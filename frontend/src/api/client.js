@@ -1,7 +1,20 @@
 import axios from 'axios';
 
+const getBaseURL = () => {
+  let url = import.meta.env.VITE_API_URL;
+  if (url) {
+    if (!url.endsWith('/api') && !url.endsWith('/api/')) {
+      url = `${url.replace(/\/$/, '')}/api`;
+    }
+    return url;
+  }
+  return typeof window !== 'undefined' && window.location.origin.includes('localhost')
+    ? 'http://localhost:5000/api'
+    : '/api';
+};
+
 const client = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || (typeof window !== 'undefined' && window.location.origin.includes('localhost') ? 'http://localhost:5000/api' : '/api'),
+  baseURL: getBaseURL(),
   headers: {
     'Content-Type': 'application/json',
   },
