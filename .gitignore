@@ -1,0 +1,29 @@
+# Dependency directories
+node_modules/
+
+# Production build outputs
+dist/
+build/
+
+# Local env files
+.env
+.env.local
+.env.*.local
+*.env
+backend/.env
+
+# Uploads and temporary directories
+.uploads/
+backend/uploads/
+response.json
+memories/
+
+# System files & Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+.idea/
+.vscode/

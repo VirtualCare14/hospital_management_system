@@ -1,0 +1,45 @@
+@media print {
+  /* Hide everything outside of print layout */
+  body * {
+    visibility: hidden;
+  }
+  
+  #print-area, #print-area * {
+    visibility: visible;
+  }
+  
+  #print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    background-color: white;
+    color: black;
+  }
+
+  /* Set page size to A4 */
+  @page {
+    size: A4;
+    margin: 15mm;
+  }
+  
+  /* Reset background colors for printer compatibility */
+  .bg-orange-50 {
+    background-color: #fffaf0 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  
+  .bg-gray-50 {
+    background-color: #f9fafb !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Hide print buttons and controls */
+  .no-print {
+    display: none !important;
+  }
+}
