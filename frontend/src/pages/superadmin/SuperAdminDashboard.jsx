@@ -28,6 +28,7 @@ const SuperAdminDashboard = () => {
     const payload = {
       name: data.name?.trim(),
       loginId: data.loginId?.trim().toLowerCase(),
+      maxUsers: Number(data.maxUsers) || 10
     };
     if (data.password) payload.password = data.password;
 
@@ -45,7 +46,7 @@ const SuperAdminDashboard = () => {
         toast.success('Hospital created');
       }
       setEditing(null);
-      reset({ name: '', loginId: '', password: '' });
+      reset({ name: '', loginId: '', password: '', maxUsers: 10 });
       loadHospitals();
     } catch (error) {
       toast.error(error.response?.data?.message || 'Unable to save hospital.');
@@ -57,6 +58,7 @@ const SuperAdminDashboard = () => {
     setValue('name', hospital.name);
     setValue('loginId', hospital.loginId);
     setValue('password', '');
+    setValue('maxUsers', hospital.maxUsers || 10);
   };
 
   const updateStatus = async (hospital) => {
@@ -88,10 +90,11 @@ const SuperAdminDashboard = () => {
           <button className="btn-secondary" onClick={() => logout(false)}>Logout</button>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="card grid gap-3 p-5 md:grid-cols-[1fr_220px_220px_auto]">
+        <form onSubmit={handleSubmit(onSubmit)} className="card grid gap-3 p-5 md:grid-cols-[1fr_200px_200px_120px_auto]">
           <input className="input" placeholder="Hospital name" {...register('name', { required: true })} />
           <input className="input" placeholder="Hospital login ID" {...register('loginId', { required: true })} />
           <input className="input" type="password" placeholder={editing ? 'New password optional' : 'Password'} {...register('password', { required: !editing })} />
+          <input className="input" type="number" min="1" placeholder="User Limit" {...register('maxUsers', { required: true, valueAsNumber: true })} />
           <button className="btn" type="submit"><Save className="h-4 w-4" /> {editing ? 'Update' : 'Create'}</button>
         </form>
 
@@ -112,7 +115,7 @@ const SuperAdminDashboard = () => {
                 <tr key={hospital.id} className="border-t border-orange-50">
                   <td className="p-3 font-bold">{hospital.name}</td>
                   <td className="p-3">{hospital.loginId}</td>
-                  <td className="p-3">{hospital.userCount}</td>
+                  <td className="p-3 font-mono">{hospital.userCount} / {hospital.maxUsers || 10}</td>
                   <td className="p-3">{hospital.isActive ? 'Active' : 'Disabled'}</td>
                   <td className="p-3">
                     <button className="btn-secondary text-xs" onClick={() => copyLink(hospital.loginLink)}>

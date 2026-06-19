@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const Hospital = require('../models/Hospital');
 const Department = require('../models/Department');
 const HospitalSettings = require('../models/HospitalSettings');
 const Patient = require('../models/Patient');
@@ -191,6 +192,14 @@ const createUser = async (req, res) => {
     const userExists = await User.findOne(hospitalFilter(req, { username: username.toLowerCase() }));
     if (userExists) {
       return res.status(400).json({ message: 'User already exists' });
+    }
+
+    // Enforce maxUsers limit
+    const hospital = await Hospital.findById(req.user.hospitalId);
+    const maxUsers = hospital?.maxUsers || 10;
+    const currentUserCount = await User.countDocuments({ hospitalId: req.user.hospitalId });
+    if (currentUserCount >= maxUsers) {
+      return res.status(400).json({ message: `User creation limit of ${maxUsers} reached. Please contact super admin.` });
     }
 
     // Set default module access based on role if not provided
@@ -711,6 +720,18 @@ const getPatientSummary = async (req, res) => {
   }
 };
 
+const getUserLimit = async (req, res) => {
+  try {
+    const hospital = await Hospital.findById(req.user.hospitalId);
+    const maxUsers = hospital?.maxUsers || 10;
+    const userCount = await User.countDocuments({ hospitalId: req.user.hospitalId });
+    res.status(200).json({ maxUsers, userCount });
+  } catch (error) {
+    console.error('Get User Limit Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   getHospitalSettings,
   createOrUpdateHospitalSettings,
@@ -728,5 +749,6 @@ module.exports = {
   updateDoctorAvailability,
   getDoctorAvailability,
   getHospitalTracking,
-  getPatientSummary
+  getPatientSummary,
+  getUserLimit
 };

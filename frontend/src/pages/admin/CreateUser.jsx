@@ -10,6 +10,7 @@ const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
 const CreateUser = () => {
   const [users, setUsers] = useState([]);
   const [departments, setDepartments] = useState([]);
+  const [limitData, setLimitData] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
   const [showAvailability, setShowAvailability] = useState(false);
   const [selectedDoctor, setSelectedDoctor] = useState(null);
@@ -26,11 +27,23 @@ const CreateUser = () => {
     : selectedModulesRaw
       ? [selectedModulesRaw]
       : [];
+  const isLimitReached = limitData && limitData.userCount >= limitData.maxUsers;
 
   const load = async () => {
-    const [userRes, deptRes] = await Promise.all([client.get('/admin/users'), client.get('/admin/departments')]);
-    setUsers(userRes.data);
-    setDepartments(deptRes.data);
+    try {
+      const [userRes, deptRes, limitRes] = await Promise.all([
+        client.get('/admin/users'),
+        client.get('/admin/departments'),
+        client.get('/admin/users/limit').catch(() => null)
+      ]);
+      setUsers(userRes.data);
+      setDepartments(deptRes.data);
+      if (limitRes) {
+        setLimitData(limitRes.data);
+      }
+    } catch (error) {
+      console.error('Error loading data:', error);
+    }
   };
 
   useEffect(() => {
@@ -225,14 +238,30 @@ const CreateUser = () => {
             </label>
           ))}
         </div>
-        <button className="btn w-full" type="submit"><Save className="h-4 w-4" /> {editingUser ? 'Update User' : 'Create User'}</button>
+        <button 
+          className="btn w-full disabled:opacity-50 disabled:cursor-not-allowed" 
+          type="submit"
+          disabled={!editingUser && isLimitReached}
+        >
+          <Save className="h-4 w-4" /> {editingUser ? 'Update User' : 'Create User'}
+        </button>
+        {!editingUser && isLimitReached && (
+          <p className="text-xs text-red-500 font-semibold text-center mt-1">
+            User creation limit reached ({limitData?.maxUsers}). Please contact Super Admin.
+          </p>
+        )}
         {editingUser && <button className="btn-secondary w-full" type="button" onClick={cancelEdit}><X className="h-4 w-4" /> Cancel Edit</button>}
       </form>
 
       <div className="space-y-4">
         <div className="card overflow-hidden">
-          <div className="border-b border-orange-100 p-5">
+          <div className="border-b border-orange-100 p-5 flex justify-between items-center">
             <h2 className="font-bold text-gray-800">User Management</h2>
+            {limitData && (
+              <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-orange-100 text-orange-800">
+                Users: {limitData.userCount} / {limitData.maxUsers}
+              </span>
+            )}
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">

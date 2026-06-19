@@ -13,7 +13,8 @@ const {
   updateDoctorAvailability,
   getDoctorAvailability,
   getHospitalTracking,
-  getPatientSummary
+  getPatientSummary,
+  getUserLimit
 } = require('../controllers/adminController');
 const authMiddleware = require('../middleware/authMiddleware');
 
@@ -28,6 +29,7 @@ const adminOnly = (req, res, next) => {
 
 router.post('/create-user', authMiddleware, adminOnly, createUser);
 router.get('/users', authMiddleware, adminOnly, getUsers);
+router.get('/users/limit', authMiddleware, adminOnly, getUserLimit);
 router.put('/users/:id', authMiddleware, adminOnly, updateUser);
 router.delete('/users/:id', authMiddleware, adminOnly, deleteUser);
 

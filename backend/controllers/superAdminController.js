@@ -23,6 +23,7 @@ const buildHospitalResponse = async (req, hospital) => {
     name: hospital.name,
     loginId: hospital.loginId,
     isActive: hospital.isActive,
+    maxUsers: hospital.maxUsers || 10,
     userCount,
     loginLink: hospitalLink(req, hospital._id),
     createdAt: hospital.createdAt,
@@ -55,7 +56,7 @@ const listHospitals = async (req, res) => {
 };
 
 const createHospital = async (req, res) => {
-  let { name, loginId, password } = req.body;
+  let { name, loginId, password, maxUsers } = req.body;
   name = name?.trim();
   loginId = loginId?.toLowerCase().trim();
 
@@ -67,7 +68,7 @@ const createHospital = async (req, res) => {
     const exists = await Hospital.findOne({ loginId });
     if (exists) return res.status(400).json({ message: 'Hospital login ID already exists' });
 
-    const hospital = await Hospital.create({ name, loginId, password, isActive: true });
+    const hospital = await Hospital.create({ name, loginId, password, isActive: true, maxUsers: parseInt(maxUsers) || 10 });
     await User.create({
       hospitalId: hospital._id,
       username: loginId,
@@ -86,12 +87,13 @@ const createHospital = async (req, res) => {
 };
 
 const updateHospital = async (req, res) => {
-  const { name, loginId, password, isActive } = req.body;
+  const { name, loginId, password, isActive, maxUsers } = req.body;
   const hospital = await Hospital.findById(req.params.id);
   if (!hospital) return res.status(404).json({ message: 'Hospital not found' });
 
   const previousLoginId = hospital.loginId;
   if (name !== undefined) hospital.name = name;
+  if (maxUsers !== undefined) hospital.maxUsers = parseInt(maxUsers) || 10;
   if (loginId !== undefined) {
     const normalizedLoginId = loginId.toLowerCase().trim();
     const exists = await Hospital.findOne({ loginId: normalizedLoginId, _id: { $ne: hospital._id } });

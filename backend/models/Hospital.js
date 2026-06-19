@@ -1,4 +1,4 @@
-﻿const mongoose = require('mongoose');
+const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
 const hospitalSchema = new mongoose.Schema({
@@ -6,7 +6,8 @@ const hospitalSchema = new mongoose.Schema({
   loginId: { type: String, required: true, unique: true, lowercase: true, trim: true },
   password: { type: String, required: true },
   isActive: { type: Boolean, default: true },
-  currentSessionId: { type: String, default: null }
+  currentSessionId: { type: String, default: null },
+  maxUsers: { type: Number, default: 10 }
 }, { timestamps: true });
 
 hospitalSchema.pre('save', async function() {
