@@ -97,7 +97,6 @@ const PatientRegistration = () => {
         setValue('dob', data.patient.dob ? new Date(data.patient.dob).toISOString().split('T')[0] : '');
         setValue('gender', data.patient.gender || '');
         setValue('address', data.patient.address || '');
-        setValue('category', data.patient.category || 'General');
 
         const visitCount = data.latestVisit ? `Visit #${(data.latestVisit.visitNumber || 0) + 1} next` : 'First visit';
         toast.success(`Existing patient found! UHID: ${formatUhid(data.patient.uhid)} — ${visitCount}. Details auto-filled.`);
@@ -257,16 +256,6 @@ const PatientRegistration = () => {
           <Field label="Gender">
             <select className="input" {...register('gender', { required: true })}>
               <option value="">Select gender</option><option>Male</option><option>Female</option><option>Other</option>
-            </select>
-          </Field>
-
-          <Field label="Patient Category">
-            <select className="input" {...register('category')}>
-              <option value="General">General</option>
-              <option value="Staff">Staff</option>
-              <option value="EWS">EWS</option>
-              <option value="Corporate">Corporate</option>
-              <option value="Insurance">Insurance</option>
             </select>
           </Field>
 

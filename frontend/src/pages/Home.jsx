@@ -146,7 +146,7 @@ const Home = () => {
             </div>
             <span className="text-xl font-black text-gray-900 tracking-tight">Medora360 <span className="text-orange-500">HMS</span></span>
           </div>
-          
+
           <nav className="hidden md:flex items-center gap-8 text-sm font-semibold text-gray-600">
             {['home', 'about', 'services', 'contact'].map((sect) => (
               <button
@@ -170,7 +170,7 @@ const Home = () => {
 
       {/* Main content sections */}
       <main className="flex-grow">
-        
+
         {/* VIEW 1: HOME SECTION */}
         {activeSection === 'home' && (
           <div className="space-y-16 py-12 md:py-20">
@@ -186,14 +186,14 @@ const Home = () => {
                 <p className="text-gray-500 text-base md:text-lg leading-relaxed max-w-xl">
                   Medora360 delivers complete clinical workflows, custom doctor prescriptions, lab report automation, IPD/OPD coordination, pharmacy billing, and deep administrative analytics.
                 </p>
-                
+
                 {/* Search Hospital form card */}
                 <div className="card p-6 border border-orange-100 bg-white rounded-2xl shadow-xl shadow-orange-100/40 max-w-lg mt-8">
                   <h3 className="font-bold text-gray-800 text-base mb-3">Open Hospital Portal</h3>
                   <form onSubmit={handlePortalLookup} className="flex gap-2">
                     <input
                       type="text"
-                      placeholder="Enter hospital name (e.g. Prayas healthcare)..."
+                      placeholder="Enter hospital name..."
                       value={searchName}
                       onChange={(e) => setSearchName(e.target.value)}
                       className="input rounded-xl border-orange-100 focus:border-orange-500 py-3"
@@ -236,7 +236,7 @@ const Home = () => {
                       { title: 'IPD Ward & OT Control', desc: 'Bed availability, surgery bookings' }
                     ].map((item, idx) => (
                       <div key={idx} className="bg-slate-50 border border-slate-100 p-3.5 rounded-xl text-xs hover:border-orange-100 hover:bg-orange-50/10 transition duration-300 flex items-start gap-3">
-                        <span className="font-black text-orange-500 mt-0.5">0{idx+1}</span>
+                        <span className="font-black text-orange-500 mt-0.5">0{idx + 1}</span>
                         <div>
                           <p className="font-bold text-gray-800">{item.title}</p>
                           <p className="text-[10px] text-gray-500 mt-0.5">{item.desc}</p>
@@ -275,7 +275,7 @@ const Home = () => {
               <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">About Medora360</h2>
               <p className="text-sm text-gray-500">Transforming healthcare digital workflows since 2026.</p>
             </div>
-            
+
             <div className="card p-8 bg-white border border-orange-100 rounded-2xl shadow-xl shadow-orange-100/20 space-y-6 leading-relaxed text-gray-600 text-sm">
               <p className="font-semibold text-gray-900 text-base">
                 Medora360 HMS is an all-in-one Enterprise Hospital Management System built to optimize clinical operations, manage patient billing records, record vitals history, and simplify department workflows.
@@ -283,7 +283,7 @@ const Home = () => {
               <p>
                 Our vision is to build software that doctors love using, that administration finds completely transparent, and that lab assistants can easily rely on. By keeping patient safety at the center, Medora360 helps decrease waiting times, automates test notifications, generates structured PDF prescriptions, and tracks active bed occupancy in real-time.
               </p>
-              
+
               <div className="grid gap-4 md:grid-cols-3 pt-4">
                 <div className="p-4 border border-orange-50 bg-orange-50/10 rounded-xl space-y-2">
                   <Shield className="h-6 w-6 text-orange-500" />
@@ -325,7 +325,7 @@ const Home = () => {
               ].map((item, idx) => (
                 <div key={idx} className="card p-6 bg-white border border-slate-100 rounded-2xl hover:shadow-lg transition duration-200 space-y-3">
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm ${item.color}`}>
-                    0{idx+1}
+                    0{idx + 1}
                   </div>
                   <h4 className="font-extrabold text-gray-900 text-base">{item.title}</h4>
                   <p className="text-xs text-gray-500 leading-relaxed">{item.desc}</p>

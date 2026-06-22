@@ -127,9 +127,35 @@ const hospitalLookup = async (req, res) => {
   }
 };
 
+// @desc    Verify current user session status
+// @route   GET /api/auth/verify
+// @access  Private
+const verifySession = async (req, res) => {
+  try {
+    // If request gets past authMiddleware, the session is valid
+    res.status(200).json({
+      valid: true,
+      user: {
+        id: req.user._id,
+        username: req.user.username,
+        role: req.user.role?.toLowerCase?.(),
+        moduleAccess: req.user.moduleAccess,
+        doctorName: req.user.doctorName,
+        department: req.user.department,
+        mobile: req.user.mobile,
+        hospitalId: req.user.hospitalId
+      }
+    });
+  } catch (error) {
+    console.error('Verify Session Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   login,
   logout,
   getPublicHospital,
-  hospitalLookup
+  hospitalLookup,
+  verifySession
 };

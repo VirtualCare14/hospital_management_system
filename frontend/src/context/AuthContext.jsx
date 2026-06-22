@@ -10,19 +10,46 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  // Sync state with LocalStorage on startup
+  // Sync state with LocalStorage on startup and verify session with backend
   useEffect(() => {
     const storedUser = localStorage.getItem('hms_user');
     const storedToken = localStorage.getItem('hms_token');
 
-    if (storedUser && storedToken) {
-      const parsedUser = JSON.parse(storedUser);
-      setUser({
-        ...parsedUser,
-        role: parsedUser.role?.toLowerCase?.().trim?.()
-      });
-    }
-    setLoading(false);
+    const verifyInitialSession = async () => {
+      if (storedUser && storedToken) {
+        try {
+          const parsedUser = JSON.parse(storedUser);
+          setUser({
+            ...parsedUser,
+            role: parsedUser.role?.toLowerCase?.().trim?.()
+          });
+
+          // Check session with backend (except for superadmin)
+          if (parsedUser.role !== 'superadmin') {
+            const response = await client.get('/auth/verify');
+            if (response.data && response.data.user) {
+              const normalizedUser = {
+                ...response.data.user,
+                role: response.data.user.role?.toLowerCase?.().trim?.()
+              };
+              setUser(normalizedUser);
+              localStorage.setItem('hms_user', JSON.stringify(normalizedUser));
+            }
+          }
+        } catch (error) {
+          console.error('Session verification failed on load:', error);
+          const status = error.response?.status;
+          if (status === 401 || status === 403) {
+            localStorage.removeItem('hms_token');
+            localStorage.removeItem('hms_user');
+            setUser(null);
+          }
+        }
+      }
+      setLoading(false);
+    };
+
+    verifyInitialSession();
   }, []);
 
   const login = async (username, password, hospitalId) => {
@@ -106,6 +133,22 @@ export const AuthProvider = ({ children }) => {
       window.removeEventListener('hms_unauthorized', handleForceLogout);
     };
   }, []);
+
+  // Periodic session check to log out inactive tabs if logged in elsewhere
+  useEffect(() => {
+    if (!user || user.role === 'superadmin') return;
+
+    const interval = setInterval(async () => {
+      try {
+        await client.get('/auth/verify');
+      } catch (error) {
+        console.warn('Periodic session check failed:', error.message);
+        // The axios interceptor handles logging out and dispatching hms_unauthorized
+      }
+    }, 15000); // 15 seconds
+
+    return () => clearInterval(interval);
+  }, [user]);
 
   const hasAccess = (requiredModules = []) => {
     if (!user) return false;
