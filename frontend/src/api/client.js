@@ -42,7 +42,9 @@ client.interceptors.response.use(
     const status = error.response?.status;
     const message = error.response?.data?.message || '';
 
-    const shouldForceLogout = !isLoginAttempt && (
+    const hasToken = Boolean(localStorage.getItem('hms_token'));
+
+    const shouldForceLogout = !isLoginAttempt && hasToken && (
       status === 401 ||
       (status === 403 && (
         message.includes('Account is disabled') ||

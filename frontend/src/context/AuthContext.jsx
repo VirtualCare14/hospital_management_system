@@ -1,4 +1,4 @@
-import { createContext, useState, useEffect, useContext } from 'react';
+import { createContext, useState, useEffect, useContext, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import client from '../api/client';
@@ -9,6 +9,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const sessionCheckIntervalRef = useRef(null);
 
   // Sync state with LocalStorage on startup and verify session with backend
   useEffect(() => {
@@ -88,12 +89,27 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = async (forced = false) => {
+    // Clear interval immediately to avoid in-flight verify requests
+    if (sessionCheckIntervalRef.current) {
+      clearInterval(sessionCheckIntervalRef.current);
+      sessionCheckIntervalRef.current = null;
+    }
+
     const targetHospitalId = user?.hospitalId || JSON.parse(localStorage.getItem('hms_user') || '{}')?.hospitalId;
     const isSuperAdmin = user?.role === 'superadmin' || JSON.parse(localStorage.getItem('hms_user') || '{}')?.role === 'superadmin';
     try {
       if (!forced) {
-        // Call backend to invalidate active session
-        await client.post('/auth/logout');
+        // Extract token and clear it from localStorage immediately so in-flight verify check
+        // responses are ignored, but use it to make the backend logout call explicitly.
+        const token = localStorage.getItem('hms_token');
+        if (token) {
+          localStorage.removeItem('hms_token');
+          await client.post('/auth/logout', {}, {
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
+          });
+        }
       }
     } catch (err) {
       console.warn('Backend logout call failed, cleaning up local state anyway:', err.message);
@@ -142,16 +158,25 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     if (!user || user.role === 'superadmin') return;
 
-    const interval = setInterval(async () => {
+    sessionCheckIntervalRef.current = setInterval(async () => {
       try {
+        const token = localStorage.getItem('hms_token');
+        if (!token) return; // Do not check if token was cleared during logout
         await client.get('/auth/verify');
       } catch (error) {
-        console.warn('Periodic session check failed:', error.message);
+        // Suppress warning if token was cleared during a logout transition
+        if (localStorage.getItem('hms_token')) {
+          console.warn('Periodic session check failed:', error.message);
+        }
         // The axios interceptor handles logging out and dispatching hms_unauthorized
       }
     }, 15000); // 15 seconds
 
-    return () => clearInterval(interval);
+    return () => {
+      if (sessionCheckIntervalRef.current) {
+        clearInterval(sessionCheckIntervalRef.current);
+      }
+    };
   }, [user]);
 
   const hasAccess = (requiredModules = []) => {
