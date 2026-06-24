@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Calendar, FileText, Clock, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Calendar, FileText, Clock, ChevronDown, ChevronUp, Stethoscope } from 'lucide-react';
 import client from '../../api/client';
 import { formatDate } from '../../utils/dateFormat';
 
@@ -29,7 +29,7 @@ const PatientConsultationTrack = () => {
         setPrescriptions(data.prescriptions || []);
         // Expand the latest consultation by default
         if (data.consultations && data.consultations.length > 0) {
-          setExpandedConsultation(data.consultations[data.consultations.length - 1]._id);
+          setExpandedConsultation(data.consultations[0]._id); // Most recent first
         }
       } catch (error) {
         console.error('Error fetching patient consultation track:', error);
@@ -40,9 +40,16 @@ const PatientConsultationTrack = () => {
     fetchData();
   }, [patientId]);
 
-  // Build a map of prescription by consultation date range
+  // Match prescription to consultation using consultationId field
   const getPrescriptionForConsultation = (consultation) => {
-    // Find prescription that was created closest to the consultation completion date
+    if (!consultation || !consultation._id) return null;
+    // Find prescription that has this consultation's ID
+    const matched = prescriptions.find(p => 
+      p.consultationId && p.consultationId.toString() === consultation._id.toString()
+    );
+    if (matched) return matched;
+    
+    // Fallback: find by closest date
     const consultationDate = new Date(consultation.consultationCompletedDate || consultation.createdAt).getTime();
     let closestPrescription = null;
     let minDiff = Infinity;
@@ -57,6 +64,16 @@ const PatientConsultationTrack = () => {
     });
     
     return closestPrescription;
+  };
+
+  // Format date time for display
+  const formatDateTime = (dateStr) => {
+    if (!dateStr) return null;
+    const d = new Date(dateStr);
+    return {
+      date: formatDate(d),
+      time: d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+    };
   };
 
   if (loading) {
@@ -83,10 +100,10 @@ const PatientConsultationTrack = () => {
         </Link>
         <div className="flex-1">
           <h1 className="text-2xl font-extrabold text-gray-900">Patient Consultation Track</h1>
-          <p className="text-sm text-gray-500">Complete consultation history for this patient</p>
+          <p className="text-sm text-gray-500">Complete consultation and prescription history for this patient</p>
         </div>
         <Link to={`/doctor/consultation/${patientId}`} className="btn-secondary text-xs">
-          New Consultation
+          <Stethoscope className="h-3 w-3" /> New Consultation
         </Link>
       </div>
 
@@ -102,7 +119,7 @@ const PatientConsultationTrack = () => {
           </div>
           <div className="flex gap-2">
             <Link to={`/doctor/prescription/${patientId}`} className="btn-secondary text-xs">
-              <FileText className="h-3 w-3" /> Prescription
+              <FileText className="h-3 w-3" /> New Prescription
             </Link>
           </div>
         </div>
@@ -112,13 +129,18 @@ const PatientConsultationTrack = () => {
       {consultations.length === 0 && (
         <div className="card p-5 text-center">
           <p className="text-gray-500">No consultations found for this patient.</p>
+          <Link to={`/doctor/consultation/${patientId}`} className="btn-secondary mt-3 inline-flex">
+            <Stethoscope className="h-3 w-3" /> Start New Consultation
+          </Link>
         </div>
       )}
 
       {/* Consultation Timeline */}
       {consultations.length > 0 && (
         <div className="space-y-4">
-          <h2 className="font-bold text-gray-800 text-lg">Consultation History</h2>
+          <h2 className="font-bold text-gray-800 text-lg">
+            Consultation History ({consultations.length} record{consultations.length > 1 ? 's' : ''})
+          </h2>
           <div className="relative">
             {/* Timeline line */}
             <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-orange-200" />
@@ -127,8 +149,10 @@ const PatientConsultationTrack = () => {
               const isExpanded = expandedConsultation === consultation._id;
               const prescription = getPrescriptionForConsultation(consultation);
               const consultationDate = new Date(consultation.consultationCompletedDate || consultation.createdAt);
-              const isLatest = index === consultations.length - 1;
+              const isLatest = index === 0; // First in array = most recent
               const isCompleted = consultation.consultationStatus === 'completed';
+              const consultDt = formatDateTime(consultation.consultationDateTime || consultation.createdAt);
+              const presDt = prescription ? formatDateTime(prescription.prescriptionDateTime || prescription.createdAt) : null;
 
               return (
                 <div key={consultation._id} className="relative pl-12 pb-6 last:pb-0">
@@ -173,6 +197,13 @@ const PatientConsultationTrack = () => {
                     <p className="text-xs text-gray-500 mt-1">
                       Dr. {consultation.doctorId?.doctorName || consultation.doctorId?.username || 'Unknown'} • {consultation.doctorId?.department || ''}
                     </p>
+
+                    {/* Consultation timestamp */}
+                    {consultDt && (
+                      <p className="text-xs text-gray-400 mt-1">
+                        Consultation recorded: {consultDt.date} at {consultDt.time}
+                      </p>
+                    )}
 
                     {/* Expanded content */}
                     {isExpanded && (
@@ -242,6 +273,11 @@ const PatientConsultationTrack = () => {
                         {prescription && prescription.medicines && prescription.medicines.length > 0 && (
                           <div>
                             <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Medicines Prescribed</h4>
+                            {presDt && (
+                              <p className="text-xs text-gray-400 mb-2">
+                                Prescription recorded: {presDt.date} at {presDt.time}
+                              </p>
+                            )}
                             <div className="overflow-x-auto rounded-lg border border-green-100">
                               <table className="w-full text-left text-xs">
                                 <thead className="bg-green-50 text-green-800">
@@ -296,6 +332,48 @@ const PatientConsultationTrack = () => {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Prescription History Summary */}
+      {prescriptions.length > 0 && (
+        <div className="card p-5">
+          <h2 className="font-bold text-gray-800 text-lg mb-4">
+            All Prescriptions ({prescriptions.length} record{prescriptions.length > 1 ? 's' : ''})
+          </h2>
+          <div className="overflow-x-auto rounded-lg border border-orange-100">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-orange-100 text-orange-900">
+                <tr>
+                  <th className="p-3">#</th>
+                  <th className="p-3">Date & Time</th>
+                  <th className="p-3">Doctor</th>
+                  <th className="p-3">Medicines</th>
+                  <th className="p-3">Language</th>
+                </tr>
+              </thead>
+              <tbody>
+                {prescriptions.map((pres, index) => {
+                  const presDt = formatDateTime(pres.prescriptionDateTime || pres.createdAt);
+                  return (
+                    <tr key={pres._id} className="border-t border-orange-50">
+                      <td className="p-3 font-bold text-orange-700">{index + 1}</td>
+                      <td className="p-3 text-xs">
+                        {presDt ? `${presDt.date} ${presDt.time}` : '-'}
+                      </td>
+                      <td className="p-3 text-xs">
+                        Dr. {pres.doctorId?.doctorName || pres.doctorId?.username || 'Unknown'}
+                      </td>
+                      <td className="p-3 text-xs">
+                        {pres.medicines?.filter(m => m.medicine).map(m => m.medicine).join(', ') || '-'}
+                      </td>
+                      <td className="p-3 text-xs">{pres.language || 'English'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

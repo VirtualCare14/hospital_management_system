@@ -3,21 +3,21 @@ import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
   ArrowLeft, Loader2, CheckCircle, FileText, Clock, User,
-  CalendarDays, Stethoscope, Syringe, Pill, FlaskRound as Flask,
+  Calendar, CalendarDays, Stethoscope, Syringe, Pill, FlaskRound as Flask,
   FileSignature, ClipboardCheck, Scissors, IndianRupee,
   Printer, Upload, X, Save, Eye, Camera, AlertCircle,
-  Building2, RefreshCw, Plus, Send
+  Building2, RefreshCw, Plus, Send, Edit3
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import client from '../../api/client';
 import { formatUhid } from '../../utils/uhid';
 import { formatDate } from '../../utils/dateFormat';
 import OtSchedulingModal from './OtSchedulingModal';
-import OtConsentForm from './OtConsentForm';
+import TemplateEditor from '../../components/TemplateEditor';
 
 const STEPS = {
-  SCHEDULING: 1,
-  CONSULTATION: 2,
+  CONSULTATION: 1,
+  SCHEDULING: 2,
   CHARGES: 3,
   PHARMACY_REQUEST: 4,
   ACTIVE: 5,
@@ -34,14 +34,19 @@ const IpdOtFlow = () => {
   const [otRecord, setOtRecord] = useState(null);
   const [hospitalInfo, setHospitalInfo] = useState(null);
 
-  // Consultation form state
-  const [consultationNotes, setConsultationNotes] = useState('');
-  const [signedFile, setSignedFile] = useState(null);
-  const [signedPreview, setSignedPreview] = useState(null);
-  const [signedByName, setSignedByName] = useState('');
-  const [uploadingSigned, setUploadingSigned] = useState(false);
+  // Consultation template state
+  const [activeTemplates, setActiveTemplates] = useState([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState('');
+  const [consultationHeading, setConsultationHeading] = useState('');
+  const [consultationContent, setConsultationContent] = useState('');
+  const [additionalParagraph1, setAdditionalParagraph1] = useState('');
+  const [additionalParagraph2, setAdditionalParagraph2] = useState('');
+  const [rawTemplateContent, setRawTemplateContent] = useState('');
+  const [surgicalProcedureInput, setSurgicalProcedureInput] = useState('');
   const [savingConsultation, setSavingConsultation] = useState(false);
-  const fileInputRef = useRef();
+  const [isEditingConsultation, setIsEditingConsultation] = useState(false);
+  const [viewStep, setViewStep] = useState(null);
 
   // Scheduling
   const [showScheduling, setShowScheduling] = useState(false);
@@ -104,8 +109,9 @@ const IpdOtFlow = () => {
       
       setOtRecord(currentOtRecord);
       if (currentOtRecord?.consultation?.isConsultationCompleted) {
-        setConsultationNotes(currentOtRecord.consultation.consultationNotes || '');
-        setSignedByName(currentOtRecord.consultation.signatureSignedBy || '');
+        setConsultationContent(currentOtRecord.consultation.consultationNotes || '');
+        setConsultationHeading(currentOtRecord.consultation.templateHeading || 'OT Consultation Report');
+        setSelectedTemplate(currentOtRecord.consultation.templateId || '');
       }
     } catch (err) {
       toast.error('Failed to load patient data');
@@ -117,17 +123,14 @@ const IpdOtFlow = () => {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  useEffect(() => {
-    if (patient?.patientName && !signedByName) {
-      setSignedByName(patient.patientName);
-    }
-  }, [patient, signedByName]);
+  // Derive patient from admission data when it loads
+  const patient = admission?.patientId || {};
 
   // Determine current step
   const getCurrentStep = () => {
-    if (!otRecord) return STEPS.SCHEDULING;
-    if (otRecord.schedulingStatus !== 'Scheduled' && otRecord.schedulingStatus !== 'Completed') return STEPS.SCHEDULING;
+    if (!otRecord) return STEPS.CONSULTATION;
     if (!otRecord.consultation?.isConsultationCompleted) return STEPS.CONSULTATION;
+    if (otRecord.schedulingStatus !== 'Scheduled' && otRecord.schedulingStatus !== 'Completed') return STEPS.SCHEDULING;
     if (!otRecord.otCharges || otRecord.otCharges.length === 0) return STEPS.CHARGES;
     if (!otRecord.pharmacyRequestSent) return STEPS.PHARMACY_REQUEST;
     if (otRecord.status === 'Completed' || otRecord.status === 'Completed Surgery' || otRecord.schedulingStatus === 'Completed') return STEPS.COMPLETED;
@@ -135,6 +138,19 @@ const IpdOtFlow = () => {
   };
 
   const currentStep = getCurrentStep();
+  const activeStep = viewStep !== null ? viewStep : currentStep;
+
+  useEffect(() => {
+    setViewStep(null);
+  }, [currentStep]);
+
+  useEffect(() => {
+    if (activeStep === STEPS.SCHEDULING) {
+      setShowScheduling(true);
+    } else {
+      setShowScheduling(false);
+    }
+  }, [activeStep]);
 
   // Auto-create OT record if none exists
   const ensureOtRecord = async () => {
@@ -169,61 +185,243 @@ const IpdOtFlow = () => {
     }
   };
 
-  // Handle signed consultation document upload
-  const handleSignedFile = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('File must be less than 10MB');
-      return;
+  // Load active templates on mount
+  const loadActiveTemplates = useCallback(async () => {
+    setLoadingTemplates(true);
+    try {
+      const { data } = await client.get('/ipd/ot-templates?active=true');
+      setActiveTemplates(data);
+    } catch (err) {
+      console.error('Failed to load active templates:', err);
+    } finally {
+      setLoadingTemplates(false);
     }
-    setSignedFile(file);
-    const reader = new FileReader();
-    reader.onload = (event) => setSignedPreview(event.target?.result);
-    reader.readAsDataURL(file);
+  }, []);
+
+  useEffect(() => {
+    loadActiveTemplates();
+  }, [loadActiveTemplates]);
+
+  // Parse template variables
+  const parseTemplate = (htmlContent, surgicalProc = '', addPara1 = '', addPara2 = '') => {
+    if (!htmlContent) return '';
+    let parsed = htmlContent;
+
+    const patientAge = patient.dob
+      ? Math.floor((new Date() - new Date(patient.dob)) / (365.25 * 24 * 60 * 60 * 1000))
+      : '';
+
+    const replacements = {
+      '{Patient Name}': patient.patientName || '',
+      '{Age}': patientAge || '',
+      '{Sex}': patient.gender || '',
+      '{Address}': patient.address || '',
+      '{Mobile Number}': patient.mobile || '',
+      '{Aadhaar Number}': patient.aadhaar || '',
+      '{Doctor Name}': otRecord?.surgeon || admission?.doctorInCharge?.doctorName || admission?.doctorInCharge?.username || '',
+      '{Referring Doctor Name}': admission?.referredDoctor?.doctorName || admission?.referredDoctor?.username || 'N/A',
+      '{Surgical Procedure}': surgicalProc || otRecord?.proceduresPerformed || '',
+      '{Additional Paragraph 1}': addPara1 || '',
+      '{Additional Paragraph 2}': addPara2 || '',
+      '{Current Date}': new Date().toLocaleDateString('en-IN'),
+      '{Hospital Name}': hospitalInfo?.hospitalName || '',
+      '{Hospital Logo}': hospitalInfo?.logoUrl ? '<img src="' + hospitalInfo.logoUrl + '" alt="Hospital Logo" style="max-height: 50px; object-fit: contain; display: inline-block; vertical-align: middle;" />' : ''
+    };
+
+    Object.entries(replacements).forEach(([placeholder, value]) => {
+      parsed = parsed.split(placeholder).join(value);
+    });
+
+    return parsed;
   };
 
-  const handleSaveConsultation = async () => {
-    if (!consultationNotes.trim()) { toast.error('Please enter consultation notes'); return; }
-    if (!signedFile) { toast.error('Please upload the signed consultation form'); return; }
-    if (!signedByName.trim()) { toast.error('Please enter the name of the person who signed'); return; }
+  const handleTemplateChange = (templateId) => {
+    setSelectedTemplate(templateId);
+    if (!templateId) {
+      setRawTemplateContent('');
+      setConsultationHeading('');
+      setConsultationContent('');
+      return;
+    }
+    const selected = activeTemplates.find(t => t._id === templateId);
+    if (selected) {
+      setRawTemplateContent(selected.content);
+      setConsultationHeading(selected.templateHeading);
+      const parsed = parseTemplate(
+        selected.content,
+        surgicalProcedureInput || otRecord?.proceduresPerformed || '',
+        additionalParagraph1,
+        additionalParagraph2
+      );
+      setConsultationContent(parsed);
+    }
+  };
+
+  const handleManualFieldChange = (field, val) => {
+    let newSurg = surgicalProcedureInput;
+    let newP1 = additionalParagraph1;
+    let newP2 = additionalParagraph2;
+
+    if (field === 'surgical') {
+      newSurg = val;
+      setSurgicalProcedureInput(val);
+    } else if (field === 'p1') {
+      newP1 = val;
+      setAdditionalParagraph1(val);
+    } else if (field === 'p2') {
+      newP2 = val;
+      setAdditionalParagraph2(val);
+    }
+
+    if (rawTemplateContent) {
+      const parsed = parseTemplate(rawTemplateContent, newSurg, newP1, newP2);
+      setConsultationContent(parsed);
+    }
+  };
+
+  const handleSaveConsultation = async (shouldPrint = false) => {
+    if (!consultationContent.trim()) {
+      toast.error('Consultation content cannot be empty');
+      return;
+    }
 
     setSavingConsultation(true);
     try {
       const record = await ensureOtRecord();
-      if (!record) return;
+      if (!record) {
+        setSavingConsultation(false);
+        return;
+      }
 
-      // Upload signed document to Cloudinary
-      setUploadingSigned(true);
-      const reader = new FileReader();
-      const fileData = await new Promise((resolve) => {
-        reader.onload = (e) => resolve(e.target?.result);
-        reader.readAsDataURL(signedFile);
-      });
+      const selected = activeTemplates.find(t => t._id === selectedTemplate);
+      const templateName = selected ? selected.templateName : 'Manual Template';
 
-      const cloudRes = await client.post(`/ipd/ot/${record._id}/documents/upload`, {
-        fileData,
-        documentType: 'consultation_signature',
-        fileName: `signed_consultation_${record._id}_${Date.now()}`
-      });
-      const uploadedDoc = cloudRes.data.document;
+      const updatePayload = {
+        consultationNotes: consultationContent,
+        templateId: selectedTemplate || null,
+        templateName: templateName,
+        templateHeading: consultationHeading || 'OT Consultation Report'
+      };
 
-      // Save consultation form data
-      const { data } = await client.put(`/ipd/ot/${record._id}/consultation`, {
-        consultationNotes: consultationNotes.trim(),
-        signatureFileUrl: uploadedDoc.fileUrl,
-        signatureCloudinaryId: uploadedDoc.cloudinaryPublicId,
-        signatureSignedBy: signedByName.trim()
-      });
+      const { data } = await client.put(`/ipd/ot/${record._id}/consultation`, updatePayload);
 
-      setOtRecord(data.record);
-      toast.success('Consultation form completed! You can now schedule OT.');
+      if (surgicalProcedureInput.trim()) {
+        await client.put(`/ipd/ot/${record._id}`, {
+          proceduresPerformed: surgicalProcedureInput.trim()
+        });
+      }
+
+      const { data: fullRecord } = await client.get(`/ipd/ot/${record._id}/full`);
+
+      setOtRecord(fullRecord);
+      setIsEditingConsultation(false);
+      toast.success('Consultation template saved successfully');
+
+      if (shouldPrint) {
+        handlePrintConsultation(fullRecord);
+      }
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to save consultation');
+      toast.error(err.response?.data?.message || 'Failed to save consultation template');
     } finally {
-      setUploadingSigned(false);
       setSavingConsultation(false);
     }
+  };
+
+  const handleEditConsultation = () => {
+    setConsultationHeading(otRecord?.consultation?.templateHeading || 'OT Consultation Report');
+    setConsultationContent(otRecord?.consultation?.consultationNotes || '');
+    setSelectedTemplate(otRecord?.consultation?.templateId || '');
+    setIsEditingConsultation(true);
+  };
+
+  const handlePrintConsultation = (customRecord = null) => {
+    const activeRecord = customRecord ? customRecord : otRecord;
+    if (!activeRecord) return;
+    const patientObj = admission?.patientId || {};
+    const consentNotes = activeRecord.consultation?.consultationNotes || '';
+    const heading = activeRecord.consultation?.templateHeading || 'OT Consultation / Consent Form';
+    const dateStr = activeRecord.consultation?.signatureSignedAt 
+      ? new Date(activeRecord.consultation.signatureSignedAt).toLocaleDateString('en-IN') 
+      : new Date().toLocaleDateString('en-IN');
+
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>${heading}</title>
+          <style>
+            @media print {
+              @page { size: A4; margin: 15mm; }
+              body { font-size: 11pt; }
+            }
+            body { font-family: 'Helvetica Neue', Arial, sans-serif; padding: 20px; color: #333; line-height: 1.6; }
+            .header-container { border-bottom: 2px solid #ea580c; padding-bottom: 12px; margin-bottom: 20px; display: flex; align-items: center; gap: 15px; }
+            .hospital-logo { max-height: 60px; max-width: 150px; object-fit: contain; }
+            .hospital-details h1 { font-size: 20px; font-weight: 800; margin: 0; color: #1e293b; }
+            .hospital-details p { font-size: 12px; margin: 2px 0 0 0; color: #64748b; }
+            
+            .doc-title { text-align: center; font-size: 16px; font-weight: 800; margin: 20px 0; text-transform: uppercase; letter-spacing: 0.5px; color: #0f172a; border-bottom: 1px dashed #cbd5e1; padding-bottom: 8px; }
+            
+            .patient-box { border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 20px; padding: 12px 16px; background-color: #f8fafc; font-size: 13px; }
+            .patient-box h4 { font-weight: 800; margin: 0 0 8px 0; color: #475569; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; }
+            .patient-grid { display: grid; grid-template-cols: 1fr 1fr; gap: 6px 20px; }
+            .patient-grid div { display: flex; }
+            .patient-grid span.label { font-weight: bold; color: #64748b; width: 140px; flex-shrink: 0; }
+            .patient-grid span.val { color: #1e293b; }
+
+            .consent-content { font-size: 14px; color: #0f172a; margin-bottom: 50px; text-align: justify; }
+            
+            .footer-section { margin-top: 60px; border-top: 1px solid #e2e8f0; padding-top: 20px; font-size: 13px; }
+            .signature-grid { display: grid; grid-template-cols: 1fr 1fr; gap: 40px; margin-bottom: 20px; }
+            .sig-col { border-top: 1px dashed #94a3b8; padding-top: 6px; text-align: center; color: #475569; font-weight: bold; margin-top: 50px; }
+            .date-row { text-align: right; font-size: 12px; color: #64748b; font-weight: bold; margin-top: 10px; }
+          </style>
+        </head>
+        <body>
+          <div class="header-container">
+            ${hospitalInfo?.logoUrl ? '<img src="' + hospitalInfo.logoUrl + '" class="hospital-logo" alt="Logo" />' : ''}
+            <div class="hospital-details">
+              <h1>${hospitalInfo?.hospitalName || 'Hospital Name'}</h1>
+              <p>${hospitalInfo?.address || ''}</p>
+            </div>
+          </div>
+
+          <div class="doc-title">${heading}</div>
+
+          <div class="patient-box">
+            <h4>Patient Demographics</h4>
+            <div class="patient-grid">
+              <div><span class="label">Patient Name:</span><span class="val">${activeRecord.patientName || patientObj.patientName || 'N/A'}</span></div>
+              <div><span class="label">Age / Sex:</span><span class="val">${activeRecord.age || 'N/A'} Yrs / ${activeRecord.gender || patientObj.gender || 'N/A'}</span></div>
+              <div><span class="label">Address:</span><span class="val">${patientObj.address || 'N/A'}</span></div>
+              <div><span class="label">Mobile Number:</span><span class="val">${patientObj.mobile || 'N/A'}</span></div>
+              <div><span class="label">Aadhaar Number:</span><span class="val">${patientObj.aadhaar || 'N/A'}</span></div>
+              <div><span class="label">UHID / MRN:</span><span class="val">${formatUhid(activeRecord.uhid || patientObj.uhid)}</span></div>
+            </div>
+          </div>
+
+          <div class="consent-content">
+            ${consentNotes}
+          </div>
+
+          <div class="footer-section">
+            <div class="signature-grid">
+              <div class="sig-col">Patient Signature / Thumb Impression</div>
+              <div class="sig-col">Witness Signature / Thumb Impression</div>
+            </div>
+            <div class="date-row">Date: ${dateStr}</div>
+          </div>
+
+          <script>
+            window.onload = function() {
+              window.print();
+              window.onafterprint = function() { window.close(); };
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   const handleScheduleSuccess = async (booking) => {
@@ -232,10 +430,6 @@ const IpdOtFlow = () => {
       setOtRecord(fullRecord);
     }
     toast.success('OT scheduled successfully! Charges can be configured by Admin.');
-  };
-
-  const handlePrintConsultation = () => {
-    window.print();
   };
 
   const addReqMedRow = () => setReqMedicines([...reqMedicines, { medicineName: '', dosage: '', quantity: 1, unit: 'nos' }]);
@@ -315,7 +509,7 @@ const IpdOtFlow = () => {
 
   if (!admission) return null;
 
-  const patient = admission.patientId || {};
+  // patient is already defined above (admission?.patientId || {})
   const stepStatus = getStepStatus;
 
   return (
@@ -365,53 +559,105 @@ const IpdOtFlow = () => {
       {/* Workflow Steps */}
       <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
         {[
-          { step: STEPS.SCHEDULING, label: 'Schedule OT', icon: CalendarDays },
           { step: STEPS.CONSULTATION, label: 'Consultation Form', icon: ClipboardCheck },
+          { step: STEPS.SCHEDULING, label: 'Schedule OT', icon: CalendarDays },
           { step: STEPS.CHARGES, label: 'OT Charges', icon: IndianRupee },
           { step: STEPS.PHARMACY_REQUEST, label: 'Pharmacy Request', icon: Pill },
           { step: STEPS.ACTIVE, label: 'OT Active', icon: Scissors },
           { step: STEPS.COMPLETED, label: 'Completed', icon: CheckCircle }
         ].map(({ step, label, icon: Icon }) => {
           const status = stepStatus(step);
+          const isClickable = step <= currentStep;
           return (
-            <div key={step} className={`p-3 rounded-xl border-2 flex items-center gap-2 ${
-              status === 'completed' ? 'border-green-400 bg-green-50' :
-              status === 'active' ? 'border-orange-400 bg-orange-50' :
-              'border-gray-200 bg-white'
-            }`}>
+            <button
+              key={step}
+              disabled={!isClickable}
+              onClick={() => setViewStep(step)}
+              className={`p-3 rounded-xl border-2 flex items-center gap-2 text-left w-full transition-all ${
+                step === activeStep ? 'border-orange-400 bg-orange-50' :
+                status === 'completed' ? 'border-green-400 bg-green-50 hover:bg-green-100/50 cursor-pointer' :
+                'border-gray-200 bg-white opacity-60 cursor-not-allowed'
+              }`}
+            >
               <div className={`p-1.5 rounded-lg ${
-                status === 'completed' ? 'bg-green-100' :
-                status === 'active' ? 'bg-orange-100' : 'bg-gray-100'
+                step === activeStep ? 'bg-orange-100' :
+                status === 'completed' ? 'bg-green-100' : 'bg-gray-100'
               }`}>
                 <Icon className={`h-4 w-4 ${
-                  status === 'completed' ? 'text-green-600' :
-                  status === 'active' ? 'text-orange-600' : 'text-gray-400'
+                  step === activeStep ? 'text-orange-600' :
+                  status === 'completed' ? 'text-green-600' : 'text-gray-400'
                 }`} />
               </div>
               <span className={`text-xs font-bold truncate ${
-                status === 'completed' ? 'text-green-700' :
-                status === 'active' ? 'text-orange-700' : 'text-gray-500'
+                step === activeStep ? 'text-orange-700' :
+                status === 'completed' ? 'text-green-700' : 'text-gray-500'
               }`}>{label}</span>
               {status === 'completed' && <CheckCircle className="h-3.5 w-3.5 text-green-500 ml-auto flex-shrink-0" />}
-            </div>
+            </button>
           );
         })}
       </div>
 
       {/* Step Content: OT Scheduling */}
-      {currentStep === STEPS.SCHEDULING && (
+      {activeStep === STEPS.SCHEDULING && (
         <div className="card p-6 space-y-4">
-          <div className="flex items-center gap-2 border-b border-orange-100 pb-3">
-            <CalendarDays className="h-5 w-5 text-orange-600" />
-            <h2 className="font-extrabold text-gray-900">Step 1: Schedule OT</h2>
+          <div className="flex items-center justify-between border-b border-orange-100 pb-3">
+            <div className="flex items-center gap-2">
+              <CalendarDays className="h-5 w-5 text-orange-600" />
+              <h2 className="font-extrabold text-gray-900">Step 2: Schedule OT Procedure</h2>
+            </div>
+            {otRecord?.schedulingStatus === 'Scheduled' || otRecord?.schedulingStatus === 'Completed' ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-green-100 text-green-800 px-3 py-1 text-xs font-bold">
+                <CheckCircle className="h-3 w-3" /> Scheduled
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 text-orange-800 px-3 py-1 text-xs font-bold">
+                <Clock className="h-3 w-3 animate-pulse" /> Pending Schedule
+              </span>
+            )}
           </div>
-          <p className="text-sm text-gray-600">First, schedule the OT by selecting the room, date, and time slot.</p>
 
-          {otRecord && (
+          {otRecord?.schedulingStatus === 'Scheduled' || otRecord?.schedulingStatus === 'Completed' ? (
+            <div className="text-center py-6 bg-green-50/10 border border-green-100 rounded-2xl max-w-xl mx-auto space-y-4">
+              <CheckCircle className="h-12 w-12 text-green-500 mx-auto" />
+              <h3 className="text-lg font-bold text-green-700">OT Procedure Already Scheduled</h3>
+              <div className="text-sm text-gray-600 space-y-1">
+                <p><span className="font-semibold text-gray-700">Scheduled Room:</span> {otRecord.otScheduling?.otId?.otName || 'N/A'}</p>
+                <p><span className="font-semibold text-gray-700">Date:</span> {otRecord.otScheduling?.scheduledStart ? new Date(otRecord.otScheduling.scheduledStart).toLocaleDateString('en-IN') : 'N/A'}</p>
+                <p>
+                  <span className="font-semibold text-gray-700">Time Window:</span> {otRecord.otScheduling?.scheduledStart ? new Date(otRecord.otScheduling.scheduledStart).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''} - {otRecord.otScheduling?.scheduledEnd ? new Date(otRecord.otScheduling.scheduledEnd).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
+                </p>
+              </div>
+              <div className="mt-6 flex gap-3 justify-center">
+                <button onClick={() => setShowScheduling(true)} className="btn-secondary text-sm py-2 px-4 flex items-center gap-2 cursor-pointer">
+                  <Calendar className="h-4 w-4" /> Reschedule OT
+                </button>
+                {currentStep > STEPS.SCHEDULING && (
+                  <button onClick={() => setViewStep(null)} className="btn text-sm py-2 px-4 flex items-center gap-2 cursor-pointer">
+                    Proceed to Next Step
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 bg-orange-50/20 border-2 border-dashed border-orange-200 rounded-2xl max-w-md mx-auto space-y-4">
+              <Calendar className="h-12 w-12 text-orange-400 mx-auto" />
+              <h3 className="text-base font-bold text-gray-800">No OT Schedule Configured</h3>
+              <p className="text-sm text-gray-500 px-4">Please schedule the OT procedure by selecting an available OT room, date, and timeslot.</p>
+              <button
+                onClick={() => setShowScheduling(true)}
+                className="btn px-6 py-2.5 flex items-center gap-2 mx-auto cursor-pointer"
+              >
+                <Calendar className="h-4 w-4" /> Open Scheduling Form
+              </button>
+            </div>
+          )}
+
+          {showScheduling && otRecord && (
             <OtSchedulingModal
               otRecord={otRecord}
               admissionId={id}
-              onClose={() => {}}
+              onClose={() => setShowScheduling(false)}
               onScheduleSuccess={handleScheduleSuccess}
             />
           )}
@@ -419,116 +665,202 @@ const IpdOtFlow = () => {
       )}
 
       {/* Step Content: Consultation Form */}
-      {currentStep === STEPS.CONSULTATION && (
+      {activeStep === STEPS.CONSULTATION && (
         <div className="card p-6 space-y-5">
-          <div className="flex items-center gap-2 border-b border-blue-100 pb-3">
-            <ClipboardCheck className="h-5 w-5 text-blue-600" />
-            <h2 className="font-extrabold text-gray-900">Step 2: Consultation Form</h2>
+          <div className="flex items-center justify-between border-b border-orange-200 pb-3 flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <ClipboardCheck className="h-5 w-5 text-orange-500" />
+              <h2 className="font-extrabold text-gray-900">Step 1: OT Consultation / Consent Template</h2>
+            </div>
+            <div className="flex items-center gap-2">
+              {otRecord?.consultation?.isConsultationCompleted ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-green-100 text-green-800 px-3 py-1 text-xs font-bold">
+                  <CheckCircle className="h-3 w-3" /> Completed
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 text-orange-800 px-3 py-1 text-xs font-bold">
+                  <Clock className="h-3 w-3 animate-pulse" /> Pending Fill
+                </span>
+              )}
+            </div>
           </div>
 
-          {otRecord?.consultation?.isConsultationCompleted ? (
-            <div className="text-center py-6">
-              <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-3" />
-              <h3 className="text-lg font-bold text-green-700">Consultation Form Already Completed</h3>
-              <p className="text-sm text-gray-600 mt-2">
-                Signed by: {otRecord.consultation.signatureSignedBy} on {formatDate(otRecord.consultation.signatureSignedAt)}
-              </p>
-              {otRecord.consultation.signatureFileUrl && (
-                <div className="mt-4">
-                  <img src={otRecord.consultation.signatureFileUrl} alt="Signature" className="max-h-24 mx-auto border rounded" />
+          {!otRecord?.consultation?.isConsultationCompleted || isEditingConsultation ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-500 font-bold text-gray-700">
+                    Select Template
+                  </label>
+                  {loadingTemplates ? (
+                    <div className="flex items-center gap-2 text-sm text-gray-500 py-2">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Loading templates...
+                    </div>
+                  ) : activeTemplates.length === 0 ? (
+                    <p className="text-xs text-gray-400 py-2">
+                      No active consultation templates found. Please configure them in Admin OT Settings.
+                    </p>
+                  ) : (
+                    <select
+                      className="input py-2.5 text-sm"
+                      value={selectedTemplate}
+                      onChange={(e) => handleTemplateChange(e.target.value)}
+                    >
+                      <option value="">Choose a Template...</option>
+                      {activeTemplates.map(t => (
+                        <option key={t._id} value={t._id}>{t.templateName}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
-              )}
-              <div className="mt-6 flex gap-3 justify-center">
-                <button onClick={handlePrintConsultation} className="btn-secondary"><Printer className="h-4 w-4" /> Print</button>
-                <button onClick={loadData} className="btn"><RefreshCw className="h-4 w-4" /> Proceed to OT Charges</button>
+                <div>
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-500 font-bold text-gray-700">
+                    Template Heading / Title
+                  </label>
+                  <input
+                    type="text"
+                    className="input py-2.5 text-sm"
+                    value={consultationHeading}
+                    onChange={(e) => setConsultationHeading(e.target.value)}
+                    placeholder="e.g. Consent for Surgery"
+                  />
+                </div>
+              </div>
+
+              {/* Manual Fields Section */}
+              <div className="border border-orange-100 rounded-xl bg-orange-50/20 p-4 space-y-3 shadow-sm">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-orange-950 uppercase tracking-wide border-b border-orange-100 pb-2">
+                  <Edit3 className="h-4 w-4 text-orange-600" />
+                  <span>Manual Form Fields</span>
+                </div>
+                <div className="grid grid-cols-1 gap-3">
+                  <div>
+                    <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-500 font-bold text-gray-700">
+                      Surgical Procedure
+                    </label>
+                    <input
+                      type="text"
+                      className="input py-2 text-sm bg-white"
+                      value={surgicalProcedureInput}
+                      onChange={(e) => handleManualFieldChange('surgical', e.target.value)}
+                      placeholder="Enter surgical procedure (e.g. Laparoscopic Cholecystectomy)"
+                    />
+                    <p className="text-[9px] text-gray-400 mt-0.5">Fills {'{Surgical Procedure}'} and updates the main form's procedure field.</p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-500 font-bold text-gray-700">
+                        Additional Paragraph 1
+                      </label>
+                      <textarea
+                        className="input py-2 text-sm bg-white min-h-[60px] resize-y"
+                        value={additionalParagraph1}
+                        onChange={(e) => handleManualFieldChange('p1', e.target.value)}
+                        placeholder="Enter custom text for {'{Additional Paragraph 1}'}..."
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-500 font-bold text-gray-700">
+                        Additional Paragraph 2
+                      </label>
+                      <textarea
+                        className="input py-2 text-sm bg-white min-h-[60px] resize-y"
+                        value={additionalParagraph2}
+                        onChange={(e) => handleManualFieldChange('p2', e.target.value)}
+                        placeholder="Enter custom text for {'{Additional Paragraph 2}'}..."
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-500 font-bold text-gray-700">
+                  Consultation Content
+                </label>
+                <TemplateEditor
+                  value={consultationContent}
+                  onChange={setConsultationContent}
+                  placeholder="Select a template above to auto-populate content, or start typing here..."
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-orange-100">
+                {otRecord?.consultation?.isConsultationCompleted && (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingConsultation(false)}
+                    className="btn-secondary text-sm py-2 px-4 cursor-pointer"
+                  >
+                    Cancel Edit
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => handleSaveConsultation(false)}
+                  disabled={savingConsultation}
+                  className="btn-secondary text-sm py-2.5 px-4 flex items-center gap-2 cursor-pointer"
+                >
+                  {savingConsultation ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  Save Form
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveConsultation(true)}
+                  disabled={savingConsultation}
+                  className="btn text-sm py-2.5 px-5 flex items-center gap-2 cursor-pointer"
+                >
+                  {savingConsultation ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+                  Save & Print Form
+                </button>
               </div>
             </div>
           ) : (
-            <>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
-                Fill the consultation form, print it, get it signed by the patient/relative, and upload the signed copy.
-              </div>
-
-              {/* Consultation Notes */}
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">
-                  Consultation Notes <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 min-h-[200px] resize-y text-sm"
-                  value={consultationNotes}
-                  onChange={(e) => setConsultationNotes(e.target.value)}
-                  placeholder="Enter detailed pre-operative consultation notes, assessment, findings, and recommendations..."
+            <div className="space-y-4">
+              <div className="border border-orange-100 rounded-xl bg-white p-5 shadow-sm space-y-4">
+                <div className="text-center border-b border-gray-100 pb-3">
+                  <h4 className="font-extrabold text-lg text-gray-900 uppercase tracking-wide">
+                    {otRecord.consultation?.templateHeading}
+                  </h4>
+                  <p className="text-[10px] text-gray-400 mt-1">
+                    Template: {otRecord.consultation?.templateName || 'Custom'} | Completed on: {otRecord.consultation?.signatureSignedAt ? new Date(otRecord.consultation.signatureSignedAt).toLocaleString('en-IN') : 'N/A'}
+                  </p>
+                </div>
+                <div
+                  className="prose prose-sm max-w-none text-gray-800 min-h-[100px]"
+                  dangerouslySetInnerHTML={{ __html: otRecord.consultation?.consultationNotes }}
                 />
               </div>
 
-              {/* Print Button */}
-              <div>
-                <button onClick={handlePrintConsultation} className="btn-secondary">
-                  <Printer className="h-4 w-4" /> Print Consultation Form
+              <div className="flex flex-wrap gap-2 pt-2">
+                <button
+                  onClick={handleEditConsultation}
+                  className="btn-secondary text-sm py-2 px-4 flex items-center gap-2 cursor-pointer"
+                >
+                  <Edit3 className="h-4 w-4" /> Edit Content
                 </button>
-                <p className="text-xs text-gray-500 mt-1">Print the form, get it signed by patient/relative, then upload below.</p>
-              </div>
-
-              {/* Upload Signed Form */}
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">
-                  Upload Signed Consultation Form <span className="text-red-500">*</span>
-                </label>
-                {signedPreview ? (
-                  <div className="border-2 border-blue-300 rounded-lg p-3 bg-blue-50">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <img src={signedPreview} alt="Signed Form" className="max-h-40 object-contain border rounded bg-white" />
-                        <p className="text-xs text-gray-500 mt-2">{signedFile?.name}</p>
-                      </div>
-                      <button onClick={() => { setSignedFile(null); setSignedPreview(null); }}
-                        className="p-1 hover:bg-red-100 rounded text-red-600 ml-2"><X className="h-4 w-4" /></button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="border-2 border-dashed border-blue-300 rounded-lg p-6 text-center bg-blue-50/30 hover:border-blue-500 cursor-pointer"
-                    onClick={() => fileInputRef.current?.click()}>
-                    <Upload className="h-8 w-8 text-blue-500 mx-auto mb-2" />
-                    <p className="text-sm font-semibold text-gray-700">Click to upload signed form (PDF or image)</p>
-                    <p className="text-xs text-gray-500">PDF, JPG, PNG up to 10MB</p>
-                    <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png,image/*"
-                      onChange={handleSignedFile} className="hidden" />
-                  </div>
+                <button
+                  onClick={() => handlePrintConsultation()}
+                  className="btn-secondary text-sm py-2 px-4 flex items-center gap-2 cursor-pointer"
+                >
+                  <Printer className="h-4 w-4" /> Print Consultation
+                </button>
+                {currentStep > STEPS.CONSULTATION && (
+                  <button
+                    onClick={() => setViewStep(null)}
+                    className="btn text-sm py-2 px-4 flex items-center gap-2 cursor-pointer"
+                  >
+                    Proceed to Next Step
+                  </button>
                 )}
               </div>
-
-              {/* Signed By */}
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">
-                  Signed By (Patient/Relative Name) <span className="text-red-500">*</span>
-                </label>
-                <input type="text"
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
-                  value={signedByName}
-                  onChange={(e) => setSignedByName(e.target.value)}
-                  placeholder="Enter the name of the person who signed the form"
-                />
-              </div>
-
-              {/* Save Button */}
-              <div className="flex justify-end gap-3 pt-2">
-                <button onClick={handleSaveConsultation} disabled={savingConsultation || uploadingSigned}
-                  className="btn px-6 py-2.5 flex items-center gap-2">
-                  {savingConsultation || uploadingSigned ? (
-                    <><Loader2 className="h-4 w-4 animate-spin" /> Submitting...</>
-                  ) : (
-                    <><CheckCircle className="h-4 w-4" /> Save & Complete Consultation</>
-                  )}
-                </button>
-              </div>
-            </>
+            </div>
           )}
         </div>
       )}
 
       {/* Step Content: OT Charges (Pending Admin) */}
-      {currentStep === STEPS.CHARGES && (
+      {activeStep === STEPS.CHARGES && (
         <div className="card p-6 space-y-4">
           <div className="flex items-center gap-2 border-b border-green-100 pb-3">
             <IndianRupee className="h-5 w-5 text-green-600" />
@@ -555,7 +887,7 @@ const IpdOtFlow = () => {
       )}
 
       {/* Step Content: Pharmacy Request */}
-      {currentStep === STEPS.PHARMACY_REQUEST && (
+      {activeStep === STEPS.PHARMACY_REQUEST && (
         <div className="card p-6 space-y-6">
           <div className="flex items-center gap-2 border-b border-orange-100 pb-3">
             <Pill className="h-5 w-5 text-orange-600" />
@@ -671,7 +1003,7 @@ const IpdOtFlow = () => {
       )}
 
       {/* Step Content: OT Active */}
-      {currentStep === STEPS.ACTIVE && (
+      {activeStep === STEPS.ACTIVE && (
         <div className="card p-6 text-center space-y-6">
           <div className="animate-pulse flex flex-col items-center justify-center space-y-3">
             <span className="relative flex h-8 w-8">
@@ -683,10 +1015,10 @@ const IpdOtFlow = () => {
           </div>
 
           <div className="border border-orange-100 rounded-2xl p-5 bg-orange-50/20 max-w-md mx-auto text-left text-sm space-y-2.5">
-            <div><span className="font-bold text-gray-700">Scheduled Room:</span> {otRecord.otScheduling?.otId?.otName || 'N/A'}</div>
-            <div><span className="font-bold text-gray-700">Surgery Date:</span> {otRecord.otScheduling?.scheduledStart ? new Date(otRecord.otScheduling.scheduledStart).toLocaleDateString('en-IN') : 'N/A'}</div>
-            <div><span className="font-bold text-gray-700">Time Window:</span> {otRecord.otScheduling?.scheduledStart ? new Date(otRecord.otScheduling.scheduledStart).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''} - {otRecord.otScheduling?.scheduledEnd ? new Date(otRecord.otScheduling.scheduledEnd).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}</div>
-            <div><span className="font-bold text-gray-700">Surgeon:</span> Dr. {otRecord.surgeon || 'N/A'}</div>
+            <div><span className="font-bold text-gray-700">Scheduled Room:</span> {otRecord?.otScheduling?.otId?.otName || 'N/A'}</div>
+            <div><span className="font-bold text-gray-700">Surgery Date:</span> {otRecord?.otScheduling?.scheduledStart ? new Date(otRecord.otScheduling.scheduledStart).toLocaleDateString('en-IN') : 'N/A'}</div>
+            <div><span className="font-bold text-gray-700">Time Window:</span> {otRecord?.otScheduling?.scheduledStart ? new Date(otRecord.otScheduling.scheduledStart).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''} - {otRecord?.otScheduling?.scheduledEnd ? new Date(otRecord.otScheduling.scheduledEnd).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}</div>
+            <div><span className="font-bold text-gray-700">Surgeon:</span> Dr. {otRecord?.surgeon || 'N/A'}</div>
           </div>
 
           <div className="flex flex-col sm:flex-row justify-center gap-3 pt-3">
@@ -697,7 +1029,7 @@ const IpdOtFlow = () => {
               <CheckCircle className="h-5 w-5" /> Mark OT Done
             </button>
             <button 
-              onClick={() => navigate(`/ipd/ot/${id}?otId=${otRecord._id}`)} 
+              onClick={() => navigate(`/ipd/ot/${id}?otId=${otRecord?._id}`)} 
               className="btn-secondary flex items-center gap-2 justify-center"
             >
               <FileText className="h-4 w-4" /> Open Operative Report / OT Form
@@ -707,7 +1039,7 @@ const IpdOtFlow = () => {
       )}
 
       {/* Step Content: Completed */}
-      {currentStep === STEPS.COMPLETED && (
+      {activeStep === STEPS.COMPLETED && (
         <div className="card p-6 text-center">
           <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-3" />
           <h2 className="text-xl font-bold text-green-700">OT Process Completed</h2>
@@ -751,23 +1083,17 @@ const IpdOtFlow = () => {
                   <h3 className="text-sm font-bold text-gray-900 mb-3">Consultation Form</h3>
                   {otRecord?.consultation?.isConsultationCompleted ? (
                     <div className="space-y-3 text-sm text-gray-700">
-                      <div><span className="font-semibold">Status:</span> Completed</div>
-                      <div><span className="font-semibold">Signed By:</span> {otRecord.consultation.signatureSignedBy || 'N/A'}</div>
-                      <div><span className="font-semibold">Signed At:</span> {otRecord.consultation.signatureSignedAt ? formatDate(otRecord.consultation.signatureSignedAt) : 'N/A'}</div>
-                      <div><span className="font-semibold">Notes:</span></div>
-                      <div className="whitespace-pre-wrap rounded-lg bg-gray-50 border border-gray-200 p-3 text-sm text-gray-800">{otRecord.consultation.consultationNotes || 'No notes available.'}</div>
-                      {otRecord.consultation.signatureFileUrl && (
-                        <div>
-                          <span className="block text-sm font-semibold text-gray-900">Signed Document</span>
-                          <img src={otRecord.consultation.signatureFileUrl} alt="Signed Consultation" className="max-h-40 w-full object-contain rounded-lg border mt-2" />
-                        </div>
-                      )}
+                      <div><span className="font-semibold">Heading:</span> {otRecord.consultation.templateHeading || 'OT Consent'}</div>
+                      <div><span className="font-semibold">Template Name:</span> {otRecord.consultation.templateName || 'Custom'}</div>
+                      <div><span className="font-semibold">Completed on:</span> {otRecord.consultation.signatureSignedAt ? formatDate(otRecord.consultation.signatureSignedAt) : new Date().toLocaleDateString('en-IN')}</div>
+                      <div><span className="font-semibold">Consent Notes / Content:</span></div>
+                      <div className="rounded-lg bg-gray-50 border border-gray-200 p-4 text-sm text-gray-800 max-h-[300px] overflow-y-auto prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: otRecord.consultation.consultationNotes }} />
                     </div>
                   ) : (
                     <div className="text-sm text-gray-700">
                       <div className="mb-2"><span className="font-semibold">Status:</span> Not completed</div>
                       <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 text-gray-600">
-                        Consultation notes, printed form, and signed document will appear here after completion.
+                        Consultation template details and content will appear here after completion.
                       </div>
                     </div>
                   )}

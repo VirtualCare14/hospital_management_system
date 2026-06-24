@@ -16,15 +16,20 @@ const consultationSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  visitId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Visit',
+    required: false
+  },
   symptoms: [{
     symptom: { type: String, required: true },
-    durationDays: { type: Number }, // duration in days
-    durationUnit: { type: String, default: 'Days' }, // Days, Weeks, Months
-    pastHistory: { type: String }, // per-symptom past history
-    remarks: { type: String } // per-symptom remarks
+    durationDays: { type: Number },
+    durationUnit: { type: String, default: 'Days' },
+    pastHistory: { type: String },
+    remarks: { type: String }
   }],
   generalPastHistory: {
-    type: String // overall past history
+    type: String
   },
   diagnosisRemark: {
     type: String
@@ -40,24 +45,20 @@ const consultationSchema = new mongoose.Schema({
     type: String
   }],
   followUpDate: {
-    type: String // Format: YYYY-MM-DD
-  }
-  ,
+    type: String
+  },
   consultationStatus: {
     type: String,
     enum: ["pending", "completed"],
     default: "pending"
   },
   consultationCompletedDate: {
-    type: Date
-  },
-  createdAt: {
     type: Date,
-    default: Date.now
+    default: null
   },
-  updatedAt: {
+  consultationDateTime: {
     type: Date,
-    default: Date.now
+    default: null
   }
 }, { timestamps: true });
 

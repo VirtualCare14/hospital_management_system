@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FileText, Search, Stethoscope, Users, Trash2, Send } from 'lucide-react';
+import { FileText, Search, Stethoscope, Users, Trash2, Send, History } from 'lucide-react';
 import toast from 'react-hot-toast';
 import client from '../../api/client';
 import { formatDate } from '../../utils/dateFormat';
@@ -8,13 +8,12 @@ import { formatDate } from '../../utils/dateFormat';
 const DoctorDashboard = () => {
   const [patients, setPatients] = useState([]);
   const [search, setSearch] = useState('');
-  const [tab, setTab] = useState('opd'); // 'opd' or 'completed'
   const [filter, setFilter] = useState('today'); // previous | today | upcoming
   const [counts, setCounts] = useState(null);
 
   const fetchPatients = useCallback(() => {
-    client.get(`/consultation/appointments?tab=${tab}&filter=${filter}`).then(({ data }) => setPatients(data)).catch(() => setPatients([]));
-  }, [tab, filter]);
+    client.get(`/consultation/appointments?filter=${filter}`).then(({ data }) => setPatients(data)).catch(() => setPatients([]));
+  }, [filter]);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -54,6 +53,17 @@ const DoctorDashboard = () => {
     }
   };
 
+  // Filter by search
+  const filteredPatients = patients.filter(patient => {
+    if (!search.trim()) return true;
+    const term = search.toLowerCase();
+    return (
+      (patient.patientName && patient.patientName.toLowerCase().includes(term)) ||
+      (patient.uhid && patient.uhid.toLowerCase().includes(term)) ||
+      (patient.mobile && patient.mobile.includes(term))
+    );
+  });
+
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -72,7 +82,7 @@ const DoctorDashboard = () => {
           />
         </div>
       </div>
-      <div className="grid gap-4 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {[{
           label: 'Total Patients', value: counts?.totalPatients
         }, {
@@ -94,21 +104,15 @@ const DoctorDashboard = () => {
       </div>
 
       <div className="card p-5">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-2">
             <Users className="text-orange-500" />
             <h2 className="font-bold text-gray-800">Patient List</h2>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="flex gap-2">
-              <button className={`btn ${filter === 'previous' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setFilter('previous')}>Previous</button>
-              <button className={`btn ${filter === 'today' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setFilter('today')}>Today</button>
-              <button className={`btn ${filter === 'upcoming' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setFilter('upcoming')}>Upcoming</button>
-            </div>
-            <div className="flex gap-2">
-              <button className={`btn ${tab === 'opd' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setTab('opd')}>OPD Patients</button>
-              <button className={`btn ${tab === 'completed' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setTab('completed')}>Consultation Completed</button>
-            </div>
+          <div className="flex gap-2">
+            <button className={`btn ${filter === 'previous' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setFilter('previous')}>Previous</button>
+            <button className={`btn ${filter === 'today' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setFilter('today')}>Today</button>
+            <button className={`btn ${filter === 'upcoming' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setFilter('upcoming')}>Upcoming</button>
           </div>
         </div>
 
@@ -118,31 +122,40 @@ const DoctorDashboard = () => {
               <tr className="border-b">
                 <th className="p-3">Patient Name</th>
                 <th className="p-3">UHID</th>
-                <th className="p-3">Appointment Date</th>
+                <th className="p-3">Date / Slot</th>
                 <th className="p-3">Department</th>
                 <th className="p-3">Status</th>
                 <th className="p-3">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white">
-              {patients.map((patient) => (
+              {filteredPatients.map((patient) => (
                 <tr key={patient._id} className="border-b">
                   <td className="p-3 font-semibold">{patient.patientName}</td>
                   <td className="p-3">{patient.uhid}</td>
-                  <td className="p-3">{formatDate(patient.appointmentDate)}</td>
+                  <td className="p-3">{formatDate(patient.appointmentDate)} {patient.slot ? `(${patient.slot})` : ''}</td>
                   <td className="p-3">{patient.department}</td>
-                  <td className="p-3">{patient.consultationStatus === 'completed' ? 'Consultation Completed' : 'OPD Pending'}</td>
+                  <td className="p-3">
+                    {patient.consultationStatus === 'completed' ? (
+                      <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Completed</span>
+                    ) : patient.slot === 'Follow-up' ? (
+                      <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">Follow-up</span>
+                    ) : (
+                      <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">Pending</span>
+                    )}
+                  </td>
                     <td className="p-3">
                       <div className="flex gap-2">
                         <Link className="btn-secondary text-xs" to={`/doctor/consultation/${patient._id}`}><Stethoscope className="h-3 w-3" /> Consult</Link>
                         <Link className="btn text-xs" to={`/doctor/prescription/${patient._id}`}><FileText className="h-3 w-3" /> Rx</Link>
+                        <Link className="btn-secondary text-xs text-green-600" to={`/doctor/consultation-track/${patient._id}`}><History className="h-3 w-3" /> Track</Link>
                         <button className="btn-secondary text-xs text-indigo-600" onClick={() => handleSendToOt(patient)}><Send className="h-3 w-3" /> OT</button>
                         <button className="btn-ghost text-red-600" onClick={() => handleDelete(patient._id)} title="Delete Patient"><Trash2 className="h-4 w-4" /></button>
                       </div>
                     </td>
                 </tr>
               ))}
-              {patients.length === 0 && <tr><td colSpan={6} className="p-4 text-sm text-gray-500">No patients found.</td></tr>}
+              {filteredPatients.length === 0 && <tr><td colSpan={6} className="p-4 text-sm text-gray-500">No patients found.</td></tr>}
             </tbody>
           </table>
         </div>

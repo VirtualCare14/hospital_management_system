@@ -8,6 +8,9 @@ const {
   scheduleOtWithDocuments, uploadDocumentsToBooking,
   autoCompleteOverdueBookings
 } = require('../controllers/otManagementController');
+const {
+  getTemplates, createTemplate, updateTemplate, deleteTemplate
+} = require('../controllers/otTemplateController');
 const authMiddleware = require('../middleware/authMiddleware');
 
 // OT CRUD
@@ -38,5 +41,11 @@ router.delete('/ot-management/documents/:id', authMiddleware, deleteOtDocument);
 
 // Auto complete
 router.post('/ot-management/auto-complete', authMiddleware, autoCompleteOverdueBookings);
+
+// OT Consultation Templates
+router.get('/ot-templates', authMiddleware, getTemplates);
+router.post('/ot-templates', authMiddleware, createTemplate);
+router.put('/ot-templates/:id', authMiddleware, updateTemplate);
+router.delete('/ot-templates/:id', authMiddleware, deleteTemplate);
 
 module.exports = router;

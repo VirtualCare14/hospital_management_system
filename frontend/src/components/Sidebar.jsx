@@ -58,6 +58,8 @@ const Sidebar = () => {
   const doctorLinks = [
     { to: '/doctor', label: 'Doctor Dashboard', icon: Activity },
     { to: '/doctor/patients', label: 'All Patients', icon: Users },
+    { to: '/doctor/ipd-patients', label: 'IPD Patients', icon: Bed },
+    { to: '/doctor/ot-patients', label: 'OT Patients', icon: Scissors },
     { to: '/doctor/completed', label: 'Completed Consultations', icon: CheckCircle },
   ];
 

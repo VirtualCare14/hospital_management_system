@@ -36,18 +36,19 @@ import {
   X,
   Scissors,
   Edit3,
-  DoorOpen
+  DoorOpen,
+  ClipboardList
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import client from '../../api/client';
 import { formatUhid } from '../../utils/uhid';
+import IpdMedicationChartContent from './IpdMedicationChartContent.jsx';
 
 const TABS = [
   { id: 'patient-info', label: 'Patient Info', icon: User },
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
   { id: 'services', label: 'Services', icon: Syringe },
   { id: 'pharmacy-requests', label: 'Pharmacy Requests', icon: Pill },
-  { id: 'billing', label: 'Billing', icon: CreditCard },
   { id: 'ot-records', label: 'OT Records', icon: Scissors },
   { id: 'discharge-records', label: 'Discharge Records', icon: DoorOpen },
   { id: 'timeline', label: 'Timeline', icon: List },
@@ -57,6 +58,7 @@ const SERVICE_CATEGORIES = [
   { id: 'consumables', label: 'Consumable Services', icon: Activity },
   { id: 'medicines', label: 'Medicines', icon: Pill },
   { id: 'lab-tests', label: 'Lab Tests', icon: FlaskConical },
+  { id: 'medication-chart', label: 'Medication Chart', icon: ClipboardList },
 ];
 
 const reportStatusColors = {
@@ -358,10 +360,19 @@ const IpdPatientDetails = () => {
     const iconMap = {
       'Admission Created': UserCircle, 'Bed Allocated': Bed, 'Admitted': UserCircle,
       'Service Added': Activity, 'Medicine Added': Pill, 'Lab Test Ordered': FlaskConical,
-      'Lab Report Generated': FileText, 'Bill Updated': DollarSign, 'Discharged': XCircle,
+      'Lab Report Generated': FileText, 'Discharged': XCircle,
       'OT Record Created': Scissors, 'OT Record Updated': Scissors, 'OT Record Completed': CheckCircle,
     };
     return iconMap[activity] || Activity;
+  };
+
+  const sanitizeTimelineDescription = (description) => {
+    if (!description) return description;
+    return description
+      .replace(/= ₹[\d,]+\.\d{2}/g, '')
+      .replace(/\(₹[\d,]+\.\d{2}\)/g, '')
+      .replace(/₹[\d,]+\.\d{2}/g, '')
+      .trim();
   };
 
   if (loading) {
@@ -470,7 +481,6 @@ const IpdPatientDetails = () => {
               <div><span className="block text-[10px] font-bold uppercase text-gray-400">Room Type</span><div className="flex items-center gap-1 font-bold text-gray-800"><Building2 className="h-3.5 w-3.5 text-gray-400" />{admission.roomId?.roomType || 'N/A'}</div></div>
               <div><span className="block text-[10px] font-bold uppercase text-gray-400">Bed Type</span><span className="font-bold text-gray-800">{admission.bedId?.bedType || 'N/A'}</span></div>
               <div><span className="block text-[10px] font-bold uppercase text-gray-400">Bed Number</span><span className="font-mono font-bold text-gray-800">{admission.bedId?.bedNumber || 'N/A'}</span></div>
-              <div><span className="block text-[10px] font-bold uppercase text-gray-400">Daily Charges</span><span className="font-bold text-green-600">₹{admission.bedId?.pricePerDay || 0}/day</span></div>
             </div>
           </div>
           <div className="card p-5 space-y-4">
@@ -490,7 +500,7 @@ const IpdPatientDetails = () => {
           {dashboardLoading ? (<div className="flex items-center justify-center p-12"><Loader2 className="h-6 w-6 animate-spin text-gray-500" /></div>
           ) : dashboard ? (
             <>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                 <div className="card p-4 text-center bg-blue-50 border-blue-100">
                   <Activity className="h-6 w-6 text-blue-500 mx-auto mb-1" />
                   <span className="block text-2xl font-black text-blue-700">{dashboard.counts.consumables}</span>
@@ -505,11 +515,6 @@ const IpdPatientDetails = () => {
                   <FlaskConical className="h-6 w-6 text-purple-500 mx-auto mb-1" />
                   <span className="block text-2xl font-black text-purple-700">{dashboard.counts.labTests}</span>
                   <span className="text-[10px] font-bold uppercase text-purple-500">Lab Tests</span>
-                </div>
-                <div className="card p-4 text-center bg-amber-50 border-amber-100">
-                  <CreditCard className="h-6 w-6 text-amber-500 mx-auto mb-1" />
-                  <span className="block text-2xl font-black text-amber-700">₹{dashboard.billing.currentTotal.toLocaleString()}</span>
-                  <span className="text-[10px] font-bold uppercase text-amber-500">Current Bill</span>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -552,15 +557,24 @@ const IpdPatientDetails = () => {
               </div>
               {showAddConsumable && (
                 <div className="p-4 border-b border-orange-100 bg-orange-50/20">
-                  <form onSubmit={handleAddConsumable} className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                    <div className="col-span-2 sm:col-span-2">
+                  <form onSubmit={handleAddConsumable} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="sm:col-span-2">
                       <label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">Service Name</label>
-                      <input list="consumable-services" className="input py-2 text-xs" placeholder="Search or type" value={consumableForm.serviceName}
-                        onChange={(e) => { setConsumableForm(p => ({ ...p, serviceName: e.target.value })); const m = consumableServicesList.find(s => s.name === e.target.value); if (m) setConsumableForm(p => ({ ...p, serviceName: e.target.value, price: m.price || p.price, gst: m.gst || p.gst })); }} />
+                      <input list="consumable-services" className="input py-2 text-xs" placeholder="Search or select service" value={consumableForm.serviceName}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setConsumableForm(p => {
+                            const m = consumableServicesList.find(s => s.name === val);
+                            return {
+                              ...p,
+                              serviceName: val,
+                              price: m ? String(m.price || '0') : '',
+                              gst: m ? String(m.gst || '0') : ''
+                            };
+                          });
+                        }} />
                       <datalist id="consumable-services">{consumableServicesList.map((s, i) => <option key={i} value={s.name} />)}</datalist>
                     </div>
-                    <div><label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">Price (₹)</label><input type="number" step="0.01" min="0" className="input py-2 text-xs" value={consumableForm.price} onChange={(e) => setConsumableForm(p => ({ ...p, price: e.target.value }))} /></div>
-                    <div><label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">GST (%)</label><input type="number" step="0.1" min="0" className="input py-2 text-xs" value={consumableForm.gst} onChange={(e) => setConsumableForm(p => ({ ...p, gst: e.target.value }))} /></div>
                     <div><label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">Qty</label><input type="number" min="1" className="input py-2 text-xs" value={consumableForm.quantity} onChange={(e) => setConsumableForm(p => ({ ...p, quantity: e.target.value }))} /></div>
                     <div className="col-span-full flex justify-end gap-2"><button type="button" onClick={() => { setShowAddConsumable(false); setConsumableForm({ serviceName: '', price: '', gst: '', quantity: '1' }); }} className="btn-secondary text-xs py-2 px-4">Cancel</button><button type="submit" className="btn text-xs py-2 px-4"><Plus className="h-3.5 w-3.5" /> Add</button></div>
                   </form>
@@ -568,16 +582,14 @@ const IpdPatientDetails = () => {
               )}
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
-                  <thead><tr className="bg-gray-50 text-xs font-bold uppercase text-gray-500 border-b border-orange-100"><th className="p-3 pl-4">Date</th><th className="p-3">Time</th><th className="p-3">Service Name</th><th className="p-3">Qty</th><th className="p-3">Price</th><th className="p-3">GST</th><th className="p-3">Total</th><th className="p-3">Added By</th><th className="p-3 pr-4 text-center">Action</th></tr></thead>
+                  <thead><tr className="bg-gray-50 text-xs font-bold uppercase text-gray-500 border-b border-orange-100"><th className="p-3 pl-4">Date</th><th className="p-3">Time</th><th className="p-3">Service Name</th><th className="p-3">Qty</th><th className="p-3">Added By</th><th className="p-3 pr-4 text-center">Action</th></tr></thead>
                   <tbody className="divide-y divide-orange-50">
-                    {consumablesLoading ? <tr><td colSpan="9" className="p-8 text-center"><Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading...</td></tr>
-                    : consumables.length === 0 ? <tr><td colSpan="9" className="p-8 text-center text-gray-400"><Activity className="h-8 w-8 mx-auto mb-2 opacity-50" /><p className="font-bold">No consumable services added yet</p></td></tr>
+                    {consumablesLoading ? <tr><td colSpan="6" className="p-8 text-center"><Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading...</td></tr>
+                    : consumables.length === 0 ? <tr><td colSpan="6" className="p-8 text-center text-gray-400"><Activity className="h-8 w-8 mx-auto mb-2 opacity-50" /><p className="font-bold">No consumable services added yet</p></td></tr>
                     : consumables.map(c => (
                       <tr key={c._id} className="hover:bg-orange-50/20">
                         <td className="p-3 pl-4 text-xs">{c.date}</td><td className="p-3 text-xs">{c.time}</td>
                         <td className="p-3 font-bold text-gray-800">{c.serviceName}</td><td className="p-3">{c.quantity}</td>
-                        <td className="p-3">₹{c.price.toFixed(2)}</td><td className="p-3">{c.gst}%</td>
-                        <td className="p-3 font-bold text-green-700">₹{c.totalAmount.toFixed(2)}</td>
                         <td className="p-3 text-xs text-gray-500">{c.addedBy?.doctorName || c.addedBy?.username || 'N/A'}</td>
                         <td className="p-3 pr-4 text-center"><button onClick={() => handleDeleteConsumable(c._id)} className="p-1 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="h-3.5 w-3.5" /></button></td>
                       </tr>
@@ -596,32 +608,26 @@ const IpdPatientDetails = () => {
               </div>
               {showAddMedicine && (
                 <div className="p-4 border-b border-orange-100 bg-orange-50/20">
-                  <form onSubmit={handleAddMedicine} className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div className="col-span-2"><label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">Medicine Name</label>
-                      <input list="medicine-list" className="input py-2 text-xs" placeholder="Search or type" value={medicineForm.medicineName}
-                        onChange={(e) => { setMedicineForm(p => ({ ...p, medicineName: e.target.value })); const m = medicineSettingsList.find(med => med.name === e.target.value); if (m) setMedicineForm(p => ({ ...p, medicineName: e.target.value, unitPrice: m.price || p.unitPrice })); }} />
+                  <form onSubmit={handleAddMedicine} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="sm:col-span-2">
+                      <label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">Medicine Name</label>
+                      <input list="medicine-list" className="input py-2 text-xs" placeholder="Search or select medicine" value={medicineForm.medicineName}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setMedicineForm(p => {
+                            const m = medicineSettingsList.find(med => med.name === val);
+                            return {
+                              ...p,
+                              medicineName: val,
+                              unitPrice: m ? String(m.price || '0') : '',
+                              gst: m ? String(m.gst || '0') : '',
+                              baseUnitPrice: m ? String(m.price || '0') : ''
+                            };
+                          });
+                        }} />
                       <datalist id="medicine-list">{medicineSettingsList.map((m, i) => <option key={i} value={m.name} />)}</datalist>
                     </div>
-                    <div>
-                      <label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">Quantity</label>
-                      <input type="number" min="1" className="input py-2 text-xs" value={medicineForm.quantity} onChange={(e) => setMedicineForm(p => ({ ...p, quantity: e.target.value }))} />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">Unit Price (₹)</label>
-                      <input type="number" step="0.01" min="0" className="input py-2 text-xs" value={medicineForm.unitPrice} onChange={(e) => {
-                        const val = e.target.value;
-                        setMedicineForm(p => ({ ...p, unitPrice: val, baseUnitPrice: val }));
-                      }} />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">GST (%)</label>
-                      <input type="number" step="0.01" min="0" className="input py-2 text-xs" value={medicineForm.gst} onChange={(e) => {
-                        const val = e.target.value;
-                        const base = medicineForm.baseUnitPrice || medicineForm.unitPrice || '0';
-                        const newUnit = applyGstToUnitPrice(base, val);
-                        setMedicineForm(p => ({ ...p, gst: val, unitPrice: newUnit }));
-                      }} />
-                    </div>
+                    <div><label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">Quantity</label><input type="number" min="1" className="input py-2 text-xs" value={medicineForm.quantity} onChange={(e) => setMedicineForm(p => ({ ...p, quantity: e.target.value }))} /></div>
                     <div className="col-span-full flex items-center justify-between">
                       <div className="text-sm"><span className="text-gray-500">Total: </span><span className="font-extrabold text-green-700">₹{medicineTotal}</span></div>
                       <div className="flex gap-2"><button type="button" onClick={() => { setShowAddMedicine(false); setMedicineForm({ medicineName: '', quantity: '1', unitPrice: '' }); }} className="btn-secondary text-xs py-2 px-4">Cancel</button><button type="submit" className="btn text-xs py-2 px-4"><Plus className="h-3.5 w-3.5" /> Add</button></div>
@@ -631,15 +637,14 @@ const IpdPatientDetails = () => {
               )}
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
-                  <thead><tr className="bg-gray-50 text-xs font-bold uppercase text-gray-500 border-b border-orange-100"><th className="p-3 pl-4">Date</th><th className="p-3">Time</th><th className="p-3">Medicine Name</th><th className="p-3">Qty</th><th className="p-3">Unit Price</th><th className="p-3">Total</th><th className="p-3">Added By</th><th className="p-3 pr-4 text-center">Action</th></tr></thead>
+                  <thead><tr className="bg-gray-50 text-xs font-bold uppercase text-gray-500 border-b border-orange-100"><th className="p-3 pl-4">Date</th><th className="p-3">Time</th><th className="p-3">Medicine Name</th><th className="p-3">Qty</th><th className="p-3">Added By</th><th className="p-3 pr-4 text-center">Action</th></tr></thead>
                   <tbody className="divide-y divide-orange-50">
-                    {medicinesLoading ? <tr><td colSpan="8" className="p-8 text-center"><Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading...</td></tr>
-                    : medicines.length === 0 ? <tr><td colSpan="8" className="p-8 text-center text-gray-400"><Pill className="h-8 w-8 mx-auto mb-2 opacity-50" /><p className="font-bold">No medicines added yet</p></td></tr>
+                    {medicinesLoading ? <tr><td colSpan="6" className="p-8 text-center"><Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading...</td></tr>
+                    : medicines.length === 0 ? <tr><td colSpan="6" className="p-8 text-center text-gray-400"><Pill className="h-8 w-8 mx-auto mb-2 opacity-50" /><p className="font-bold">No medicines added yet</p></td></tr>
                     : medicines.map(m => (
                       <tr key={m._id} className="hover:bg-orange-50/20">
                         <td className="p-3 pl-4 text-xs">{m.date}</td><td className="p-3 text-xs">{m.time}</td>
                         <td className="p-3 font-bold text-gray-800">{m.medicineName}</td><td className="p-3">{m.quantity}</td>
-                        <td className="p-3">₹{m.unitPrice.toFixed(2)}</td><td className="p-3 font-bold text-green-700">₹{m.totalAmount.toFixed(2)}</td>
                         <td className="p-3 text-xs text-gray-500">{m.addedBy?.doctorName || m.addedBy?.username || 'N/A'}</td>
                         <td className="p-3 pr-4 text-center"><button onClick={() => handleDeleteMedicine(m._id)} className="p-1 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="h-3.5 w-3.5" /></button></td>
                       </tr>
@@ -700,15 +705,14 @@ const IpdPatientDetails = () => {
               )}
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
-                  <thead><tr className="bg-gray-50 text-xs font-bold uppercase text-gray-500 border-b border-orange-100"><th className="p-3 pl-4">Date</th><th className="p-3">Time</th><th className="p-3">Test Name</th><th className="p-3">Category</th><th className="p-3">Price</th><th className="p-3">Report Status</th><th className="p-3">Report Date</th><th className="p-3">Added By</th><th className="p-3 pr-4 text-center">Action</th></tr></thead>
+                  <thead><tr className="bg-gray-50 text-xs font-bold uppercase text-gray-500 border-b border-orange-100"><th className="p-3 pl-4">Date</th><th className="p-3">Time</th><th className="p-3">Test Name</th><th className="p-3">Category</th><th className="p-3">Report Status</th><th className="p-3">Report Date</th><th className="p-3">Added By</th><th className="p-3 pr-4 text-center">Action</th></tr></thead>
                   <tbody className="divide-y divide-orange-50">
-                    {labTestsLoading ? <tr><td colSpan="9" className="p-8 text-center"><Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading...</td></tr>
-                    : labTests.length === 0 ? <tr><td colSpan="9" className="p-8 text-center text-gray-400"><FlaskConical className="h-8 w-8 mx-auto mb-2 opacity-50" /><p className="font-bold">No lab tests ordered yet</p></td></tr>
+                    {labTestsLoading ? <tr><td colSpan="8" className="p-8 text-center"><Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading...</td></tr>
+                    : labTests.length === 0 ? <tr><td colSpan="8" className="p-8 text-center text-gray-400"><FlaskConical className="h-8 w-8 mx-auto mb-2 opacity-50" /><p className="font-bold">No lab tests ordered yet</p></td></tr>
                     : labTests.map(t => (
                       <tr key={t._id} className="hover:bg-orange-50/20">
                         <td className="p-3 pl-4 text-xs">{t.date}</td><td className="p-3 text-xs">{t.time}</td>
                         <td className="p-3 font-bold text-gray-800">{t.testName}</td><td className="p-3 text-xs">{t.testCategory || '-'}</td>
-                        <td className="p-3 font-bold text-green-700">₹{t.testPrice.toFixed(2)}</td>
                         <td className="p-3"><span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold ${reportStatusColors[t.reportStatus] || 'bg-gray-100 text-gray-700'}`}>{t.reportStatus === 'Completed' || t.reportStatus === 'Approved' ? <CheckCircle className="h-3 w-3" /> : <Clock className="h-3 w-3" />}{t.reportStatus}</span></td>
                         <td className="p-3 text-xs">{t.reportDate || '-'}</td>
                         <td className="p-3 text-xs text-gray-500">{t.addedBy?.doctorName || t.addedBy?.username || 'N/A'}</td>
@@ -726,6 +730,10 @@ const IpdPatientDetails = () => {
                 </table>
               </div>
             </div>
+          )}
+
+          {serviceCategory === 'medication-chart' && (
+            <IpdMedicationChartContent admissionId={id} />
           )}
         </div>
       )}
@@ -898,7 +906,7 @@ const IpdPatientDetails = () => {
                         </div>
                         <div className="flex-1 min-w-0 pt-1">
                           <div className="flex items-center gap-2"><span className="font-extrabold text-gray-900 text-sm">{entry.activity}</span><span className="text-[10px] text-gray-400 font-mono">{entry.date} {entry.time}</span></div>
-                          <p className="text-xs text-gray-600 mt-0.5">{entry.description}</p>
+                          <p className="text-xs text-gray-600 mt-0.5">{sanitizeTimelineDescription(entry.description)}</p>
                           {entry.performedByName && <p className="text-[10px] text-gray-400 mt-0.5">by {entry.performedByName}</p>}
                         </div>
                       </div>

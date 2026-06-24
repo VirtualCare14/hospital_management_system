@@ -13,11 +13,28 @@ const OtSchedulingModal = ({ otRecord, admissionId, onClose, onScheduleSuccess }
   const [documents, setDocuments] = useState([]);
   const [uploadingDoc, setUploadingDoc] = useState(false);
 
+  const getLocalDateString = (dateInput) => {
+    if (!dateInput) return '';
+    const d = new Date(dateInput);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const getLocalTimeString = (dateInput) => {
+    if (!dateInput) return '';
+    const d = new Date(dateInput);
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  };
+
   const [formData, setFormData] = useState({
-    otId: '',
-    surgeryDate: '',
-    startTime: '',
-    endTime: ''
+    otId: otRecord?.otScheduling?.otId?._id || otRecord?.otScheduling?.otId || '',
+    surgeryDate: getLocalDateString(otRecord?.otScheduling?.scheduledStart),
+    startTime: getLocalTimeString(otRecord?.otScheduling?.scheduledStart),
+    endTime: getLocalTimeString(otRecord?.otScheduling?.scheduledEnd)
   });
 
   // Load available OTs

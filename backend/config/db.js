@@ -93,14 +93,27 @@ const disableLegacyDefaultAdmin = async (db) => {
 };
 
 const connectDB = async () => {
-  try {
-    const conn = await mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/hospital_management');
-    console.log(`MongoDB Connected: ${conn.connection.host}`);
-    await ensureTenantIndexes(conn.connection.db);
-    await disableLegacyDefaultAdmin(conn.connection.db);
-  } catch (error) {
-    console.error(`MongoDB connection error: ${error.message}`);
-    process.exit(1);
+  const maxRetries = 5;
+  let retries = 0;
+  while (retries < maxRetries) {
+    try {
+      const conn = await mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/hospital_management', {
+        serverSelectionTimeoutMS: 5000,
+      });
+      console.log(`MongoDB Connected: ${conn.connection.host}`);
+      await ensureTenantIndexes(conn.connection.db);
+      await disableLegacyDefaultAdmin(conn.connection.db);
+      return;
+    } catch (error) {
+      retries++;
+      console.error(`MongoDB connection attempt ${retries} failed: ${error.message}`);
+      if (retries >= maxRetries) {
+        console.error('All MongoDB connection attempts failed. Exiting...');
+        process.exit(1);
+      }
+      console.log('Retrying MongoDB connection in 5 seconds...');
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+    }
   }
 };
 

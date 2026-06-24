@@ -2,11 +2,15 @@ import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
   Plus, Edit3, Trash2, Search, X, Loader2, Building2,
-  CheckCircle, RefreshCw, IndianRupee, Save, Eye
+  CheckCircle, RefreshCw, IndianRupee, Save, Eye, FileText
 } from 'lucide-react';
 import client from '../../api/client';
+import TemplateEditor from '../../components/TemplateEditor';
 
 const OperationTheatreSettings = () => {
+  const [activeTab, setActiveTab] = useState('theatres'); // 'theatres' or 'templates'
+
+  // Operation Theatres State
   const [ots, setOts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
@@ -24,6 +28,14 @@ const OperationTheatreSettings = () => {
   const [savingCharges, setSavingCharges] = useState(false);
   const [loadingPatients, setLoadingPatients] = useState(false);
 
+  // Consultation Templates State
+  const [templates, setTemplates] = useState([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [showTemplateForm, setShowTemplateForm] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState(null);
+  const [templateForm, setTemplateForm] = useState({ templateName: '', templateHeading: '', content: '', isActive: true });
+  const [savingTemplate, setSavingTemplate] = useState(false);
+
   const loadOts = async () => {
     setLoading(true);
     try {
@@ -37,7 +49,25 @@ const OperationTheatreSettings = () => {
     }
   };
 
-  useEffect(() => { loadOts(); }, []);
+  const loadTemplates = async () => {
+    setLoadingTemplates(true);
+    try {
+      const { data } = await client.get('/ipd/ot-templates');
+      setTemplates(data);
+    } catch (err) {
+      toast.error('Failed to load templates');
+    } finally {
+      setLoadingTemplates(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'theatres') {
+      loadOts();
+    } else {
+      loadTemplates();
+    }
+  }, [activeTab]);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -85,6 +115,69 @@ const OperationTheatreSettings = () => {
       loadOts();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Cannot delete OT');
+    }
+  };
+
+  // Consultation Templates CRUD handlers
+  const openCreateTemplate = () => {
+    setEditingTemplate(null);
+    setTemplateForm({ templateName: '', templateHeading: '', content: '', isActive: true });
+    setShowTemplateForm(true);
+  };
+
+  const openEditTemplate = (template) => {
+    setEditingTemplate(template);
+    setTemplateForm({
+      templateName: template.templateName,
+      templateHeading: template.templateHeading,
+      content: template.content,
+      isActive: template.isActive
+    });
+    setShowTemplateForm(true);
+  };
+
+  const handleSaveTemplate = async (e) => {
+    e.preventDefault();
+    if (!templateForm.templateName.trim()) { toast.error('Template Name is required'); return; }
+    if (!templateForm.templateHeading.trim()) { toast.error('Template Heading is required'); return; }
+    if (!templateForm.content.trim()) { toast.error('Template Content is required'); return; }
+
+    setSavingTemplate(true);
+    try {
+      if (editingTemplate) {
+        await client.put(`/ipd/ot-templates/${editingTemplate._id}`, templateForm);
+        toast.success('Template updated successfully');
+      } else {
+        await client.post('/ipd/ot-templates', templateForm);
+        toast.success('Template created successfully');
+      }
+      setShowTemplateForm(false);
+      loadTemplates();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to save template');
+    } finally {
+      setSavingTemplate(false);
+    }
+  };
+
+  const handleDeleteTemplate = async (template) => {
+    if (!window.confirm(`Delete template "${template.templateName}"?`)) return;
+    try {
+      await client.delete(`/ipd/ot-templates/${template._id}`);
+      toast.success('Template deleted successfully');
+      loadTemplates();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete template');
+    }
+  };
+
+  const toggleTemplateActive = async (template) => {
+    try {
+      await client.put(`/ipd/ot-templates/${template._id}`, { isActive: !template.isActive });
+      toast.success(`Template ${!template.isActive ? 'activated' : 'deactivated'}`);
+      loadTemplates();
+    } catch (err) {
+      toast.error('Failed to update template status');
     }
   };
 
@@ -197,14 +290,179 @@ const OperationTheatreSettings = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">Operation Theatre Settings</h1>
-          <p className="text-sm text-gray-500">Configure and manage operation theatres & patient pricing</p>
+          <p className="text-sm text-gray-500">Configure and manage operation theatres, templates, & patient pricing</p>
         </div>
-        <button onClick={openCreate} className="btn text-sm py-2.5 px-4 flex items-center gap-2">
-          <Plus className="h-4 w-4" /> Add OT
+        {activeTab === 'theatres' ? (
+          <button onClick={openCreate} className="btn text-sm py-2.5 px-4 flex items-center gap-2">
+            <Plus className="h-4 w-4" /> Add OT
+          </button>
+        ) : (
+          <button onClick={openCreateTemplate} className="btn text-sm py-2.5 px-4 flex items-center gap-2">
+            <Plus className="h-4 w-4" /> Add Template
+          </button>
+        )}
+      </div>
+
+      {/* Tab Switcher */}
+      <div className="flex border-b border-orange-100">
+        <button
+          onClick={() => setActiveTab('theatres')}
+          className={`py-3 px-6 font-bold text-sm border-b-2 transition-all flex items-center gap-2 ${
+            activeTab === 'theatres'
+              ? 'border-orange-500 text-orange-950 bg-orange-50/20'
+              : 'border-transparent text-gray-500 hover:text-orange-950 hover:bg-orange-50/10'
+          }`}
+        >
+          <Building2 className="h-4 w-4" />
+          Operation Theatres
+        </button>
+        <button
+          onClick={() => setActiveTab('templates')}
+          className={`py-3 px-6 font-bold text-sm border-b-2 transition-all flex items-center gap-2 ${
+            activeTab === 'templates'
+              ? 'border-orange-500 text-orange-950 bg-orange-50/20'
+              : 'border-transparent text-gray-500 hover:text-orange-950 hover:bg-orange-50/10'
+          }`}
+        >
+          <FileText className="h-4 w-4" />
+          Consultation Templates
         </button>
       </div>
 
-      {/* Form Modal */}
+      {/* Tab Contents: Theatres */}
+      {activeTab === 'theatres' && (
+        <>
+          {/* Search */}
+          <div className="card p-4">
+            <form onSubmit={handleSearch} className="flex gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                <input type="text" className="input pl-9 py-2.5" placeholder="Search by OT Code or Name..." value={search} onChange={(e) => setSearch(e.target.value)} />
+                {search && <button type="button" onClick={() => { setSearch(''); loadOts(); }} className="absolute right-2 top-2 p-1"><X className="h-4 w-4" /></button>}
+              </div>
+              <button type="submit" className="btn py-2.5 px-6"><Search className="h-4 w-4" /> Search</button>
+              <button type="button" onClick={loadOts} className="btn-secondary py-2.5 px-4"><RefreshCw className="h-4 w-4" /></button>
+            </form>
+          </div>
+
+          {/* Table */}
+          <div className="card overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="bg-gradient-to-r from-orange-50 to-amber-50 text-xs font-bold uppercase text-gray-600 border-b border-orange-100">
+                    <th className="p-3 pl-4">OT Code</th>
+                    <th className="p-3">OT Name</th>
+                    <th className="p-3">Status</th>
+                    <th className="p-3">Availability</th>
+                    <th className="p-3">Location</th>
+                    <th className="p-3">Total Bookings</th>
+                    <th className="p-3 pr-4 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-orange-50">
+                  {loading ? (
+                    <tr><td colSpan="7" className="p-8 text-center"><Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading...</td></tr>
+                  ) : ots.length === 0 ? (
+                    <tr><td colSpan="7" className="p-8 text-center text-gray-400"><Building2 className="h-8 w-8 mx-auto mb-2 opacity-50" /><p className="font-bold">No operation theatres found</p></td></tr>
+                  ) : (
+                    ots.map(ot => (
+                      <tr key={ot._id} className="hover:bg-orange-50/20">
+                        <td className="p-3 pl-4 font-mono font-bold text-orange-700">{ot.otCode}</td>
+                        <td className="p-3 font-bold text-gray-800">{ot.otName}</td>
+                        <td className="p-3">{statusBadge(ot.status)}</td>
+                        <td className="p-3">{availabilityBadge(ot.availabilityStatus)}</td>
+                        <td className="p-3 text-xs text-gray-500">{ot.location || '-'}</td>
+                        <td className="p-3 text-xs font-bold">{ot.totalBookings || 0}</td>
+                        <td className="p-3 pr-4">
+                          <div className="flex justify-center gap-1">
+                            <button onClick={() => openCharges(ot)} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg" title="Set Pricing"><IndianRupee className="h-3.5 w-3.5" /></button>
+                            <button onClick={() => openEdit(ot)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="Edit"><Edit3 className="h-3.5 w-3.5" /></button>
+                            <button onClick={() => handleDelete(ot)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg" title="Delete"><Trash2 className="h-3.5 w-3.5" /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {ots.length > 0 && <div className="p-3 border-t border-orange-100 bg-orange-50/20 text-xs text-gray-500 text-center">Total OTs: {ots.length}</div>}
+          </div>
+        </>
+      )}
+
+      {/* Tab Contents: Consultation Templates */}
+      {activeTab === 'templates' && (
+        <div className="card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="bg-gradient-to-r from-orange-50 to-amber-50 text-xs font-bold uppercase text-gray-600 border-b border-orange-100">
+                  <th className="p-3 pl-4">Template Name</th>
+                  <th className="p-3">Heading / Title</th>
+                  <th className="p-3">Status</th>
+                  <th className="p-3">Last Updated</th>
+                  <th className="p-3 pr-4 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-orange-50">
+                {loadingTemplates ? (
+                  <tr><td colSpan="5" className="p-8 text-center"><Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading templates...</td></tr>
+                ) : templates.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" className="p-8 text-center text-gray-400">
+                      <FileText className="h-8 w-8 mx-auto mb-2 opacity-50 text-orange-400" />
+                      <p className="font-bold">No consultation templates found</p>
+                      <button onClick={openCreateTemplate} className="mt-2 text-xs bg-orange-500 hover:bg-orange-600 text-white font-bold py-1.5 px-3 rounded-lg transition-colors cursor-pointer">
+                        Create Your First Template
+                      </button>
+                    </td>
+                  </tr>
+                ) : (
+                  templates.map(template => (
+                    <tr key={template._id} className="hover:bg-orange-50/20">
+                      <td className="p-3 pl-4 font-bold text-gray-800">{template.templateName}</td>
+                      <td className="p-3 text-xs text-gray-600 truncate max-w-[200px]" title={template.templateHeading}>
+                        {template.templateHeading}
+                      </td>
+                      <td className="p-3">
+                        <button
+                          onClick={() => toggleTemplateActive(template)}
+                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold transition-colors cursor-pointer ${
+                            template.isActive ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                        >
+                          {template.isActive ? 'Active' : 'Inactive'}
+                        </button>
+                      </td>
+                      <td className="p-3 text-xs text-gray-500">
+                        {new Date(template.updatedAt).toLocaleDateString('en-IN', {
+                          dateStyle: 'medium'
+                        })}
+                      </td>
+                      <td className="p-3 pr-4">
+                        <div className="flex justify-center gap-1">
+                          <button onClick={() => openEditTemplate(template)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg cursor-pointer" title="Edit Template">
+                            <Edit3 className="h-3.5 w-3.5" />
+                          </button>
+                          <button onClick={() => handleDeleteTemplate(template)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg cursor-pointer" title="Delete Template">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          {templates.length > 0 && <div className="p-3 border-t border-orange-100 bg-orange-50/20 text-xs text-gray-500 text-center">Total Templates: {templates.length}</div>}
+        </div>
+      )}
+
+      {/* Forms and Modals */}
+      {/* OT Modal */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowForm(false)}>
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg mx-4" onClick={e => e.stopPropagation()}>
@@ -250,7 +508,90 @@ const OperationTheatreSettings = () => {
         </div>
       )}
 
-      {/* OT Charges/Pricing Modal */}
+      {/* Consultation Template CRUD Modal */}
+      {showTemplateForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 overflow-y-auto" onClick={() => setShowTemplateForm(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-4xl mx-4 my-8" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4 pb-2 border-b border-gray-100">
+              <div>
+                <h3 className="font-extrabold text-lg text-gray-900 flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-orange-500" />
+                  {editingTemplate ? 'Edit Consultation Template' : 'Add Consultation Template'}
+                </h3>
+                <p className="text-xs text-gray-500">Create standard consent forms and consultation summaries using variables</p>
+              </div>
+              <button onClick={() => setShowTemplateForm(false)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"><X className="h-5 w-5" /></button>
+            </div>
+            
+            <form onSubmit={handleSaveTemplate} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-500">
+                    Template Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    className="input py-2.5 text-sm"
+                    value={templateForm.templateName}
+                    onChange={(e) => setTemplateForm(p => ({ ...p, templateName: e.target.value }))}
+                    placeholder="e.g. Surgery Informed Consent"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-0.5">Internal name used for managing templates</p>
+                </div>
+                <div>
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-500">
+                    Template Heading / Title <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    className="input py-2.5 text-sm"
+                    value={templateForm.templateHeading}
+                    onChange={(e) => setTemplateForm(p => ({ ...p, templateHeading: e.target.value }))}
+                    placeholder="e.g. Informed Consent for Surgery and Anaesthesia"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-0.5">Heading displayed at the top of the printed form</p>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-500">
+                  Rich Text Content Editor <span className="text-red-500">*</span>
+                </label>
+                <TemplateEditor
+                  value={templateForm.content}
+                  onChange={(val) => setTemplateForm(p => ({ ...p, content: val }))}
+                  placeholder="Draft your consent form here. Use the buttons below to insert placeholders that auto-populate patient info."
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="isActiveTemplate"
+                  checked={templateForm.isActive}
+                  onChange={(e) => setTemplateForm(p => ({ ...p, isActive: e.target.checked }))}
+                  className="w-4 h-4 rounded border-gray-300 text-orange-500"
+                />
+                <label htmlFor="isActiveTemplate" className="text-xs font-bold text-gray-600 uppercase tracking-wide cursor-pointer select-none">
+                  Make Template Active & Available in Workflows
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-gray-100">
+                <button type="button" onClick={() => setShowTemplateForm(false)} className="btn-secondary text-sm py-2.5 px-4 cursor-pointer">Cancel</button>
+                <button type="submit" disabled={savingTemplate} className="btn text-sm py-2.5 px-5 flex items-center gap-2 cursor-pointer">
+                  {savingTemplate ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  {editingTemplate ? 'Update Template' : 'Save Template'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Charges Modal */}
       {showChargesModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowChargesModal(false)}>
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-3xl mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
@@ -346,64 +687,6 @@ const OperationTheatreSettings = () => {
           </div>
         </div>
       )}
-
-      {/* Search */}
-      <div className="card p-4">
-        <form onSubmit={handleSearch} className="flex gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-            <input type="text" className="input pl-9 py-2.5" placeholder="Search by OT Code or Name..." value={search} onChange={(e) => setSearch(e.target.value)} />
-            {search && <button type="button" onClick={() => { setSearch(''); loadOts(); }} className="absolute right-2 top-2 p-1"><X className="h-4 w-4" /></button>}
-          </div>
-          <button type="submit" className="btn py-2.5 px-6"><Search className="h-4 w-4" /> Search</button>
-          <button type="button" onClick={loadOts} className="btn-secondary py-2.5 px-4"><RefreshCw className="h-4 w-4" /></button>
-        </form>
-      </div>
-
-      {/* Table */}
-      <div className="card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="bg-gradient-to-r from-orange-50 to-amber-50 text-xs font-bold uppercase text-gray-600 border-b border-orange-100">
-                <th className="p-3 pl-4">OT Code</th>
-                <th className="p-3">OT Name</th>
-                <th className="p-3">Status</th>
-                <th className="p-3">Availability</th>
-                <th className="p-3">Location</th>
-                <th className="p-3">Total Bookings</th>
-                <th className="p-3 pr-4 text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-orange-50">
-              {loading ? (
-                <tr><td colSpan="7" className="p-8 text-center"><Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading...</td></tr>
-              ) : ots.length === 0 ? (
-                <tr><td colSpan="7" className="p-8 text-center text-gray-400"><Building2 className="h-8 w-8 mx-auto mb-2 opacity-50" /><p className="font-bold">No operation theatres found</p></td></tr>
-              ) : (
-                ots.map(ot => (
-                  <tr key={ot._id} className="hover:bg-orange-50/20">
-                    <td className="p-3 pl-4 font-mono font-bold text-orange-700">{ot.otCode}</td>
-                    <td className="p-3 font-bold text-gray-800">{ot.otName}</td>
-                    <td className="p-3">{statusBadge(ot.status)}</td>
-                    <td className="p-3">{availabilityBadge(ot.availabilityStatus)}</td>
-                    <td className="p-3 text-xs text-gray-500">{ot.location || '-'}</td>
-                    <td className="p-3 text-xs font-bold">{ot.totalBookings || 0}</td>
-                    <td className="p-3 pr-4">
-                      <div className="flex justify-center gap-1">
-                        <button onClick={() => openCharges(ot)} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg" title="Set Pricing"><IndianRupee className="h-3.5 w-3.5" /></button>
-                        <button onClick={() => openEdit(ot)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="Edit"><Edit3 className="h-3.5 w-3.5" /></button>
-                        <button onClick={() => handleDelete(ot)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg" title="Delete"><Trash2 className="h-3.5 w-3.5" /></button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-        {ots.length > 0 && <div className="p-3 border-t border-orange-100 bg-orange-50/20 text-xs text-gray-500 text-center">Total OTs: {ots.length}</div>}
-      </div>
     </div>
   );
 };

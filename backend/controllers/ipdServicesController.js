@@ -11,6 +11,7 @@ const LabTest = require('../models/LabTest');
 const IpdOtRecord = require('../models/IpdOtRecord');
 const OtBooking = require('../models/OtBooking');
 const OperationTheatre = require('../models/OperationTheatre');
+const Consultation = require('../models/Consultation');
 
 const tenantFilter = (req, query = {}) => (
   req.user.hospitalId ? { ...query, hospitalId: req.user.hospitalId } : query
@@ -162,9 +163,17 @@ const getIpdPatientDetails = async (req, res) => {
     }
 
     const otStatus = await checkAndAutoCompleteIpdOt(admission._id);
+    
+    // Fetch allergy details from latest completed consultation
+    const latestConsultation = await Consultation.findOne({
+      patientId: admission.patientId?._id || admission.patientId,
+      consultationStatus: 'completed'
+    }).sort({ createdAt: -1 });
+
     const admissionObj = {
       ...admission.toObject(),
-      otStatus
+      otStatus,
+      allergyDetails: latestConsultation?.vitals?.drugAllergy || 'No known allergies'
     };
 
     res.status(200).json(admissionObj);

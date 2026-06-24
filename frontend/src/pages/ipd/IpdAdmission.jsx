@@ -421,7 +421,7 @@ const IpdAdmission = () => {
       </div>
 
       {/* Grid Layout: Form on Left, List on Right */}
-      <div className="grid gap-6 lg:grid-cols-[450px_1fr]">
+      <div className="grid gap-6 lg:grid-cols-[550px_1fr]">
 
         {/* LEFT COLUMN: ADMIT PATIENT FORM */}
         <div className="card p-6 h-fit space-y-5">
@@ -783,8 +783,87 @@ const IpdAdmission = () => {
           </form>
         </div>
 
-        {/* RIGHT COLUMN: ACTIVE ADMISSIONS LIST */}
+        {/* RIGHT COLUMN: ACTIVE ADMISSIONS LIST + OPD Referrals */}
         <div className="space-y-4">
+          
+          {/* OPD Referrals Section - MOVED TO RIGHT COLUMN for visibility */}
+          <div className="card overflow-hidden">
+            <div className="p-4 border-b border-orange-100 flex items-center justify-between bg-indigo-50/25">
+              <div className="flex items-center gap-2">
+                <span className="bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1">
+                  <User className="h-3.5 w-3.5" /> OPD Referrals
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-gray-500">
+                  {referrals.filter(r => r.status === 'Pending').length} Pending
+                </span>
+                <button onClick={loadReferrals} className="btn-secondary text-xs py-1 px-2">
+                  <RefreshCw className="h-3 w-3" />
+                </button>
+              </div>
+            </div>
+
+            {loadingReferrals ? (
+              <div className="p-4 text-center">
+                <Loader2 className="h-5 w-5 animate-spin text-indigo-500 mx-auto" />
+                <p className="text-xs text-gray-500 mt-1">Loading referrals...</p>
+              </div>
+            ) : referrals.length === 0 ? (
+              <div className="p-4 text-center text-gray-400">
+                <p className="text-sm font-bold">No OPD referrals pending</p>
+                <p className="text-xs mt-1">Patients referred from OPD will appear here</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto text-xs max-h-[200px] overflow-y-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-indigo-50/50 text-[10px] font-bold uppercase text-indigo-800 border-b border-indigo-100">
+                      <th className="p-2">Patient / UHID</th>
+                      <th className="p-2">Referred By</th>
+                      <th className="p-2">Date</th>
+                      <th className="p-2">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-indigo-50">
+                    {referrals.map((ref) => (
+                      <tr key={ref._id} className={`hover:bg-indigo-50/10 transition-all ${
+                        selectedReferral?._id === ref._id ? 'bg-indigo-50/30' : ''
+                      }`}>
+                        <td className="p-2">
+                          <p className="font-bold text-gray-900">{ref.patientName}</p>
+                          <span className="font-mono text-indigo-700 text-[9px] block font-bold">
+                            {formatUhid(ref.uhid)}
+                          </span>
+                        </td>
+                        <td className="p-2 text-[10px]">
+                          Dr. {ref.referredByDoctor?.doctorName || ref.referredByDoctor?.username || 'N/A'}
+                        </td>
+                        <td className="p-2 text-[10px]">
+                          {new Date(ref.referredAt).toLocaleDateString()}
+                        </td>
+                        <td className="p-2">
+                          {ref.status === 'Pending' && (
+                            <button
+                              onClick={() => handleSelectReferral(ref)}
+                              className="btn text-[10px] py-1 px-2 flex items-center gap-1"
+                            >
+                              <Plus className="h-3 w-3" /> Admit
+                            </button>
+                          )}
+                          {ref.status === 'Admitted' && (
+                            <span className="text-[10px] text-green-600 font-bold">
+                              Admitted
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
           
           <div className="card overflow-hidden">
             <div className="p-4 border-b border-orange-100 flex items-center justify-between bg-orange-50/25">
@@ -899,104 +978,6 @@ const IpdAdmission = () => {
 
       </div>
 
-      {/* OPD Referrals Section */}
-      <div className="card overflow-hidden">
-        <div className="p-4 border-b border-orange-100 flex items-center justify-between bg-indigo-50/25">
-          <div className="flex items-center gap-2">
-            <span className="bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1">
-              <User className="h-3.5 w-3.5" /> OPD Referrals
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-gray-500">
-              {referrals.filter(r => r.status === 'Pending').length} Pending
-            </span>
-            <button onClick={loadReferrals} className="btn-secondary text-xs py-1 px-2">
-              <RefreshCw className="h-3 w-3" />
-            </button>
-          </div>
-        </div>
-
-        {loadingReferrals ? (
-          <div className="p-8 text-center">
-            <Loader2 className="h-5 w-5 animate-spin text-indigo-500 mx-auto" />
-            <p className="text-xs text-gray-500 mt-2">Loading referrals...</p>
-          </div>
-        ) : referrals.length === 0 ? (
-          <div className="p-8 text-center text-gray-400">
-            <p className="text-sm font-bold">No OPD referrals pending</p>
-            <p className="text-xs mt-1">Patients referred from OPD will appear here</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto text-sm">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-indigo-50/50 text-xs font-bold uppercase text-indigo-800 border-b border-indigo-100">
-                  <th className="p-4">Patient / UHID</th>
-                  <th className="p-4">Referred By</th>
-                  <th className="p-4">Diagnosis</th>
-                  <th className="p-4">Referred On</th>
-                  <th className="p-4">Status</th>
-                  <th className="p-4 text-center">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-indigo-50">
-                {referrals.map((ref) => (
-                  <tr key={ref._id} className={`hover:bg-indigo-50/10 transition-all ${
-                    selectedReferral?._id === ref._id ? 'bg-indigo-50/30' : ''
-                  }`}>
-                    <td className="p-4">
-                      <p className="font-bold text-gray-900">{ref.patientName}</p>
-                      <span className="font-mono text-indigo-700 text-[10px] block font-bold">
-                        {formatUhid(ref.uhid)}
-                      </span>
-                    </td>
-                    <td className="p-4 text-xs">
-                      <span className="flex items-center gap-1">
-                        <Stethoscope className="h-3.5 w-3.5 text-gray-400" />
-                        Dr. {ref.referredByDoctor?.doctorName || ref.referredByDoctor?.username || 'N/A'}
-                      </span>
-                    </td>
-                    <td className="p-4 text-xs max-w-[200px] truncate" title={ref.diagnosis}>
-                      {ref.diagnosis || 'N/A'}
-                    </td>
-                    <td className="p-4 text-xs">
-                      {new Date(ref.referredAt).toLocaleString([], {
-                        dateStyle: 'short',
-                        timeStyle: 'short'
-                      })}
-                    </td>
-                    <td className="p-4">
-                      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold leading-tight ${
-                        ref.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
-                        ref.status === 'Admitted' ? 'bg-green-100 text-green-800' :
-                        'bg-gray-200 text-gray-800'
-                      }`}>
-                        {ref.status}
-                      </span>
-                    </td>
-                    <td className="p-4 text-center">
-                      {ref.status === 'Pending' && (
-                        <button
-                          onClick={() => handleSelectReferral(ref)}
-                          className="btn text-xs py-1.5 px-3 flex items-center gap-1 mx-auto"
-                        >
-                          <Plus className="h-3.5 w-3.5" /> Admit
-                        </button>
-                      )}
-                      {ref.status === 'Admitted' && ref.admissionId && (
-                        <span className="text-xs text-green-600 font-bold">
-                          IPD: {ref.admissionId.ipdNumber || 'N/A'}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
 
       {/* POST-ADMISSION PRINT CARD MODAL */}
       {receiptModalAdmission && (

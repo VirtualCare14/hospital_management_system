@@ -13,7 +13,6 @@ const ConsultationPage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [patient, setPatient] = useState(null);
-  const [consultation, setConsultation] = useState(null); // existing pending consultation
   const [loading, setLoading] = useState(true);
   const [symptoms, setSymptoms] = useState([{ symptom: '', durationDays: '', durationUnit: 'Days', pastHistory: '', remarks: '' }]);
   const [suggestions, setSuggestions] = useState([]);
@@ -28,9 +27,10 @@ const ConsultationPage = () => {
   const [generalPastHistory, setGeneralPastHistory] = useState('');
   const [diagnosisRemark, setDiagnosisRemark] = useState('');
   const [followUpDate, setFollowUpDate] = useState('');
+  const [visitId, setVisitId] = useState(null);
   const { register, handleSubmit, reset } = useForm();
 
-  // Load patient AND any existing pending consultation
+  // Load patient AND visit information
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -44,45 +44,16 @@ const ConsultationPage = () => {
           temperature: patientRes.data.demographics?.temperature
         });
 
-        // Try to load existing pending consultation
+        // Get the latest visit for this patient
         try {
-          const consultationsRes = await client.get(`/consultation/${patientId}`);
-          const consultations = consultationsRes.data;
-          if (consultations && consultations.length > 0) {
-            // Find the first pending consultation
-            const pending = consultations.find(c => c.consultationStatus === 'pending');
-            if (pending) {
-              setConsultation(pending);
-              // Pre-fill all form fields from existing consultation data
-              if (pending.symptoms && pending.symptoms.length > 0) {
-                setSymptoms(pending.symptoms);
-              }
-              if (pending.generalPastHistory) {
-                setGeneralPastHistory(pending.generalPastHistory);
-              }
-              if (pending.diagnosisRemark) {
-                setDiagnosisRemark(pending.diagnosisRemark);
-              }
-              if (pending.tests && pending.tests.length > 0) {
-                setSelectedTests(pending.tests);
-              }
-              if (pending.followUpDate) {
-                setFollowUpDate(pending.followUpDate);
-              }
-              if (pending.vitals) {
-                reset({
-                  weight: pending.vitals.weight || patientRes.data.demographics?.weight || '',
-                  height: pending.vitals.height || patientRes.data.demographics?.height || '',
-                  temperature: pending.vitals.temperature || patientRes.data.demographics?.temperature || '',
-                  bmi: pending.vitals.bmi || '',
-                  drugAllergy: pending.vitals.drugAllergy || ''
-                });
-              }
-            }
+          const visitsRes = await client.get(`/patients/${patientId}/visits`);
+          const visits = visitsRes.data;
+          if (visits && visits.length > 0) {
+            const latestVisit = visits[0]; // Most recent first
+            setVisitId(latestVisit._id);
           }
         } catch (err) {
-          // No existing consultation - that's fine, start fresh
-          console.log('No existing consultation found, starting fresh');
+          console.log('No visits found for patient');
         }
       } catch (error) {
         console.error('Error loading data:', error);
@@ -154,6 +125,7 @@ const ConsultationPage = () => {
     setSaving(true);
     const payload = {
       patientId,
+      visitId, // Pass visitId to link consultation to visit
       symptoms: symptoms.filter((item) => item.symptom).map((item) => ({ 
         symptom: item.symptom, 
         durationDays: item.durationDays || 0,
@@ -176,15 +148,9 @@ const ConsultationPage = () => {
     };
 
     try {
-      if (consultation && consultation._id) {
-        // Update existing consultation if we loaded one
-        await client.put(`/consultation/${consultation._id}`, payload);
-        toast.success('Consultation updated successfully');
-      } else {
-        // Create new consultation
-        await client.post('/consultation/create', payload);
-        toast.success(data.sendToLab ? 'Consultation saved and sent to lab' : 'Consultation saved');
-      }
+      // ALWAYS create a new consultation record
+      await client.post('/consultation/create', payload);
+      toast.success(data.sendToLab ? 'Consultation saved and sent to lab' : 'Consultation saved');
       navigate(`/doctor/prescription/${patientId}`);
     } catch (error) {
       console.error('Saving consultation failed:', error);
@@ -198,10 +164,8 @@ const ConsultationPage = () => {
     if (!patient) return;
     setSendingToIpd(true);
     try {
-      const consultationId = consultation?._id || null;
       await client.post('/ipd/referrals', {
         patientId: patient._id,
-        consultationId,
         notes: `Referred from OPD by Dr. ${user?.doctorName || user?.username || 'Doctor'}. Diagnosis: ${diagnosisRemark || 'N/A'}`
       });
       toast.success(`${patient.patientName} has been referred to IPD successfully!`);
@@ -253,9 +217,6 @@ const ConsultationPage = () => {
         <p className="text-sm font-bold text-orange-600">{patient.uhid}</p>
         <h1 className="text-2xl font-extrabold text-gray-900">{patient.patientName}</h1>
         <p className="text-sm text-gray-500">{patient.gender} • {patient.mobile} • {formatDate(patient.appointmentDate)} {patient.slot}</p>
-        {consultation && (
-          <p className="text-xs text-green-600 mt-1">✓ Existing consultation data loaded — edits will update the saved record.</p>
-        )}
       </div>
 
       <section className="card space-y-4 p-5">
@@ -473,7 +434,7 @@ const ConsultationPage = () => {
         </div>
         <div className="flex gap-2 flex-wrap">
           <button className="btn" type="submit" disabled={saving}>
-            <Save className="h-4 w-4" /> {saving ? 'Saving...' : (consultation ? 'Update Consultation' : 'Save Consultation')}
+            <Save className="h-4 w-4" /> {saving ? 'Saving...' : 'Save Consultation'}
           </button>
           <Link className="btn-secondary" to={`/doctor/prescription/${patientId}`}>Create Prescription</Link>
           {referralSent ? (
@@ -505,7 +466,6 @@ const ConsultationPage = () => {
               try {
                 await client.post('/ipd/referrals', {
                   patientId: patient._id,
-                  consultationId: consultation?._id || null,
                   notes: `Referred to OT. Diagnosis: ${diagnosisRemark || 'N/A'}`
                 });
                 toast.success(`${patient.patientName} referred to OT successfully!`);

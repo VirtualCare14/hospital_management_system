@@ -156,6 +156,18 @@ const ipdOtRecordSchema = new mongoose.Schema({
   // Consultation Form Tracking (OT-specific)
   consultation: {
     isConsultationCompleted: { type: Boolean, default: false },
+    templateId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'OtConsultationTemplate'
+    },
+    templateName: {
+      type: String,
+      default: ''
+    },
+    templateHeading: {
+      type: String,
+      default: ''
+    },
     consultationNotes: String,
     signatureFileUrl: String,
     signatureCloudinaryId: String,

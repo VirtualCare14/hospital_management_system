@@ -16,14 +16,27 @@ const prescriptionSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  consultationId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Consultation',
+    required: false
+  },
+  visitId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Visit',
+    required: false
+  },
   medicines: [{
     medicine: { type: String, required: true },
-    duration: { type: String, required: true }, // e.g. "3 days"
+    duration: { type: String, required: true },
     morning: { type: Boolean, default: false },
     afternoon: { type: Boolean, default: false },
     night: { type: Boolean, default: false },
-    remarks: { type: String } // e.g. "After Food"
+    remarks: { type: String }
   }],
+  diagnosisRemark: {
+    type: String
+  },
   language: {
     type: String,
     required: true,
@@ -31,6 +44,10 @@ const prescriptionSchema = new mongoose.Schema({
   },
   pdfUrl: {
     type: String
+  },
+  prescriptionDateTime: {
+    type: Date,
+    default: null
   }
 }, { timestamps: true });
 

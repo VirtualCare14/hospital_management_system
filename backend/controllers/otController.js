@@ -2,6 +2,8 @@ const IpdOtRecord = require('../models/IpdOtRecord');
 const IpdAdmission = require('../models/IpdAdmission');
 const Patient = require('../models/Patient');
 const HospitalSettings = require('../models/HospitalSettings');
+const IpdActivityTimeline = require('../models/IpdActivityTimeline');
+const OperationTheatre = require('../models/OperationTheatre');
 const { v2: cloudinary } = require('cloudinary');
 
 cloudinary.config({
@@ -17,18 +19,30 @@ const tenantFilter = (req, query = {}) => (
 
 // Helper to check and auto-complete record if past scheduledEnd
 const checkAndAutoCompleteRecord = async (record) => {
-  if (record && (record.status === 'In Progress' || record.status === 'Scheduled') && record.otScheduling?.scheduledEnd) {
-    if (new Date() > new Date(record.otScheduling.scheduledEnd)) {
+  if (!record || !record.otScheduling?.scheduledStart || !record.otScheduling?.scheduledEnd) {
+    return;
+  }
+
+  const now = new Date();
+  const start = new Date(record.otScheduling.scheduledStart);
+  const end = new Date(record.otScheduling.scheduledEnd);
+
+  let updated = false;
+
+  if (now >= end) {
+    // If current time is after scheduledEnd, status should be 'Completed'
+    if (record.status !== 'Completed' || record.schedulingStatus !== 'Completed') {
       record.status = 'Completed';
       record.schedulingStatus = 'Completed';
-      await record.save();
-      
+      updated = true;
+
+      // Update linked booking
       const OtBooking = require('../models/OtBooking');
-      const OperationTheatre = require('../models/OperationTheatre');
       if (record.otScheduling.otBookingId) {
         await OtBooking.findByIdAndUpdate(record.otScheduling.otBookingId, { status: 'Completed' });
       }
       if (record.otScheduling.otId) {
+        const OperationTheatre = require('../models/OperationTheatre');
         const activeBookings = await OtBooking.countDocuments({
           otId: record.otScheduling.otId,
           status: { $in: ['Scheduled', 'In Progress'] }
@@ -38,7 +52,46 @@ const checkAndAutoCompleteRecord = async (record) => {
         }
       }
     }
+  } else if (now >= start && now < end) {
+    // If current time is between start and end, status should be 'In Progress'
+    if (record.status !== 'In Progress' || record.schedulingStatus !== 'Ongoing') {
+      record.status = 'In Progress';
+      record.schedulingStatus = 'Ongoing';
+      updated = true;
+
+      // Update linked booking
+      const OtBooking = require('../models/OtBooking');
+      if (record.otScheduling.otBookingId) {
+        await OtBooking.findByIdAndUpdate(record.otScheduling.otBookingId, { status: 'In Progress' });
+      }
+    }
+  } else {
+    // If current time is before start, status should be 'Scheduled'
+    if (record.status !== 'Scheduled' || record.schedulingStatus !== 'Scheduled') {
+      record.status = 'Scheduled';
+      record.schedulingStatus = 'Scheduled';
+      updated = true;
+
+      // Update linked booking
+      const OtBooking = require('../models/OtBooking');
+      if (record.otScheduling.otBookingId) {
+        await OtBooking.findByIdAndUpdate(record.otScheduling.otBookingId, { status: 'Scheduled' });
+      }
+    }
   }
+
+  if (updated) {
+    await record.save();
+  }
+};
+
+const populateOtRecord = async (id) => {
+  return IpdOtRecord.findById(id)
+    .populate('createdBy', 'username doctorName')
+    .populate('updatedBy', 'username doctorName')
+    .populate('otScheduling.otId', 'otCode otName')
+    .populate('otScheduling.scheduledRoom', 'otCode otName')
+    .populate('otScheduling.scheduledBy', 'username doctorName');
 };
 
 // @desc    Create a new OT record (Save Draft)
@@ -136,6 +189,73 @@ const updateOtRecord = async (req, res) => {
       record.pharmacyRequestSent = true;
       record.pharmacyRequestAt = new Date();
       record.pharmacyRequestBy = req.user._id;
+
+      // Create PharmacyRequest document
+      try {
+        const PharmacyRequest = require('../models/PharmacyRequest');
+        const count = await PharmacyRequest.countDocuments({ hospitalId: record.hospitalId });
+        const requestNumber = `PR-${10001 + count}`;
+
+        const items = [];
+        if (record.otMedicines && record.otMedicines.length > 0) {
+          record.otMedicines.forEach(m => {
+            if (m.medicineName && m.medicineName.trim()) {
+              items.push({
+                itemName: m.medicineName.trim() + (m.dosage && m.dosage.trim() ? ` (${m.dosage.trim()})` : ''),
+                requestedQty: parseInt(m.quantity) || 1,
+                pendingQty: parseInt(m.quantity) || 1
+              });
+            }
+          });
+        }
+        if (record.otConsumables && record.otConsumables.length > 0) {
+          record.otConsumables.forEach(c => {
+            if (c.consumableName && c.consumableName.trim()) {
+              items.push({
+                itemName: c.consumableName.trim(),
+                requestedQty: parseInt(c.quantity) || 1,
+                pendingQty: parseInt(c.quantity) || 1
+              });
+            }
+          });
+        }
+
+        if (items.length > 0) {
+          await PharmacyRequest.create({
+            hospitalId: record.hospitalId,
+            requestNumber,
+            admissionId: record.admissionId,
+            patientId: record.patientId,
+            doctorId: req.user._id,
+            procedureName: `OT - ${record.proceduresPerformed || 'Surgery'}`,
+            status: 'Pending',
+            items,
+            auditTrail: [{
+              status: 'Pending',
+              action: 'Request Created',
+              performedBy: req.user._id,
+              performedByName: req.user.doctorName || req.user.username || 'Doctor',
+              timestamp: new Date(),
+              remarks: `Requested items from OT Workspace`
+            }]
+          });
+
+          // Log timeline
+          await IpdActivityTimeline.create({
+            hospitalId: record.hospitalId,
+            admissionId: record.admissionId,
+            patientId: record.patientId,
+            activity: 'Service Added',
+            description: `OT Pharmacy Request #${requestNumber} created`,
+            date: new Date().toISOString().split('T')[0],
+            time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false }),
+            performedBy: req.user._id,
+            performedByName: req.user.doctorName || req.user.username || 'Doctor'
+          });
+        }
+      } catch (err) {
+        console.error('Error creating PharmacyRequest from OT:', err);
+      }
     }
 
     // If status is being set to Completed, ensure it's valid and sync booking/room status
@@ -164,8 +284,9 @@ const updateOtRecord = async (req, res) => {
 
     record.updatedBy = req.user._id;
     const updated = await record.save();
+    const populated = await populateOtRecord(updated._id);
 
-    res.json({ message: 'OT record updated successfully', record: updated });
+    res.json({ message: 'OT record updated successfully', record: populated });
   } catch (error) {
     console.error('Update OT Record Error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -183,6 +304,9 @@ const getOtRecordsByAdmission = async (req, res) => {
     )
       .populate('createdBy', 'username doctorName')
       .populate('updatedBy', 'username doctorName')
+      .populate('otScheduling.otId', 'otCode otName')
+      .populate('otScheduling.scheduledRoom', 'otCode otName')
+      .populate('otScheduling.scheduledBy', 'username doctorName')
       .sort({ createdAt: -1 });
 
     for (const record of records) {
@@ -246,7 +370,17 @@ const getHospitalInfo = async (req, res) => {
   try {
     const settings = await HospitalSettings.findOne({ hospitalId: req.user.hospitalId });
     if (!settings) {
-      return res.status(404).json({ message: 'Hospital settings not found' });
+      return res.json({
+        hospitalName: 'Hospital Care',
+        address: 'Default Address',
+        phoneNumbers: [],
+        logoUrl: '',
+        hospitalHeading: 'General Consent',
+        emailAddress: '',
+        gstNumber: '',
+        website: '',
+        invoiceFooterMessage: ''
+      });
     }
     res.json({
       hospitalName: settings.hospitalName,
@@ -356,6 +490,7 @@ const getOtRecordFull = async (req, res) => {
       .populate('createdBy', 'username doctorName')
       .populate('updatedBy', 'username doctorName')
       .populate('otScheduling.otId', 'otCode otName')
+      .populate('otScheduling.scheduledRoom', 'otCode otName')
       .populate('otScheduling.scheduledBy', 'username doctorName');
 
     if (!record) {
@@ -377,16 +512,18 @@ const getOtRecordFull = async (req, res) => {
 const saveConsultationForm = async (req, res) => {
   try {
     const { id } = req.params;
-    const { consultationNotes, signatureFileUrl, signatureCloudinaryId, signatureSignedBy } = req.body;
+    const {
+      consultationNotes,
+      templateId,
+      templateName,
+      templateHeading,
+      signatureFileUrl,
+      signatureCloudinaryId,
+      signatureSignedBy
+    } = req.body;
 
     if (!consultationNotes) {
       return res.status(400).json({ message: 'Consultation notes are required' });
-    }
-    if (!signatureFileUrl) {
-      return res.status(400).json({ message: 'Signature file URL is required' });
-    }
-    if (!signatureSignedBy) {
-      return res.status(400).json({ message: 'Signed by name is required' });
     }
 
     const record = await IpdOtRecord.findOne(tenantFilter(req, { _id: id }));
@@ -396,18 +533,48 @@ const saveConsultationForm = async (req, res) => {
 
     record.consultation = {
       isConsultationCompleted: true,
+      templateId: templateId || null,
+      templateName: templateName || '',
+      templateHeading: templateHeading || '',
       consultationNotes: consultationNotes.trim(),
-      signatureFileUrl,
+      signatureFileUrl: signatureFileUrl || '',
       signatureCloudinaryId: signatureCloudinaryId || '',
-      signatureSignedBy: signatureSignedBy.trim(),
-      signatureSignedAt: new Date(),
+      signatureSignedBy: signatureSignedBy ? signatureSignedBy.trim() : '',
+      signatureSignedAt: signatureFileUrl ? new Date() : null,
       consultationCompletedBy: req.user._id
     };
 
     record.updatedBy = req.user._id;
     const updated = await record.save();
 
-    res.json({ message: 'Consultation form saved successfully', record: updated });
+    // Create activity timeline entry (Patient history)
+    try {
+      const now = new Date();
+      const dateStr = now.toISOString().split('T')[0];
+      const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+      
+      await IpdActivityTimeline.create({
+        hospitalId: req.user.hospitalId,
+        admissionId: record.admissionId,
+        patientId: record.patientId,
+        activity: 'OT Consent / Consultation Completed',
+        description: `Consent form template "${templateName || 'Manual'}" completed. Title: "${templateHeading || 'OT Consent'}"`,
+        date: dateStr,
+        time: timeStr,
+        performedBy: req.user._id,
+        performedByName: req.user.doctorName || req.user.username || 'System',
+        metadata: {
+          templateId: templateId || null,
+          templateName: templateName || '',
+          templateHeading: templateHeading || ''
+        }
+      });
+    } catch (timelineErr) {
+      console.warn('Failed to save activity timeline entry:', timelineErr);
+    }
+
+    const populated = await populateOtRecord(updated._id);
+    res.json({ message: 'Consultation form saved successfully', record: populated });
   } catch (error) {
     console.error('Save Consultation Form Error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -437,10 +604,10 @@ const saveConsentForm = async (req, res) => {
       consentVerifiedBy: req.user._id
     };
 
-    record.updatedBy = req.user._id;
     const updated = await record.save();
+    const populated = await populateOtRecord(updated._id);
 
-    res.json({ message: 'Consent form saved successfully', record: updated });
+    res.json({ message: 'Consent form saved successfully', record: populated });
   } catch (error) {
     console.error('Save Consent Form Error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -480,10 +647,10 @@ const updateOtCharges = async (req, res) => {
     record.totalCharges = chargesWithUser
       .filter(c => c.isActive)
       .reduce((sum, c) => sum + c.chargeAmount, 0);
-    record.updatedBy = req.user._id;
     const updated = await record.save();
+    const populated = await populateOtRecord(updated._id);
 
-    res.json({ message: 'OT charges updated', record: updated });
+    res.json({ message: 'OT charges updated', record: populated });
   } catch (error) {
     console.error('Update OT Charges Error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -519,10 +686,10 @@ const addOtMedicines = async (req, res) => {
     }));
 
     record.otMedicines.push(...medsWithUser);
-    record.updatedBy = req.user._id;
     const updated = await record.save();
+    const populated = await populateOtRecord(updated._id);
 
-    res.status(201).json({ message: 'Medicines added successfully', record: updated });
+    res.status(201).json({ message: 'Medicines added successfully', record: populated });
   } catch (error) {
     console.error('Add OT Medicines Error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -557,10 +724,10 @@ const addOtConsumables = async (req, res) => {
     }));
 
     record.otConsumables.push(...consWithUser);
-    record.updatedBy = req.user._id;
     const updated = await record.save();
+    const populated = await populateOtRecord(updated._id);
 
-    res.status(201).json({ message: 'Consumables added successfully', record: updated });
+    res.status(201).json({ message: 'Consumables added successfully', record: populated });
   } catch (error) {
     console.error('Add OT Consumables Error:', error);
     res.status(500).json({ message: 'Server error' });

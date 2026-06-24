@@ -89,6 +89,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async (forced = false) => {
     const targetHospitalId = user?.hospitalId || JSON.parse(localStorage.getItem('hms_user') || '{}')?.hospitalId;
+    const isSuperAdmin = user?.role === 'superadmin' || JSON.parse(localStorage.getItem('hms_user') || '{}')?.role === 'superadmin';
     try {
       if (!forced) {
         // Call backend to invalidate active session
@@ -97,19 +98,15 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {
       console.warn('Backend logout call failed, cleaning up local state anyway:', err.message);
     } finally {
-      // Clean up local storage
-      localStorage.removeItem('hms_token');
-      localStorage.removeItem('hms_user');
-      setUser(null);
-
       if (forced) {
         toast.error('Session expired or account disabled.', { id: 'force_logout_toast' });
       } else {
         toast.success('Logged out successfully.');
       }
-      // Redirect to modules page (home) after logout
+
+      // Redirect first to avoid ProtectedRoute overriding navigation
       try {
-        if (user?.role === 'superadmin') {
+        if (isSuperAdmin) {
           navigate('/super-admin');
         } else if (targetHospitalId) {
           navigate(`/hospital/${targetHospitalId}`);
@@ -119,6 +116,13 @@ export const AuthProvider = ({ children }) => {
       } catch (e) {
         console.error('Logout navigation failed:', e);
       }
+
+      // Clean up local storage and state in the next tick
+      setTimeout(() => {
+        localStorage.removeItem('hms_token');
+        localStorage.removeItem('hms_user');
+        setUser(null);
+      }, 0);
     }
   };
 

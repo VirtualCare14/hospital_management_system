@@ -32,6 +32,7 @@ app.use('/api/ipd', require('./routes/ipdRoutes'));
 app.use('/api/ipd/settings', require('./routes/ipdSettingsRoutes'));
 app.use('/api/ipd/reports', require('./routes/ipdReportsRoutes'));
 app.use('/api/ipd', require('./routes/ipdServicesRoutes'));
+app.use('/api/ipd', require('./routes/ipdMedicationRoutes'));
 app.use('/api/pharmacy', require('./routes/pharmacyRoutes'));
 app.use('/api/ipd', require('./routes/otRoutes'));
 app.use('/api/ipd', require('./routes/dischargeRoutes'));

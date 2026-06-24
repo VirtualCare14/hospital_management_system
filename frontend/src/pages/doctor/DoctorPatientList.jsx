@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, Stethoscope, FileText, Send } from 'lucide-react';
+import { Search, Stethoscope, FileText, Send, History } from 'lucide-react';
 import toast from 'react-hot-toast';
 import client from '../../api/client';
 import { formatDate } from '../../utils/dateFormat';
@@ -118,6 +118,9 @@ const DoctorPatientList = () => {
                           }}>
                           <Send className="h-3 w-3" /> OT
                         </button>
+                        <Link className="btn-secondary text-xs inline-flex items-center gap-1 text-green-600" to={`/doctor/consultation-track/${patient._id}`}>
+                          <History className="h-3 w-3" /> Track
+                        </Link>
                         <button className="btn-secondary text-xs inline-flex items-center gap-1 text-orange-600 font-bold"
                           onClick={() => handleSendToSameDay(patient)}>
                           <Send className="h-3 w-3" /> Same Day

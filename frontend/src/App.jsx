@@ -17,6 +17,8 @@ import CompletedConsultationDetails from './pages/doctor/CompletedConsultationDe
 import ConsultationPage from './pages/doctor/ConsultationPage.jsx';
 import PrescriptionPage from './pages/doctor/PrescriptionPage.jsx';
 import PatientConsultationTrack from './pages/doctor/PatientConsultationTrack.jsx';
+import DoctorOtPatients from './pages/doctor/DoctorOtPatients.jsx';
+import DoctorOtForm from './pages/doctor/DoctorOtForm.jsx';
 import SuperAdminLogin from './pages/superadmin/SuperAdminLogin.jsx';
 import SuperAdminDashboard from './pages/superadmin/SuperAdminDashboard.jsx';
 import LabWorkspace from './pages/lab/LabWorkspace.jsx';
@@ -40,6 +42,8 @@ import SameDayTreatmentSettings from './pages/admin/SameDayTreatmentSettings.jsx
 import NursingWorkspace from './pages/nursing/NursingWorkspace.jsx';
 import SameDayTreatmentForm from './pages/nursing/SameDayTreatmentForm.jsx';
 import BillingPage from './pages/billing/BillingPage.jsx';
+import DoctorIpdPatients from './pages/doctor/DoctorIpdPatients.jsx';
+import IpdMedicationChart from './pages/ipd/IpdMedicationChart.jsx';
 
 function App() {
   return (
@@ -81,6 +85,10 @@ function App() {
             <Route path="/doctor/consultation/:patientId" element={<ConsultationPage />} />
             <Route path="/doctor/prescription/:patientId" element={<PrescriptionPage />} />
             <Route path="/doctor/consultation-track/:patientId" element={<PatientConsultationTrack />} />
+            <Route path="/doctor/ot-patients" element={<DoctorOtPatients />} />
+            <Route path="/doctor/ot/:id" element={<DoctorOtForm />} />
+            <Route path="/doctor/ipd-patients" element={<DoctorIpdPatients />} />
+            <Route path="/doctor/ipd-chart/:id" element={<IpdMedicationChart />} />
           </Route>
           <Route path="/module/:moduleId" element={<ModulePlaceholder />} />
           <Route element={<ProtectedRoute allowedRoles={['admin', 'billing']} requiredModule={8} />}>
@@ -89,10 +97,12 @@ function App() {
           <Route element={<ProtectedRoute allowedRoles={['admin', 'lab']} requiredModule={4} />}>
             <Route path="/lab" element={<LabWorkspace />} />
           </Route>
+          <Route element={<ProtectedRoute allowedRoles={['admin', 'reception', 'ipd', 'doctor', 'nursing']} />}>
+            <Route path="/ipd/patient/:id" element={<IpdPatientDetails />} />
+          </Route>
           <Route element={<ProtectedRoute allowedRoles={['admin', 'reception', 'ipd']} requiredModule={5} />}>
             <Route path="/ipd/admission" element={<IpdAdmission />} />
             <Route path="/ipd/patients" element={<IpdPatientList />} />
-            <Route path="/ipd/patient/:id" element={<IpdPatientDetails />} />
             <Route path="/ipd/services" element={<IpdServices />} />
             <Route path="/ipd/ot-flow/:id" element={<IpdOtFlow />} />
             <Route path="/ipd/ot/:id" element={<IpdOtForm />} />

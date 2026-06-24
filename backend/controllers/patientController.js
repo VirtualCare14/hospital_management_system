@@ -31,10 +31,10 @@ const generateRegistrationNumber = async (hospitalId) => {
 };
 
 // @desc    Generate next appointment number for today (per doctor + department)
-const generateAppointmentNumber = async (hospitalId, doctorId, department) => {
-  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+const generateAppointmentNumber = async (hospitalId, doctorId, department, appointmentDate) => {
+  const dateStr = appointmentDate || new Date().toISOString().split('T')[0]; // YYYY-MM-DD
   const filter = {
-    appointmentDateSeq: today,
+    appointmentDateSeq: dateStr,
     appointmentDept: department,
     appointmentDoctorId: doctorId
   };
@@ -42,7 +42,7 @@ const generateAppointmentNumber = async (hospitalId, doctorId, department) => {
 
   const lastVisit = await Visit.findOne(filter).sort({ appointmentNumber: -1 });
   const nextNumber = (lastVisit?.appointmentNumber || 0) + 1;
-  return { appointmentNumber: nextNumber, appointmentDateSeq: today };
+  return { appointmentNumber: nextNumber, appointmentDateSeq: dateStr };
 };
 
 // @desc    Look up existing patient by Aadhaar number
@@ -164,9 +164,9 @@ const createPatient = async (req, res) => {
     // Generate registration number
     const registrationNumber = await generateRegistrationNumber(req.user.hospitalId);
 
-    // Generate appointment number for today (per doctor + department)
+    // Generate appointment number (per doctor + department + date)
     const { appointmentNumber, appointmentDateSeq } = await generateAppointmentNumber(
-      req.user.hospitalId, doctorId, department
+      req.user.hospitalId, doctorId, department, appointmentDate
     );
 
     // Determine visit type
@@ -248,7 +248,11 @@ const createPatient = async (req, res) => {
       gender: patient.gender,
       aadhaar: patient.aadhaar,
       department: visit.department,
-      doctorId: visit.doctorId,
+      doctorId: doctor ? {
+        _id: doctor._id,
+        doctorName: doctor.doctorName,
+        username: doctor.username
+      } : visit.doctorId,
       appointmentDate: visit.appointmentDate,
       slot: visit.slot,
       appointmentNumber: visit.appointmentNumber,
@@ -470,6 +474,7 @@ const getRegistrations = async (req, res) => {
       doctorName: v.doctorId?.doctorName || v.doctorId?.username || '',
       appointmentDate: v.appointmentDate,
       slot: v.slot,
+      appointmentNumber: v.appointmentNumber,
       consultationStatus: v.consultationStatus,
       patientId: v.patientId?._id,
       doctorId: v.doctorId?._id

@@ -17,6 +17,59 @@ const tenantFilter = (req, query = {}) => (
   req.user.hospitalId ? { ...query, hospitalId: req.user.hospitalId } : query
 );
 
+const updateBookingStatusesDynamically = async (hospitalId) => {
+  try {
+    const now = new Date();
+    const query = { status: { $in: ['Scheduled', 'In Progress'] } };
+    if (hospitalId) query.hospitalId = hospitalId;
+
+    const bookings = await OtBooking.find(query);
+    const OperationTheatre = require('../models/OperationTheatre');
+    const IpdOtRecord = require('../models/IpdOtRecord');
+
+    for (const booking of bookings) {
+      const dateStr = booking.surgeryDate.toISOString().split('T')[0];
+      const start = new Date(`${dateStr}T${booking.startTime}`);
+      const end = new Date(`${dateStr}T${booking.endTime}`);
+
+      let newStatus = booking.status;
+      if (now >= end) {
+        newStatus = 'Completed';
+      } else if (now >= start && now < end) {
+        newStatus = 'In Progress';
+      } else {
+        newStatus = 'Scheduled';
+      }
+
+      if (newStatus !== booking.status) {
+        booking.status = newStatus;
+        await booking.save();
+
+        if (booking.otRecordId) {
+          const otRecord = await IpdOtRecord.findById(booking.otRecordId);
+          if (otRecord) {
+            otRecord.status = newStatus;
+            otRecord.schedulingStatus = newStatus === 'In Progress' ? 'Ongoing' : newStatus;
+            await otRecord.save();
+          }
+        }
+
+        if (newStatus === 'Completed') {
+          const activeCount = await OtBooking.countDocuments({
+            otId: booking.otId,
+            status: { $in: ['Scheduled', 'In Progress'] }
+          });
+          if (activeCount === 0) {
+            await OperationTheatre.findByIdAndUpdate(booking.otId, { availabilityStatus: 'Available' });
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error updating booking statuses dynamically:', err);
+  }
+};
+
 // Helper to generate OT code
 const generateOtCode = async (hospitalId) => {
   const lastOt = await OperationTheatre.findOne({ hospitalId }).sort({ createdAt: -1 });
@@ -285,6 +338,7 @@ const updateOtBooking = async (req, res) => {
 const getOtBookings = async (req, res) => {
   try {
     const { otId, date, status } = req.query;
+    await updateBookingStatusesDynamically(req.user.hospitalId);
     let query = tenantFilter(req);
     if (otId) query.otId = otId;
     if (date) {
@@ -311,6 +365,7 @@ const getOtBookings = async (req, res) => {
 const getOtBookingsByAdmission = async (req, res) => {
   try {
     const { admissionId } = req.params;
+    await updateBookingStatusesDynamically(req.user.hospitalId);
     const bookings = await OtBooking.find(tenantFilter(req, { admissionId }))
       .populate('otId', 'otCode otName')
       .populate('patientId', 'patientName uhid')
@@ -327,6 +382,7 @@ const getOtBookingsByAdmission = async (req, res) => {
 const getOtDashboard = async (req, res) => {
   try {
     const hospitalId = req.user.hospitalId;
+    await updateBookingStatusesDynamically(hospitalId);
     const filter = hospitalId ? { hospitalId } : {};
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -525,26 +581,63 @@ const scheduleOtWithDocuments = async (req, res) => {
 
 
 
-    // Check time overlap
-    const hasOverlap = await checkTimeOverlap(otId, surgeryDate, startTime, endTime);
+    // If there is an existing booking, exclude it from overlap check
+    const existingBookingId = otRecord.otScheduling?.otBookingId;
+    let oldOtId = null;
+
+    // Check time overlap excluding current booking
+    const hasOverlap = await checkTimeOverlap(otId, surgeryDate, startTime, endTime, existingBookingId);
     if (hasOverlap) {
       return res.status(400).json({ message: 'This OT is already booked for the selected time slot' });
     }
 
-    // Create booking
-    const booking = new OtBooking({
-      hospitalId: req.user.hospitalId,
-      otId,
-      admissionId: otRecord.admissionId,
-      patientId: otRecord.patientId,
-      otRecordId: otRecordId,
-      surgeryDate: new Date(surgeryDate),
-      startTime,
-      endTime,
-      status: 'Scheduled',
-      createdBy: req.user._id,
-      updatedBy: req.user._id
-    });
+    let booking;
+    if (existingBookingId) {
+      booking = await OtBooking.findById(existingBookingId);
+      if (booking) {
+        oldOtId = booking.otId;
+      }
+    }
+
+    const scheduledStart = new Date(`${surgeryDate}T${startTime}`);
+    const scheduledEnd = new Date(`${surgeryDate}T${endTime}`);
+    const now = new Date();
+
+    let computedStatus = 'Scheduled';
+    let computedSchedulingStatus = 'Scheduled';
+
+    if (now >= scheduledEnd) {
+      computedStatus = 'Completed';
+      computedSchedulingStatus = 'Completed';
+    } else if (now >= scheduledStart && now < scheduledEnd) {
+      computedStatus = 'In Progress';
+      computedSchedulingStatus = 'Ongoing';
+    }
+
+    if (!booking) {
+      // Create booking
+      booking = new OtBooking({
+        hospitalId: req.user.hospitalId,
+        otId,
+        admissionId: otRecord.admissionId,
+        patientId: otRecord.patientId,
+        otRecordId: otRecordId,
+        surgeryDate: new Date(surgeryDate),
+        startTime,
+        endTime,
+        status: computedStatus,
+        createdBy: req.user._id,
+        updatedBy: req.user._id
+      });
+    } else {
+      // Reschedule/Update booking
+      booking.otId = otId;
+      booking.surgeryDate = new Date(surgeryDate);
+      booking.startTime = startTime;
+      booking.endTime = endTime;
+      booking.status = computedStatus;
+      booking.updatedBy = req.user._id;
+    }
 
     // Process documents if provided
     if (documentFiles && Array.isArray(documentFiles) && documentFiles.length > 0) {
@@ -586,8 +679,6 @@ const scheduleOtWithDocuments = async (req, res) => {
     await booking.save();
 
     // Update OT record with scheduling info (use explicit datetimes)
-    const scheduledStart = new Date(`${surgeryDate}T${startTime}`);
-    const scheduledEnd = new Date(`${surgeryDate}T${endTime}`);
     otRecord.otScheduling = {
       otId,
       otBookingId: booking._id,
@@ -597,15 +688,41 @@ const scheduleOtWithDocuments = async (req, res) => {
       scheduledBy: req.user._id,
       scheduledAt: new Date()
     };
-    otRecord.schedulingStatus = 'Scheduled';
+    otRecord.schedulingStatus = computedSchedulingStatus;
     otRecord.schedulingHistory = otRecord.schedulingHistory || [];
-    otRecord.schedulingHistory.push({ action: 'Scheduled', by: req.user._id, at: new Date(), notes: `Scheduled in OT ${otId}` });
-    otRecord.status = 'Scheduled';
+    otRecord.schedulingHistory.push({
+      action: computedStatus,
+      by: req.user._id,
+      at: new Date(),
+      notes: `Scheduled in OT ${otId}. Status: ${computedStatus}`
+    });
+    otRecord.status = computedStatus;
     otRecord.updatedBy = req.user._id;
     await otRecord.save();
 
-    // Update OT availability
-    await OperationTheatre.findByIdAndUpdate(otId, { availabilityStatus: 'Occupied' });
+    // Update OT availability for the new/current OT
+    if (computedStatus === 'Completed') {
+      const activeCount = await OtBooking.countDocuments({
+        otId,
+        status: { $in: ['Scheduled', 'In Progress'] }
+      });
+      if (activeCount === 0) {
+        await OperationTheatre.findByIdAndUpdate(otId, { availabilityStatus: 'Available' });
+      }
+    } else {
+      await OperationTheatre.findByIdAndUpdate(otId, { availabilityStatus: 'Occupied' });
+    }
+
+    // Release old OT if it changed and has no other active bookings
+    if (oldOtId && oldOtId.toString() !== otId.toString()) {
+      const activeCount = await OtBooking.countDocuments({
+        otId: oldOtId,
+        status: { $in: ['Scheduled', 'In Progress'] }
+      });
+      if (activeCount === 0) {
+        await OperationTheatre.findByIdAndUpdate(oldOtId, { availabilityStatus: 'Available' });
+      }
+    }
 
     res.status(201).json({
       message: 'OT scheduled successfully with documents',

@@ -33,6 +33,7 @@ const PrescriptionPage = () => {
   const [sendingToIpd, setSendingToIpd] = useState(false);
   const [referralSent, setReferralSent] = useState(false);
   const [pharmacyMedicines, setPharmacyMedicines] = useState([]);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     const fetchPharmacyMedicines = async () => {
@@ -57,8 +58,9 @@ const PrescriptionPage = () => {
           client.get(`/prescription/${patientId}`).catch(() => ({ data: [] }))
         ]);
         setPatient(patientRes.data);
-        setConsultation(consultationRes.data[0] || null);
-        setPrescription(prescriptionRes.data[0] || null);
+        const consultations = consultationRes.data;
+        setConsultation(consultations && consultations.length > 0 ? consultations[0] : null);
+        setPrescription(prescriptionRes.data && prescriptionRes.data.length > 0 ? prescriptionRes.data[0] : null);
       } catch (error) {
         console.error('Error loading data:', error);
       }
@@ -83,6 +85,7 @@ const PrescriptionPage = () => {
   };
 
   const savePrescription = async (redirectAfterSave = true) => {
+    setIsSaving(true);
     const consultationData = consultation ? {
       symptoms: consultation.symptoms,
       generalPastHistory: consultation.generalPastHistory,
@@ -102,7 +105,7 @@ const PrescriptionPage = () => {
       });
       toast.success('✓ Prescription saved & Consultation marked as completed');
       
-      // Reload prescription data after save
+      // Reload prescription data after save to get latest
       const { data: prescriptionData } = await client.get(`/prescription/${patientId}`).catch(() => ({ data: [] }));
       if (prescriptionData.length > 0) {
         setPrescription(prescriptionData[0]);
@@ -112,6 +115,8 @@ const PrescriptionPage = () => {
     } catch (error) {
       toast.error('Error saving prescription');
       console.error(error);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -120,7 +125,8 @@ const PrescriptionPage = () => {
       diagnosisRemark: translatedDiagnosisRemark || consultation?.diagnosisRemark || '',
       medicines: medicines.filter((m) => m.medicine),
       symptoms: consultation?.symptoms || [],
-      followUpDate: consultation?.followUpDate || null
+      followUpDate: consultation?.followUpDate || null,
+      language: language // Pass language for rendering
     };
   };
 
@@ -128,8 +134,6 @@ const PrescriptionPage = () => {
     if (!receiptRef.current) {
       throw new Error('Printable content is not available');
     }
-    // Save prescription first to ensure latest data
-    await savePrescription(false);
     
     const canvas = await html2canvas(receiptRef.current, {
       scale: 2,
@@ -142,12 +146,22 @@ const PrescriptionPage = () => {
     const pdf = new jsPDF('p', 'mm', 'a4');
     const width = pdf.internal.pageSize.getWidth();
     const height = (canvas.height * width) / canvas.width;
-    pdf.addImage(imgData, 'PNG', 0, 0, width, height);
+    
+    // Add padding to prevent content from touching edges
+    const padding = 5;
+    pdf.addImage(imgData, 'PNG', padding, padding, width - (padding * 2), height);
+    
     return pdf;
   };
 
   const makePdf = async (action = 'download') => {
     try {
+      // Save prescription first to ensure latest data is persisted
+      await savePrescription(false);
+      
+      // Wait a moment for state to update
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
       const pdf = await generateA4Print();
       const filename = `${sanitizePatientName(patient?.patientName) || 'patient'}_${formatUhid(patient?.uhid) || 'UHIDunknown'}.pdf`;
       if (action === 'print') {
@@ -171,6 +185,11 @@ const PrescriptionPage = () => {
       if (phone && phone.length === 10) {
         phone = '91' + phone;
       }
+      
+      // Save first
+      await savePrescription(false);
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
       const pdf = await generateA4Print();
       const pdfBlob = pdf.output('blob');
       const filename = `${sanitizePatientName(patient.patientName)}_${formatUhid(patient.uhid)}.pdf`;
@@ -294,10 +313,10 @@ const PrescriptionPage = () => {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <button className="btn-secondary" onClick={() => savePrescription(true)}><Save className="h-4 w-4" /> Save</button>
-        <button className="btn" onClick={() => makePdf('download')}><Download className="h-4 w-4" /> Download PDF</button>
-        <button className="btn-secondary" onClick={() => makePdf('print')}><Printer className="h-4 w-4" /> Print</button>
-        <button className="btn-secondary" onClick={shareWhatsApp}><MessageCircle className="h-4 w-4" /> WhatsApp</button>
+        <button className="btn-secondary" disabled={isSaving} onClick={() => savePrescription(true)}><Save className="h-4 w-4" /> {isSaving ? 'Saving...' : 'Save'}</button>
+        <button className="btn" disabled={isSaving} onClick={() => makePdf('download')}><Download className="h-4 w-4" /> Download PDF</button>
+        <button className="btn-secondary" disabled={isSaving} onClick={() => makePdf('print')}><Printer className="h-4 w-4" /> Print</button>
+        <button className="btn-secondary" disabled={isSaving} onClick={shareWhatsApp}><MessageCircle className="h-4 w-4" /> WhatsApp</button>
         {referralSent ? (
           <span className="btn-secondary bg-green-50 text-green-700 border-green-200 cursor-default">
             ✓ Referred to IPD

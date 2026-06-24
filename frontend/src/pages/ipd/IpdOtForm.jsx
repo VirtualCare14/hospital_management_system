@@ -19,7 +19,8 @@ import {
   Pill,
   FlaskRound as Flask,
   FileSignature,
-  ClipboardCheck
+  ClipboardCheck,
+  Edit3
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import client from '../../api/client';
@@ -27,7 +28,7 @@ import { formatUhid } from '../../utils/uhid';
 import { formatDate } from '../../utils/dateFormat';
 import OtSchedulingModal from './OtSchedulingModal';
 import OtConsentForm from './OtConsentForm';
-import OtConsultationForm from './OtConsultationForm';
+import TemplateEditor from '../../components/TemplateEditor';
 
 const IpdOtForm = () => {
   const { id } = useParams(); // admissionId
@@ -46,7 +47,17 @@ const IpdOtForm = () => {
   const [showPreview, setShowPreview] = useState(false);
   const [showScheduling, setShowScheduling] = useState(false);
   const [showConsentForm, setShowConsentForm] = useState(false);
-  const [showConsultationForm, setShowConsultationForm] = useState(false);
+  const [activeTemplates, setActiveTemplates] = useState([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState('');
+  const [consultationHeading, setConsultationHeading] = useState('');
+  const [consultationContent, setConsultationContent] = useState('');
+  const [additionalParagraph1, setAdditionalParagraph1] = useState('');
+  const [additionalParagraph2, setAdditionalParagraph2] = useState('');
+  const [rawTemplateContent, setRawTemplateContent] = useState('');
+  const [surgicalProcedureInput, setSurgicalProcedureInput] = useState('');
+  const [savingConsultation, setSavingConsultation] = useState(false);
+  const [isEditingConsultation, setIsEditingConsultation] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
 
   // Form fields
@@ -153,6 +164,7 @@ const IpdOtForm = () => {
               totalCharges: otData.totalCharges || 0,
               otChargesTemplate: otData.otCharges || []
             });
+            setSurgicalProcedureInput(otData.proceduresPerformed || '');
           }
         } else {
           // New record - auto-fill from admission
@@ -254,17 +266,259 @@ const IpdOtForm = () => {
     }
   };
 
-  // Auto-open consultation form when coming from patient list
-  useEffect(() => {
-    const openConsultation = searchParams.get('openConsultation');
-    if (openConsultation === 'true' && otRecord && !showConsultationForm) {
-      // Wait a moment for the record to fully load, then open consultation
-      const timer = setTimeout(() => {
-        setShowConsultationForm(true);
-      }, 1000);
-      return () => clearTimeout(timer);
+  // Load active templates on mount
+  const loadActiveTemplates = useCallback(async () => {
+    setLoadingTemplates(true);
+    try {
+      const { data } = await client.get('/ipd/ot-templates?active=true');
+      setActiveTemplates(data);
+    } catch (err) {
+      console.error('Failed to load active templates:', err);
+    } finally {
+      setLoadingTemplates(false);
     }
-  }, [searchParams, otRecord, showConsultationForm]);
+  }, []);
+
+  useEffect(() => {
+    loadActiveTemplates();
+  }, [loadActiveTemplates]);
+
+  // Parse template variables
+  const parseTemplate = (htmlContent, surgicalProc = '', addPara1 = '', addPara2 = '') => {
+    if (!htmlContent) return '';
+    let parsed = htmlContent;
+
+    const replacements = {
+      '{Patient Name}': form.patientName || admission?.patientId?.patientName || '',
+      '{Age}': form.age || (admission?.patientId?.dob ? Math.floor((new Date() - new Date(admission.patientId.dob)) / (365.25 * 24 * 60 * 60 * 1000)) : '') || '',
+      '{Sex}': form.gender || admission?.patientId?.gender || '',
+      '{Address}': admission?.patientId?.address || '',
+      '{Mobile Number}': admission?.patientId?.mobile || '',
+      '{Aadhaar Number}': admission?.patientId?.aadhaar || '',
+      '{Doctor Name}': form.surgeon || form.consultantDoctor || admission?.doctorInCharge?.doctorName || admission?.doctorInCharge?.username || '',
+      '{Referring Doctor Name}': admission?.referredDoctor?.doctorName || admission?.referredDoctor?.username || 'N/A',
+      '{Surgical Procedure}': surgicalProc || form.proceduresPerformed || '',
+      '{Additional Paragraph 1}': addPara1 || '',
+      '{Additional Paragraph 2}': addPara2 || '',
+      '{Current Date}': new Date().toLocaleDateString('en-IN'),
+      '{Hospital Name}': hospitalInfo?.hospitalName || '',
+      '{Hospital Logo}': hospitalInfo?.logoUrl ? '<img src="' + hospitalInfo.logoUrl + '" alt="Hospital Logo" style="max-height: 50px; object-fit: contain; display: inline-block; vertical-align: middle;" />' : ''
+    };
+
+    Object.entries(replacements).forEach(([placeholder, value]) => {
+      parsed = parsed.split(placeholder).join(value);
+    });
+
+    return parsed;
+  };
+
+  const handleTemplateChange = (templateId) => {
+    setSelectedTemplate(templateId);
+    if (!templateId) {
+      setRawTemplateContent('');
+      setConsultationHeading('');
+      setConsultationContent('');
+      return;
+    }
+    const selected = activeTemplates.find(t => t._id === templateId);
+    if (selected) {
+      setRawTemplateContent(selected.content);
+      setConsultationHeading(selected.templateHeading);
+      const parsed = parseTemplate(
+        selected.content,
+        surgicalProcedureInput || form.proceduresPerformed || '',
+        additionalParagraph1,
+        additionalParagraph2
+      );
+      setConsultationContent(parsed);
+    }
+  };
+
+  const handleManualFieldChange = (field, val) => {
+    let newSurg = surgicalProcedureInput;
+    let newP1 = additionalParagraph1;
+    let newP2 = additionalParagraph2;
+
+    if (field === 'surgical') {
+      newSurg = val;
+      setSurgicalProcedureInput(val);
+      handleChange('proceduresPerformed', val);
+    } else if (field === 'p1') {
+      newP1 = val;
+      setAdditionalParagraph1(val);
+    } else if (field === 'p2') {
+      newP2 = val;
+      setAdditionalParagraph2(val);
+    }
+
+    if (rawTemplateContent) {
+      const parsed = parseTemplate(rawTemplateContent, newSurg, newP1, newP2);
+      setConsultationContent(parsed);
+    }
+  };
+
+  const handleSaveConsultation = async (shouldPrint = false) => {
+    if (!consultationContent.trim()) {
+      toast.error('Consultation content cannot be empty');
+      return;
+    }
+
+    setSavingConsultation(true);
+    try {
+      let currentOtRecord = otRecord;
+
+      // If OT record doesn't exist yet, save draft first
+      if (!currentOtRecord && !form._id) {
+        if (!form.surgeon?.trim()) {
+          toast.error('Please enter Surgeon name in Surgery Information first');
+          setSavingConsultation(false);
+          return;
+        }
+
+        const payload = {
+          ...form,
+          admissionId: id,
+          status: 'Draft',
+          dateOfBirth: form.dateOfBirth ? new Date(form.dateOfBirth) : null,
+          admissionDate: form.admissionDate ? new Date(form.admissionDate) : null,
+          dateOfSurgery: form.dateOfSurgery ? new Date(form.dateOfSurgery) : null,
+          age: form.age ? Number(form.age) : null
+        };
+
+        const response = await client.post('/ipd/ot', payload);
+        currentOtRecord = response.data.record;
+        setOtRecord(currentOtRecord);
+        setForm(prev => ({ ...prev, ...currentOtRecord }));
+        navigate(`/ipd/ot/${id}?otId=${currentOtRecord._id}`, { replace: true });
+      }
+
+      const selected = activeTemplates.find(t => t._id === selectedTemplate);
+      const templateName = selected ? selected.templateName : 'Manual Template';
+
+      const { data } = await client.put(`/ipd/ot/${currentOtRecord._id}/consultation`, {
+        consultationNotes: consultationContent,
+        templateId: selectedTemplate || null,
+        templateName: templateName,
+        templateHeading: consultationHeading || 'OT Consultation Report'
+      });
+
+      setOtRecord(data.record);
+      setForm(prev => ({
+        ...prev,
+        consultation: data.record.consultation
+      }));
+      setIsEditingConsultation(false);
+      toast.success('Consultation template saved successfully');
+
+      if (shouldPrint) {
+        handlePrintConsultation(data.record);
+      }
+
+      if (data.record.schedulingStatus === 'Pending') {
+        setTimeout(() => setShowScheduling(true), 1000);
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to save consultation template');
+    } finally {
+      setSavingConsultation(false);
+    }
+  };
+
+  const handleEditConsultation = () => {
+    setConsultationHeading(form.consultation?.templateHeading || 'OT Consultation Report');
+    setConsultationContent(form.consultation?.consultationNotes || '');
+    setSelectedTemplate(form.consultation?.templateId || '');
+    setIsEditingConsultation(true);
+  };
+
+  const handlePrintConsultation = (customRecord = null) => {
+    const activeForm = customRecord ? customRecord : form;
+    const patientObj = admission?.patientId || {};
+    const consentNotes = activeForm.consultation?.consultationNotes || '';
+    const heading = activeForm.consultation?.templateHeading || 'OT Consultation / Consent Form';
+    const dateStr = activeForm.consultation?.signatureSignedAt 
+      ? new Date(activeForm.consultation.signatureSignedAt).toLocaleDateString('en-IN') 
+      : new Date().toLocaleDateString('en-IN');
+
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>${heading}</title>
+          <style>
+            @media print {
+              @page { size: A4; margin: 15mm; }
+              body { font-size: 11pt; }
+            }
+            body { font-family: 'Helvetica Neue', Arial, sans-serif; padding: 20px; color: #333; line-height: 1.6; }
+            .header-container { border-bottom: 2px solid #ea580c; padding-bottom: 12px; margin-bottom: 20px; display: flex; align-items: center; gap: 15px; }
+            .hospital-logo { max-height: 60px; max-width: 150px; object-fit: contain; }
+            .hospital-details h1 { font-size: 20px; font-weight: 800; margin: 0; color: #1e293b; }
+            .hospital-details p { font-size: 12px; margin: 2px 0 0 0; color: #64748b; }
+            
+            .doc-title { text-align: center; font-size: 16px; font-weight: 800; margin: 20px 0; text-transform: uppercase; letter-spacing: 0.5px; color: #0f172a; border-bottom: 1px dashed #cbd5e1; padding-bottom: 8px; }
+            
+            .patient-box { border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 20px; padding: 12px 16px; background-color: #f8fafc; font-size: 13px; }
+            .patient-box h4 { font-weight: 800; margin: 0 0 8px 0; color: #475569; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; }
+            .patient-grid { display: grid; grid-template-cols: 1fr 1fr; gap: 6px 20px; }
+            .patient-grid div { display: flex; }
+            .patient-grid span.label { font-weight: bold; color: #64748b; width: 140px; flex-shrink: 0; }
+            .patient-grid span.val { color: #1e293b; }
+
+            .consent-content { font-size: 14px; color: #0f172a; margin-bottom: 50px; text-align: justify; }
+            
+            .footer-section { margin-top: 60px; border-top: 1px solid #e2e8f0; padding-top: 20px; font-size: 13px; }
+            .signature-grid { display: grid; grid-template-cols: 1fr 1fr; gap: 40px; margin-bottom: 20px; }
+            .sig-col { border-top: 1px dashed #94a3b8; padding-top: 6px; text-align: center; color: #475569; font-weight: bold; margin-top: 50px; }
+            .date-row { text-align: right; font-size: 12px; color: #64748b; font-weight: bold; margin-top: 10px; }
+          </style>
+        </head>
+        <body>
+          <div class="header-container">
+            ${hospitalInfo?.logoUrl ? '<img src="' + hospitalInfo.logoUrl + '" class="hospital-logo" alt="Logo" />' : ''}
+            <div class="hospital-details">
+              <h1>${hospitalInfo?.hospitalName || 'Hospital Name'}</h1>
+              <p>${hospitalInfo?.address || ''}</p>
+            </div>
+          </div>
+
+          <div class="doc-title">${heading}</div>
+
+          <div class="patient-box">
+            <h4>Patient Demographics</h4>
+            <div class="patient-grid">
+              <div><span class="label">Patient Name:</span><span class="val">${activeForm.patientName || patientObj.patientName || 'N/A'}</span></div>
+              <div><span class="label">Age / Sex:</span><span class="val">${activeForm.age || 'N/A'} Yrs / ${activeForm.gender || patientObj.gender || 'N/A'}</span></div>
+              <div><span class="label">Address:</span><span class="val">${patientObj.address || 'N/A'}</span></div>
+              <div><span class="label">Mobile Number:</span><span class="val">${patientObj.mobile || 'N/A'}</span></div>
+              <div><span class="label">Aadhaar Number:</span><span class="val">${patientObj.aadhaar || 'N/A'}</span></div>
+              <div><span class="label">UHID / MRN:</span><span class="val">${formatUhid(activeForm.uhid || patientObj.uhid)}</span></div>
+            </div>
+          </div>
+
+          <div class="consent-content">
+            ${consentNotes}
+          </div>
+
+          <div class="footer-section">
+            <div class="signature-grid">
+              <div class="sig-col">Patient Signature / Thumb Impression</div>
+              <div class="sig-col">Witness Signature / Thumb Impression</div>
+            </div>
+            <div class="date-row">Date: ${dateStr}</div>
+          </div>
+
+          <script>
+            window.onload = function() {
+              window.print();
+              window.onafterprint = function() { window.close(); };
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
 
   useEffect(() => {
     if (user && !form.surgeon) {
@@ -291,15 +545,6 @@ const IpdOtForm = () => {
     } catch (err) {
       console.error('Failed to save consent tracking:', err);
     }
-  };
-
-  // Handle consultation completed callback
-  const handleConsultationCompleted = (record) => {
-    setOtRecord(record);
-    setForm(prev => ({
-      ...prev,
-      consultation: record.consultation
-    }));
   };
 
 
@@ -356,8 +601,8 @@ const IpdOtForm = () => {
   if (!admission) return null;
 
   const currentFormStep = (() => {
-    if (form.schedulingStatus !== 'Scheduled' && form.schedulingStatus !== 'Completed') return 1;
-    if (!form.consultation?.isConsultationCompleted) return 2;
+    if (!form.consultation?.isConsultationCompleted) return 1;
+    if (form.schedulingStatus !== 'Scheduled' && form.schedulingStatus !== 'Completed') return 2;
     if (!form.otCharges || form.otCharges.length === 0) return 3;
     if (form.status !== 'Completed' && !form.pharmacyRequestSent) return 4;
     return 5;
@@ -408,32 +653,32 @@ const IpdOtForm = () => {
 
         {/* Workflow Status Bar */}
         <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3">
-          {/* Step 1: Schedule OT */}
+          {/* Step 1: Consultation Template */}
           <div className={`p-3 rounded-xl border-2 ${getStepClass(1)} flex items-center gap-3`}>
             <div className={`p-2 rounded-lg ${getIconClass(1)}`}>
-              <CalendarDays className="h-5 w-5" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-bold text-gray-600">Step 1</p>
-              <p className="text-sm font-semibold truncate">
-                {form.schedulingStatus === 'Scheduled' || form.schedulingStatus === 'Completed' ? 'OT Scheduled' : 'Pending Schedule'}
-              </p>
-            </div>
-            {(form.schedulingStatus === 'Scheduled' || form.schedulingStatus === 'Completed') && <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />}
-          </div>
-
-          {/* Step 2: Consultation Form */}
-          <div className={`p-3 rounded-xl border-2 ${getStepClass(2)} flex items-center gap-3`}>
-            <div className={`p-2 rounded-lg ${getIconClass(2)}`}>
               <ClipboardCheck className="h-5 w-5" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-bold text-gray-600">Step 2</p>
+              <p className="text-xs font-bold text-gray-600">Step 1</p>
               <p className="text-sm font-semibold truncate">
                 {form.consultation?.isConsultationCompleted ? 'Consultation Completed' : 'Consultation Required'}
               </p>
             </div>
             {form.consultation?.isConsultationCompleted && <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />}
+          </div>
+
+          {/* Step 2: Schedule OT */}
+          <div className={`p-3 rounded-xl border-2 ${getStepClass(2)} flex items-center gap-3`}>
+            <div className={`p-2 rounded-lg ${getIconClass(2)}`}>
+              <CalendarDays className="h-5 w-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-gray-600">Step 2</p>
+              <p className="text-sm font-semibold truncate">
+                {form.schedulingStatus === 'Scheduled' || form.schedulingStatus === 'Completed' ? 'OT Scheduled' : 'Pending Schedule'}
+              </p>
+            </div>
+            {(form.schedulingStatus === 'Scheduled' || form.schedulingStatus === 'Completed') && <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />}
           </div>
 
           {/* Step 3: OT Charges */}
@@ -487,12 +732,6 @@ const IpdOtForm = () => {
             <FileSignature className="h-4 w-4" />
             Consent Form
           </button>
-          <button onClick={() => setShowConsultationForm(true)}
-            disabled={!otRecord && !form._id}
-            className="btn-secondary text-sm py-2.5 px-4 flex items-center gap-2">
-            <ClipboardCheck className="h-4 w-4" />
-            Consultation Form
-          </button>
 
           {/* View/Print Buttons */}
           <button onClick={() => setShowPreview(!showPreview)}
@@ -527,6 +766,192 @@ const IpdOtForm = () => {
           </div>
         </div>
       )}
+
+      {/* Step 1: Consultation Template Card */}
+      <div className="no-print card p-5 border-2 border-orange-200 bg-orange-50/10 space-y-4">
+        <div className="flex items-center justify-between border-b border-orange-200 pb-3 flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <ClipboardCheck className="h-5 w-5 text-orange-500" />
+            <h3 className="font-extrabold text-gray-900">Step 1: OT Consultation / Consent Template</h3>
+          </div>
+          <div className="flex items-center gap-2">
+            {form.consultation?.isConsultationCompleted ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-green-100 text-green-800 px-3 py-1 text-xs font-bold">
+                <CheckCircle className="h-3 w-3" /> Completed
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 text-orange-800 px-3 py-1 text-xs font-bold">
+                <Clock className="h-3 w-3 animate-pulse" /> Pending Fill
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Editing mode or template completion view */}
+        {!form.consultation?.isConsultationCompleted || isEditingConsultation ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-500">
+                  Select Template
+                </label>
+                {loadingTemplates ? (
+                  <div className="flex items-center gap-2 text-sm text-gray-500 py-2">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Loading templates...
+                  </div>
+                ) : activeTemplates.length === 0 ? (
+                  <p className="text-xs text-gray-400 py-2">
+                    No active consultation templates found. Please configure them in Admin OT Settings.
+                  </p>
+                ) : (
+                  <select
+                    className="input py-2.5 text-sm"
+                    value={selectedTemplate}
+                    onChange={(e) => handleTemplateChange(e.target.value)}
+                  >
+                    <option value="">Choose a Template...</option>
+                    {activeTemplates.map(t => (
+                      <option key={t._id} value={t._id}>{t.templateName}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-500">
+                  Template Heading / Title
+                </label>
+                <input
+                  type="text"
+                  className="input py-2.5 text-sm"
+                  value={consultationHeading}
+                  onChange={(e) => setConsultationHeading(e.target.value)}
+                  placeholder="e.g. Consent for Surgery"
+                />
+              </div>
+            </div>
+
+            {/* Manual Fields Section */}
+            <div className="border border-orange-100 rounded-xl bg-orange-50/20 p-4 space-y-3 shadow-sm">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-orange-950 uppercase tracking-wide border-b border-orange-100 pb-2">
+                <Edit3 className="h-4 w-4 text-orange-600" />
+                <span>Manual Form Fields</span>
+              </div>
+              <div className="grid grid-cols-1 gap-3">
+                <div>
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-500">
+                    Surgical Procedure
+                  </label>
+                  <input
+                    type="text"
+                    className="input py-2 text-sm bg-white"
+                    value={surgicalProcedureInput}
+                    onChange={(e) => handleManualFieldChange('surgical', e.target.value)}
+                    placeholder="Enter surgical procedure (e.g. Laparoscopic Cholecystectomy)"
+                  />
+                  <p className="text-[9px] text-gray-400 mt-0.5">Fills {'{Surgical Procedure}'} and updates the main form's procedure field.</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-500">
+                      Additional Paragraph 1
+                    </label>
+                    <textarea
+                      className="input py-2 text-sm bg-white min-h-[60px] resize-y"
+                      value={additionalParagraph1}
+                      onChange={(e) => handleManualFieldChange('p1', e.target.value)}
+                      placeholder="Enter custom text for {'{Additional Paragraph 1}'}..."
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-500">
+                      Additional Paragraph 2
+                    </label>
+                    <textarea
+                      className="input py-2 text-sm bg-white min-h-[60px] resize-y"
+                      value={additionalParagraph2}
+                      onChange={(e) => handleManualFieldChange('p2', e.target.value)}
+                      placeholder="Enter custom text for {'{Additional Paragraph 2}'}..."
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-500">
+                Consultation Content
+              </label>
+              <TemplateEditor
+                value={consultationContent}
+                onChange={setConsultationContent}
+                placeholder="Select a template above to auto-populate content, or start typing here..."
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-orange-100">
+              {form.consultation?.isConsultationCompleted && (
+                <button
+                  type="button"
+                  onClick={() => setIsEditingConsultation(false)}
+                  className="btn-secondary text-sm py-2 px-4 cursor-pointer"
+                >
+                  Cancel Edit
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => handleSaveConsultation(false)}
+                disabled={savingConsultation}
+                className="btn-secondary text-sm py-2.5 px-4 flex items-center gap-2 cursor-pointer"
+              >
+                {savingConsultation ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Save Form
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSaveConsultation(true)}
+                disabled={savingConsultation}
+                className="btn text-sm py-2.5 px-5 flex items-center gap-2 cursor-pointer"
+              >
+                {savingConsultation ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+                Save & Print Form
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="border border-orange-100 rounded-xl bg-white p-5 shadow-sm space-y-4">
+              <div className="text-center border-b border-gray-100 pb-3">
+                <h4 className="font-extrabold text-lg text-gray-900 uppercase tracking-wide">
+                  {form.consultation?.templateHeading}
+                </h4>
+                <p className="text-[10px] text-gray-400 mt-1">
+                  Template: {form.consultation?.templateName || 'Custom'} | Completed on: {form.consultation?.signatureSignedAt ? new Date(form.consultation.signatureSignedAt).toLocaleString('en-IN') : 'N/A'}
+                </p>
+              </div>
+              <div
+                className="prose prose-sm max-w-none text-gray-800 min-h-[100px]"
+                dangerouslySetInnerHTML={{ __html: form.consultation?.consultationNotes }}
+              />
+            </div>
+
+            <div className="flex flex-wrap gap-2 pt-2">
+              <button
+                onClick={handleEditConsultation}
+                className="btn-secondary text-sm py-2 px-4 flex items-center gap-2 cursor-pointer"
+              >
+                <Edit3 className="h-4 w-4" /> Edit Content
+              </button>
+              <button
+                onClick={handlePrintConsultation}
+                className="btn-secondary text-sm py-2 px-4 flex items-center gap-2 cursor-pointer"
+              >
+                <Printer className="h-4 w-4" /> Print Consultation
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Main Form */}
       <div className="grid gap-6 lg:grid-cols-2">
@@ -770,13 +1195,6 @@ const IpdOtForm = () => {
         user={user}
         onClose={() => setShowConsentForm(false)}
         onConsentPrinted={handleConsentPrinted}
-      />
-    )}
-    {showConsultationForm && otRecord && (
-      <OtConsultationForm
-        otRecord={otRecord}
-        onClose={() => setShowConsultationForm(false)}
-        onConsultationCompleted={handleConsultationCompleted}
       />
     )}
     {showScheduling && otRecord && (
