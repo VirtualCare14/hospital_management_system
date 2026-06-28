@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
-import { Building2, Plus } from 'lucide-react';
+import { Building2, Plus, Trash2 } from 'lucide-react';
 import client from '../../api/client';
 
 const ManageDepartments = () => {
@@ -30,6 +30,20 @@ const ManageDepartments = () => {
     load();
   };
 
+  const handleDelete = async (dept) => {
+    const ok = window.confirm(`Are you sure you want to delete the department "${dept.departmentName}"?`);
+    if (!ok) return;
+
+    try {
+      await client.delete(`/admin/departments/${dept._id}`);
+      toast.success('Department deleted successfully');
+      load();
+    } catch (error) {
+      console.error('Delete department error:', error);
+      toast.error(error.response?.data?.message || 'Error deleting department');
+    }
+  };
+
   return (
     <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
       <form onSubmit={handleSubmit(onSubmit)} className="card space-y-4 p-5">
@@ -47,7 +61,10 @@ const ManageDepartments = () => {
               <p className="font-bold text-gray-800">{dept.departmentName}</p>
               <p className="text-sm text-gray-500">{dept.isActive ? 'Active' : 'Inactive'}</p>
             </div>
-            <button className="btn-secondary" onClick={() => toggle(dept)}>{dept.isActive ? 'Disable' : 'Enable'}</button>
+            <div className="flex items-center gap-2">
+              <button className="btn-secondary" onClick={() => toggle(dept)}>{dept.isActive ? 'Disable' : 'Enable'}</button>
+              <button className="btn bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 hover:text-red-700 hover:border-red-200 p-2 rounded-xl transition-all" onClick={() => handleDelete(dept)}><Trash2 className="h-4 w-4" /></button>
+            </div>
           </div>
         ))}
       </div>

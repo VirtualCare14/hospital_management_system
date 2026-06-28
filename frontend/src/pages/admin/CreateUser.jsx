@@ -166,8 +166,8 @@ const CreateUser = () => {
         <input className="input" placeholder="Username" disabled={Boolean(editingUser)} {...register('username', { required: 'Username is required' })} />
         {errors.username && <p className="text-xs text-red-500">{errors.username.message}</p>}
         <input className="input" placeholder={editingUser ? 'New password optional' : 'Password'} type="password" {...register('password', { required: editingUser ? false : 'Password is required' })} />
-        <select className="input" {...register('role')}>
-          {roles.map((item) => <option key={item} value={item}>{item}</option>)}
+        <select className="input font-bold" {...register('role')}>
+          {roles.map((item) => <option key={item} value={item}>{item === 'nursing' ? 'same day care' : item}</option>)}
         </select>
         {role === 'doctor' && <input className="input" placeholder="Doctor name" {...register('doctorName')} />}
         {role === 'doctor' && (
@@ -276,7 +276,7 @@ const CreateUser = () => {
                             <span className="ml-2 text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded">₹{user.opdFees}</span>
                           )}
                         </td>
-                    <td className="p-3 capitalize">{user.role}</td>
+                    <td className="p-3 capitalize">{user.role === 'nursing' ? 'same day care' : user.role}</td>
                     <td className="p-3">{user.department || '-'}</td>
                     <td className="flex flex-wrap gap-2 p-3">
                       <button className="btn-secondary text-xs" onClick={() => updateUser(user, { isActive: !user.isActive })}>{user.isActive ? 'Disable' : 'Enable'}</button>

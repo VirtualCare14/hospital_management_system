@@ -58,7 +58,7 @@ const getPatientByAadhaar = async (req, res) => {
     const patient = await Patient.findOne(tenantQuery(req, { aadhaar: aadhaar.trim() }));
 
     if (!patient) {
-      return res.status(404).json({ message: 'No patient found with this Aadhaar number', found: false });
+      return res.status(200).json({ message: 'No patient found with this Aadhaar number', found: false });
     }
 
     // Get the latest visit for this patient
@@ -289,7 +289,7 @@ const createPatient = async (req, res) => {
 // @access  Private
 const getPatients = async (req, res) => {
   try {
-    const { search } = req.query;
+    const { search, excludeCompleted } = req.query;
     let query = tenantQuery(req);
 
     // Role-based filtering
@@ -332,7 +332,12 @@ const getPatients = async (req, res) => {
       })
     );
 
-    res.status(200).json(patientsWithVisits);
+    let result = patientsWithVisits;
+    if (excludeCompleted === 'true') {
+      result = patientsWithVisits.filter(pat => pat.consultationStatus !== 'completed');
+    }
+
+    res.status(200).json(result);
   } catch (error) {
     console.error('Get Patients Error:', error);
     res.status(500).json({ message: 'Server error' });

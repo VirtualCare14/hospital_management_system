@@ -554,10 +554,10 @@ const HospitalSettings = () => {
               />
               <div>
                 <label htmlFor="sdtPricingInBilling" className="text-sm font-bold text-gray-900 cursor-pointer">
-                  Decide Same Day Treatment Pricing at Billing Module
+                  Decide Same Day Care Pricing at Billing Module
                 </label>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  If enabled, billing officers can edit the base price of same day treatments directly on the invoice builder before finalization.
+                  If enabled, billing officers can edit the base price of same day care treatments directly on the invoice builder before finalization.
                 </p>
               </div>
             </div>

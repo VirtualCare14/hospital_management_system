@@ -1,8 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Calendar, FileText, Clock, ChevronDown, ChevronUp, Stethoscope } from 'lucide-react';
+import { ArrowLeft, Calendar, FileText, Clock, ChevronDown, ChevronUp, Stethoscope, Plus, Printer } from 'lucide-react';
 import client from '../../api/client';
 import { formatDate } from '../../utils/dateFormat';
+import toast from 'react-hot-toast';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
+import PatientReceipt from '../../components/PatientReceipt';
+import { sanitizeClonedDocumentForPdf } from '../../utils/pdfUtils';
 
 const ageFromDob = (dob) => {
   if (!dob) return '-';
@@ -18,6 +23,10 @@ const PatientConsultationTrack = () => {
   const [prescriptions, setPrescriptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedConsultation, setExpandedConsultation] = useState(null);
+
+  // States and refs for print helper
+  const [printData, setPrintData] = useState(null);
+  const printReceiptRef = useRef(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -76,6 +85,57 @@ const PatientConsultationTrack = () => {
     };
   };
 
+  // Helper to trigger prescription print
+  const printSinglePrescription = (consultationObj, prescriptionObj) => {
+    setPrintData({
+      prescription: {
+        ...prescriptionObj,
+        diagnosisRemark: consultationObj.diagnosisRemark,
+        symptoms: consultationObj.symptoms,
+        followUpDate: consultationObj.followUpDate,
+        language: prescriptionObj.language || 'English'
+      }
+    });
+  };
+
+  useEffect(() => {
+    if (printData && printReceiptRef.current) {
+      const executePrint = async () => {
+        const toastId = toast.loading('Generating PDF for printing...');
+        try {
+          const canvas = await html2canvas(printReceiptRef.current, {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: '#ffffff',
+            imageTimeout: 20000,
+            onclone: (clonedDoc) => sanitizeClonedDocumentForPdf(clonedDoc)
+          });
+          const imgData = canvas.toDataURL('image/png');
+          const pdf = new jsPDF('p', 'mm', 'a4');
+          const width = pdf.internal.pageSize.getWidth();
+          const height = (canvas.height * width) / canvas.width;
+          
+          const padding = 5;
+          pdf.addImage(imgData, 'PNG', padding, padding, width - (padding * 2), height);
+          
+          pdf.autoPrint();
+          window.open(pdf.output('bloburl'), '_blank');
+          toast.dismiss(toastId);
+          toast.success('Print dialog opened');
+        } catch (error) {
+          console.error('Prescription print error:', error);
+          toast.dismiss(toastId);
+          toast.error('Error generating print view');
+        } finally {
+          setPrintData(null);
+        }
+      };
+      
+      const timer = setTimeout(executePrint, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [printData]);
+
   if (loading) {
     return <div className="card p-5">Loading patient consultation history...</div>;
   }
@@ -102,8 +162,8 @@ const PatientConsultationTrack = () => {
           <h1 className="text-2xl font-extrabold text-gray-900">Patient Consultation Track</h1>
           <p className="text-sm text-gray-500">Complete consultation and prescription history for this patient</p>
         </div>
-        <Link to={`/doctor/consultation/${patientId}`} className="btn-secondary text-xs">
-          <Stethoscope className="h-3 w-3" /> New Consultation
+        <Link to={`/doctor/consultation/${patientId}?addMore=true`} className="btn bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs inline-flex items-center gap-1">
+          <Plus className="h-3.5 w-3.5" /> Add Consult
         </Link>
       </div>
 
@@ -118,8 +178,8 @@ const PatientConsultationTrack = () => {
             </p>
           </div>
           <div className="flex gap-2">
-            <Link to={`/doctor/prescription/${patientId}`} className="btn-secondary text-xs">
-              <FileText className="h-3 w-3" /> New Prescription
+            <Link to={`/doctor/prescription/${patientId}?addMore=true`} className="btn bg-green-600 hover:bg-green-700 text-white font-bold text-xs inline-flex items-center gap-1">
+              <Plus className="h-3.5 w-3.5" /> Add Prescription
             </Link>
           </div>
         </div>
@@ -129,8 +189,8 @@ const PatientConsultationTrack = () => {
       {consultations.length === 0 && (
         <div className="card p-5 text-center">
           <p className="text-gray-500">No consultations found for this patient.</p>
-          <Link to={`/doctor/consultation/${patientId}`} className="btn-secondary mt-3 inline-flex">
-            <Stethoscope className="h-3 w-3" /> Start New Consultation
+          <Link to={`/doctor/consultation/${patientId}?addMore=true`} className="btn bg-orange-500 hover:bg-orange-600 text-white font-bold text-sm mt-3 inline-flex items-center gap-1">
+            <Plus className="h-4 w-4" /> Add Consult
           </Link>
         </div>
       )}
@@ -205,6 +265,13 @@ const PatientConsultationTrack = () => {
                       </p>
                     )}
 
+                    {/* Consultation edited timestamp */}
+                    {consultation.updatedAt && new Date(consultation.updatedAt).getTime() - new Date(consultation.createdAt).getTime() > 1000 && (
+                      <p className="text-xs text-orange-600 font-semibold mt-1">
+                        ✎ Last edited by: Dr. {consultation.doctorId?.doctorName || consultation.doctorId?.username || 'Unknown'} on {formatDate(consultation.updatedAt)} at {new Date(consultation.updatedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    )}
+
                     {/* Expanded content */}
                     {isExpanded && (
                       <div className="mt-4 space-y-4 border-t border-orange-100 pt-4">
@@ -274,8 +341,13 @@ const PatientConsultationTrack = () => {
                           <div>
                             <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Medicines Prescribed</h4>
                             {presDt && (
-                              <p className="text-xs text-gray-400 mb-2">
+                              <p className="text-xs text-gray-400 mb-1">
                                 Prescription recorded: {presDt.date} at {presDt.time}
+                              </p>
+                            )}
+                            {prescription.updatedAt && new Date(prescription.updatedAt).getTime() - new Date(prescription.createdAt).getTime() > 1000 && (
+                              <p className="text-xs text-green-600 font-semibold mb-2">
+                                ✎ Prescription last edited by: Dr. {prescription.doctorId?.doctorName || prescription.doctorId?.username || 'Unknown'} on {formatDate(prescription.updatedAt)} at {new Date(prescription.updatedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                               </p>
                             )}
                             <div className="overflow-x-auto rounded-lg border border-green-100">
@@ -322,9 +394,21 @@ const PatientConsultationTrack = () => {
                           <Link 
                             to={`/doctor/completed/${consultation._id}`}
                             className="btn-secondary text-xs"
+                            onClick={(e) => e.stopPropagation()}
                           >
                             <FileText className="h-3 w-3" /> View Details
                           </Link>
+                          {prescription && (
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                printSinglePrescription(consultation, prescription);
+                              }}
+                              className="btn-secondary text-xs flex items-center gap-1 cursor-pointer"
+                            >
+                              <Printer className="h-3 w-3" /> Print Prescription
+                            </button>
+                          )}
                         </div>
                       </div>
                     )}
@@ -351,6 +435,7 @@ const PatientConsultationTrack = () => {
                   <th className="p-3">Doctor</th>
                   <th className="p-3">Medicines</th>
                   <th className="p-3">Language</th>
+                  <th className="p-3">Last Edited</th>
                 </tr>
               </thead>
               <tbody>
@@ -369,12 +454,32 @@ const PatientConsultationTrack = () => {
                         {pres.medicines?.filter(m => m.medicine).map(m => m.medicine).join(', ') || '-'}
                       </td>
                       <td className="p-3 text-xs">{pres.language || 'English'}</td>
+                      <td className="p-3 text-xs">
+                        {pres.updatedAt && new Date(pres.updatedAt).getTime() - new Date(pres.createdAt).getTime() > 1000 ? (
+                          <span className="text-orange-600 font-semibold">
+                            {formatDate(pres.updatedAt)} {new Date(pres.updatedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })} by Dr. {pres.doctorId?.doctorName || pres.doctorId?.username || 'Unknown'}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 font-medium">Never</span>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Hidden receipt for printing */}
+      {printData && (
+        <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', opacity: 0, pointerEvents: 'none' }}>
+          <PatientReceipt 
+            ref={printReceiptRef} 
+            patient={patient} 
+            prescription={printData.prescription}
+          />
         </div>
       )}
     </div>

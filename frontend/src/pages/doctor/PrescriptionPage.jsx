@@ -34,14 +34,30 @@ const PrescriptionPage = () => {
   const [referralSent, setReferralSent] = useState(false);
   const [pharmacyMedicines, setPharmacyMedicines] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
-
+  const [previousPrescription, setPreviousPrescription] = useState(null);
+  const [newDiagnosisRemark, setNewDiagnosisRemark] = useState('');
+  const isAddMore = window.location.search.includes('addMore=true');
   useEffect(() => {
     const fetchPharmacyMedicines = async () => {
       try {
         const { data } = await client.get('/pharmacy/inventory?limit=5000');
         const items = data.items || [];
-        const uniqueNames = [...new Set(items.map(item => item.itemName))].sort();
-        setPharmacyMedicines(uniqueNames);
+        
+        const medicineStockMap = {};
+        items.forEach(item => {
+          const name = String(item.itemName || '').trim();
+          const qty = parseInt(item.quantity) || 0;
+          if (name) {
+            medicineStockMap[name] = (medicineStockMap[name] || 0) + qty;
+          }
+        });
+        
+        const sortedMedicines = Object.keys(medicineStockMap).map(name => ({
+          name,
+          stock: medicineStockMap[name]
+        })).sort((a, b) => a.name.localeCompare(b.name));
+        
+        setPharmacyMedicines(sortedMedicines);
       } catch (error) {
         console.error('Error fetching pharmacy inventory:', error);
       }
@@ -60,7 +76,11 @@ const PrescriptionPage = () => {
         setPatient(patientRes.data);
         const consultations = consultationRes.data;
         setConsultation(consultations && consultations.length > 0 ? consultations[0] : null);
-        setPrescription(prescriptionRes.data && prescriptionRes.data.length > 0 ? prescriptionRes.data[0] : null);
+        const latestPres = prescriptionRes.data && prescriptionRes.data.length > 0 ? prescriptionRes.data[0] : null;
+        setPrescription(latestPres);
+        if (latestPres) {
+          setPreviousPrescription(latestPres);
+        }
       } catch (error) {
         console.error('Error loading data:', error);
       }
@@ -75,7 +95,7 @@ const PrescriptionPage = () => {
   useEffect(() => {
     if (!prescription) return;
     if (prescription.language) setLanguage(prescription.language);
-    if (prescription.medicines && prescription.medicines.length > 0) {
+    if (!isAddMore && prescription.medicines && prescription.medicines.length > 0) {
       setMedicines(prescription.medicines);
     }
   }, [prescription]);
@@ -86,19 +106,28 @@ const PrescriptionPage = () => {
 
   const savePrescription = async (redirectAfterSave = true) => {
     setIsSaving(true);
+
+    const mergedMedicines = isAddMore && previousPrescription
+      ? [...(previousPrescription.medicines || []), ...medicines.filter((m) => m.medicine)]
+      : medicines.filter((m) => m.medicine);
+
+    const mergedDiagnosisRemark = isAddMore
+      ? [previousPrescription?.diagnosisRemark || consultation?.diagnosisRemark, newDiagnosisRemark].filter(Boolean).join('\n')
+      : translatedDiagnosisRemark;
+
     const consultationData = consultation ? {
       symptoms: consultation.symptoms,
       generalPastHistory: consultation.generalPastHistory,
-      diagnosisRemark: translatedDiagnosisRemark || consultation.diagnosisRemark,
+      diagnosisRemark: mergedDiagnosisRemark || consultation.diagnosisRemark,
       vitals: consultation.vitals,
       tests: consultation.tests || [],
       followUpDate: consultation.followUpDate
-    } : { diagnosisRemark: translatedDiagnosisRemark };
+    } : { diagnosisRemark: mergedDiagnosisRemark };
 
     try {
       const res = await client.post('/prescription/create', { 
         patientId, 
-        medicines: medicines.filter((m) => m.medicine), 
+        medicines: mergedMedicines, 
         language, 
         pdfUrl: '', 
         consultationData 
@@ -109,6 +138,11 @@ const PrescriptionPage = () => {
       const { data: prescriptionData } = await client.get(`/prescription/${patientId}`).catch(() => ({ data: [] }));
       if (prescriptionData.length > 0) {
         setPrescription(prescriptionData[0]);
+        setPreviousPrescription(prescriptionData[0]);
+        if (isAddMore) {
+          setMedicines([{ medicine: '', duration: '', morning: true, afternoon: false, night: true, remarks: '' }]);
+          setNewDiagnosisRemark('');
+        }
       }
       
       if (redirectAfterSave) navigate('/doctor/completed');
@@ -121,9 +155,17 @@ const PrescriptionPage = () => {
   };
 
   const buildPrescriptionData = () => {
+    const mergedMedicines = isAddMore && previousPrescription
+      ? [...(previousPrescription.medicines || []), ...medicines.filter((m) => m.medicine)]
+      : medicines.filter((m) => m.medicine);
+
+    const mergedDiagnosisRemark = isAddMore
+      ? [previousPrescription?.diagnosisRemark || consultation?.diagnosisRemark, newDiagnosisRemark].filter(Boolean).join('\n')
+      : translatedDiagnosisRemark || consultation?.diagnosisRemark || '';
+
     return {
-      diagnosisRemark: translatedDiagnosisRemark || consultation?.diagnosisRemark || '',
-      medicines: medicines.filter((m) => m.medicine),
+      diagnosisRemark: mergedDiagnosisRemark,
+      medicines: mergedMedicines,
       symptoms: consultation?.symptoms || [],
       followUpDate: consultation?.followUpDate || null,
       language: language // Pass language for rendering
@@ -257,17 +299,60 @@ const PrescriptionPage = () => {
 
       <div className="card space-y-4 p-5">
         <h2 className="font-bold text-gray-800">{t(language, 'diagnosis')}</h2>
-        <p className="text-sm text-gray-500">Doctor remarks are prepared in the selected language. Edit here before PDF, print, or WhatsApp sharing.</p>
+        {isAddMore && (previousPrescription?.diagnosisRemark || consultation?.diagnosisRemark) && (
+          <div className="p-3 bg-gray-100 rounded-lg border border-gray-200 text-gray-600 text-sm mb-2">
+            <p className="text-xs font-bold text-gray-500 uppercase mb-1">Previous Diagnosis / Remarks (Read-Only)</p>
+            <p className="whitespace-pre-line">{previousPrescription?.diagnosisRemark || consultation?.diagnosisRemark}</p>
+          </div>
+        )}
+        <p className="text-sm text-gray-500">
+          {isAddMore 
+            ? "Add new remarks or updates here. They will be appended to the diagnosis history."
+            : "Doctor remarks are prepared in the selected language. Edit here before PDF, print, or WhatsApp sharing."}
+        </p>
         <textarea
           className="input min-h-24"
-          value={translatedDiagnosisRemark}
-          onChange={(event) => setTranslatedDiagnosisRemark(event.target.value)}
-          placeholder={t(language, 'diagnosis')}
+          value={isAddMore ? newDiagnosisRemark : translatedDiagnosisRemark}
+          onChange={(event) => isAddMore ? setNewDiagnosisRemark(event.target.value) : setTranslatedDiagnosisRemark(event.target.value)}
+          placeholder={isAddMore ? "Add new diagnosis details..." : t(language, 'diagnosis')}
         />
       </div>
 
       <div className="card space-y-4 p-5 rounded-2xl shadow-sm bg-white">
         <h2 className="font-bold text-gray-800">Medicines</h2>
+        {isAddMore && previousPrescription?.medicines?.length > 0 && (
+          <div className="mb-4 border border-orange-100 rounded-xl overflow-hidden bg-gray-50">
+            <div className="p-3 bg-orange-50 border-b border-orange-100 text-xs font-bold text-orange-900 uppercase">
+              Previous Medicines (Read-Only)
+            </div>
+            <table className="w-full text-left text-sm bg-white">
+              <thead className="bg-orange-100/40 text-xs text-orange-900">
+                <tr>
+                  <th className="p-3">Medicine</th>
+                  <th className="p-3">Duration</th>
+                  <th className="p-3">Morning</th>
+                  <th className="p-3">Afternoon</th>
+                  <th className="p-3">Night</th>
+                  <th className="p-3">Remarks</th>
+                </tr>
+              </thead>
+              <tbody>
+                {previousPrescription.medicines.map((med, idx) => (
+                  <tr key={idx} className="border-t border-orange-50/50 text-gray-600">
+                    <td className="p-3 font-semibold">{med.medicine}</td>
+                    <td className="p-3">{med.duration}</td>
+                    <td className="p-3">{med.morning ? '✓' : '-'}</td>
+                    <td className="p-3">{med.afternoon ? '✓' : '-'}</td>
+                    <td className="p-3">{med.night ? '✓' : '-'}</td>
+                    <td className="p-3 text-xs">{med.remarks || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        
+        {isAddMore && <h3 className="text-sm font-bold text-gray-700 uppercase">Add New Medicines</h3>}
         {medicines.map((item, index) => (
           <div key={index} className="grid gap-3 xl:grid-cols-[1fr_180px_repeat(3,130px)_1fr]">
             <input className="input" placeholder="Medicine" list="pharmacy-medicines" value={item.medicine} onChange={(e) => updateMedicine(index, 'medicine', e.target.value)} />
@@ -283,7 +368,9 @@ const PrescriptionPage = () => {
         <button className="btn-secondary" type="button" onClick={() => setMedicines([...medicines, { medicine: '', duration: '', morning: false, afternoon: false, night: false, remarks: '' }])}><Plus className="h-4 w-4" /> Add Medicine</button>
         <datalist id="pharmacy-medicines">
           {pharmacyMedicines.map((med) => (
-            <option key={med} value={med} />
+            <option key={med.name} value={med.name}>
+              {med.stock <= 0 ? 'Out of Stock' : `Stock: ${med.stock} available`}
+            </option>
           ))}
         </datalist>
       </div>
@@ -308,6 +395,7 @@ const PrescriptionPage = () => {
             ref={receiptRef} 
             patient={patient} 
             prescription={receiptPrescription}
+            language={language}
           />
         </div>
       </div>

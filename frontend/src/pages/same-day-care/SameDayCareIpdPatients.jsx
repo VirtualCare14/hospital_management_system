@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import client from '../../api/client';
 import { formatUhid } from '../../utils/uhid';
 
-const NursingIpdPatients = () => {
+const SameDayCareIpdPatients = () => {
   const [admissions, setAdmissions] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
@@ -120,8 +120,8 @@ const NursingIpdPatients = () => {
                         Dr. {adm.doctorInCharge?.doctorName || adm.doctorInCharge?.username || 'N/A'}
                       </td>
                       <td className="p-3 pr-4 text-center">
-                        <Link 
-                          to={`/nursing/ipd-chart/${adm._id}`} 
+                        <Link
+                          to={`/same-day-care/ipd-chart/${adm._id}`}
                           className="btn py-1.5 px-3 text-xs inline-flex items-center gap-1 cursor-pointer"
                         >
                           <Eye className="h-3.5 w-3.5" /> View Drug Chart
@@ -139,4 +139,5 @@ const NursingIpdPatients = () => {
   );
 };
 
-export default NursingIpdPatients;
+export default SameDayCareIpdPatients;
+

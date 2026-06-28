@@ -1177,11 +1177,18 @@ const IpdOtForm = () => {
       {/* Print styles */}
       <style>{`
         @media print {
-          body { background: white; font-size: 12pt; }
+          @page {
+            margin: 0 !important;
+          }
+          body {
+            background: white !important;
+            font-size: 12pt !important;
+            margin: 0 !important;
+            padding: 1.5cm !important;
+          }
           .no-print { display: none !important; }
           .print\\:block { display: block !important; }
           .card { border: 1px solid #ddd !important; box-shadow: none !important; }
-          @page { margin: 15mm; }
         }
       `}</style>
     </div>

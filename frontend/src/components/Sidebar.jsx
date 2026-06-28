@@ -48,6 +48,7 @@ const Sidebar = () => {
     { to: '/admin/consumable-services', label: 'Consumable Services', icon: Package },
     { to: '/admin/medicine-settings', label: 'Medicine Settings', icon: Pill },
     { to: '/admin/ot-settings', label: 'OT Settings', icon: Scissors },
+    { to: '/admin/same-day-care', label: 'Same Day Care Settings', icon: Bandage },
   ];
 
   const receptionLinks = [
@@ -219,11 +220,11 @@ const Sidebar = () => {
         )}
         {hasAccess([6]) && (
           <div className="mt-6">
-            <span className="px-4 text-xs font-bold text-orange-400 uppercase tracking-widest block mb-2">Nursing</span>
+            <span className="px-4 text-xs font-bold text-orange-400 uppercase tracking-widest block mb-2">Same Day Care</span>
             <div className="space-y-1">
-              <NavLink to="/nursing" className={({ isActive }) => isActive ? activeStyle : inactiveStyle}>
+              <NavLink to="/same-day-care" className={({ isActive }) => isActive ? activeStyle : inactiveStyle}>
                 <Bandage className="h-5 w-5" />
-                Same Day Treatment
+                Same Day Care
               </NavLink>
             </div>
           </div>

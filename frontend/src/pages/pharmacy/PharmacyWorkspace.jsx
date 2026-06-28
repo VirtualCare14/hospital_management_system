@@ -41,6 +41,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import client from '../../api/client';
 import * as XLSX from 'xlsx';
+import { createPortal } from 'react-dom';
 import './PharmacyInvoicePrint.css';
 
 // Color Helper for stock status
@@ -3027,11 +3028,18 @@ const InvoicePrintModal = ({ billId, onClose }) => {
     fetchInvoiceDetails();
   }, [billId]);
 
+  useEffect(() => {
+    document.body.classList.add('printing-pharmacy-invoice');
+    return () => {
+      document.body.classList.remove('printing-pharmacy-invoice');
+    };
+  }, []);
+
   const handlePrint = () => {
     window.print();
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 print:p-0 print:static print:bg-transparent no-print-backdrop">
       <div className="bg-white rounded-3xl p-6 max-w-4xl w-full border border-orange-100 shadow-2xl print:border-none print:shadow-none print:p-0 print:max-w-none print:w-full print:static max-h-[95vh] overflow-y-auto print:overflow-visible flex flex-col justify-between">
         
@@ -3247,14 +3255,15 @@ const InvoicePrintModal = ({ billId, onClose }) => {
             </div>
 
             {/* Bottom Thank You message */}
-            <div className="text-center border-t border-gray-200 pt-6 mt-12">
-              <p className="text-xs font-bold text-orange-600">{data.pharmacySetting?.thankYouMessage || 'Thank you for your visit!'}</p>
-              <p className="text-[9px] text-gray-450 mt-1 uppercase font-semibold">Computer Generated Invoice - No Signature Required</p>
+            <div className="text-center border-t border-gray-200 pt-6 mt-12 print-footer">
+              <p className="text-xs font-bold text-orange-600">Thank you for visiting! Wishing you a speedy recovery.</p>
+              <p className="text-[9px] text-gray-450 mt-1 uppercase font-semibold">COMPUTER GENERATED INVOICE - NO SIGNATURE REQUIRED</p>
             </div>
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

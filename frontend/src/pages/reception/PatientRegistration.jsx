@@ -37,8 +37,7 @@ const PatientRegistration = () => {
   useEffect(() => {
     client.get('/admin/departments').then(({ data }) => {
       const activeDepts = data.filter((dept) => dept.isActive);
-      // Add "Same Day Treatment" as a virtual department option
-      setDepartments([...activeDepts, { _id: 'sdt', departmentName: 'Same Day Treatment' }]);
+      setDepartments(activeDepts);
     });
   }, []);
 
@@ -52,8 +51,8 @@ const PatientRegistration = () => {
       return;
     }
 
-    // If "Same Day Treatment" department is selected, load all doctors (not filtered by dept)
-    if (department === 'Same Day Treatment') {
+    // If "Same Day Care" department is selected, load all doctors (not filtered by dept)
+    if (department === 'Same Day Care') {
       client
         .get('/admin/doctors')
         .then(({ data }) => setDoctors(data))
@@ -116,7 +115,7 @@ const PatientRegistration = () => {
     try {
       const payload = {
         ...data,
-        visitType: data.department === 'Same Day Treatment' ? 'Same Day Treatment' : 'OPD'
+        visitType: data.department === 'Same Day Care' ? 'Same Day Care' : 'OPD'
       };
       const { data: res } = await client.post('/patients/create', payload);
       toast.success(res.message);
@@ -163,7 +162,7 @@ const PatientRegistration = () => {
       <form onSubmit={handleSubmit(onSubmit)} className="card space-y-5 p-5">
         <div>
           <h1 className="text-2xl font-extrabold text-gray-900">Patient Registration / EMR</h1>
-          <p className="text-sm text-gray-500">Register patients for OPD, IPD, or Same Day Treatment. Aadhaar-based patient lookup with auto UHID generation.</p>
+          <p className="text-sm text-gray-500">Register patients for OPD, IPD, or Same Day Care. Aadhaar-based patient lookup with auto UHID generation.</p>
         </div>
 
         {/* Existing Patient Banner */}

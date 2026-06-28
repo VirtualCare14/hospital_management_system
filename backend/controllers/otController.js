@@ -102,7 +102,7 @@ const createOtRecord = async (req, res) => {
     const {
       admissionId, patientId, uhid, pidNumber, ipdNumber,
       patientName, dateOfBirth, age, gender, admissionDate, consultantDoctor,
-      dateOfSurgery, surgeon, assistantSurgeon, anesthesia,
+      dateOfSurgery, surgeon, assistantSurgeon, anesthesiaName, anesthesia,
       preOperativeDiagnosis, postOperativeDiagnosis,
       proceduresPerformed, indicationsForSurgery, findings, descriptionOfProcedure,
       status
@@ -136,6 +136,7 @@ const createOtRecord = async (req, res) => {
       dateOfSurgery: dateOfSurgery || null,
       surgeon: surgeon || '',
       assistantSurgeon: assistantSurgeon || '',
+      anesthesiaName: anesthesiaName || '',
       anesthesia: anesthesia || '',
       preOperativeDiagnosis: preOperativeDiagnosis || '',
       postOperativeDiagnosis: postOperativeDiagnosis || '',
@@ -172,12 +173,13 @@ const updateOtRecord = async (req, res) => {
     // Update fields
     const updatableFields = [
       'patientName', 'dateOfBirth', 'age', 'gender', 'admissionDate', 'consultantDoctor',
-      'dateOfSurgery', 'surgeon', 'assistantSurgeon', 'anesthesia',
+      'dateOfSurgery', 'surgeon', 'assistantSurgeon', 'anesthesiaName', 'anesthesia',
       'preOperativeDiagnosis', 'postOperativeDiagnosis',
       'proceduresPerformed', 'indicationsForSurgery', 'findings', 'descriptionOfProcedure',
       'status', 'uhid', 'pidNumber', 'ipdNumber',
       'pharmacyRequestSent', 'pharmacyRequestAt', 'pharmacyRequestBy', 'otMedicines', 'otConsumables'
     ];
+    const wasPharmacyRequestSent = record.pharmacyRequestSent;
 
     updatableFields.forEach(field => {
       if (updateData[field] !== undefined) {
@@ -185,7 +187,7 @@ const updateOtRecord = async (req, res) => {
       }
     });
 
-    if (updateData.pharmacyRequestSent === true && !record.pharmacyRequestSent) {
+    if (updateData.pharmacyRequestSent === true && !wasPharmacyRequestSent) {
       record.pharmacyRequestSent = true;
       record.pharmacyRequestAt = new Date();
       record.pharmacyRequestBy = req.user._id;

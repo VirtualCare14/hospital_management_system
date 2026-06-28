@@ -10,6 +10,12 @@ import { useAuth } from '../../context/AuthContext';
 import client from '../../api/client';
 import { formatUhid } from '../../utils/uhid';
 
+const ageFromDob = (dob) => {
+  if (!dob) return '-';
+  const diff = Date.now() - new Date(dob).getTime();
+  return Math.abs(new Date(diff).getUTCFullYear() - 1970);
+};
+
 const TREATMENT_META = {
   'Fracture': { icon: Bone, color: 'text-orange-500', bg: 'bg-orange-50' },
   'Minor Injury': { icon: Bandage, color: 'text-blue-500', bg: 'bg-blue-50' },
@@ -19,7 +25,7 @@ const TREATMENT_META = {
   'Dialysis': { icon: Droplets, color: 'text-cyan-500', bg: 'bg-cyan-50' }
 };
 
-const SameDayTreatmentForm = () => {
+const SameDayCareForm = () => {
   const { patientId } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -63,7 +69,7 @@ const SameDayTreatmentForm = () => {
         setPatient(patientData);
 
         if (recordId) {
-          const { data: recData } = await client.get(`/nursing/treatment/${recordId}`);
+          const { data: recData } = await client.get(`/same-day-care/treatment/${recordId}`);
           setRecord(recData);
           setForm({
             patientId: patientId,
@@ -77,13 +83,13 @@ const SameDayTreatmentForm = () => {
             status: recData.status || 'Draft'
           });
           
-          // Load items for this treatment
-          const { data: itemsData } = await client.get(`/nursing/treatment/${recordId}/items`);
+          // Load items for this care record
+          const { data: itemsData } = await client.get(`/same-day-care/treatment/${recordId}/items`);
           setItems(itemsData || []);
         }
       } catch {
         toast.error('Failed to load patient data');
-        navigate('/nursing');
+        navigate('/same-day-care');
       } finally {
         setLoading(false);
       }
@@ -124,16 +130,16 @@ const SameDayTreatmentForm = () => {
       };
 
       if (record?._id) {
-        await client.put(`/nursing/treatment/${record._id}`, payload);
-        toast.success(finalStatus === 'Completed' ? 'Treatment completed and sent to billing' : 'Treatment record updated');
+        await client.put(`/same-day-care/treatment/${record._id}`, payload);
+        toast.success(finalStatus === 'Completed' ? 'Care completed and sent to billing' : 'Care record updated');
       } else {
-        const { data } = await client.post('/nursing/treatment', payload);
-        toast.success(finalStatus === 'Completed' ? 'Treatment completed and sent to billing' : 'Treatment record saved');
-        navigate(`/nursing/treatment/${patientId}?type=${treatmentType}&recordId=${data.record._id}`, { replace: true });
+        const { data } = await client.post('/same-day-care/treatment', payload);
+        toast.success(finalStatus === 'Completed' ? 'Care completed and sent to billing' : 'Care record saved');
+        navigate(`/same-day-care/treatment/${patientId}?type=${treatmentType}&recordId=${data.record._id}`, { replace: true });
       }
       
       if (finalStatus === 'Completed') {
-        navigate('/nursing');
+        navigate('/same-day-care');
       }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to save');
@@ -155,7 +161,7 @@ const SameDayTreatmentForm = () => {
       return;
     }
     try {
-      const { data } = await client.post(`/nursing/treatment/${recordId}/items`, {
+      const { data } = await client.post(`/same-day-care/treatment/${recordId}/items`, {
         itemType: newItem.itemType,
         itemName: newItem.itemName,
         quantity: parseInt(newItem.quantity),
@@ -174,7 +180,7 @@ const SameDayTreatmentForm = () => {
     if (!recordId) return;
     if (!window.confirm('Remove this item?')) return;
     try {
-      const { data } = await client.delete(`/nursing/treatment/${recordId}/items/${itemId}`);
+      const { data } = await client.delete(`/same-day-care/treatment/${recordId}/items/${itemId}`);
       setItems(data.record.items || []);
       toast.success('Item removed');
     } catch {
@@ -203,15 +209,15 @@ const SameDayTreatmentForm = () => {
       {/* Header - Hidden when printing */}
       <div className="no-print">
         <div className="flex items-center gap-4">
-          <button onClick={() => navigate('/nursing')} className="p-2 rounded-xl hover:bg-orange-100 transition-colors">
+          <button onClick={() => navigate('/same-day-care')} className="p-2 rounded-xl hover:bg-orange-100 transition-colors">
             <ArrowLeft className="h-5 w-5 text-gray-600" />
           </button>
           <div className="flex-1">
             <div className="flex items-center gap-2">
               <Icon className={`h-6 w-6 ${meta.color}`} />
-              <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">{treatmentLabel} Treatment Form</h1>
+              <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">{treatmentLabel} Care Form</h1>
             </div>
-            <p className="text-sm text-gray-500">Nursing Module - Same Day Treatment</p>
+            <p className="text-sm text-gray-500">Same Day Care Module</p>
           </div>
           <div className="flex items-center gap-2">
             {form.status === 'Completed' ? (
@@ -234,7 +240,7 @@ const SameDayTreatmentForm = () => {
             </button>
             <button onClick={() => handleSave('Completed')} disabled={saving} className="btn text-sm py-2.5 px-4 flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
-              Complete Treatment
+              Complete Care
             </button>
             <button onClick={() => setShowPreview(!showPreview)} className="btn-secondary text-sm py-2.5 px-4 flex items-center gap-2">
               <Eye className="h-4 w-4" /> {showPreview ? 'Hide Preview' : 'View Report'}
@@ -254,8 +260,9 @@ const SameDayTreatmentForm = () => {
         )}
       </div>
 
-      {/* Patient Info Card */}
-      <div className={`card p-5 ${meta.bg} border-l-4 border-l-orange-400`}>
+      <div className="no-print space-y-6">
+        {/* Patient Info Card */}
+        <div className={`card p-5 ${meta.bg} border-l-4 border-l-orange-400`}>
         <div className="flex items-center gap-4">
           <div className="bg-orange-500 text-white p-3 rounded-2xl">
             <User className="h-8 w-8" />
@@ -435,12 +442,13 @@ const SameDayTreatmentForm = () => {
           </div>
         )}
       </div>
+      </div>
 
       {/* Print-only Report */}
       <div className="hidden print:block">
         <div className="p-8 text-gray-900">
           <div className="border-b-2 border-gray-800 pb-4 mb-6 text-center">
-            <h1 className="text-xl font-black">SAME DAY TREATMENT REPORT</h1>
+            <h1 className="text-xl font-black">SAME DAY CARE REPORT</h1>
             <h2 className="text-lg font-bold mt-1">{treatmentLabel}</h2>
           </div>
           <div className="border border-gray-800 rounded-lg mb-4 p-4">
@@ -450,6 +458,10 @@ const SameDayTreatmentForm = () => {
               <div><span className="font-bold">UHID:</span> {formatUhid(patient?.uhid)}</div>
               <div><span className="font-bold">Mobile:</span> {patient?.mobile}</div>
               <div><span className="font-bold">Gender:</span> {patient?.gender}</div>
+              {patient?.dob && (
+                <div><span className="font-bold">Age:</span> {ageFromDob(patient.dob)} years</div>
+              )}
+              <div><span className="font-bold">Address:</span> {patient?.address || '-'}</div>
             </div>
           </div>
           <div className="border border-gray-800 rounded-lg mb-4 p-4">
@@ -462,6 +474,39 @@ const SameDayTreatmentForm = () => {
               <div><span className="font-bold">Follow Up:</span> {form.followUpRequired || '-'} {form.followUpDate ? `(${new Date(form.followUpDate).toLocaleDateString()})` : ''}</div>
             </div>
           </div>
+
+          {items.length > 0 && (
+            <div className="border border-gray-800 rounded-lg mb-4 p-4">
+              <h3 className="font-bold text-sm mb-2">Consumables & Services</h3>
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-gray-800 text-left">
+                    <th className="py-2 font-bold">Type</th>
+                    <th className="py-2 font-bold">Item Name</th>
+                    <th className="py-2 text-center font-bold">Qty</th>
+                    <th className="py-2 text-right font-bold">Price</th>
+                    <th className="py-2 text-right font-bold">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item) => (
+                    <tr key={item._id} className="border-b border-gray-200">
+                      <td className="py-2 text-gray-700">{item.itemType}</td>
+                      <td className="py-2 font-semibold text-gray-900">{item.itemName}</td>
+                      <td className="py-2 text-center text-gray-700">{item.quantity}</td>
+                      <td className="py-2 text-right text-gray-700">₹{item.price?.toFixed(2)}</td>
+                      <td className="py-2 text-right font-bold text-orange-600">₹{(item.quantity * item.price).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                  <tr className="font-bold border-t border-gray-800">
+                    <td colSpan={4} className="py-3 text-right">Total:</td>
+                    <td className="py-3 text-right text-orange-700">₹{items.reduce((sum, item) => sum + (item.quantity * item.price), 0).toFixed(2)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+
           <div className="border-t-2 border-gray-800 pt-4 mt-6">
             <div className="grid grid-cols-3 gap-4 text-sm">
               <div><p className="text-xs text-gray-500">Generated By</p><p className="font-bold">{user?.doctorName || user?.username || '-'}</p></div>
@@ -472,9 +517,28 @@ const SameDayTreatmentForm = () => {
         </div>
       </div>
 
-      <style>{`@media print { body { background: white; font-size: 12pt; } .no-print { display: none !important; } .print\\:block { display: block !important; } .card { border: 1px solid #ddd !important; box-shadow: none !important; } @page { margin: 15mm; } }`}</style>
+      <style>{`
+        @media print {
+          @page {
+            size: A4;
+            margin: 0 !important;
+          }
+          html, body, #root, #root > div {
+            background: white !important;
+            background-color: white !important;
+            margin: 0 !important;
+            padding: 1.5cm !important;
+          }
+          aside, header, nav, .no-print {
+            display: none !important;
+          }
+          .print\\:block {
+            display: block !important;
+          }
+        }
+      `}</style>
     </div>
   );
 };
 
-export default SameDayTreatmentForm;
+export default SameDayCareForm;

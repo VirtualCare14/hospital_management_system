@@ -28,6 +28,7 @@ const ConsultationPage = () => {
   const [diagnosisRemark, setDiagnosisRemark] = useState('');
   const [followUpDate, setFollowUpDate] = useState('');
   const [visitId, setVisitId] = useState(null);
+  const [previousConsultation, setPreviousConsultation] = useState(null);
   const { register, handleSubmit, reset } = useForm();
 
   // Load patient AND visit information
@@ -43,6 +44,17 @@ const ConsultationPage = () => {
           height: patientRes.data.demographics?.height,
           temperature: patientRes.data.demographics?.temperature
         });
+
+        // Load previous consultations to find latest completed one
+        try {
+          const consultationsRes = await client.get(`/consultation/${patientId}`);
+          const completedConsultation = consultationsRes.data.find(c => c.consultationStatus === 'completed');
+          if (completedConsultation) {
+            setPreviousConsultation(completedConsultation);
+          }
+        } catch (err) {
+          console.log('Error loading previous consultations:', err);
+        }
 
         // Get the latest visit for this patient
         try {
@@ -123,35 +135,63 @@ const ConsultationPage = () => {
 
   const onSubmit = async (data) => {
     setSaving(true);
-    const payload = {
-      patientId,
-      visitId, // Pass visitId to link consultation to visit
-      symptoms: symptoms.filter((item) => item.symptom).map((item) => ({ 
+    
+    // Merge symptoms
+    const mergedSymptoms = [
+      ...(previousConsultation?.symptoms || []),
+      ...symptoms.filter((item) => item.symptom).map((item) => ({ 
         symptom: item.symptom, 
         durationDays: item.durationDays || 0,
         durationUnit: item.durationUnit,
         pastHistory: item.pastHistory,
         remarks: item.remarks
-      })),
-      pastHistory: generalPastHistory,
-      diagnosisRemark: diagnosisRemark,
-      vitals: {
-        weight: data.weight,
-        height: data.height,
-        temperature: data.temperature,
-        bmi: data.bmi,
-        drugAllergy: data.drugAllergy
-      },
-      tests: selectedTests,
+      }))
+    ];
+
+    // Merge general history
+    const mergedPastHistory = [
+      previousConsultation?.generalPastHistory,
+      generalPastHistory
+    ].filter(Boolean).join('\n');
+
+    // Merge diagnosis remark
+    const mergedDiagnosisRemark = [
+      previousConsultation?.diagnosisRemark,
+      diagnosisRemark
+    ].filter(Boolean).join('\n');
+
+    // Merge vitals
+    const mergedVitals = {
+      weight: data.weight || previousConsultation?.vitals?.weight,
+      height: data.height || previousConsultation?.vitals?.height,
+      temperature: data.temperature || previousConsultation?.vitals?.temperature,
+      bmi: data.bmi || previousConsultation?.vitals?.bmi,
+      drugAllergy: data.drugAllergy || previousConsultation?.vitals?.drugAllergy
+    };
+
+    // Merge tests
+    const mergedTests = [
+      ...(previousConsultation?.tests || []),
+      ...selectedTests
+    ];
+
+    const payload = {
+      patientId,
+      visitId, // Pass visitId to link consultation to visit
+      symptoms: mergedSymptoms,
+      pastHistory: mergedPastHistory,
+      diagnosisRemark: mergedDiagnosisRemark,
+      vitals: mergedVitals,
+      tests: mergedTests,
       sendToLab: data.sendToLab,
-      followUpDate: followUpDate
+      followUpDate: followUpDate || previousConsultation?.followUpDate
     };
 
     try {
       // ALWAYS create a new consultation record
       await client.post('/consultation/create', payload);
       toast.success(data.sendToLab ? 'Consultation saved and sent to lab' : 'Consultation saved');
-      navigate(`/doctor/prescription/${patientId}`);
+      navigate(`/doctor/prescription/${patientId}${previousConsultation ? '?addMore=true' : ''}`);
     } catch (error) {
       console.error('Saving consultation failed:', error);
       toast.error('Unable to save consultation. Please try again.');
@@ -181,18 +221,18 @@ const ConsultationPage = () => {
     if (!patient) return;
     const types = ['Fracture', 'Minor Injury', 'Minor Stitches', 'Small Burns', 'Mild Allergic Reactions', 'Dialysis'];
     const chosenType = window.prompt(
-      `Send ${patient.patientName} to Same Day Treatment?\nEnter one of: ${types.join(', ')}`,
+      `Send ${patient.patientName} to Same Day Care?\nEnter one of: ${types.join(', ')}`,
       'Minor Injury'
     );
     if (chosenType === null) return;
     if (!types.includes(chosenType)) {
-      toast.error(`Invalid treatment type! Must be one of: ${types.join(', ')}`);
+      toast.error(`Invalid care type! Must be one of: ${types.join(', ')}`);
       return;
     }
     try {
       const dob = patient.dob;
       const age = dob ? Math.floor((new Date() - new Date(dob)) / (365.25 * 24 * 60 * 60 * 1000)) : null;
-      await client.post('/nursing/treatment', {
+      await client.post('/same-day-care/treatment', {
         patientId: patient._id,
         patientName: patient.patientName,
         uhid: patient.uhid,
@@ -202,7 +242,7 @@ const ConsultationPage = () => {
         treatmentType: chosenType,
         status: 'Draft'
       });
-      toast.success(`${patient.patientName} referred to Same Day Treatment (${chosenType})!`);
+      toast.success(`${patient.patientName} referred to Same Day Care (${chosenType})!`);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to refer patient');
     }
@@ -220,6 +260,28 @@ const ConsultationPage = () => {
       </div>
 
       <section className="card space-y-4 p-5">
+        {previousConsultation?.symptoms?.length > 0 && (
+          <div className="space-y-2 mb-6 border-b border-orange-100 pb-4">
+            <h3 className="text-sm font-bold text-gray-700 uppercase">Previous Symptoms (Read-Only)</h3>
+            <div className="grid gap-2 md:grid-cols-[2fr_1fr_1fr_2fr_2fr] items-center text-xs font-semibold text-gray-500 px-2">
+              <div>Symptom</div>
+              <div>Duration</div>
+              <div>Unit</div>
+              <div>Past History</div>
+              <div>Remarks</div>
+            </div>
+            {previousConsultation.symptoms.map((item, idx) => (
+              <div key={idx} className="grid gap-2 md:grid-cols-[2fr_1fr_1fr_2fr_2fr] items-start md:items-center p-3 bg-gray-100 rounded-lg border border-gray-200 text-gray-600 text-sm">
+                <div className="font-semibold">{item.symptom}</div>
+                <div>{item.durationDays || '-'}</div>
+                <div>{item.durationUnit}</div>
+                <div className="italic">{item.pastHistory || 'N/A'}</div>
+                <div>{item.remarks || 'N/A'}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
         <h2 className="font-bold text-gray-800">Current Symptoms</h2>
         
         {/* Symptoms Header - Column Labels */}
@@ -311,6 +373,12 @@ const ConsultationPage = () => {
         ))}
         
         <div className="border-t border-orange-100 pt-4 mt-4">
+          {previousConsultation?.generalPastHistory && (
+            <div className="mb-4 p-3 bg-gray-100 rounded-lg border border-gray-200 text-gray-600 text-sm">
+              <p className="text-xs font-bold text-gray-500 uppercase mb-1">Previous General Past History (Read-Only)</p>
+              <p className="whitespace-pre-line">{previousConsultation.generalPastHistory}</p>
+            </div>
+          )}
           <label className="text-sm font-semibold text-gray-700 mb-2 block">General Past History</label>
           <textarea 
             className="input" 
@@ -322,6 +390,12 @@ const ConsultationPage = () => {
         </div>
         
         <div>
+          {previousConsultation?.diagnosisRemark && (
+            <div className="mb-4 p-3 bg-gray-100 rounded-lg border border-gray-200 text-gray-600 text-sm">
+              <p className="text-xs font-bold text-gray-500 uppercase mb-1">Previous Diagnosis / Remarks (Read-Only)</p>
+              <p className="whitespace-pre-line">{previousConsultation.diagnosisRemark}</p>
+            </div>
+          )}
           <label className="text-sm font-semibold text-gray-700 mb-2 block">Diagnosis / Remarks</label>
           <textarea 
             className="input" 
@@ -335,6 +409,16 @@ const ConsultationPage = () => {
 
       <section className="card space-y-4 p-5 rounded-2xl shadow-sm bg-white">
         <h2 className="font-bold text-gray-800">Vitals</h2>
+        {previousConsultation?.vitals && (
+          <div className="grid gap-4 md:grid-cols-5 p-3 bg-gray-100 rounded-xl border border-gray-200 text-gray-600 text-sm mb-4">
+            <div className="col-span-5"><p className="text-xs font-bold text-gray-500 uppercase">Previous Vitals (Read-Only)</p></div>
+            <div><strong>Weight:</strong> {previousConsultation.vitals.weight ? `${previousConsultation.vitals.weight} kg` : '-'}</div>
+            <div><strong>Height:</strong> {previousConsultation.vitals.height ? `${previousConsultation.vitals.height} cm` : '-'}</div>
+            <div><strong>Temp:</strong> {previousConsultation.vitals.temperature ? `${previousConsultation.vitals.temperature} °C` : '-'}</div>
+            <div><strong>BMI:</strong> {previousConsultation.vitals.bmi || '-'}</div>
+            <div><strong>Drug Allergy:</strong> {previousConsultation.vitals.drugAllergy || '-'}</div>
+          </div>
+        )}
         <div className="grid gap-4 md:grid-cols-5">
           <div>
             <label className="text-sm text-gray-600">Weight (kg)</label>
@@ -361,6 +445,18 @@ const ConsultationPage = () => {
 
       <section className="card space-y-4 p-5">
         <h2 className="font-bold text-gray-800">Tests & Reports</h2>
+        {previousConsultation?.tests?.length > 0 && (
+          <div className="p-3 bg-gray-100 rounded-xl border border-gray-200 text-gray-600 text-sm mb-4">
+            <p className="text-xs font-bold text-gray-500 uppercase mb-2">Previous Recommended Tests (Read-Only)</p>
+            <div className="flex flex-wrap gap-2">
+              {previousConsultation.tests.map((test, index) => (
+                <span key={index} className="inline-flex items-center gap-1 rounded-full border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-gray-700">
+                  {test}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="relative">
           <label className="text-sm font-semibold text-gray-700 mb-2 block">Search and select tests</label>
@@ -456,7 +552,7 @@ const ConsultationPage = () => {
             className="btn bg-orange-600 hover:bg-orange-700 text-white"
             onClick={handleSendToSameDay}
           >
-            <Send className="h-4 w-4" /> Send to Same Day
+            <Send className="h-4 w-4" /> Send to Same Day Care
           </button>
           <button
             type="button"

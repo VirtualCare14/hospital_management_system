@@ -5,7 +5,7 @@ const {
   getTreatmentsByPatient, getTreatmentById, getAllTreatments,
   getTreatmentPricing,
   addItemToTreatment, removeItemFromTreatment, getItemsForTreatment
-} = require('../controllers/sameDayTreatmentController');
+} = require('../controllers/sameDayCareController');
 const authMiddleware = require('../middleware/authMiddleware');
 
 router.get('/treatment', authMiddleware, getAllTreatments);

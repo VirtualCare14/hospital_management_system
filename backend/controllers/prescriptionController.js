@@ -1,6 +1,7 @@
 const Prescription = require('../models/Prescription');
 const Patient = require('../models/Patient');
 const Consultation = require('../models/Consultation');
+const Visit = require('../models/Visit');
 
 const tenantQuery = (req, extra = {}) => (
   req.user.hospitalId ? { ...extra, hospitalId: req.user.hospitalId } : extra
@@ -33,9 +34,9 @@ const createPrescription = async (req, res) => {
     let consultationId = null;
 
     if (consultationData) {
-      // Find the LATEST consultation (pending or not) for this patient+doctor
+      // Find the LATEST PENDING consultation for this patient+doctor
       consultation = await Consultation.findOne(
-        tenantQuery(req, { patientId, doctorId })
+        tenantQuery(req, { patientId, doctorId, consultationStatus: 'pending' })
       ).sort({ createdAt: -1 });
 
       if (consultation) {
@@ -108,10 +109,17 @@ const createPrescription = async (req, res) => {
     });
 
     // 3. Update Visit records to mark consultation as completed
-    if (consultationId) {
-      await Consultation.updateMany(
-        tenantQuery(req, { patientId, doctorId, _id: consultationId }),
+    if (visitId) {
+      await Visit.updateOne(
+        tenantQuery(req, { _id: visitId }),
         { consultationStatus: 'completed', consultationCompletedDate: new Date() }
+      );
+    } else {
+      // Fallback: update latest pending visit for patient/doctor
+      await Visit.updateOne(
+        tenantQuery(req, { patientId, doctorId, consultationStatus: 'pending' }),
+        { consultationStatus: 'completed', consultationCompletedDate: new Date() },
+        { sort: { createdAt: -1 } }
       );
     }
 

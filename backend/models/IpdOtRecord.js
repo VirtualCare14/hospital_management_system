@@ -62,6 +62,10 @@ const ipdOtRecordSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  anesthesiaName: {
+    type: String,
+    default: ''
+  },
   anesthesia: {
     type: String,
     default: ''

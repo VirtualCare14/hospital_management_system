@@ -529,7 +529,7 @@ const AdminDashboard = () => {
                       {patientSummary.treatments?.sameDayTreatments?.map((sdt) => (
                         <div key={sdt._id} className="border border-amber-100 p-3 rounded-xl text-xs flex justify-between items-center hover:bg-amber-50/10 transition">
                           <div>
-                            <p className="font-bold text-amber-950">Same Day Treatment ({sdt.treatmentType})</p>
+                            <p className="font-bold text-amber-950">Same Day Care ({sdt.treatmentType})</p>
                             <p className="text-[10px] text-gray-500">Date: {new Date(sdt.treatmentDate).toLocaleDateString()}</p>
                             {sdt.treatmentNotes && <p className="text-[10px] text-gray-600 mt-1 italic">Notes: {sdt.treatmentNotes}</p>}
                           </div>
@@ -540,7 +540,7 @@ const AdminDashboard = () => {
                       ))}
 
                       {patientSummary.treatments?.ipdAdmissions?.length === 0 && patientSummary.treatments?.sameDayTreatments?.length === 0 && (
-                        <p className="text-gray-400 text-center py-3 text-xs italic">No IPD admissions or Same Day Treatments found</p>
+                        <p className="text-gray-400 text-center py-3 text-xs italic">No IPD admissions or Same Day Care records found</p>
                       )}
                     </div>
                   </div>

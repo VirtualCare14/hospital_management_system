@@ -55,10 +55,10 @@ export const moduleCards = [
   },
   {
     id: 6,
-    title: 'Nursing',
-    subtitle: 'Separate nursing login for future nursing task workflow',
+    title: 'Same Day Care',
+    subtitle: 'Manage same day care treatments, procedures, and patient tracking',
     icon: Activity,
-    path: '/nursing'
+    path: '/same-day-care'
   },
   {
     id: 7,

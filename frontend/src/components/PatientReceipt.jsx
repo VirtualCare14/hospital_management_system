@@ -1,10 +1,10 @@
 import { useEffect, useState, forwardRef } from 'react';
 import client from '../api/client';
 import { formatDate, formatDateShort } from '../utils/dateFormat';
-import { t } from '../utils/prescriptionI18n';
+import { t, translateClinicalText } from '../utils/prescriptionI18n';
 
 const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, language }, ref) => {
-  const activeLang = language || 'English';
+  const activeLang = language || prescription?.language || 'English';
   const [hospital, setHospital] = useState(null);
 
   useEffect(() => {
@@ -47,13 +47,15 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
     <div ref={ref} className="a4-receipt" style={{
       width: '210mm',
       minHeight: '297mm',
-      padding: '15mm 18mm',
+      padding: '15mm 18mm 30mm 18mm',
       margin: '0 auto',
       backgroundColor: '#ffffff',
       color: '#000000',
       fontFamily: 'Arial, Helvetica, sans-serif',
       fontSize: '11px',
-      lineHeight: '1.5'
+      lineHeight: '1.5',
+      position: 'relative',
+      boxSizing: 'border-box'
     }}>
       {/* Hospital Header */}
       <div style={{
@@ -155,24 +157,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
         <>
           <hr style={{ margin: '18px 0', border: '1px solid #000' }} />
           
-          {/* Diagnosis */}
-          {prescription.diagnosisRemark && (
-            <div style={{ marginBottom: '15px' }}>
-              <p style={{ fontWeight: 'bold', margin: '0 0 5px 0', fontSize: '12px', textDecoration: 'underline' }}>
-                {t(activeLang, 'diagnosis')}:
-              </p>
-              <p style={{ 
-                margin: '0', 
-                padding: '8px 10px', 
-                border: '1px solid #000', 
-                minHeight: '30px', 
-                fontSize: '11px',
-                lineHeight: '1.5'
-              }}>
-                {prescription.diagnosisRemark}
-              </p>
-            </div>
-          )}
+          {/* Diagnosis block removed as per request to not print remarks of doctor consultation */}
 
           {/* Medicines Table */}
           {prescription.medicines && prescription.medicines.filter(m => m.medicine).length > 0 && (
@@ -205,8 +190,8 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
                       <td style={{ padding: '5px 8px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle' }}>{item.morning ? '✓' : '-'}</td>
                       <td style={{ padding: '5px 8px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle' }}>{item.afternoon ? '✓' : '-'}</td>
                       <td style={{ padding: '5px 8px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle' }}>{item.night ? '✓' : '-'}</td>
-                      <td style={{ padding: '5px 8px', border: '1px solid #000', verticalAlign: 'middle' }}>{item.duration}</td>
-                      <td style={{ padding: '5px 8px', border: '1px solid #000', verticalAlign: 'middle' }}>{item.remarks || '-'}</td>
+                      <td style={{ padding: '5px 8px', border: '1px solid #000', verticalAlign: 'middle' }}>{translateClinicalText(item.duration, activeLang)}</td>
+                      <td style={{ padding: '5px 8px', border: '1px solid #000', verticalAlign: 'middle' }}>{translateClinicalText(item.remarks, activeLang) || '-'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -225,7 +210,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
                 fontSize: '10px',
                 lineHeight: '1.5'
               }}>
-                {prescription.symptoms.map((s) => s.symptom).join(', ')}
+                {prescription.symptoms.map((s) => translateClinicalText(s.symptom, activeLang)).join(', ')}
               </p>
             </div>
           )}
@@ -250,7 +235,10 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
 
       {/* Footer */}
       <div style={{ 
-        marginTop: '30px', 
+        position: 'absolute',
+        bottom: '15mm',
+        left: '18mm',
+        right: '18mm',
         textAlign: 'center', 
         fontSize: '9px', 
         color: '#666', 

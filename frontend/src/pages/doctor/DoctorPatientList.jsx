@@ -12,18 +12,18 @@ const DoctorPatientList = () => {
   const handleSendToSameDay = async (patient) => {
     const types = ['Fracture', 'Minor Injury', 'Minor Stitches', 'Small Burns', 'Mild Allergic Reactions', 'Dialysis'];
     const chosenType = window.prompt(
-      `Send ${patient.patientName} to Same Day Treatment?\nEnter one of: ${types.join(', ')}`,
+      `Send ${patient.patientName} to Same Day Care?\nEnter one of: ${types.join(', ')}`,
       'Minor Injury'
     );
     if (chosenType === null) return;
     if (!types.includes(chosenType)) {
-      toast.error(`Invalid treatment type! Must be one of: ${types.join(', ')}`);
+      toast.error(`Invalid care type! Must be one of: ${types.join(', ')}`);
       return;
     }
     try {
       const dob = patient.dob;
       const age = dob ? Math.floor((new Date() - new Date(dob)) / (365.25 * 24 * 60 * 60 * 1000)) : null;
-      await client.post('/nursing/treatment', {
+      await client.post('/same-day-care/treatment', {
         patientId: patient._id,
         patientName: patient.patientName,
         uhid: patient.uhid,
@@ -33,7 +33,7 @@ const DoctorPatientList = () => {
         treatmentType: chosenType,
         status: 'Draft'
       });
-      toast.success(`${patient.patientName} referred to Same Day Treatment (${chosenType})!`);
+      toast.success(`${patient.patientName} referred to Same Day Care (${chosenType})!`);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to refer patient');
     }
@@ -42,7 +42,7 @@ const DoctorPatientList = () => {
   useEffect(() => {
     const timeout = setTimeout(() => {
       client
-        .get(`/patients?search=${encodeURIComponent(search)}`)
+        .get(`/patients?excludeCompleted=true&search=${encodeURIComponent(search)}`)
         .then(({ data }) => setPatients(data))
         .catch(() => setPatients([]));
     }, 250);
@@ -123,7 +123,7 @@ const DoctorPatientList = () => {
                         </Link>
                         <button className="btn-secondary text-xs inline-flex items-center gap-1 text-orange-600 font-bold"
                           onClick={() => handleSendToSameDay(patient)}>
-                          <Send className="h-3 w-3" /> Same Day
+                          <Send className="h-3 w-3" /> Same Day Care
                         </button>
                       </div>
                     </td>

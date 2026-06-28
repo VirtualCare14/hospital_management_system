@@ -1,8 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Calendar, FileText } from 'lucide-react';
+import { ArrowLeft, Calendar, FileText, Printer } from 'lucide-react';
 import client from '../../api/client';
 import { formatDate } from '../../utils/dateFormat';
+import toast from 'react-hot-toast';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
+import PatientReceipt from '../../components/PatientReceipt';
+import { sanitizeClonedDocumentForPdf } from '../../utils/pdfUtils';
 
 const ageFromDob = (dob) => {
   if (!dob) return '-';
@@ -12,6 +17,7 @@ const ageFromDob = (dob) => {
 
 const CompletedConsultationDetails = () => {
   const { consultationId } = useParams();
+  const receiptRef = useRef(null);
   const [consultation, setConsultation] = useState(null);
   const [patient, setPatient] = useState(null);
   const [prescription, setPrescription] = useState(null);
@@ -35,6 +41,40 @@ const CompletedConsultationDetails = () => {
     fetchDetails();
   }, [consultationId]);
 
+  const printPrescription = async () => {
+    if (!receiptRef.current) {
+      toast.error('Printable content is not available');
+      return;
+    }
+    
+    const toastId = toast.loading('Generating PDF for printing...');
+    try {
+      const canvas = await html2canvas(receiptRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        imageTimeout: 20000,
+        onclone: (clonedDoc) => sanitizeClonedDocumentForPdf(clonedDoc)
+      });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const width = pdf.internal.pageSize.getWidth();
+      const height = (canvas.height * width) / canvas.width;
+      
+      const padding = 5;
+      pdf.addImage(imgData, 'PNG', padding, padding, width - (padding * 2), height);
+      
+      pdf.autoPrint();
+      window.open(pdf.output('bloburl'), '_blank');
+      toast.dismiss(toastId);
+      toast.success('Print dialog opened');
+    } catch (error) {
+      console.error('Prescription print error:', error);
+      toast.dismiss(toastId);
+      toast.error('Error generating print view');
+    }
+  };
+
   if (loading) {
     return <div className="card p-5">Loading consultation details...</div>;
   }
@@ -47,16 +87,42 @@ const CompletedConsultationDetails = () => {
     );
   }
 
+  const receiptPrescription = prescription ? {
+    ...prescription,
+    diagnosisRemark: consultation.diagnosisRemark,
+    symptoms: consultation.symptoms,
+    followUpDate: consultation.followUpDate,
+    language: prescription.language || 'English'
+  } : null;
+
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <Link to="/doctor/completed" className="btn-secondary">
-          <ArrowLeft className="h-4 w-4" />
-        </Link>
-        <div>
-          <h1 className="text-2xl font-extrabold text-gray-900">Consultation Details</h1>
-          <p className="text-sm text-gray-500">Completed on {formatDate(consultation.consultationCompletedDate || consultation.createdAt)}</p>
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-center gap-3">
+          <Link to="/doctor/completed" className="btn-secondary">
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
+          <div>
+            <h1 className="text-2xl font-extrabold text-gray-900">Consultation Details</h1>
+            <p className="text-sm text-gray-500">Completed on {formatDate(consultation.consultationCompletedDate || consultation.createdAt)}</p>
+          </div>
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          {prescription && (
+            <button 
+              onClick={printPrescription} 
+              className="btn bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm inline-flex items-center gap-1 cursor-pointer"
+            >
+              <Printer className="h-4 w-4" /> Print Prescription
+            </button>
+          )}
+          <Link to={`/doctor/consultation/${patient._id}?addMore=true`} className="btn bg-orange-500 hover:bg-orange-600 text-white font-bold text-sm">
+            Add Consult
+          </Link>
+          <Link to={`/doctor/prescription/${patient._id}?addMore=true`} className="btn bg-green-600 hover:bg-green-700 text-white font-bold text-sm">
+            Add Prescription
+          </Link>
         </div>
       </div>
 
@@ -244,6 +310,15 @@ const CompletedConsultationDetails = () => {
           </div>
         </div>
       )}
+
+      {/* Hidden receipt for printing */}
+      <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', opacity: 0, pointerEvents: 'none' }}>
+        <PatientReceipt 
+          ref={receiptRef} 
+          patient={patient} 
+          prescription={receiptPrescription}
+        />
+      </div>
     </div>
   );
 };

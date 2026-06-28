@@ -6,7 +6,7 @@ export const modules = [
   { id: 3, label: 'Module 3 - Digital Prescription' },
   { id: 4, label: 'Lab' },
   { id: 5, label: 'IPD' },
-  { id: 6, label: 'Nursing' },
+  { id: 6, label: 'Same Day Care' },
   { id: 7, label: 'Pharmacy' },
   { id: 8, label: 'Billing' }
 ];

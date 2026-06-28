@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Save, Loader2, DollarSign } from 'lucide-react';
+import { Save, Loader2, DollarSign, Info, Settings, ShieldCheck } from 'lucide-react';
 import client from '../../api/client';
 
 const TREATMENTS = [
@@ -12,7 +12,7 @@ const TREATMENTS = [
   { id: 'Dialysis', label: 'Dialysis' }
 ];
 
-const SameDayTreatmentSettings = () => {
+const SameDayCareSettings = () => {
   const [prices, setPrices] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -69,12 +69,49 @@ const SameDayTreatmentSettings = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">Same Day Treatment Pricing</h1>
-          <p className="text-sm text-gray-500">Set pricing for nursing treatments (nursing staff cannot see prices)</p>
+          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">Same Day Care Settings & Pricing</h1>
+          <p className="text-sm text-gray-500">Configure flat rates and pricing models for Same Day Care services.</p>
         </div>
         <button onClick={handleSave} disabled={saving} className="btn text-sm py-2.5 px-4 flex items-center gap-2">
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save Prices
         </button>
+      </div>
+
+      {/* Same Day Care Settings Guide & Commands */}
+      <div className="card p-5 border border-orange-100 bg-orange-50/20 rounded-2xl space-y-4">
+        <div className="flex items-center gap-2 border-b border-orange-100 pb-3">
+          <Info className="h-5 w-5 text-orange-500" />
+          <h2 className="font-extrabold text-xs text-gray-800 uppercase tracking-wider">Same Day Care Configuration Instructions</h2>
+        </div>
+        <div className="grid gap-4 md:grid-cols-3 text-xs">
+          <div className="bg-white p-4 rounded-xl border border-orange-100/50 space-y-1">
+            <div className="flex items-center gap-1.5 font-bold text-gray-800 mb-1">
+              <DollarSign className="h-4 w-4 text-orange-500" />
+              1. Set Service Pricing
+            </div>
+            <p className="text-gray-500 leading-relaxed">
+              Define the base flat rates for the care categories below. Clinicians will select these types, and prices will map to billing automatically.
+            </p>
+          </div>
+          <div className="bg-white p-4 rounded-xl border border-orange-100/50 space-y-1">
+            <div className="flex items-center gap-1.5 font-bold text-gray-800 mb-1">
+              <Settings className="h-4 w-4 text-orange-500" />
+              2. Overrides & Rules
+            </div>
+            <p className="text-gray-500 leading-relaxed">
+              Enable manual pricing override for Billing Officers inside **Hospital Settings** if price adjustments on final invoice builder are allowed.
+            </p>
+          </div>
+          <div className="bg-white p-4 rounded-xl border border-orange-100/50 space-y-1">
+            <div className="flex items-center gap-1.5 font-bold text-gray-800 mb-1">
+              <ShieldCheck className="h-4 w-4 text-orange-500" />
+              3. Clinician Privacy
+            </div>
+            <p className="text-gray-500 leading-relaxed">
+              Same Day Care clinicians are blocked from seeing any price fields to ensure strict data separation and focus on patient care.
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -105,4 +142,4 @@ const SameDayTreatmentSettings = () => {
   );
 };
 
-export default SameDayTreatmentSettings;
+export default SameDayCareSettings;

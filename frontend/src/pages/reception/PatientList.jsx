@@ -7,7 +7,7 @@ import client from '../../api/client';
 import PatientReceipt from '../../components/PatientReceipt';
 import { formatUhid } from '../../utils/uhid';
 
-const DEPARTMENTS = ['General', 'Cardiology', 'Orthopedics', 'Pediatrics', 'Neurology', 'Dermatology', 'ENT', 'Ophthalmology', 'Psychiatry', 'Same Day Treatment'];
+const DEPARTMENTS = ['General', 'Cardiology', 'Orthopedics', 'Pediatrics', 'Neurology', 'Dermatology', 'ENT', 'Ophthalmology', 'Psychiatry'];
 
 const PatientList = () => {
   const [registrations, setRegistrations] = useState([]);

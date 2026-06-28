@@ -111,18 +111,12 @@ const checkBillableItems = async (patientId) => {
   // Check if patient already has a Final bill
   const hasExistingBills = finalizedBills.length > 0;
 
-  // Check OPD Consultations
-  const consultations = await Consultation.find({ patientId }).populate('doctorId', 'opdFees');
-  const opdConsultations = consultations.filter(c => (c.doctorId?.opdFees || 0) > 0 && !billedSourceIds.has(c._id.toString()));
-  if (opdConsultations.length > 0) {
+  // Check OPD Visits (Registrations)
+  const visits = await Visit.find({ patientId, visitType: 'OPD' }).populate('doctorId', 'opdFees');
+  const pendingVisits = visits.filter(v => !billedSourceIds.has(v._id.toString()));
+  if (pendingVisits.length > 0) {
     categories.push('OPD');
-    totalPendingAmount += opdConsultations.reduce((sum, c) => sum + (c.doctorId?.opdFees || 0), 0);
-  }
-
-  // Include Registration fee if they have never been billed
-  if (!hasExistingBills) {
-    categories.push('OPD');
-    totalPendingAmount += 200; // Registration fee matches generateBillItems
+    totalPendingAmount += pendingVisits.reduce((sum, v) => sum + (v.doctorId?.opdFees || 0), 0);
   }
 
   // Check Same Day Treatments (Completed)
@@ -170,9 +164,7 @@ const checkBillableItems = async (patientId) => {
         if (!categories.includes('BedCharge')) categories.push('BedCharge');
         totalPendingAmount += roomCharge;
 
-        // Add dynamic Nursing charges (e.g. flat 300 per day stay) matching generateBillItems
-        if (!categories.includes('IPD')) categories.push('IPD');
-        totalPendingAmount += 300 * daysAdmitted;
+
       }
 
       // Consumables
@@ -314,38 +306,25 @@ const generateBillItems = async (req, res) => {
 
     // 1. OPD Charges
     if (!billType || billType === 'All' || billType === 'OPD') {
-      // Registration Fee (apply only on the first bill, default to 200 or config)
-      if (!hasExistingBills) {
-        items.push({
-          category: 'OPD',
-          date: fmtDate(patient.createdAt),
-          description: 'OPD Registration Fee',
-          price: 200,
-          quantity: 1,
-          total: 200,
-          sourceId: patient._id, // use patientId as a dummy source to prevent double billing
-          sourceModel: 'Patient'
-        });
-      }
-
-      // Consultation Fees
-      const consultations = await Consultation.find({ patientId: patient._id })
+      const visits = await Visit.find(tenantFilter(req, { patientId: patient._id, visitType: 'OPD' }))
         .populate('doctorId', 'doctorName opdFees')
         .sort({ createdAt: -1 });
-        
-      consultations.forEach(c => {
-        if (billedSourceIds.has(c._id.toString())) return;
-        const fee = c.doctorId?.opdFees || 0;
+
+      visits.forEach(v => {
+        if (billedSourceIds.has(v._id.toString())) return;
+
+        // Add OPD Consultation Fee
+        const fee = v.doctorId?.opdFees || 0;
         if (fee > 0) {
           items.push({
             category: 'OPD',
-            date: fmtDate(c.createdAt),
-            description: `OPD Consultation - Dr. ${c.doctorId?.doctorName || 'Doctor'}`,
+            date: fmtDate(v.createdAt),
+            description: `OPD Consultation - Dr. ${v.doctorId?.doctorName || 'Doctor'} (${v.registrationNumber})`,
             price: fee,
             quantity: 1,
             total: fee,
-            sourceId: c._id,
-            sourceModel: 'Consultation'
+            sourceId: v._id,
+            sourceModel: 'Visit'
           });
         }
       });
@@ -457,18 +436,6 @@ const generateBillItems = async (req, res) => {
             sourceModel: 'IpdAdmission'
           });
 
-          // Add dynamic Nursing charges (e.g. flat 300 per day stay)
-          const nursingCharge = 300 * daysAdmitted;
-          items.push({
-            category: 'IPD',
-            date: fmtDate(admission.admissionDate),
-            description: `Nursing Charges - ${daysAdmitted} day(s) @ ₹300/day`,
-            price: 300,
-            quantity: daysAdmitted,
-            total: nursingCharge,
-            sourceId: admission._id,
-            sourceModel: 'IpdAdmissionNursing'
-          });
         }
 
         // IPD Consumables

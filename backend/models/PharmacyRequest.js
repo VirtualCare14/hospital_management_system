@@ -128,7 +128,11 @@ const pharmacyRequestSchema = new mongoose.Schema({
     default: ''
   },
   items: [requestItemSchema],
-  auditTrail: [auditLogSchema]
+  auditTrail: [auditLogSchema],
+  doctorNotifiedOfReturn: {
+    type: Boolean,
+    default: false
+  }
 }, { timestamps: true });
 
 // Index for fast lookups per hospital and patient/admission

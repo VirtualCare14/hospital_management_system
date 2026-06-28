@@ -44,6 +44,48 @@ import client from '../../api/client';
 import { formatUhid } from '../../utils/uhid';
 import IpdMedicationChartContent from './IpdMedicationChartContent.jsx';
 
+const getStatusBadgeText = (status) => {
+  switch (status) {
+    case 'Issued':
+      return 'Pharmacy Sent Medicine';
+    case 'Remaining Items Issued':
+      return 'Pharmacy Sent Medicine (Remaining)';
+    case 'Return Requested':
+      return 'Return Requested (Pending Acceptance)';
+    case 'Return Accepted':
+      return 'Return Accepted (Added to Stock)';
+    case 'Return Rejected':
+      return 'Return Rejected';
+    case 'Pending':
+      return 'Pending Review';
+    default:
+      return status;
+  }
+};
+
+const getStatusBadgeClass = (status) => {
+  switch (status) {
+    case 'Pending':
+      return 'bg-yellow-100 text-yellow-800 border border-yellow-250';
+    case 'Approved':
+    case 'Partially Approved':
+      return 'bg-orange-100 text-orange-850 border border-orange-200';
+    case 'Issued':
+    case 'Remaining Items Issued':
+      return 'bg-blue-100 text-blue-800 border border-blue-200';
+    case 'Return Requested':
+      return 'bg-purple-100 text-purple-800 border border-purple-200';
+    case 'Return Accepted':
+    case 'Completed':
+      return 'bg-green-100 text-green-800 border border-green-200';
+    case 'Return Rejected':
+    case 'Rejected':
+      return 'bg-red-100 text-red-800 border border-red-200';
+    default:
+      return 'bg-gray-100 text-gray-800 border border-gray-200';
+  }
+};
+
 const TABS = [
   { id: 'patient-info', label: 'Patient Info', icon: User },
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
@@ -115,6 +157,7 @@ const IpdPatientDetails = () => {
   const [requestsLoading, setRequestsLoading] = useState(false);
   const [showAddRequest, setShowAddRequest] = useState(false);
   const [requestForm, setRequestForm] = useState({ procedureName: '', items: [] });
+  const [requestItemType, setRequestItemType] = useState('medicine'); // 'medicine' or 'consumable'
   const [searchItemQuery, setSearchItemQuery] = useState('');
   const [pharmacyMedsList, setPharmacyMedsList] = useState([]);
   const [selectedRequest, setSelectedRequest] = useState(null);
@@ -197,6 +240,16 @@ const IpdPatientDetails = () => {
     }
   }, [id]);
 
+  const handleDismissNotification = async (reqId) => {
+    try {
+      await client.post(`/pharmacy/requests/${reqId}/dismiss-notification`);
+      toast.success('Notification acknowledged');
+      loadPharmacyRequests();
+    } catch (err) {
+      toast.error('Failed to dismiss notification');
+    }
+  };
+
   const loadPharmacyMeds = useCallback(async () => {
     try {
       const { data } = await client.get('/pharmacy/inventory?limit=1000');
@@ -239,8 +292,8 @@ const IpdPatientDetails = () => {
     if (activeTab === 'timeline') loadTimeline();
     if (activeTab === 'ot-records') loadOtRecords();
     if (activeTab === 'discharge-records') loadDischargeRecords();
-    if (activeTab === 'pharmacy-requests') loadPharmacyRequests();
-  }, [activeTab, loadConsumables, loadMedicines, loadLabTests, loadBilling, loadDashboard, loadTimeline, loadOtRecords, loadDischargeRecords, loadPharmacyRequests]);
+    if (activeTab === 'pharmacy-requests') { loadPharmacyRequests(); loadPharmacyMeds(); }
+  }, [activeTab, loadConsumables, loadMedicines, loadLabTests, loadBilling, loadDashboard, loadTimeline, loadOtRecords, loadDischargeRecords, loadPharmacyRequests, loadPharmacyMeds]);
 
   useEffect(() => {
     const params = new URLSearchParams(searchParams);
@@ -920,7 +973,30 @@ const IpdPatientDetails = () => {
       )}
       {/* TAB: Pharmacy Requests */}
       {activeTab === 'pharmacy-requests' && (
-        <div className="space-y-6">
+        <div className="space-y-4">
+          {/* Return Notifications */}
+          {pharmacyRequests
+            .filter((r) => r.status === 'Return Accepted' && !r.doctorNotifiedOfReturn)
+            .map((noti) => (
+              <div key={noti._id} className="bg-green-50 border border-green-200 rounded-2xl p-4 flex items-center justify-between shadow-sm animate-pulse mb-4">
+                <div className="flex items-center gap-3">
+                  <span className="p-2 rounded-xl bg-green-500 text-white font-extrabold text-sm">🔔</span>
+                  <div>
+                    <p className="text-sm font-bold text-green-800">Medicines Added Back to Stock</p>
+                    <p className="text-xs text-green-600 font-medium">
+                      Unused medicines from Pharmacy Request <strong>#{noti.requestNumber}</strong> have been accepted by the pharmacy and added back to inventory stock!
+                    </p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => handleDismissNotification(noti._id)} 
+                  className="text-xs font-bold text-green-700 bg-green-100 hover:bg-green-200 py-1.5 px-3 rounded-lg border border-green-300 cursor-pointer transition whitespace-nowrap"
+                >
+                  Acknowledge & Dismiss
+                </button>
+              </div>
+            ))}
+
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 className="font-extrabold text-gray-900 text-lg flex items-center gap-2">
@@ -934,6 +1010,7 @@ const IpdPatientDetails = () => {
               <button 
                 onClick={() => {
                   setShowAddRequest(true);
+                  setRequestItemType('medicine');
                   setRequestForm({ procedureName: '', items: [] });
                 }} 
                 className="btn text-xs py-2 px-3 flex items-center gap-1 cursor-pointer"
@@ -975,19 +1052,8 @@ const IpdPatientDetails = () => {
                         <td className="p-3 text-xs">Dr. {reqItem.doctorId?.doctorName || reqItem.doctorId?.username}</td>
                         <td className="p-3 text-xs text-gray-500">{new Date(reqItem.createdAt).toLocaleDateString('en-IN')}</td>
                         <td className="p-3">
-                          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold border ${
-                            reqItem.status === 'Pending' ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
-                            reqItem.status === 'Approved' ? 'bg-green-100 text-green-800 border-green-200' :
-                            reqItem.status === 'Partially Approved' ? 'bg-orange-100 text-orange-800 border-orange-200' :
-                            reqItem.status === 'Rejected' ? 'bg-red-100 text-red-800 border-red-200' :
-                            reqItem.status === 'Issued' ? 'bg-blue-100 text-blue-800 border-blue-200' :
-                            reqItem.status === 'Return Requested' ? 'bg-purple-100 text-purple-800 border-purple-200' :
-                            reqItem.status === 'Return Accepted' ? 'bg-teal-100 text-teal-800 border-teal-200' :
-                            reqItem.status === 'Return Rejected' ? 'bg-pink-100 text-pink-800 border-pink-200' :
-                            reqItem.status === 'Remaining Items Issued' ? 'bg-sky-100 text-sky-800 border-sky-200' :
-                            'bg-gray-100 text-gray-800 border-gray-200'
-                          }`}>
-                            {reqItem.status}
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold border ${getStatusBadgeClass(reqItem.status)}`}>
+                            {getStatusBadgeText(reqItem.status)}
                           </span>
                         </td>
                         <td className="p-3 pr-4">
@@ -1130,20 +1196,57 @@ const IpdPatientDetails = () => {
 
                   {/* Add Item Form */}
                   <div className="p-3.5 bg-orange-50/50 border border-orange-100 rounded-2xl space-y-3">
-                    <span className="block text-xs font-bold text-orange-800">Add Item to Request</span>
+                    <div className="flex justify-between items-center">
+                      <span className="block text-xs font-bold text-orange-800">Add Item to Request</span>
+                      <div className="flex items-center gap-3">
+                        <label className="flex items-center gap-1 text-[11px] text-gray-700 cursor-pointer font-semibold">
+                          <input
+                            type="radio"
+                            name="requestItemType"
+                            value="medicine"
+                            checked={requestItemType === 'medicine'}
+                            onChange={() => {
+                              setRequestItemType('medicine');
+                              setSearchItemQuery('');
+                            }}
+                            className="text-orange-500 focus:ring-orange-500 h-3 w-3"
+                          />
+                          Medicine
+                        </label>
+                        <label className="flex items-center gap-1 text-[11px] text-gray-700 cursor-pointer font-semibold">
+                          <input
+                            type="radio"
+                            name="requestItemType"
+                            value="consumable"
+                            checked={requestItemType === 'consumable'}
+                            onChange={() => {
+                              setRequestItemType('consumable');
+                              setSearchItemQuery('');
+                            }}
+                            className="text-orange-500 focus:ring-orange-500 h-3 w-3"
+                          />
+                          Consumable
+                        </label>
+                      </div>
+                    </div>
                     <div className="grid grid-cols-3 gap-2">
                       <div className="col-span-2">
-                        <label className="mb-0.5 block text-[10px] uppercase font-bold text-gray-400">Item Name</label>
+                        <label className="mb-0.5 block text-[10px] uppercase font-bold text-gray-400">
+                          {requestItemType === 'medicine' ? 'Medicine Name' : 'Consumable Name'}
+                        </label>
                         <input 
                           type="text" 
                           list="search-meds-datalist"
                           className="input py-1.5 text-xs"
-                          placeholder="Type or search medicine"
+                          placeholder={requestItemType === 'medicine' ? "Type or search medicine" : "Type or search consumable"}
                           value={searchItemQuery}
                           onChange={(e) => setSearchItemQuery(e.target.value)}
                         />
                         <datalist id="search-meds-datalist">
-                          {pharmacyMedsList.map((m, i) => <option key={i} value={m} />)}
+                          {requestItemType === 'medicine'
+                            ? pharmacyMedsList.map((m, i) => <option key={i} value={m} />)
+                            : consumableServicesList.map((c, i) => <option key={i} value={c.name} />)
+                          }
                         </datalist>
                       </div>
                       <div>

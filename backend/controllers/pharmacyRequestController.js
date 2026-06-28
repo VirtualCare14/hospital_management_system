@@ -3,6 +3,7 @@ const PharmacyInventory = require('../models/PharmacyInventory');
 const IpdAdmission = require('../models/IpdAdmission');
 const IpdMedicine = require('../models/IpdMedicine');
 const IpdActivityTimeline = require('../models/IpdActivityTimeline');
+const PharmacyStockMovement = require('../models/PharmacyStockMovement');
 
 const tenantFilter = (req, query = {}) => (
   req.user.hospitalId ? { ...query, hospitalId: req.user.hospitalId } : query
@@ -33,12 +34,16 @@ const addTimeline = async (req, admissionId, patientId, activity, description, m
 // @access  Private
 const getRequests = async (req, res) => {
   try {
-    const { patientId, admissionId, status, search } = req.query;
+    const { patientId, admissionId, status, search, doctorId, doctorNotifiedOfReturn } = req.query;
     let query = tenantFilter(req);
 
     if (patientId) query.patientId = patientId;
     if (admissionId) query.admissionId = admissionId;
     if (status) query.status = status;
+    if (doctorId) query.doctorId = doctorId;
+    if (doctorNotifiedOfReturn !== undefined) {
+      query.doctorNotifiedOfReturn = doctorNotifiedOfReturn === 'true';
+    }
 
     const requests = await PharmacyRequest.find(query)
       .populate('patientId', 'patientName uhid gender dob')
@@ -291,9 +296,24 @@ const issueRequest = async (req, res) => {
         }
 
         // Deduct quantity
+        const previousStock = invItem.quantity;
         invItem.quantity -= item.approvedQty;
         invItem.amount = invItem.rate * invItem.quantity;
         await invItem.save();
+
+        // Create Stock Movement log
+        await PharmacyStockMovement.create({
+          hospitalId: req.user.hospitalId,
+          itemName: item.itemName,
+          batch: item.batch,
+          type: 'OT Issue',
+          quantity: -item.approvedQty,
+          previousStock,
+          newStock: invItem.quantity,
+          referenceId: request._id,
+          performedBy: req.user._id,
+          remarks: `Issued for Pharmacy Request #${request.requestNumber}`
+        });
 
         item.issuedQty = item.approvedQty;
       }
@@ -437,9 +457,24 @@ const verifyReturn = async (req, res) => {
           });
 
           if (invItem) {
+            const previousStock = invItem.quantity;
             invItem.quantity += item.returnedQty;
             invItem.amount = invItem.rate * invItem.quantity;
             await invItem.save();
+
+            // Create Stock Movement log
+            await PharmacyStockMovement.create({
+              hospitalId: req.user.hospitalId,
+              itemName: item.itemName,
+              batch: item.batch,
+              type: 'OT Return',
+              quantity: item.returnedQty,
+              previousStock,
+              newStock: invItem.quantity,
+              referenceId: request._id,
+              performedBy: req.user._id,
+              remarks: `Returned from OT for Pharmacy Request #${request.requestNumber}`
+            });
           }
         } else {
           // If return is rejected, unused items become wasted/damaged (stock does not increase)
@@ -451,6 +486,7 @@ const verifyReturn = async (req, res) => {
 
     const newStatus = returnsAccepted ? 'Return Accepted' : 'Return Rejected';
     request.status = newStatus;
+    request.doctorNotifiedOfReturn = false;
     request.remarks = remarks || '';
     request.auditTrail.push({
       status: newStatus,
@@ -519,9 +555,24 @@ const issueRemainingPending = async (req, res) => {
         }
 
         // Deduct inventory
+        const previousStock = invItem.quantity;
         invItem.quantity -= item.pendingQty;
         invItem.amount = invItem.rate * invItem.quantity;
         await invItem.save();
+
+        // Create Stock Movement log
+        await PharmacyStockMovement.create({
+          hospitalId: req.user.hospitalId,
+          itemName: item.itemName,
+          batch: selectedBatch,
+          type: 'OT Issue',
+          quantity: -item.pendingQty,
+          previousStock,
+          newStock: invItem.quantity,
+          referenceId: request._id,
+          performedBy: req.user._id,
+          remarks: `Remaining issued for Pharmacy Request #${request.requestNumber}`
+        });
 
         // Update request item stats
         item.batch = selectedBatch;
@@ -642,6 +693,26 @@ const autoPostToBilling = async (req, request) => {
   }
 };
 
+// @desc    Doctor dismiss return accepted/rejected notification
+// @route   POST /api/pharmacy/requests/:id/dismiss-notification
+// @access  Private
+const dismissNotification = async (req, res) => {
+  try {
+    const request = await PharmacyRequest.findOne(tenantFilter(req, { _id: req.params.id }));
+    if (!request) {
+      return res.status(404).json({ message: 'Request not found' });
+    }
+
+    request.doctorNotifiedOfReturn = true;
+    await request.save();
+
+    res.status(200).json({ message: 'Notification dismissed successfully', request });
+  } catch (error) {
+    console.error('Dismiss Notification Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   getRequests,
   getRequestDetails,
@@ -651,5 +722,6 @@ module.exports = {
   recordConsumption,
   verifyReturn,
   issueRemainingPending,
-  completeRequest
+  completeRequest,
+  dismissNotification
 };

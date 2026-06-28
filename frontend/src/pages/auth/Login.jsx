@@ -28,6 +28,13 @@ const Login = () => {
       const user = await login(data.username, data.password, hospitalId);
 
       if (selectedModule === 'admin' && user.role !== 'admin') {
+        const hasModuleQuery = searchParams.has('module');
+        if (!hasModuleQuery && user.moduleAccess && user.moduleAccess.length > 0) {
+          const firstModule = user.moduleAccess[0];
+          navigate(getDefaultPathForUser(user, String(firstModule), hospitalId));
+          return;
+        }
+
         await logout(false);
         toast.error('Admin module requires admin credentials.');
         return;
@@ -41,7 +48,7 @@ const Login = () => {
 
       navigate(getDefaultPathForUser(user, selectedModule, hospitalId));
     } catch (err) {
-      console.error(err);
+      // Error toast is already displayed in AuthContext
     } finally {
       setIsSubmitting(false);
     }

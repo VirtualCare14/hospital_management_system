@@ -29,7 +29,7 @@ const TREATMENTS = [
   { id: 'Dialysis', label: 'Dialysis (Coming Soon)', icon: Droplets },
 ];
 
-const NursingWorkspace = () => {
+const SameDayCareWorkspace = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('queue');
@@ -42,6 +42,7 @@ const NursingWorkspace = () => {
   const [showTreatmentList, setShowTreatmentList] = useState(false);
   const [patientTreatments, setPatientTreatments] = useState([]);
   const [treatmentsLoading, setTreatmentsLoading] = useState(false);
+  const [showFlowGuide, setShowFlowGuide] = useState(true);
 
   const loadPatients = async () => {
     setLoading(true);
@@ -59,10 +60,10 @@ const NursingWorkspace = () => {
   const loadQueue = async () => {
     setLoadingQueue(true);
     try {
-      const { data } = await client.get('/nursing/treatment?status=Draft');
+      const { data } = await client.get('/same-day-care/treatment?status=Draft');
       setQueue(data || []);
     } catch (err) {
-      toast.error('Failed to load treatment queue');
+      toast.error('Failed to load care queue');
     } finally {
       setLoadingQueue(false);
     }
@@ -84,10 +85,10 @@ const NursingWorkspace = () => {
     setSelectedPatient(patient);
     setShowTreatmentList(true);
     try {
-      const { data } = await client.get(`/nursing/treatment/patient/${patient._id}`);
+      const { data } = await client.get(`/same-day-care/treatment/patient/${patient._id}`);
       setPatientTreatments(data || []);
     } catch (err) {
-      toast.error('Failed to load treatments');
+      toast.error('Failed to load care records');
     } finally {
       setTreatmentsLoading(false);
     }
@@ -98,11 +99,11 @@ const NursingWorkspace = () => {
       toast('Dialysis form will be available soon', { icon: '⏳' });
       return;
     }
-    navigate(`/nursing/treatment/${selectedPatient._id}?type=${treatmentType}`);
+    navigate(`/same-day-care/treatment/${selectedPatient._id}?type=${treatmentType}`);
   };
 
   const handleViewTreatment = (record) => {
-    navigate(`/nursing/treatment/${record.patientId?._id || record.patientId}?type=${record.treatmentType}&recordId=${record._id}&view=true`);
+    navigate(`/same-day-care/treatment/${record.patientId?._id || record.patientId}?type=${record.treatmentType}&recordId=${record._id}&view=true`);
   };
 
   return (
@@ -110,12 +111,75 @@ const NursingWorkspace = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">Nursing Module</h1>
-          <p className="text-sm text-gray-500">Same Day Treatment - Nursing Care</p>
+          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">Same Day Care Module</h1>
+          <p className="text-sm text-gray-500">Same Day Care Dashboard & Workspace</p>
         </div>
-        <button onClick={loadAllData} className="btn-secondary text-sm py-2 px-4">
+        <button onClick={loadAllData} className="btn-secondary text-sm py-2 px-4 font-bold">
           <RefreshCw className="h-4 w-4" /> Refresh
         </button>
+      </div>
+
+      {/* Same Day Care Flow Guide */}
+      <div className="card border border-orange-100 bg-gradient-to-r from-orange-50/50 to-amber-50/20 p-5 rounded-2xl">
+        <div className="flex items-center justify-between cursor-pointer" onClick={() => setShowFlowGuide(!showFlowGuide)}>
+          <div className="flex items-center gap-2">
+            <Activity className="h-5 w-5 text-orange-500" />
+            <h2 className="font-extrabold text-xs text-gray-800 uppercase tracking-wider">Same Day Care Workflow Guide</h2>
+          </div>
+          <span className="text-xs text-orange-600 font-bold hover:underline select-none">
+            {showFlowGuide ? 'Hide Guide' : 'Show Guide'}
+          </span>
+        </div>
+        
+        {showFlowGuide && (
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mt-5 border-t border-orange-100/50 pt-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-orange-500 text-[10px] font-bold text-white">1</span>
+                <span className="font-bold text-[10px] text-gray-700 uppercase tracking-wide">Referral</span>
+              </div>
+              <p className="text-[11px] text-gray-500 leading-relaxed">
+                Patient is registered for Same Day Care at Reception or referred by a Doctor during EMR consultation.
+              </p>
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-orange-500 text-[10px] font-bold text-white">2</span>
+                <span className="font-bold text-[10px] text-gray-700 uppercase tracking-wide">Active Queue</span>
+              </div>
+              <p className="text-[11px] text-gray-500 leading-relaxed">
+                Referred patients appear instantly in the **Same Day Care Queue** below. Click **"Start Care"** to begin.
+              </p>
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-orange-500 text-[10px] font-bold text-white">3</span>
+                <span className="font-bold text-[10px] text-gray-700 uppercase tracking-wide">Clinical Record</span>
+              </div>
+              <p className="text-[11px] text-gray-500 leading-relaxed">
+                Input patient vitals, chief complaints, nursing assessment, and the care procedures administered.
+              </p>
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-orange-500 text-[10px] font-bold text-white">4</span>
+                <span className="font-bold text-[10px] text-gray-700 uppercase tracking-wide">Consumables</span>
+              </div>
+              <p className="text-[11px] text-gray-500 leading-relaxed">
+                Add any materials, syringes, or medicines used to deduct pharmacy stock and add to billing.
+              </p>
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-orange-500 text-[10px] font-bold text-white">5</span>
+                <span className="font-bold text-[10px] text-gray-700 uppercase tracking-wide">Complete & Bill</span>
+              </div>
+              <p className="text-[11px] text-gray-500 leading-relaxed">
+                Submit the report as **"Complete"** to lock the record and auto-push charges to the **Billing module**.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {!showTreatmentList ? (
@@ -128,7 +192,7 @@ const NursingWorkspace = () => {
                 activeTab === 'queue' ? 'bg-orange-500 text-white shadow-sm' : 'text-orange-950 hover:bg-orange-100/50'
               }`}
             >
-              <Clock className="h-4 w-4" /> Same Day Treatment Queue ({queue.length})
+              <Clock className="h-4 w-4" /> Same Day Care Queue ({queue.length})
             </button>
             <button
               onClick={() => setActiveTab('all')}
@@ -141,10 +205,10 @@ const NursingWorkspace = () => {
           </div>
 
           {activeTab === 'queue' ? (
-            /* Same Day Treatment Queue Table */
+            /* Same Day Care Queue Table */
             <div className="card overflow-hidden">
               <div className="p-4 border-b border-orange-100 bg-orange-50/30">
-                <h3 className="font-extrabold text-gray-900 flex items-center gap-2"><Clock className="h-5 w-5 text-orange-500" /> Same Day Treatment Queue</h3>
+                <h3 className="font-extrabold text-gray-900 flex items-center gap-2"><Clock className="h-5 w-5 text-orange-500" /> Same Day Care Queue</h3>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
@@ -155,7 +219,7 @@ const NursingWorkspace = () => {
                       <th className="p-3">Mobile</th>
                       <th className="p-3">Gender</th>
                       <th className="p-3">Age</th>
-                      <th className="p-3">Treatment Type</th>
+                      <th className="p-3">Care Type</th>
                       <th className="p-3">Assigned Date</th>
                       <th className="p-3 pr-4 text-center">Actions</th>
                     </tr>
@@ -176,8 +240,8 @@ const NursingWorkspace = () => {
                           <td className="p-3 text-xs font-semibold">{item.treatmentType}</td>
                           <td className="p-3 text-xs">{new Date(item.treatmentDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
                           <td className="p-3 pr-4 text-center">
-                            <button onClick={() => navigate(`/nursing/treatment/${item.patientId}?type=${item.treatmentType}&recordId=${item._id}`)} className="btn text-xs py-1.5 px-3">
-                              <Activity className="h-3.5 w-3.5" /> Treat
+                            <button onClick={() => navigate(`/same-day-care/treatment/${item.patientId}?type=${item.treatmentType}&recordId=${item._id}`)} className="btn text-xs py-1.5 px-3">
+                              <Activity className="h-3.5 w-3.5" /> Start Care
                             </button>
                           </td>
                         </tr>
@@ -249,7 +313,7 @@ const NursingWorkspace = () => {
                             <td className="p-3 text-xs">{p.department || '-'}</td>
                             <td className="p-3 pr-4 text-center">
                               <button onClick={() => loadPatientTreatments(p)} className="btn text-xs py-1.5 px-3">
-                                <Activity className="h-3.5 w-3.5" /> Treat
+                                <Activity className="h-3.5 w-3.5" /> Start Care
                               </button>
                             </td>
                           </tr>
@@ -330,7 +394,7 @@ const NursingWorkspace = () => {
                   <thead>
                     <tr className="bg-gray-50 text-xs font-bold uppercase text-gray-500 border-b border-orange-100">
                       <th className="p-3 pl-4">Date</th>
-                      <th className="p-3">Treatment Type</th>
+                      <th className="p-3">Care Type</th>
                       <th className="p-3">Diagnosis</th>
                       <th className="p-3">Status</th>
                       <th className="p-3">Created By</th>
@@ -367,4 +431,4 @@ const NursingWorkspace = () => {
   );
 };
 
-export default NursingWorkspace;
+export default SameDayCareWorkspace;

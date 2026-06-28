@@ -6,8 +6,8 @@ const tenantFilter = (req, query = {}) => (
   req.user.hospitalId ? { ...query, hospitalId: req.user.hospitalId } : query
 );
 
-// @desc    Create or save treatment
-// @route   POST /api/nursing/treatment
+// @desc    Create or save care record
+// @route   POST /api/same-day-care/treatment
 // @access  Private
 const createTreatment = async (req, res) => {
   try {
@@ -19,7 +19,7 @@ const createTreatment = async (req, res) => {
     } = req.body;
 
     if (!patientId || !treatmentType) {
-      return res.status(400).json({ message: 'Patient ID and treatment type are required' });
+      return res.status(400).json({ message: 'Patient ID and care type are required' });
     }
 
     // Get default price from settings if not provided
@@ -52,15 +52,15 @@ const createTreatment = async (req, res) => {
     });
 
     await record.save();
-    res.status(201).json({ message: 'Treatment record saved', record });
+    res.status(201).json({ message: 'Same day care record saved', record });
   } catch (error) {
-    console.error('Create Treatment Error:', error);
+    console.error('Create Care Record Error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
 
-// @desc    Update treatment
-// @route   PUT /api/nursing/treatment/:id
+// @desc    Update care record
+// @route   PUT /api/same-day-care/treatment/:id
 // @access  Private
 const updateTreatment = async (req, res) => {
   try {
@@ -68,7 +68,7 @@ const updateTreatment = async (req, res) => {
     const updateData = req.body;
 
     const record = await SameDayTreatment.findOne(tenantFilter(req, { _id: id }));
-    if (!record) return res.status(404).json({ message: 'Treatment record not found' });
+    if (!record) return res.status(404).json({ message: 'Care record not found' });
 
     const fields = [
       'diagnosis', 'treatmentNotes', 'prescription', 'followUpRequired', 'followUpDate',
@@ -78,15 +78,15 @@ const updateTreatment = async (req, res) => {
 
     record.updatedBy = req.user._id;
     await record.save();
-    res.json({ message: 'Treatment updated', record });
+    res.json({ message: 'Care record updated', record });
   } catch (error) {
-    console.error('Update Treatment Error:', error);
+    console.error('Update Care Record Error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
 
-// @desc    Get treatments for a patient
-// @route   GET /api/nursing/treatment/patient/:patientId
+// @desc    Get care records for a patient
+// @route   GET /api/same-day-care/treatment/patient/:patientId
 // @access  Private
 const getTreatmentsByPatient = async (req, res) => {
   try {
@@ -96,29 +96,29 @@ const getTreatmentsByPatient = async (req, res) => {
       .sort({ createdAt: -1 });
     res.json(records);
   } catch (error) {
-    console.error('Get Treatments Error:', error);
+    console.error('Get Care Records Error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
 
-// @desc    Get single treatment
-// @route   GET /api/nursing/treatment/:id
+// @desc    Get single care record
+// @route   GET /api/same-day-care/treatment/:id
 // @access  Private
 const getTreatmentById = async (req, res) => {
   try {
     const { id } = req.params;
     const record = await SameDayTreatment.findOne(tenantFilter(req, { _id: id }))
       .populate('createdBy', 'username doctorName');
-    if (!record) return res.status(404).json({ message: 'Treatment not found' });
+    if (!record) return res.status(404).json({ message: 'Care record not found' });
     res.json(record);
   } catch (error) {
-    console.error('Get Treatment Error:', error);
+    console.error('Get Care Record Error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
 
-// @desc    Get all treatments (with filters)
-// @route   GET /api/nursing/treatment
+// @desc    Get all care records (with filters)
+// @route   GET /api/same-day-care/treatment
 // @access  Private
 const getAllTreatments = async (req, res) => {
   try {
@@ -137,13 +137,13 @@ const getAllTreatments = async (req, res) => {
       .sort({ createdAt: -1 });
     res.json(records);
   } catch (error) {
-    console.error('Get All Treatments Error:', error);
+    console.error('Get All Care Records Error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
 
-// @desc    Get treatment pricing for admin display
-// @route   GET /api/nursing/treatment/pricing
+// @desc    Get care pricing for admin display
+// @route   GET /api/same-day-care/treatment/pricing
 // @access  Private
 const getTreatmentPricing = async (req, res) => {
   try {
@@ -164,13 +164,13 @@ const getTreatmentPricing = async (req, res) => {
     });
     res.json(merged);
   } catch (error) {
-    console.error('Get Pricing Error:', error);
+    console.error('Get Care Pricing Error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
 
-// @desc    Add item to treatment
-// @route   POST /api/nursing/treatment/:id/items
+// @desc    Add item to care record
+// @route   POST /api/same-day-care/treatment/:id/items
 // @access  Private
 const addItemToTreatment = async (req, res) => {
   try {
@@ -182,7 +182,7 @@ const addItemToTreatment = async (req, res) => {
     }
 
     const record = await SameDayTreatment.findOne(tenantFilter(req, { _id: id }));
-    if (!record) return res.status(404).json({ message: 'Treatment record not found' });
+    if (!record) return res.status(404).json({ message: 'Care record not found' });
 
     const newItem = {
       itemType,
@@ -204,15 +204,15 @@ const addItemToTreatment = async (req, res) => {
   }
 };
 
-// @desc    Remove item from treatment
-// @route   DELETE /api/nursing/treatment/:id/items/:itemId
+// @desc    Remove item from care record
+// @route   DELETE /api/same-day-care/treatment/:id/items/:itemId
 // @access  Private
 const removeItemFromTreatment = async (req, res) => {
   try {
     const { id, itemId } = req.params;
 
     const record = await SameDayTreatment.findOne(tenantFilter(req, { _id: id }));
-    if (!record) return res.status(404).json({ message: 'Treatment record not found' });
+    if (!record) return res.status(404).json({ message: 'Care record not found' });
 
     if (!record.items || !record.items.id(itemId)) {
       return res.status(404).json({ message: 'Item not found' });
@@ -229,15 +229,15 @@ const removeItemFromTreatment = async (req, res) => {
   }
 };
 
-// @desc    Get items for a treatment
-// @route   GET /api/nursing/treatment/:id/items
+// @desc    Get items for a care record
+// @route   GET /api/same-day-care/treatment/:id/items
 // @access  Private
 const getItemsForTreatment = async (req, res) => {
   try {
     const { id } = req.params;
 
     const record = await SameDayTreatment.findOne(tenantFilter(req, { _id: id }));
-    if (!record) return res.status(404).json({ message: 'Treatment record not found' });
+    if (!record) return res.status(404).json({ message: 'Care record not found' });
 
     res.json(record.items || []);
   } catch (error) {

@@ -63,6 +63,29 @@ const IpdOtFlow = () => {
   const [reqMedicines, setReqMedicines] = useState([{ medicineName: '', dosage: '', quantity: 1, unit: 'nos' }]);
   const [reqConsumables, setReqConsumables] = useState([{ consumableName: '', quantity: 1, unit: 'nos' }]);
   const [submittingRequest, setSubmittingRequest] = useState(false);
+  const [pharmacyMedsList, setPharmacyMedsList] = useState([]);
+  const [consumablesList, setConsumablesList] = useState([]);
+
+  const loadPharmacyMeds = useCallback(async () => {
+    try {
+      const { data } = await client.get('/pharmacy/inventory?limit=1000');
+      const uniqueNames = [...new Set(data.items.map(item => item.itemName))];
+      setPharmacyMedsList(uniqueNames);
+    } catch (err) {
+      console.warn('Could not load pharmacy inventory for searching:', err.message);
+    }
+  }, []);
+
+  const loadConsumables = useCallback(async () => {
+    try {
+      const { data } = await client.get('/ipd/settings');
+      if (data?.consumableServices) {
+        setConsumablesList(data.consumableServices.filter(s => s.isActive).map(s => s.name));
+      }
+    } catch (err) {
+      console.warn('Could not load consumable settings for searching:', err.message);
+    }
+  }, []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -117,11 +140,16 @@ const IpdOtFlow = () => {
       toast.error('Failed to load patient data');
       navigate('/ipd/patients');
     } finally {
+      setViewStep(null); // or keep as loading state
       setLoading(false);
     }
   }, [id, navigate]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    loadData();
+    loadPharmacyMeds();
+    loadConsumables();
+  }, [loadData, loadPharmacyMeds, loadConsumables]);
 
   // Derive patient from admission data when it loads
   const patient = admission?.patientId || {};
@@ -907,6 +935,7 @@ const IpdOtFlow = () => {
                     <input
                       type="text"
                       placeholder="Medicine Name"
+                      list="flow-medicines-datalist"
                       className="input text-xs py-2"
                       value={item.medicineName}
                       onChange={(e) => updateReqMed(index, 'medicineName', e.target.value)}
@@ -934,6 +963,11 @@ const IpdOtFlow = () => {
                     </button>
                   </div>
                 ))}
+                <datalist id="flow-medicines-datalist">
+                  {pharmacyMedsList.map((m, i) => (
+                    <option key={i} value={m} />
+                  ))}
+                </datalist>
                 <button
                   type="button"
                   onClick={addReqMedRow}
@@ -955,6 +989,7 @@ const IpdOtFlow = () => {
                     <input
                       type="text"
                       placeholder="Consumable Name"
+                      list="flow-consumables-datalist"
                       className="input text-xs py-2"
                       value={item.consumableName}
                       onChange={(e) => updateReqCon(index, 'consumableName', e.target.value)}
@@ -975,6 +1010,11 @@ const IpdOtFlow = () => {
                     </button>
                   </div>
                 ))}
+                <datalist id="flow-consumables-datalist">
+                  {consumablesList.map((c, i) => (
+                    <option key={i} value={c} />
+                  ))}
+                </datalist>
                 <button
                   type="button"
                   onClick={addReqConRow}
@@ -1113,9 +1153,16 @@ const IpdOtFlow = () => {
       {/* Print styles for consultation form */}
       <style>{`
         @media print {
-          body { background: white; font-size: 12pt; margin: 0; padding: 0; }
+          @page {
+            margin: 0 !important;
+          }
+          body {
+            background: white !important;
+            font-size: 12pt !important;
+            margin: 0 !important;
+            padding: 1.5cm !important;
+          }
           .no-print { display: none !important; }
-          @page { margin: 15mm; }
         }
       `}</style>
     </div>

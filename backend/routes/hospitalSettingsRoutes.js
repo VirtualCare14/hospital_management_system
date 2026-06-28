@@ -20,7 +20,7 @@ const adminOnly = (req, res, next) => {
 };
 
 // GET /api/admin/hospital-settings - Get hospital settings
-router.get('/', authMiddleware, adminOnly, getHospitalSettings);
+router.get('/', authMiddleware, getHospitalSettings);
 
 // POST /api/admin/hospital-settings - Create or update hospital settings
 router.post('/', authMiddleware, adminOnly, createOrUpdateHospitalSettings);
