@@ -18,21 +18,100 @@ const sameDayTreatmentSchema = new mongoose.Schema({
   age: { type: Number },
   treatmentType: {
     type: String,
-    enum: ['Fracture', 'Minor Injury', 'Minor Stitches', 'Small Burns', 'Mild Allergic Reactions', 'Dialysis'],
     required: true
   },
-  // Treatment details - generic fields used by all treatment types
+  source: {
+    type: String,
+    enum: ['Registration', 'Doctor Referral'],
+    default: 'Registration'
+  },
+  referredByDoctorName: { type: String, default: '' },
+  // Clinical details
+  chiefComplaint: { type: String, default: '' },
+  presentIllness: { type: String, default: '' },
+  clinicalFindings: { type: String, default: '' },
+  medicalHistory: { type: String, default: '' },
+  surgicalHistory: { type: String, default: '' },
+  drugAllergies: { type: String, default: '' },
+  vitals: {
+    bloodPressure: { type: String, default: '' },
+    pulse: { type: Number },
+    temperature: { type: Number },
+    height: { type: Number },
+    weight: { type: Number },
+    bmi: { type: Number }
+  },
+  selectedInvestigations: [{ type: String }],
+  attachments: [{
+    name: { type: String },
+    url: { type: String },
+    uploadedAt: { type: Date, default: Date.now }
+  }],
+  // Treatment details
   treatmentDate: { type: Date, default: Date.now },
   diagnosis: { type: String, default: '' },
   treatmentNotes: { type: String, default: '' },
+  treatmentPlan: { type: String, default: '' },
+  procedure: { type: String, default: '' },
+  productsMedicinesUsed: { type: String, default: '' },
+  procedureNotes: { type: String, default: '' },
+  anaesthesiaUsed: { type: String, enum: ['Yes', 'No', ''], default: '' },
+  anaesthesiaType: { type: String, default: '' },
+  complications: { type: String, default: '' },
   prescription: { type: String, default: '' },
-  followUpRequired: { type: String, enum: ['Yes', 'No'], default: '' },
+  prescriptionMedicines: [{
+    medicineName: { type: String, required: true },
+    dosage: { type: String, default: '' },
+    frequency: { type: String, default: '' },
+    duration: { type: String, default: '' },
+    route: { type: String, default: '' },
+    instructions: { type: String, default: '' },
+    itemType: { type: String, enum: ['Medicine', 'Consumable'], default: 'Medicine' }
+  }],
+  // Follow Up
+  followUpRequired: { type: String, enum: ['Yes', 'No', ''], default: '' },
   followUpDate: { type: Date },
+  reviewNotes: { type: String, default: '' },
+  nextProcedurePlanned: { type: String, default: '' },
   // Pricing (hidden from nursing staff)
   price: { type: Number, default: 0 },
   isFixedPrice: { type: Boolean, default: true },
   // Status
   status: { type: String, enum: ['Completed', 'Draft'], default: 'Draft' },
+  // Dialysis specific fields
+  physicianName: { type: String, default: '' },
+  physicianContact: { type: String, default: '' },
+  emergencyContact: { type: String, default: '' },
+  ipNumber: { type: String, default: '' },
+  dayCareVisitNumber: { type: String, default: '' },
+  dialysisSessions: [{
+    date: { type: Date, default: Date.now },
+    time: { type: String, default: '' },
+    startingWeight: { type: Number },
+    startingBP: { type: String },
+    endingWeight: { type: Number },
+    endingBP: { type: String },
+    fluidRemoved: { type: Number },
+    comments: { type: String, default: '' }
+  }],
+  // Audit Trail
+  auditTrail: [{
+    action: { type: String, required: true },
+    performedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    performedByName: { type: String, default: '' },
+    performedByRole: { type: String, default: '' },
+    timestamp: { type: Date, default: Date.now },
+    remarks: { type: String, default: '' },
+    changedFields: [{
+      fieldName: { type: String },
+      oldValue: { type: String },
+      newValue: { type: String }
+    }],
+    ipAddress: { type: String, default: '' }
+  }],
   // Audit
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,

@@ -38,9 +38,13 @@ import IpdOtFlow from './pages/ipd/IpdOtFlow.jsx';
 import IpdDischargeForm from './pages/ipd/IpdDischargeForm.jsx';
 import OperationTheatreSettings from './pages/admin/OperationTheatreSettings.jsx';
 import IpdOtDashboard from './pages/ipd/IpdOtDashboard.jsx';
+import IpdSameDayDashboard from './pages/ipd/IpdSameDayDashboard.jsx';
 import SameDayCareSettings from './pages/admin/SameDayCareSettings.jsx';
 import SameDayCareWorkspace from './pages/same-day-care/SameDayCareWorkspace.jsx';
 import SameDayCareForm from './pages/same-day-care/SameDayCareForm.jsx';
+import SameDayCareIpdPatients from './pages/same-day-care/SameDayCareIpdPatients.jsx';
+import DialysisWorkspace from './pages/same-day-care/DialysisWorkspace.jsx';
+import DialysisRecordForm from './pages/same-day-care/DialysisRecordForm.jsx';
 import BillingPage from './pages/billing/BillingPage.jsx';
 import DoctorIpdPatients from './pages/doctor/DoctorIpdPatients.jsx';
 import IpdMedicationChart from './pages/ipd/IpdMedicationChart.jsx';
@@ -108,10 +112,17 @@ function App() {
             <Route path="/ipd/ot/:id" element={<IpdOtForm />} />
             <Route path="/ipd/discharge/:id" element={<IpdDischargeForm />} />
             <Route path="/ipd/ot-management" element={<IpdOtDashboard />} />
+            <Route path="/ipd/same-day" element={<IpdSameDayDashboard />} />
           </Route>
           <Route element={<ProtectedRoute allowedRoles={['admin', 'nursing']} requiredModule={6} />}>
             <Route path="/same-day-care" element={<SameDayCareWorkspace />} />
             <Route path="/same-day-care/treatment/:patientId" element={<SameDayCareForm />} />
+            <Route path="/same-day-care/ipd-patients" element={<SameDayCareIpdPatients />} />
+            <Route path="/same-day-care/ipd-chart/:id" element={<IpdMedicationChart />} />
+          </Route>
+          <Route element={<ProtectedRoute allowedRoles={['admin', 'nursing', 'doctor', 'reception']} />}>
+            <Route path="/same-day-care/dialysis" element={<DialysisWorkspace />} />
+            <Route path="/same-day-care/dialysis/treatment/:patientId" element={<DialysisRecordForm />} />
           </Route>
           <Route element={<ProtectedRoute allowedRoles={['admin', 'pharmacy']} requiredModule={7} />}>
             <Route path="/pharmacy" element={<PharmacyWorkspace />} />

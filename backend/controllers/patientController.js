@@ -205,12 +205,24 @@ const createPatient = async (req, res) => {
       const age = dob ? Math.floor((new Date() - new Date(dob)) / (365.25 * 24 * 60 * 60 * 1000)) : null;
 
       // Get default price from settings
-      let defaultPrice = 0;
+      let defaultPrice = 300; // default fallback for 'Minor Injury'
       try {
         const settings = await IpdAdminSettings.findOne(tenantQuery(req));
-        if (settings?.sameDayTreatmentPrices?.length > 0) {
-          defaultPrice = settings.sameDayTreatmentPrices[0]?.price || 0;
+        let foundPrice = null;
+        if (settings?.sameDayCareCategories) {
+          for (const cat of settings.sameDayCareCategories) {
+            const sub = cat.subServices.find(s => s.name.toLowerCase() === 'minor injury');
+            if (sub) {
+              foundPrice = sub.price;
+              break;
+            }
+          }
         }
+        if (foundPrice === null && settings?.sameDayTreatmentPrices) {
+          const service = settings.sameDayTreatmentPrices.find(s => s.name === 'Minor Injury');
+          if (service) foundPrice = service.price;
+        }
+        if (foundPrice !== null) defaultPrice = foundPrice;
       } catch (e) { /* ignore */ }
 
       sameDayTreatmentRecord = new SameDayTreatment({
@@ -225,6 +237,8 @@ const createPatient = async (req, res) => {
         treatmentDate: new Date(),
         diagnosis: '',
         status: 'Draft',
+        price: defaultPrice,
+        isFixedPrice: true,
         createdBy: req.user._id,
         updatedBy: req.user._id
       });
@@ -289,7 +303,7 @@ const createPatient = async (req, res) => {
 // @access  Private
 const getPatients = async (req, res) => {
   try {
-    const { search, excludeCompleted } = req.query;
+    const { search, excludeCompleted, sameDayCareOnly } = req.query;
     let query = tenantQuery(req);
 
     // Role-based filtering
@@ -298,6 +312,28 @@ const getPatients = async (req, res) => {
         .select('patientId');
       const patientIds = [...new Set(doctorVisits.map(v => v.patientId.toString()))];
       query = { ...query, _id: { $in: patientIds } };
+    }
+
+    if (sameDayCareOnly === 'true') {
+      const sdtPatientIds = await SameDayTreatment.find(tenantQuery(req)).distinct('patientId');
+      const sdtVisitPatientIds = await Visit.find(tenantQuery(req, {
+        $or: [
+          { department: 'Same Day Care' },
+          { visitType: 'Same Day Treatment' }
+        ]
+      })).distinct('patientId');
+
+      const allowedPatientIds = [...new Set([
+        ...sdtPatientIds.map(id => id.toString()),
+        ...sdtVisitPatientIds.map(id => id.toString())
+      ])];
+
+      if (query._id) {
+        const intersection = query._id.$in.filter(id => allowedPatientIds.includes(id));
+        query._id = { $in: intersection };
+      } else {
+        query._id = { $in: allowedPatientIds };
+      }
     }
 
     if (search) {

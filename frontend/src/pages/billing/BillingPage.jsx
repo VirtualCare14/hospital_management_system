@@ -63,6 +63,8 @@ const BillingPage = () => {
   const [discountReasonsList, setDiscountReasonsList] = useState([]);
   const [remarks, setRemarks] = useState('');
   const [sdtPricingInBilling, setSdtPricingInBilling] = useState(true);
+  const [accessDiscount, setAccessDiscount] = useState(false);
+  const [directDiscountPercent, setDirectDiscountPercent] = useState(0);
 
   // Discount Configuration & Auto Calculations
   const [applyDiscount, setApplyDiscount] = useState(true);
@@ -223,10 +225,15 @@ const BillingPage = () => {
     try {
       const { data } = await client.get(`/billing/generate/${patient.uhid}?billType=All`);
       setSelectedPatient(data.patient);
-      setItems(data.items || []);
+      const mappedItems = (data.items || []).map(i => ({
+        ...i,
+        discountAmount: i.discountAmount || 0,
+        total: i.total || ((i.price - (i.discountAmount || 0)) * i.quantity) || 0
+      }));
+      setItems(mappedItems);
       
       // Auto-check all items by default
-      setSelectedItemIndexes(data.items ? data.items.map((_, i) => i) : []);
+      setSelectedItemIndexes(mappedItems.map((_, i) => i));
 
       // Pull active unadjusted advances
       setPatientAdvances(data.activeAdvances || []);
@@ -238,6 +245,7 @@ const BillingPage = () => {
         setDiscountReasonsList(data.settings.discountReasons || []);
         setApplyDiscount(true);
         setSdtPricingInBilling(data.settings.sdtPricingInBilling !== false);
+        setAccessDiscount(data.settings.accessDiscount || false);
       }
 
       // Load past bills
@@ -266,8 +274,13 @@ const BillingPage = () => {
 
     try {
       const { data } = await client.get(`/billing/generate/${selectedPatient.uhid}?billType=${newType}`);
-      setItems(data.items || []);
-      setSelectedItemIndexes(data.items ? data.items.map((_, i) => i) : []);
+      const mappedItems = (data.items || []).map(i => ({
+        ...i,
+        discountAmount: i.discountAmount || 0,
+        total: i.total || ((i.price - (i.discountAmount || 0)) * i.quantity) || 0
+      }));
+      setItems(mappedItems);
+      setSelectedItemIndexes(mappedItems.map((_, i) => i));
     } catch (err) {
       toast.error('Failed to reload items');
     } finally {
@@ -294,13 +307,19 @@ const BillingPage = () => {
   const selectedItems = items.filter((_, idx) => selectedItemIndexes.includes(idx));
   const subtotal = selectedItems.reduce((sum, i) => sum + i.total, 0);
 
-  // Automated/Dynamic Discount Calculation (computed during render to avoid useEffect state cycles and TDZ)
-  let discountPercentage = 0;
-  let discountReason = requestAdminDiscount ? 'Admin Discount Requested' : '';
+  // Calculate sum of item-wise discounts
+  const itemDiscountTotal = selectedItems.reduce((sum, i) => sum + ((i.discountAmount || 0) * i.quantity), 0);
 
-  const gstAmount = gstEnabled ? subtotal * (gstPercentage / 100) : 0;
-  const discountAmount = 0;
-  const grandTotal = subtotal + gstAmount;
+  // Automated/Dynamic Discount Calculation (computed during render to avoid useEffect state cycles and TDZ)
+  let discountPercentage = accessDiscount ? parseFloat(directDiscountPercent || 0) : 0;
+  let discountReason = requestAdminDiscount ? 'Admin Discount Requested' : (accessDiscount && directDiscountPercent > 0 ? 'Direct Percentage Discount' : '');
+
+  const percentDiscountAmount = subtotal * (discountPercentage / 100);
+  const discountedSubtotal = Math.max(0, subtotal - percentDiscountAmount);
+
+  const gstAmount = gstEnabled ? discountedSubtotal * (gstPercentage / 100) : 0;
+  const discountAmount = itemDiscountTotal + percentDiscountAmount;
+  const grandTotal = discountedSubtotal + gstAmount;
 
   // Net payable amount after adjusting patient advance
   const maxAllowedAdjustment = Math.min(totalAdvanceAvailable, grandTotal);
@@ -918,6 +937,7 @@ const BillingPage = () => {
                               <th className="p-3">Category</th>
                               <th className="p-3">Description</th>
                               <th className="p-3 text-right">Price</th>
+                              {accessDiscount && <th className="p-3 text-right w-24">Discount (₹)</th>}
                               <th className="p-3 text-right">Qty</th>
                               <th className="p-3 text-right pr-4">Total</th>
                             </tr>
@@ -953,22 +973,26 @@ const BillingPage = () => {
                                     </td>
                                     <td className="p-3 font-bold text-gray-800 max-w-[280px] truncate">{item.description}</td>
                                     <td className="p-3 text-right font-semibold text-gray-600">
-                                      {item.category === 'SameDayTreatment' && sdtPricingInBilling ? (
-                                        <div className="relative inline-block w-24" onClick={(e) => e.stopPropagation()}>
-                                          <span className="absolute left-1.5 top-1 text-gray-400 font-bold">₹</span>
+                                      ₹{(item.price || 0).toFixed(2)}
+                                    </td>
+                                    {accessDiscount && (
+                                      <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
+                                        <div className="relative inline-block w-20">
+                                          <span className="absolute left-1.5 top-1.5 text-gray-400 font-bold text-[10px]">₹</span>
                                           <input
                                             type="number"
                                             min="0"
+                                            max={item.price}
                                             className="input text-xs py-0.5 pl-4 pr-1 font-mono font-bold w-full text-right bg-white border border-orange-200 rounded-lg focus:ring-1 focus:ring-orange-500"
-                                            value={item.price}
+                                            value={item.discountAmount || ''}
                                             onChange={(e) => {
-                                              const newPrice = parseFloat(e.target.value) || 0;
+                                              const discountVal = Math.min(item.price, parseFloat(e.target.value) || 0);
                                               setItems(prev => prev.map((itemVal, valIdx) => {
                                                 if (valIdx === idx) {
                                                   return {
                                                     ...itemVal,
-                                                    price: newPrice,
-                                                    total: newPrice * itemVal.quantity
+                                                    discountAmount: discountVal,
+                                                    total: (itemVal.price - discountVal) * itemVal.quantity
                                                   };
                                                 }
                                                 return itemVal;
@@ -976,10 +1000,8 @@ const BillingPage = () => {
                                             }}
                                           />
                                         </div>
-                                      ) : (
-                                        `₹${(item.price || 0).toFixed(2)}`
-                                      )}
-                                    </td>
+                                      </td>
+                                    )}
                                     <td className="p-3 text-right font-semibold text-gray-600">{item.quantity}</td>
                                     <td className="p-3 text-right font-black text-gray-900 pr-4">₹{(item.total || 0).toFixed(2)}</td>
                                   </tr>
@@ -1041,34 +1063,62 @@ const BillingPage = () => {
                         </div>
                         
                         {/* Discount Manager */}
-                        <div className="space-y-3 bg-orange-50/20 p-2.5 rounded-lg border border-orange-100/50">
-                          <div className="flex items-center justify-between text-gray-500">
-                            <span>Discount (Pending Admin):</span>
-                            <span className="font-bold text-gray-600">₹0.00</span>
-                          </div>
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2 mt-1">
-                              <input
-                                type="checkbox"
-                                id="request-discount-toggle"
-                                className="rounded border-orange-200 text-orange-600 focus:ring-orange-500 h-4 w-4 cursor-pointer"
-                                checked={requestAdminDiscount}
-                                onChange={(e) => setRequestAdminDiscount(e.target.checked)}
-                              />
-                              <label htmlFor="request-discount-toggle" className="text-[11px] font-bold text-gray-700 cursor-pointer">
-                                Request Admin Discount
-                              </label>
+                        {accessDiscount ? (
+                          <div className="space-y-3 bg-orange-50/20 p-2.5 rounded-lg border border-orange-100/50">
+                            <div className="flex items-center justify-between text-gray-500">
+                              <span>Direct Discount applied:</span>
+                              <span className="font-bold text-green-700">- ₹{discountAmount.toFixed(2)}</span>
                             </div>
-                            {requestAdminDiscount && (
-                              <div className="text-[10px] space-y-1 text-gray-600 leading-normal">
-                                <p className="font-bold text-orange-600">Admin discount will be calculated from the subtotal.</p>
-                                <p>Subtotal: <span className="font-semibold text-gray-900">₹{subtotal.toFixed(2)}</span></p>
-                                <p>{gstEnabled ? `GST (${gstPercentage}%) will be recalculated on the discounted subtotal.` : 'GST is not applied, so discount subtracts directly from the total.'}</p>
-                                <p className="text-orange-600">This invoice will be sent as a draft and finalized once Admin approves the percentage.</p>
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[11px] font-bold text-gray-700">Discount Percent (%):</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  step="0.1"
+                                  className="input text-xs py-1 px-1.5 font-mono font-bold w-20 text-green-700 bg-white border border-orange-200 rounded-lg text-right"
+                                  placeholder="0"
+                                  value={directDiscountPercent || ''}
+                                  onChange={(e) => setDirectDiscountPercent(Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))}
+                                />
                               </div>
-                            )}
+                              <div className="text-[10px] space-y-1 text-gray-500 border-t border-orange-100/50 pt-1">
+                                <div className="flex justify-between"><span>Item discounts:</span><span className="font-bold text-gray-700">₹{itemDiscountTotal.toFixed(2)}</span></div>
+                                <div className="flex justify-between"><span>Percent discount:</span><span className="font-bold text-gray-700">₹{percentDiscountAmount.toFixed(2)}</span></div>
+                              </div>
+                            </div>
                           </div>
-                        </div>
+                        ) : (
+                          <div className="space-y-3 bg-orange-50/20 p-2.5 rounded-lg border border-orange-100/50">
+                            <div className="flex items-center justify-between text-gray-500">
+                              <span>Discount (Pending Admin):</span>
+                              <span className="font-bold text-gray-600">₹0.00</span>
+                            </div>
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2 mt-1">
+                                <input
+                                  type="checkbox"
+                                  id="request-discount-toggle"
+                                  className="rounded border-orange-200 text-orange-600 focus:ring-orange-500 h-4 w-4 cursor-pointer"
+                                  checked={requestAdminDiscount}
+                                  onChange={(e) => setRequestAdminDiscount(e.target.checked)}
+                                />
+                                <label htmlFor="request-discount-toggle" className="text-[11px] font-bold text-gray-700 cursor-pointer">
+                                  Request Admin Discount
+                                </label>
+                              </div>
+                              {requestAdminDiscount && (
+                                <div className="text-[10px] space-y-1 text-gray-600 leading-normal">
+                                  <p className="font-bold text-orange-600">Admin discount will be calculated from the subtotal.</p>
+                                  <p>Subtotal: <span className="font-semibold text-gray-900">₹{subtotal.toFixed(2)}</span></p>
+                                  <p>{gstEnabled ? `GST (${gstPercentage}%) will be recalculated on the discounted subtotal.` : 'GST is not applied, so discount subtracts directly from the total.'}</p>
+                                  <p className="text-orange-600">This invoice will be sent as a draft and finalized once Admin approves the percentage.</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
 
                         {/* Grand Total */}
                         <div className="border-t border-orange-100 pt-2 flex justify-between items-center text-sm font-bold text-gray-900">
@@ -1582,343 +1632,403 @@ const BillingPage = () => {
 
       {/* ========================================================================= */}
       {/* ===================== MODAL 3: PRINT PREVIEW DRAWER ===================== */}
-      {showPrintModal && printBillObj && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto animate-fadeIn">
-          <div className="bg-gray-100 rounded-2xl shadow-2xl max-w-4xl w-full flex flex-col h-[90vh]">
-            
-            {/* Modal Header */}
-            <div className="bg-white border-b border-gray-200 px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0 rounded-t-2xl">
-              <div className="flex items-center gap-2">
-                <Printer className="h-5 w-5 text-orange-500" />
-                <div>
-                  <h3 className="font-black text-gray-900 text-sm">Invoice No: {printBillObj.invoiceNo || printBillObj.billNo}</h3>
-                  <p className="text-[10px] text-gray-500">Select formatting layout before printing or exporting</p>
+      {showPrintModal && printBillObj && (() => {
+        const hasItemDiscounts = (printBillObj.items || []).some(item => (item.discountAmount || 0) > 0);
+        const totalItemDiscounts = (printBillObj.items || []).reduce((sum, item) => sum + ((item.discountAmount || 0) * item.quantity), 0);
+        const actualGrossSubtotal = (printBillObj.items || []).reduce((sum, item) => sum + ((item.price || 0) * item.quantity), 0);
+        const generalDiscountAmount = (printBillObj.discountAmount || 0) - totalItemDiscounts;
+        const footerColSpan = hasItemDiscounts ? 7 : 5;
+        return (
+          <div className="fixed inset-0 bg-black/75 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto animate-fadeIn">
+            <div className="bg-gray-100 rounded-2xl shadow-2xl max-w-4xl w-full flex flex-col h-[90vh]">
+              
+              {/* Modal Header */}
+              <div className="bg-white border-b border-gray-200 px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0 rounded-t-2xl">
+                <div className="flex items-center gap-2">
+                  <Printer className="h-5 w-5 text-orange-500" />
+                  <div>
+                    <h3 className="font-black text-gray-900 text-sm">Invoice No: {printBillObj.invoiceNo || printBillObj.billNo}</h3>
+                    <p className="text-[10px] text-gray-500">Select formatting layout before printing or exporting</p>
+                  </div>
+                </div>
+
+                {/* Layout Switcher tabs */}
+                <div className="flex bg-gray-100 p-0.5 rounded-lg border border-gray-200 w-fit text-xs font-bold">
+                  <button
+                    onClick={() => setPrintLayoutTab('invoice')}
+                    className={`px-3 py-1.5 rounded-md transition-all ${
+                      printLayoutTab === 'invoice' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500'
+                    }`}
+                  >
+                    Standard Tax Invoice
+                  </button>
+                  <button
+                    onClick={() => setPrintLayoutTab('summary')}
+                    className={`px-3 py-1.5 rounded-md transition-all ${
+                      printLayoutTab === 'summary' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500'
+                    }`}
+                  >
+                    Bill Summary Ledger
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button onClick={handleDownloadPDF} className="btn-secondary py-2 px-3 text-xs flex items-center gap-1">
+                    <Download className="h-3.5 w-3.5" /> PDF
+                  </button>
+                  <button onClick={handlePrintAction} className="btn py-2 px-4 text-xs flex items-center gap-1">
+                    <Printer className="h-3.5 w-3.5" /> Print Out
+                  </button>
+                  <button onClick={() => setShowPrintModal(false)} className="p-2 bg-gray-100 hover:bg-gray-200 rounded-full">
+                    <X className="h-4.5 w-4.5 text-gray-500" />
+                  </button>
                 </div>
               </div>
 
-              {/* Layout Switcher tabs */}
-              <div className="flex bg-gray-100 p-0.5 rounded-lg border border-gray-200 w-fit text-xs font-bold">
-                <button
-                  onClick={() => setPrintLayoutTab('invoice')}
-                  className={`px-3 py-1.5 rounded-md transition-all ${
-                    printLayoutTab === 'invoice' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500'
-                  }`}
+              {/* Print Area Preview Container */}
+              <div className="flex-1 overflow-y-auto p-8 flex justify-center bg-gray-200/50">
+                <div
+                  ref={printAreaRef}
+                  className="bg-white shadow-lg w-[210mm] min-h-[297mm] p-10 border border-gray-300 relative text-gray-900 overflow-hidden text-left leading-normal"
+                  id="invoice-print-area"
                 >
-                  Standard Tax Invoice
-                </button>
-                <button
-                  onClick={() => setPrintLayoutTab('summary')}
-                  className={`px-3 py-1.5 rounded-md transition-all ${
-                    printLayoutTab === 'summary' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500'
-                  }`}
-                >
-                  Bill Summary Ledger
-                </button>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button onClick={handleDownloadPDF} className="btn-secondary py-2 px-3 text-xs flex items-center gap-1">
-                  <Download className="h-3.5 w-3.5" /> PDF
-                </button>
-                <button onClick={handlePrintAction} className="btn py-2 px-4 text-xs flex items-center gap-1">
-                  <Printer className="h-3.5 w-3.5" /> Print Out
-                </button>
-                <button onClick={() => setShowPrintModal(false)} className="p-2 bg-gray-100 hover:bg-gray-200 rounded-full">
-                  <X className="h-4.5 w-4.5 text-gray-500" />
-                </button>
-              </div>
-            </div>
-
-            {/* Print Area Preview Container */}
-            <div className="flex-1 overflow-y-auto p-8 flex justify-center bg-gray-200/50">
-              <div
-                ref={printAreaRef}
-                className="bg-white shadow-lg w-[210mm] min-h-[297mm] p-10 border border-gray-300 relative text-gray-900 overflow-hidden text-left leading-normal"
-                id="invoice-print-area"
-              >
-                {/* Printout stylesheet rules */}
-                <style>{`
-                  #invoice-print-area {
-                    font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
-                    color: #000000 !important;
-                    background-color: #ffffff !important;
-                  }
-                  #invoice-print-area * {
-                    color: #000000 !important;
-                    border-color: #000000 !important;
-                  }
-                  #invoice-print-area table {
-                    width: 100%;
-                    border-collapse: collapse;
-                    margin-top: 15px;
-                  }
-                  #invoice-print-area th {
-                    border: 1px solid #000000;
-                    padding: 8px 10px;
-                    font-weight: 800;
-                    text-align: left;
-                    font-size: 11px;
-                    background-color: transparent !important;
-                    -webkit-print-color-adjust: exact;
-                    print-color-adjust: exact;
-                  }
-                  #invoice-print-area td {
-                    border: 1px solid #000000;
-                    padding: 8px 10px;
-                    font-size: 11px;
-                  }
-                  #invoice-print-area .meta-label {
-                    font-weight: 800;
-                  }
-                  #invoice-print-area .logo-grayscale {
-                    filter: grayscale(100%) !important;
-                    -webkit-filter: grayscale(100%) !important;
-                  }
-                  @media print {
-                    body * {
-                      visibility: hidden;
-                    }
-                    #invoice-print-area, #invoice-print-area * {
-                      visibility: visible;
-                      color: #000000 !important;
-                      background-color: transparent !important;
-                      background: none !important;
-                      box-shadow: none !important;
-                    }
+                  {/* Printout stylesheet rules */}
+                  <style>{`
                     #invoice-print-area {
-                      position: absolute;
-                      left: 0;
-                      top: 0;
-                      width: 100% !important;
-                      border: none !important;
-                      box-shadow: none !important;
-                      padding: 10mm !important;
-                      margin: 0 !important;
+                      font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
+                      color: #000000 !important;
+                      background-color: #ffffff !important;
                     }
-                  }
-                `}</style>
+                    #invoice-print-area * {
+                      color: #000000 !important;
+                      border-color: #000000 !important;
+                    }
+                    #invoice-print-area table {
+                      width: 100%;
+                      border-collapse: collapse;
+                      margin-top: 15px;
+                    }
+                    #invoice-print-area th {
+                      border: 1px solid #000000;
+                      padding: 8px 10px;
+                      font-weight: 800;
+                      text-align: left;
+                      font-size: 11px;
+                      background-color: transparent !important;
+                      -webkit-print-color-adjust: exact;
+                      print-color-adjust: exact;
+                    }
+                    #invoice-print-area td {
+                      border: 1px solid #000000;
+                      padding: 8px 10px;
+                      font-size: 11px;
+                    }
+                    #invoice-print-area .meta-label {
+                      font-weight: 800;
+                    }
+                    #invoice-print-area .logo-grayscale {
+                      filter: grayscale(100%) !important;
+                      -webkit-filter: grayscale(100%) !important;
+                    }
+                    @media print {
+                      body * {
+                        visibility: hidden;
+                      }
+                      #invoice-print-area, #invoice-print-area * {
+                        visibility: visible;
+                        color: #000000 !important;
+                        background-color: transparent !important;
+                        background: none !important;
+                        box-shadow: none !important;
+                      }
+                      #invoice-print-area {
+                        position: absolute;
+                        left: 0;
+                        top: 0;
+                        width: 100% !important;
+                        border: none !important;
+                        box-shadow: none !important;
+                        padding: 10mm !important;
+                        margin: 0 !important;
+                      }
+                    }
+                  `}</style>
 
-                {/* Hospital Header */}
-                <div className="border-b-2 border-black pb-4 flex justify-between items-start gap-4">
-                  <div className="flex items-center gap-4">
-                    {hospitalInfo?.logoUrl && (
-                      <img
-                        src={hospitalInfo.logoUrl}
-                        alt="Hospital Logo"
-                        className="h-16 w-16 object-contain logo-grayscale"
-                      />
-                    )}
-                    <div>
-                      <h1 className="text-xl font-black uppercase tracking-tight">{hospitalInfo?.hospitalName || 'HOSPITAL NAME'}</h1>
-                      {hospitalInfo?.hospitalHeading && <p className="text-[10px] font-bold text-gray-600 -mt-0.5">{hospitalInfo.hospitalHeading}</p>}
-                      <p className="text-[10px] text-gray-600 mt-1 max-w-sm">{hospitalInfo?.address || ''}</p>
+                  {/* Hospital Header */}
+                  <div className="border-b-2 border-black pb-4 flex justify-between items-start gap-4">
+                    <div className="flex items-center gap-4">
+                      {hospitalInfo?.logoUrl && (
+                        <img
+                          src={hospitalInfo.logoUrl}
+                          alt="Hospital Logo"
+                          className="h-16 w-16 object-contain logo-grayscale"
+                        />
+                      )}
+                      <div>
+                        <h1 className="text-xl font-black uppercase tracking-tight">{hospitalInfo?.hospitalName || 'HOSPITAL NAME'}</h1>
+                        {hospitalInfo?.hospitalHeading && <p className="text-[10px] font-bold text-gray-600 -mt-0.5">{hospitalInfo.hospitalHeading}</p>}
+                        <p className="text-[10px] text-gray-600 mt-1 max-w-sm">{hospitalInfo?.address || ''}</p>
+                      </div>
+                    </div>
+                    <div className="text-right text-[10px] text-gray-700 space-y-0.5 font-semibold">
+                      {hospitalInfo?.phoneNumbers?.length > 0 && <p>Phone: {hospitalInfo.phoneNumbers.join(', ')}</p>}
+                      {hospitalInfo?.emailAddress && <p>Email: {hospitalInfo.emailAddress}</p>}
+                      {hospitalInfo?.website && <p>Website: {hospitalInfo.website}</p>}
+                      {hospitalInfo?.gstNumber && <p>GSTIN: {hospitalInfo.gstNumber}</p>}
                     </div>
                   </div>
-                  <div className="text-right text-[10px] text-gray-700 space-y-0.5 font-semibold">
-                    {hospitalInfo?.phoneNumbers?.length > 0 && <p>Phone: {hospitalInfo.phoneNumbers.join(', ')}</p>}
-                    {hospitalInfo?.emailAddress && <p>Email: {hospitalInfo.emailAddress}</p>}
-                    {hospitalInfo?.website && <p>Website: {hospitalInfo.website}</p>}
-                    {hospitalInfo?.gstNumber && <p>GSTIN: {hospitalInfo.gstNumber}</p>}
-                  </div>
-                </div>
 
-                {/* Invoice Title */}
-                <div className="text-center my-6">
-                  <h2 className="text-base font-black uppercase tracking-widest border-b border-black w-fit mx-auto pb-0.5">
-                    {printLayoutTab === 'invoice' ? 'TAX INVOICE' : 'BILL SUMMARY LEDGER'}
-                  </h2>
-                  {printBillObj.status === 'Cancelled' && (
-                    <div className="text-red-600 text-xs font-black mt-1 uppercase border-2 border-red-600 px-3 py-1 rounded w-fit mx-auto animate-pulse">
-                      Cancelled Invoice
+                  {/* Invoice Title */}
+                  <div className="text-center my-6">
+                    <h2 className="text-base font-black uppercase tracking-widest border-b border-black w-fit mx-auto pb-0.5">
+                      {printLayoutTab === 'invoice' ? 'TAX INVOICE' : 'BILL SUMMARY LEDGER'}
+                    </h2>
+                    {printBillObj.status === 'Cancelled' && (
+                      <div className="text-red-600 text-xs font-black mt-1 uppercase border-2 border-red-600 px-3 py-1 rounded w-fit mx-auto animate-pulse">
+                        Cancelled Invoice
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Patient & Invoice Meta Information Block */}
+                  <div className="grid grid-cols-2 gap-6 text-[11px] mb-6">
+                    <div className="space-y-1 p-3 rounded border border-gray-300">
+                      <h3 className="font-extrabold text-xs border-b border-gray-300 pb-1 uppercase">Patient Details</h3>
+                      <p><span className="meta-label">Patient Name:</span> {printBillObj.patientName}</p>
+                      <p><span className="meta-label">UHID:</span> <span className="font-mono">{formatUhid(printBillObj.uhid)}</span></p>
+                      <p><span className="meta-label">Age / Gender:</span> {printBillObj.patientAge ? `${printBillObj.patientAge} Years` : 'N/A'} / {printBillObj.patientGender}</p>
+                      <p><span className="meta-label">Mobile:</span> {printBillObj.patientMobile || '-'}</p>
+                    </div>
+                    
+                    <div className="space-y-1 p-3 rounded border border-gray-300">
+                      <h3 className="font-extrabold text-xs border-b border-gray-300 pb-1 uppercase">Invoice Metadata</h3>
+                      <p><span className="meta-label">Invoice No:</span> <span className="font-mono font-bold">{printBillObj.invoiceNo || printBillObj.billNo}</span></p>
+                      <p><span className="meta-label">Date & Time:</span> {new Date(printBillObj.createdAt).toLocaleString('en-IN')}</p>
+                      <p><span className="meta-label">Consulting Doctor:</span> {printBillObj.doctorName || selectedPatient?.doctorName || 'General Staff'}</p>
+                      {selectedPatient?.admissionDetails?.ipdNumber && (
+                        <p><span className="meta-label">IPD Number:</span> {selectedPatient.admissionDetails.ipdNumber}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Charges Table */}
+                  <table>
+                    <thead>
+                      {hasItemDiscounts ? (
+                        <tr>
+                          <th className="w-12 text-center">Sr No</th>
+                          <th>Service Name</th>
+                          <th>Category</th>
+                          <th className="text-right w-12">Qty</th>
+                          <th className="text-right w-20">Actual Price</th>
+                          <th className="text-right w-20">Discount Price</th>
+                          <th className="text-right w-20">Total Discount</th>
+                          <th className="text-right w-20">Amount</th>
+                        </tr>
+                      ) : (
+                        <tr>
+                          <th className="w-12 text-center">Sr No</th>
+                          <th>Service Name</th>
+                          <th>Category</th>
+                          <th className="text-right w-16">Quantity</th>
+                          <th className="text-right w-20">Rate</th>
+                          <th className="text-right w-24">Amount</th>
+                        </tr>
+                      )}
+                    </thead>
+                    <tbody>
+                      {(printBillObj.items || []).map((item, idx) => {
+                        const itemDisc = item.discountAmount || 0;
+                        const itemTotalDisc = itemDisc * item.quantity;
+                        return hasItemDiscounts ? (
+                          <tr key={idx}>
+                            <td className="text-center">{idx + 1}</td>
+                            <td className="font-bold">{item.description}</td>
+                            <td>{item.category}</td>
+                            <td className="text-right">{item.quantity}</td>
+                            <td className="text-right font-mono">₹{(item.price || 0).toFixed(2)}</td>
+                            <td className="text-right font-mono text-green-700">₹{itemDisc.toFixed(2)}</td>
+                            <td className="text-right font-mono text-green-700">₹{itemTotalDisc.toFixed(2)}</td>
+                            <td className="text-right font-mono font-bold">₹{(item.total || 0).toFixed(2)}</td>
+                          </tr>
+                        ) : (
+                          <tr key={idx}>
+                            <td className="text-center">{idx + 1}</td>
+                            <td className="font-bold">{item.description}</td>
+                            <td>{item.category}</td>
+                            <td className="text-right">{item.quantity}</td>
+                            <td className="text-right font-mono">₹{(item.price || 0).toFixed(2)}</td>
+                            <td className="text-right font-mono font-bold">₹{(item.total || 0).toFixed(2)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot className="font-bold text-[11px] font-mono">
+                      {hasItemDiscounts ? (
+                        <>
+                          <tr>
+                            <td colSpan={footerColSpan} className="text-right border-r-0">Gross Total (Before Discount):</td>
+                            <td className="text-right border-l-0">₹{actualGrossSubtotal.toFixed(2)}</td>
+                          </tr>
+                          <tr>
+                            <td colSpan={footerColSpan} className="text-right border-r-0">Item-wise Discount:</td>
+                            <td className="text-right border-l-0 text-green-700">- ₹{totalItemDiscounts.toFixed(2)}</td>
+                          </tr>
+                          <tr>
+                            <td colSpan={footerColSpan} className="text-right border-r-0">Subtotal after Item Discount:</td>
+                            <td className="text-right border-l-0">₹{(printBillObj.subtotal || 0).toFixed(2)}</td>
+                          </tr>
+                        </>
+                      ) : (
+                        <tr>
+                          <td colSpan={footerColSpan} className="text-right border-r-0">Gross Subtotal:</td>
+                          <td className="text-right border-l-0">₹{(printBillObj.subtotal || 0).toFixed(2)}</td>
+                        </tr>
+                      )}
+                      {printBillObj.gstPercentage > 0 && (
+                        <tr>
+                          <td colSpan={footerColSpan} className="text-right border-r-0">GST ({printBillObj.gstPercentage}%):</td>
+                          <td className="text-right border-l-0">+ ₹{(printBillObj.gstAmount || 0).toFixed(2)}</td>
+                        </tr>
+                      )}
+                      {generalDiscountAmount > 0 && (
+                        <tr>
+                          <td colSpan={footerColSpan} className="text-right border-r-0">
+                            {printBillObj.discountPercentage > 0 
+                              ? `General Discount (${printBillObj.discountPercentage}%):` 
+                              : 'General Discount:'}
+                          </td>
+                          <td className="text-right border-l-0 text-green-700">- ₹{generalDiscountAmount.toFixed(2)}</td>
+                        </tr>
+                      )}
+                      {!hasItemDiscounts && printBillObj.discountAmount > 0 && (
+                        <tr>
+                          <td colSpan={footerColSpan} className="text-right border-r-0">Discount:</td>
+                          <td className="text-right border-l-0 text-green-700">- ₹{(printBillObj.discountAmount || 0).toFixed(2)}</td>
+                        </tr>
+                      )}
+                      <tr className="text-[12px] font-black uppercase">
+                        <td colSpan={footerColSpan} className="text-right border-r-0">Grand Total:</td>
+                        <td className="text-right border-l-0">₹{(printBillObj.grandTotal || 0).toFixed(2)}</td>
+                      </tr>
+
+                      {/* LAYOUT DIFFERENCE: SUMMARY LEDGER DETAILS */}
+                      {printLayoutTab === 'summary' && (
+                        <>
+                          {printBillObj.advanceAdjusted > 0 && (
+                            <tr className="text-green-700">
+                              <td colSpan={footerColSpan} className="text-right border-r-0">Advance Adjusted:</td>
+                              <td className="text-right border-l-0">- ₹{(printBillObj.advanceAdjusted || 0).toFixed(2)}</td>
+                            </tr>
+                          )}
+                          <tr className="text-blue-700">
+                            <td colSpan={footerColSpan} className="text-right border-r-0">Amount Paid In Invoice:</td>
+                            <td className="text-right border-l-0">₹{(printBillObj.amountPaid || 0).toFixed(2)}</td>
+                          </tr>
+                          {printBillObj.dueAmount > 0 && (
+                            <tr className="text-red-600">
+                              <td colSpan={footerColSpan} className="text-right border-r-0">Balance Due Outstanding:</td>
+                              <td className="text-right border-l-0 font-black">₹{(printBillObj.dueAmount || 0).toFixed(2)}</td>
+                            </tr>
+                          )}
+                        </>
+                      )}
+                    </tfoot>
+                  </table>
+
+                  {/* Complete Advance Payments Table shown only in Bill Summary */}
+                  {printLayoutTab === 'summary' && allPatientAdvances.length > 0 && (
+                    <div className="mt-6">
+                      <h4 className="font-extrabold uppercase text-xs border-b border-black pb-1 mb-2">Advance Payments Ledger</h4>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th className="text-center w-12">Sr No</th>
+                            <th>Date & Time</th>
+                            <th>Payment Mode</th>
+                            <th>Remarks</th>
+                            <th>Status</th>
+                            <th className="text-right w-28">Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {allPatientAdvances.map((adv, aIdx) => (
+                            <tr key={adv._id}>
+                              <td className="text-center">{aIdx + 1}</td>
+                              <td>{new Date(adv.createdAt).toLocaleString('en-IN')}</td>
+                              <td className="font-bold text-gray-750">{adv.paymentMode}</td>
+                              <td className="italic text-gray-500">{adv.remarks || 'No remarks'}</td>
+                              <td>
+                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase ${
+                                  adv.isAdjusted ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-850'
+                                }`}>
+                                  {adv.isAdjusted ? 'Adjusted' : 'Available'}
+                                </span>
+                              </td>
+                              <td className="text-right font-mono font-bold">₹{(adv.amount || 0).toFixed(2)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot className="font-bold font-mono text-[11px]">
+                          <tr>
+                            <td colSpan="5" className="text-right border-r-0">Total Advance Collected:</td>
+                            <td className="text-right border-l-0">
+                              ₹{allPatientAdvances.reduce((sum, a) => sum + a.amount, 0).toFixed(2)}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
                     </div>
                   )}
-                </div>
 
-                {/* Patient & Invoice Meta Information Block */}
-                <div className="grid grid-cols-2 gap-6 text-[11px] mb-6">
-                  <div className="space-y-1 p-3 rounded border border-gray-300">
-                    <h3 className="font-extrabold text-xs border-b border-gray-300 pb-1 uppercase">Patient Details</h3>
-                    <p><span className="meta-label">Patient Name:</span> {printBillObj.patientName}</p>
-                    <p><span className="meta-label">UHID:</span> <span className="font-mono">{formatUhid(printBillObj.uhid)}</span></p>
-                    <p><span className="meta-label">Age / Gender:</span> {printBillObj.patientAge ? `${printBillObj.patientAge} Years` : 'N/A'} / {printBillObj.patientGender}</p>
-                    <p><span className="meta-label">Mobile:</span> {printBillObj.patientMobile || '-'}</p>
-                  </div>
-                  
-                  <div className="space-y-1 p-3 rounded border border-gray-300">
-                    <h3 className="font-extrabold text-xs border-b border-gray-300 pb-1 uppercase">Invoice Metadata</h3>
-                    <p><span className="meta-label">Invoice No:</span> <span className="font-mono font-bold">{printBillObj.invoiceNo || printBillObj.billNo}</span></p>
-                    <p><span className="meta-label">Date & Time:</span> {new Date(printBillObj.createdAt).toLocaleString('en-IN')}</p>
-                    <p><span className="meta-label">Consulting Doctor:</span> {printBillObj.doctorName || selectedPatient?.doctorName || 'General Staff'}</p>
-                    {selectedPatient?.admissionDetails?.ipdNumber && (
-                      <p><span className="meta-label">IPD Number:</span> {selectedPatient.admissionDetails.ipdNumber}</p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Charges Table */}
-                <table>
-                  <thead>
-                    <tr>
-                      <th className="w-12 text-center">Sr No</th>
-                      <th>Service Name</th>
-                      <th>Category</th>
-                      <th className="text-right w-16">Quantity</th>
-                      <th className="text-right w-20">Rate</th>
-                      <th className="text-right w-24">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(printBillObj.items || []).map((item, idx) => (
-                      <tr key={idx}>
-                        <td className="text-center">{idx + 1}</td>
-                        <td className="font-bold">{item.description}</td>
-                        <td>{item.category}</td>
-                        <td className="text-right">{item.quantity}</td>
-                        <td className="text-right font-mono">₹{(item.price || 0).toFixed(2)}</td>
-                        <td className="text-right font-mono font-bold">₹{(item.total || 0).toFixed(2)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="font-bold text-[11px] font-mono">
-                    <tr>
-                      <td colSpan="5" className="text-right border-r-0">Gross Subtotal:</td>
-                      <td className="text-right border-l-0">₹{(printBillObj.subtotal || 0).toFixed(2)}</td>
-                    </tr>
-                    {printBillObj.gstPercentage > 0 && (
-                      <tr>
-                        <td colSpan="5" className="text-right border-r-0">GST ({printBillObj.gstPercentage}%):</td>
-                        <td className="text-right border-l-0">+ ₹{(printBillObj.gstAmount || 0).toFixed(2)}</td>
-                      </tr>
-                    )}
-                    {printBillObj.discountPercentage > 0 && (
-                      <tr>
-                        <td colSpan="5" className="text-right border-r-0">Discount ({printBillObj.discountPercentage}%):</td>
-                        <td className="text-right border-l-0">- ₹{(printBillObj.discountAmount || 0).toFixed(2)}</td>
-                      </tr>
-                    )}
-                    <tr className="text-[12px] font-black uppercase">
-                      <td colSpan="5" className="text-right border-r-0">Grand Total:</td>
-                      <td className="text-right border-l-0">₹{(printBillObj.grandTotal || 0).toFixed(2)}</td>
-                    </tr>
-
-                    {/* LAYOUT DIFFERENCE: SUMMARY LEDGER DETAILS */}
-                    {printLayoutTab === 'summary' && (
-                      <>
-                        {printBillObj.advanceAdjusted > 0 && (
-                          <tr className="text-green-700">
-                            <td colSpan="5" className="text-right border-r-0">Advance Adjusted:</td>
-                            <td className="text-right border-l-0">- ₹{(printBillObj.advanceAdjusted || 0).toFixed(2)}</td>
-                          </tr>
-                        )}
-                        <tr className="text-blue-700">
-                          <td colSpan="5" className="text-right border-r-0">Amount Paid In Invoice:</td>
-                          <td className="text-right border-l-0">₹{(printBillObj.amountPaid || 0).toFixed(2)}</td>
-                        </tr>
-                        {printBillObj.dueAmount > 0 && (
-                          <tr className="text-red-600">
-                            <td colSpan="5" className="text-right border-r-0">Balance Due Outstanding:</td>
-                            <td className="text-right border-l-0 font-black">₹{(printBillObj.dueAmount || 0).toFixed(2)}</td>
-                          </tr>
-                        )}
-                      </>
-                    )}
-                  </tfoot>
-                </table>
-
-                {/* Complete Advance Payments Table shown only in Bill Summary */}
-                {printLayoutTab === 'summary' && allPatientAdvances.length > 0 && (
-                  <div className="mt-6">
-                    <h4 className="font-extrabold uppercase text-xs border-b border-black pb-1 mb-2">Advance Payments Ledger</h4>
-                    <table>
-                      <thead>
-                        <tr>
-                          <th className="text-center w-12">Sr No</th>
-                          <th>Date & Time</th>
-                          <th>Payment Mode</th>
-                          <th>Remarks</th>
-                          <th>Status</th>
-                          <th className="text-right w-28">Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {allPatientAdvances.map((adv, idx) => (
-                          <tr key={adv._id || idx}>
-                            <td className="text-center">{idx + 1}</td>
-                            <td>
-                              {adv.date ? new Date(adv.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : ''} {adv.time || ''}
-                            </td>
-                            <td>{adv.paymentMode}</td>
-                            <td className="italic">{adv.remarks || '-'}</td>
-                            <td className="font-bold">
-                              {adv.isAdjusted ? (
-                                <span className="text-gray-500">Adjusted</span>
-                              ) : (
-                                <span className="text-green-700">Available</span>
-                              )}
-                            </td>
-                            <td className="text-right font-mono font-bold">₹{(adv.amount || 0).toFixed(2)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot className="font-bold font-mono text-[11px]">
-                        <tr>
-                          <td colSpan="5" className="text-right border-r-0">Total Advance Collected:</td>
-                          <td className="text-right border-l-0">
-                            ₹{allPatientAdvances.reduce((sum, a) => sum + a.amount, 0).toFixed(2)}
-                          </td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                )}
-
-                {/* Additional payment history shown only in Bill Summary */}
-                {printLayoutTab === 'summary' && (
-                  <div className="mt-6 text-[10px] space-y-2 border border-gray-300 p-3 rounded">
-                    <h4 className="font-extrabold uppercase text-xs border-b border-gray-200 pb-1">Payment & Adjustment History</h4>
-                    <p><span className="font-bold">Payment Mode:</span> {printBillObj.paymentMode || 'N/A'}</p>
-                    {printBillObj.transactionRef && <p><span className="font-bold">Transaction Ref:</span> {printBillObj.transactionRef}</p>}
-                    {printBillObj.paymentMode === 'Mixed Payment' && printBillObj.mixedPayments?.length > 0 && (
-                      <p>
-                        <span className="font-bold">Mixed Payment Split:</span>{' '}
-                        {printBillObj.mixedPayments.map(p => `${p.method}: ₹${p.amount.toFixed(2)}`).join(' | ')}
-                      </p>
-                    )}
-                    {printBillObj.remarks && <p><span className="font-bold">Invoice Remarks:</span> {printBillObj.remarks}</p>}
-                  </div>
-                )}
-
-                {/* Footer Declaration */}
-                {hospitalInfo?.invoiceFooterMessage ? (
-                  <p className="text-[10px] text-gray-500 italic mt-8 text-center">{hospitalInfo.invoiceFooterMessage}</p>
-                ) : (
-                  <p className="text-[9px] text-gray-400 italic mt-8 text-center">Computer generated document. Signature not required unless manual stamp is present.</p>
-                )}
-
-                {/* Bottom Signatures Block */}
-                <div className="mt-12 border-t border-gray-300 pt-6">
-                  <div className="grid grid-cols-3 gap-4 text-[10px] text-center font-bold">
-                    <div className="text-left">
-                      <p className="text-gray-400 text-[9px] uppercase font-black mb-6">Prepared By</p>
-                      <p className="text-gray-800">{printBillObj.createdBy?.doctorName || printBillObj.createdBy?.username || '-'}</p>
+                  {/* Additional payment history shown only in Bill Summary */}
+                  {printLayoutTab === 'summary' && (
+                    <div className="mt-6 text-[10px] space-y-2 border border-gray-300 p-3 rounded">
+                      <h4 className="font-extrabold uppercase text-xs border-b border-gray-200 pb-1">Payment & Adjustment History</h4>
+                      <p><span className="font-bold">Payment Mode:</span> {printBillObj.paymentMode || 'N/A'}</p>
+                      {printBillObj.transactionRef && <p><span className="font-bold">Transaction Ref:</span> {printBillObj.transactionRef}</p>}
+                      {printBillObj.paymentMode === 'Mixed Payment' && printBillObj.mixedPayments?.length > 0 && (
+                        <p>
+                          <span className="font-bold">Mixed Payment Split:</span>{' '}
+                          {printBillObj.mixedPayments.map(p => `${p.method}: ₹${p.amount.toFixed(2)}`).join(' | ')}
+                        </p>
+                      )}
+                      {printBillObj.remarks && <p><span className="font-bold">Invoice Remarks:</span> {printBillObj.remarks}</p>}
                     </div>
-                    <div>
-                      <p className="text-gray-400 text-[9px] uppercase font-black mb-6">Patient Signature</p>
-                      <div className="border-b border-gray-300 w-3/4 mx-auto mt-6"></div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-gray-400 text-[9px] uppercase font-black mb-6">Authorized Stamp & Sign</p>
-                      <div className="border-b border-gray-300 w-3/4 ml-auto mt-6"></div>
+                  )}
+
+                  {/* Footer Declaration */}
+                  {hospitalInfo?.invoiceFooterMessage ? (
+                    <p className="text-[10px] text-gray-500 italic mt-8 text-center">{hospitalInfo.invoiceFooterMessage}</p>
+                  ) : (
+                    <p className="text-[9px] text-gray-400 italic mt-8 text-center">Computer generated document. Signature not required unless manual stamp is present.</p>
+                  )}
+
+                  {/* Bottom Signatures Block */}
+                  <div className="mt-12 border-t border-gray-300 pt-6">
+                    <div className="grid grid-cols-3 gap-4 text-[10px] text-center font-bold">
+                      <div className="text-left">
+                        <p className="text-gray-400 text-[9px] uppercase font-black mb-6">Prepared By</p>
+                        <p className="text-gray-800">{printBillObj.createdBy?.doctorName || printBillObj.createdBy?.username || '-'}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400 text-[9px] uppercase font-black mb-6">Patient Signature</p>
+                        <div className="border-b border-gray-300 w-3/4 mx-auto mt-6"></div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-gray-400 text-[9px] uppercase font-black mb-6">Authorized Stamp & Sign</p>
+                        <div className="border-b border-gray-300 w-3/4 ml-auto mt-6"></div>
+                      </div>
                     </div>
                   </div>
-                </div>
 
+                </div>
               </div>
-            </div>
 
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
     </div>
   );

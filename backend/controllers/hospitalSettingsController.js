@@ -47,7 +47,7 @@ const createOrUpdateHospitalSettings = asyncHandler(async (req, res) => {
       gstEnabled, gstPercentage, gstRules,
       discountEnabled, discountReasons,
       discountPercentage, discountFixedAmount, patientSpecificDiscounts,
-      sdtPricingInBilling
+      sdtPricingInBilling, accessDiscount
     } = req.body;
     
     // Validate required fields
@@ -91,7 +91,8 @@ const createOrUpdateHospitalSettings = asyncHandler(async (req, res) => {
       discountPercentage: discountPercentage !== undefined ? Number(discountPercentage) : 0,
       discountFixedAmount: discountFixedAmount !== undefined ? Number(discountFixedAmount) : 0,
       patientSpecificDiscounts: patientSpecificDiscounts || 'Staff:10,EWS:100',
-      sdtPricingInBilling: sdtPricingInBilling !== undefined ? Boolean(sdtPricingInBilling) : true
+      sdtPricingInBilling: sdtPricingInBilling !== undefined ? Boolean(sdtPricingInBilling) : true,
+      accessDiscount: accessDiscount !== undefined ? Boolean(accessDiscount) : false
     };
 
     if (settings) {
@@ -103,7 +104,8 @@ const createOrUpdateHospitalSettings = asyncHandler(async (req, res) => {
         { key: 'discountFixedAmount', label: 'Standard Discount Fixed Amount' },
         { key: 'patientSpecificDiscounts', label: 'Patient Specific Discount Rules' },
         { key: 'gstEnabled', label: 'GST Active Status' },
-        { key: 'gstPercentage', label: 'GST Percentage Rate' }
+        { key: 'gstPercentage', label: 'GST Percentage Rate' },
+        { key: 'accessDiscount', label: 'Direct Access Discount Permission' }
       ];
 
       fieldsToCheck.forEach(field => {

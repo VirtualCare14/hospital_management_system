@@ -2,6 +2,8 @@ const PharmacyRequest = require('../models/PharmacyRequest');
 const PharmacyInventory = require('../models/PharmacyInventory');
 const IpdAdmission = require('../models/IpdAdmission');
 const IpdMedicine = require('../models/IpdMedicine');
+const IpdConsumable = require('../models/IpdConsumable');
+const IpdAdminSettings = require('../models/IpdAdminSettings');
 const IpdActivityTimeline = require('../models/IpdActivityTimeline');
 const PharmacyStockMovement = require('../models/PharmacyStockMovement');
 
@@ -37,10 +39,10 @@ const getRequests = async (req, res) => {
     const { patientId, admissionId, status, search, doctorId, doctorNotifiedOfReturn } = req.query;
     let query = tenantFilter(req);
 
-    if (patientId) query.patientId = patientId;
-    if (admissionId) query.admissionId = admissionId;
-    if (status) query.status = status;
-    if (doctorId) query.doctorId = doctorId;
+    if (patientId && patientId !== 'undefined' && patientId !== 'null') query.patientId = patientId;
+    if (admissionId && admissionId !== 'undefined' && admissionId !== 'null') query.admissionId = admissionId;
+    if (status && status !== 'undefined' && status !== 'null') query.status = status;
+    if (doctorId && doctorId !== 'undefined' && doctorId !== 'null') query.doctorId = doctorId;
     if (doctorNotifiedOfReturn !== undefined) {
       query.doctorNotifiedOfReturn = doctorNotifiedOfReturn === 'true';
     }
@@ -654,6 +656,8 @@ const autoPostToBilling = async (req, request) => {
   const dateStr = now.toISOString().split('T')[0];
   const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
 
+  const adminSettings = await IpdAdminSettings.findOne({ hospitalId: request.hospitalId });
+
   for (const item of request.items) {
     const consumedQty = item.usedQty + item.damagedQty; // items used or wasted are billable
     if (consumedQty > 0) {
@@ -669,26 +673,56 @@ const autoPostToBilling = async (req, request) => {
       const basePrice = invItem ? invItem.rate : 0;
       const totalAmount = consumedQty * unitPrice;
 
-      // Auto-create IPD billing entry
-      await IpdMedicine.create({
-        hospitalId: request.hospitalId,
-        admissionId: request.admissionId,
-        patientId: request.patientId,
-        medicineName: item.itemName,
-        quantity: consumedQty,
-        unitPrice,
-        gst,
-        baseUnitPrice: basePrice,
-        totalAmount,
-        date: dateStr,
-        time: timeStr,
-        addedBy: request.doctorId
-      });
+      // Check if item is configured as a consumable in IpdAdminSettings
+      let isConsumable = false;
+      if (adminSettings && adminSettings.consumableServices) {
+        isConsumable = adminSettings.consumableServices.some(
+          c => c.name.trim().toLowerCase() === item.itemName.trim().toLowerCase()
+        );
+      }
 
-      // Timeline entry for each billed item
-      await addTimeline(req, request.admissionId, request.patientId, 'Medicine Added',
-        `Procedure Medicine Billed: ${item.itemName} x ${consumedQty} = ₹${totalAmount}`
-      );
+      if (isConsumable) {
+        // Auto-create IPD Consumable billing entry
+        await IpdConsumable.create({
+          hospitalId: request.hospitalId,
+          admissionId: request.admissionId,
+          patientId: request.patientId,
+          serviceName: item.itemName,
+          price: unitPrice,
+          gst: gst,
+          quantity: consumedQty,
+          totalAmount,
+          date: dateStr,
+          time: timeStr,
+          addedBy: request.doctorId
+        });
+
+        // Timeline entry for each billed consumable
+        await addTimeline(req, request.admissionId, request.patientId, 'Service Added',
+          `Consumable Billed: ${item.itemName} x ${consumedQty} = ₹${totalAmount}`
+        );
+      } else {
+        // Auto-create IPD Medicine billing entry
+        await IpdMedicine.create({
+          hospitalId: request.hospitalId,
+          admissionId: request.admissionId,
+          patientId: request.patientId,
+          medicineName: item.itemName,
+          quantity: consumedQty,
+          unitPrice,
+          gst,
+          baseUnitPrice: basePrice,
+          totalAmount,
+          date: dateStr,
+          time: timeStr,
+          addedBy: request.doctorId
+        });
+
+        // Timeline entry for each billed medicine
+        await addTimeline(req, request.admissionId, request.patientId, 'Medicine Added',
+          `Procedure Medicine Billed: ${item.itemName} x ${consumedQty} = ₹${totalAmount}`
+        );
+      }
     }
   }
 };

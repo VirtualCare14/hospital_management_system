@@ -33,7 +33,8 @@ const HospitalSettings = () => {
       invoiceCounter: 1,
       invoiceFormat: '{PREFIX}{COUNTER}',
       discountEnabled: true,
-      sdtPricingInBilling: true
+      sdtPricingInBilling: true,
+      accessDiscount: false
     }
   });
 
@@ -127,7 +128,8 @@ const HospitalSettings = () => {
           discountPercentage: data.data.discountPercentage !== undefined ? data.data.discountPercentage : 0,
           discountFixedAmount: data.data.discountFixedAmount !== undefined ? data.data.discountFixedAmount : 0,
           patientSpecificDiscounts: data.data.patientSpecificDiscounts !== undefined ? data.data.patientSpecificDiscounts : 'Staff:10,EWS:100',
-          sdtPricingInBilling: data.data.sdtPricingInBilling !== undefined ? data.data.sdtPricingInBilling : true
+          sdtPricingInBilling: data.data.sdtPricingInBilling !== undefined ? data.data.sdtPricingInBilling : true,
+          accessDiscount: data.data.accessDiscount !== undefined ? data.data.accessDiscount : false
         });
         setPreviewLogo(data.data.logoUrl);
       }
@@ -234,7 +236,8 @@ const HospitalSettings = () => {
         discountPercentage: 0,
         discountFixedAmount: 0,
         patientSpecificDiscounts: '',
-        sdtPricingInBilling: Boolean(data.sdtPricingInBilling)
+        sdtPricingInBilling: Boolean(data.sdtPricingInBilling),
+        accessDiscount: Boolean(data.accessDiscount)
       };
 
       await client.post('/admin/hospital-settings', payload);
@@ -579,6 +582,32 @@ const HospitalSettings = () => {
         {/* ===================== TAB 3: APPLY DISCOUNTS % ===================== */}
         {activeTab === 'gst-discount' && (
           <div className="space-y-6 animate-fadeIn">
+            {/* Access Discount Switch */}
+            <div className="bg-orange-50/20 p-5 rounded-2xl border border-orange-100/60 shadow-sm space-y-4 text-left">
+              <div className="flex items-center justify-between gap-4">
+                <label htmlFor="accessDiscount" className="cursor-pointer select-none">
+                  <h4 className="text-sm font-extrabold text-gray-900">Access Discount Permission</h4>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Allow direct item-wise or percentage discount entry in the billing module without requiring admin approval.
+                  </p>
+                </label>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0 select-none">
+                  <input
+                    type="checkbox"
+                    id="accessDiscount"
+                    className="sr-only peer"
+                    {...register('accessDiscount')}
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
+                </label>
+              </div>
+              <div className="pt-2 border-t border-orange-100/50 flex justify-end">
+                <button type="submit" className="btn text-xs py-2 px-4 flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600">
+                  <Save className="h-3.5 w-3.5" /> Save Discount Setting
+                </button>
+              </div>
+            </div>
+
             <h3 className="text-base font-extrabold text-gray-900 border-b border-orange-100 pb-2 flex items-center justify-between">
               <span className="flex items-center gap-2">
                 <Percent className="h-4.5 w-4.5 text-orange-500" /> Pending Discount Requests ({discountRequests.length})

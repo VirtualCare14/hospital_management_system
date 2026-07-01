@@ -16,6 +16,9 @@ const IpdOtRecord = require('../models/IpdOtRecord');
 const PharmacyBill = require('../models/PharmacyBill');
 const AdvancePayment = require('../models/AdvancePayment');
 const Visit = require('../models/Visit');
+const PharmacyInventory = require('../models/PharmacyInventory');
+const IpdAdminSettings = require('../models/IpdAdminSettings');
+
 
 
 const tenantFilter = (req, query = {}) => (
@@ -249,6 +252,43 @@ const searchPatient = async (req, res) => {
 // @desc    Generate bill items for a patient by UHID
 // @route   GET /api/billing/generate/:uhid
 // @access  Private
+const getItemLatestPrice = async (hospitalId, itemName, category, fallbackPrice, adminSettings) => {
+  try {
+    const cleanName = itemName.trim().toLowerCase();
+
+    // 1. Check Pharmacy Inventory first
+    const pharmacyItem = await PharmacyInventory.findOne({
+      hospitalId,
+      itemName: { $regex: new RegExp('^' + cleanName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '$', 'i') }
+    }).sort({ createdAt: -1 });
+
+    if (pharmacyItem) {
+      return pharmacyItem.mrp;
+    }
+
+    // 2. Check Admin Settings (IpdAdminSettings)
+    if (adminSettings) {
+      if (category === 'Consumable' && adminSettings.consumableServices) {
+        const consumable = adminSettings.consumableServices.find(
+          c => c.name.trim().toLowerCase() === cleanName
+        );
+        if (consumable) return consumable.price;
+      }
+      if (category === 'Medicine' && adminSettings.medicines) {
+        const medicine = adminSettings.medicines.find(
+          m => m.name.trim().toLowerCase() === cleanName
+        );
+        if (medicine) return medicine.price;
+      }
+    }
+
+    return fallbackPrice;
+  } catch (error) {
+    console.error('Error fetching latest price for item:', itemName, error);
+    return fallbackPrice;
+  }
+};
+
 const generateBillItems = async (req, res) => {
   try {
     const { uhid } = req.params;
@@ -259,6 +299,7 @@ const generateBillItems = async (req, res) => {
 
     // Fetch hospital configurations
     const settings = await HospitalSettings.findOne({ hospitalId: req.user.hospitalId });
+    const adminSettings = await IpdAdminSettings.findOne({ hospitalId: req.user.hospitalId });
     const gstEnabled = settings ? settings.gstEnabled : true;
     const gstPercentage = settings ? settings.gstPercentage : 18;
     const discountEnabled = settings ? settings.discountEnabled : true;
@@ -354,24 +395,28 @@ const generateBillItems = async (req, res) => {
 
     if (includeSdtItems) {
       const treatmentItems = await SdtItem.find({ patientId: patient._id }).populate('treatmentId', 'status').sort({ createdAt: -1 });
-      treatmentItems.forEach(item => {
-        if (billedSourceIds.has(item._id.toString())) return;
+      for (const item of treatmentItems) {
+        if (billedSourceIds.has(item._id.toString())) continue;
         const itemStatus = item.treatmentId?.status;
-        if (itemStatus && itemStatus !== 'Completed') return;
-        if (billType === 'Lab' && item.itemType !== 'Lab Test') return;
+        if (itemStatus && itemStatus !== 'Completed') continue;
+        if (billType === 'Lab' && item.itemType !== 'Lab Test') continue;
         
         const category = item.itemType === 'Lab Test' ? 'Lab' : item.itemType;
+        let price = item.price || 0;
+        if (category === 'Medicine' || category === 'Consumable') {
+          price = await getItemLatestPrice(req.user.hospitalId, item.name, category, price, adminSettings);
+        }
         items.push({
           category,
           date: item.date || fmtDate(item.createdAt),
           description: `${item.name} (${item.itemType})`,
-          price: item.price || 0,
+          price,
           quantity: item.quantity || 1,
-          total: item.totalAmount || (item.price * item.quantity) || 0,
+          total: price * (item.quantity || 1),
           sourceId: item._id,
           sourceModel: 'SdtItem'
         });
-      });
+      }
     }
 
     // 3. Laboratory Charges
@@ -440,35 +485,37 @@ const generateBillItems = async (req, res) => {
 
         // IPD Consumables
         const consumables = await IpdConsumable.find({ admissionId: admission._id });
-        consumables.forEach(c => {
-          if (billedSourceIds.has(c._id.toString())) return;
+        for (const c of consumables) {
+          if (billedSourceIds.has(c._id.toString())) continue;
+          const price = await getItemLatestPrice(req.user.hospitalId, c.serviceName, 'Consumable', c.price, adminSettings);
           items.push({
             category: 'Consumable',
             date: c.date || fmtDate(c.createdAt),
             description: `${c.serviceName}${c.gst ? ` (GST: ${c.gst}%)` : ''}`,
-            price: c.price || 0,
+            price,
             quantity: c.quantity || 1,
-            total: c.totalAmount || 0,
+            total: price * (c.quantity || 1),
             sourceId: c._id,
             sourceModel: 'IpdConsumable'
           });
-        });
+        }
 
         // IPD Medicines
         const medicines = await IpdMedicine.find({ admissionId: admission._id });
-        medicines.forEach(m => {
-          if (billedSourceIds.has(m._id.toString())) return;
+        for (const m of medicines) {
+          if (billedSourceIds.has(m._id.toString())) continue;
+          const price = await getItemLatestPrice(req.user.hospitalId, m.medicineName, 'Medicine', m.unitPrice, adminSettings);
           items.push({
             category: 'Medicine',
             date: m.date || fmtDate(m.createdAt),
             description: m.medicineName,
-            price: m.unitPrice || 0,
+            price,
             quantity: m.quantity || 1,
-            total: m.totalAmount || 0,
+            total: price * (m.quantity || 1),
             sourceId: m._id,
             sourceModel: 'IpdMedicine'
           });
-        });
+        }
       }
     }
 
@@ -499,24 +546,37 @@ const generateBillItems = async (req, res) => {
     // 6. Pharmacy Charges (from unpaid Pharmacy Bills)
     if (!billType || billType === 'All' || billType === 'Pharmacy') {
       const pharmacyBills = await PharmacyBill.find(tenantFilter(req, { patientId: patient._id, paymentStatus: { $ne: 'Paid' } })).sort({ createdAt: -1 });
-      pharmacyBills.forEach(pBill => {
-        if (billedSourceIds.has(pBill._id.toString())) return;
-        pBill.items.forEach((pItem, pIdx) => {
+      for (const pBill of pharmacyBills) {
+        if (billedSourceIds.has(pBill._id.toString())) continue;
+        for (const pItem of pBill.items) {
           const remainingQty = pItem.quantity - pItem.returnedQty;
           if (remainingQty > 0) {
+            let itemCategory = 'Medicine';
+            // Check if item is configured as a consumable in IpdAdminSettings
+            if (adminSettings && adminSettings.consumableServices) {
+              const isConsumable = adminSettings.consumableServices.some(
+                c => c.name.trim().toLowerCase() === pItem.itemName.trim().toLowerCase()
+              );
+              if (isConsumable) {
+                itemCategory = 'Consumable';
+              }
+            }
+
+            const price = await getItemLatestPrice(req.user.hospitalId, pItem.itemName, itemCategory, pItem.unitPrice, adminSettings);
+
             items.push({
-              category: 'Medicine',
+              category: itemCategory,
               date: fmtDate(pBill.billDate || pBill.createdAt),
               description: `Pharmacy Bill ${pBill.billNumber}: ${pItem.itemName}`,
-              price: pItem.unitPrice || 0,
+              price,
               quantity: remainingQty,
-              total: pItem.amount || (pItem.unitPrice * remainingQty) || 0,
+              total: price * remainingQty,
               sourceId: pBill._id,
               sourceModel: 'PharmacyBill'
             });
           }
-        });
-      });
+        }
+      }
     }
 
     // Filter items based on whether their source IDs have already been finalized
@@ -553,7 +613,8 @@ const generateBillItems = async (req, res) => {
         discountFixedAmount: settings ? settings.discountFixedAmount : 0,
         patientSpecificDiscounts: settings ? settings.patientSpecificDiscounts : '',
         discountReasons,
-        sdtPricingInBilling: settings ? settings.sdtPricingInBilling : true
+        sdtPricingInBilling: settings ? settings.sdtPricingInBilling : true,
+        accessDiscount: settings ? settings.accessDiscount : false
       }
     });
   } catch (error) {
@@ -589,10 +650,16 @@ const createBill = async (req, res) => {
     // Use the GST rate sent in request directly
     const finalGstPercentage = parseFloat(gstPercentage || 0);
 
-    const discountAmt = subtotal * (parseFloat(discountPercentage || 0) / 100);
-    const discountedSubtotal = Math.max(0, subtotal - discountAmt);
+    // Calculate sum of item-wise discounts
+    const itemDiscountTotal = activeItems.reduce((sum, i) => sum + ((i.discountAmount || 0) * i.quantity), 0);
+
+    // General discount from percentage
+    const percentDiscountAmt = subtotal * (parseFloat(discountPercentage || 0) / 100);
+    const discountedSubtotal = Math.max(0, subtotal - percentDiscountAmt);
     const gstAmt = discountedSubtotal * (finalGstPercentage / 100);
     const grandTotal = discountedSubtotal + gstAmt;
+
+    const discountAmt = itemDiscountTotal + percentDiscountAmt;
 
     let invoiceNo = undefined;
     if (status === 'Final') {
@@ -778,8 +845,10 @@ const updateBill = async (req, res) => {
     let finalGstPercentage = parseFloat(bill.gstPercentage || 0);
     bill.gstPercentage = finalGstPercentage;
 
-    bill.discountAmount = subtotal * (bill.discountPercentage / 100);
-    const discountedSubtotal = Math.max(0, subtotal - bill.discountAmount);
+    const itemDiscountTotal = bill.items.reduce((sum, i) => sum + ((i.discountAmount || 0) * i.quantity), 0);
+    const percentDiscountAmt = subtotal * (bill.discountPercentage / 100);
+    bill.discountAmount = itemDiscountTotal + percentDiscountAmt;
+    const discountedSubtotal = Math.max(0, subtotal - percentDiscountAmt);
     bill.gstAmount = discountedSubtotal * (bill.gstPercentage / 100);
     bill.grandTotal = discountedSubtotal + bill.gstAmount;
     bill.updatedBy = req.user._id;

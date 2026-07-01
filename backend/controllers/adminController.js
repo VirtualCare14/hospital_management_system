@@ -395,6 +395,15 @@ const updateDepartment = async (req, res) => {
       return res.status(404).json({ message: 'Department not found' });
     }
 
+    if (dept.departmentName?.toLowerCase() === 'same day care') {
+      if (isActive === false) {
+        return res.status(400).json({ message: 'Same Day Care department cannot be disabled' });
+      }
+      if (departmentName !== undefined && departmentName.toLowerCase() !== 'same day care') {
+        return res.status(400).json({ message: 'Same Day Care department cannot be renamed' });
+      }
+    }
+
     if (isActive !== undefined) dept.isActive = isActive;
     if (departmentName !== undefined) dept.departmentName = departmentName;
 
@@ -415,6 +424,11 @@ const deleteDepartment = async (req, res) => {
     if (!dept) {
       return res.status(404).json({ message: 'Department not found' });
     }
+
+    if (dept.departmentName?.toLowerCase() === 'same day care') {
+      return res.status(400).json({ message: 'Same Day Care department cannot be deleted' });
+    }
+
     await dept.deleteOne();
     res.status(200).json({ message: 'Department deleted successfully' });
   } catch (error) {

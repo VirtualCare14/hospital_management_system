@@ -28,7 +28,9 @@ import {
   BarChart3,
   Plus,
   Percent,
-  Truck
+  Truck,
+  Droplets,
+  Clock
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -215,17 +217,41 @@ const Sidebar = () => {
                 <CalendarDays className="h-5 w-5" />
                 OT Management
               </NavLink>
+              <NavLink to="/ipd/same-day" className={({ isActive }) => isActive ? activeStyle : inactiveStyle}>
+                <Activity className="h-5 w-5" />
+                IPD Same Day
+              </NavLink>
             </div>
           </div>
         )}
-        {hasAccess([6]) && (
+        {(hasAccess([6]) || ['doctor', 'reception'].includes(user.role)) && (
           <div className="mt-6">
-            <span className="px-4 text-xs font-bold text-orange-400 uppercase tracking-widest block mb-2">Same Day Care</span>
+            <span className="px-4 text-xs font-bold text-orange-400 uppercase tracking-widest block mb-2">Day Care</span>
             <div className="space-y-1">
-              <NavLink to="/same-day-care" className={({ isActive }) => isActive ? activeStyle : inactiveStyle}>
-                <Bandage className="h-5 w-5" />
-                Same Day Care
-              </NavLink>
+              {(user.role === 'admin' || user.role === 'nursing') && hasAccess([6]) && (
+                <NavLink to="/same-day-care" end className={({ isActive }) => isActive && !window.location.search.includes('tab=') ? activeStyle : inactiveStyle}>
+                  <Bandage className="h-5 w-5" />
+                  Same Day Care
+                </NavLink>
+              )}
+              {['admin', 'nursing', 'doctor', 'reception'].includes(user.role) && (
+                <NavLink to="/same-day-care/dialysis" className={({ isActive }) => isActive ? activeStyle : inactiveStyle}>
+                  <Droplets className="h-5 w-5 text-sky-500" />
+                  Dialysis Management
+                </NavLink>
+              )}
+              {['admin', 'nursing', 'doctor', 'reception'].includes(user.role) && (
+                <NavLink to="/same-day-care?tab=completed" className={() => window.location.search.includes('tab=completed') ? activeStyle : inactiveStyle}>
+                  <CheckCircle className="h-5 w-5" />
+                  Treatment Completed
+                </NavLink>
+              )}
+              {['admin', 'nursing', 'doctor', 'reception'].includes(user.role) && (
+                <NavLink to="/same-day-care?tab=pending" className={() => window.location.search.includes('tab=pending') ? activeStyle : inactiveStyle}>
+                  <Clock className="h-5 w-5" />
+                  Treatment Pending
+                </NavLink>
+              )}
             </div>
           </div>
         )}

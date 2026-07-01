@@ -136,6 +136,10 @@ const hospitalSettingsSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  accessDiscount: {
+    type: Boolean,
+    default: false
+  },
 
   // Audit Logs for Discount and Settings Activity
   settingsAuditTrail: [{

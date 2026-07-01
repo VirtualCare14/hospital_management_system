@@ -11,6 +11,7 @@ const billingItemSchema = new mongoose.Schema({
   price: { type: Number, required: true, min: 0 },
   quantity: { type: Number, required: true, min: 1, default: 1 },
   total: { type: Number, required: true, min: 0 },
+  discountAmount: { type: Number, default: 0 },
   // Reference to source record
   sourceId: { type: mongoose.Schema.Types.ObjectId },
   sourceModel: { type: String },

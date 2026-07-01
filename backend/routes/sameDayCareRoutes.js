@@ -4,7 +4,10 @@ const {
   createTreatment, updateTreatment,
   getTreatmentsByPatient, getTreatmentById, getAllTreatments,
   getTreatmentPricing,
-  addItemToTreatment, removeItemFromTreatment, getItemsForTreatment
+  addItemToTreatment, removeItemFromTreatment, getItemsForTreatment,
+  getDialysisPatients, getDialysisPatientDetails, getDialysisRecords,
+  getDialysisRecordById, createDialysisRecord, updateDialysisRecord,
+  deleteDialysisRecord
 } = require('../controllers/sameDayCareController');
 const authMiddleware = require('../middleware/authMiddleware');
 
@@ -18,4 +21,14 @@ router.post('/treatment/:id/items', authMiddleware, addItemToTreatment);
 router.get('/treatment/:id/items', authMiddleware, getItemsForTreatment);
 router.delete('/treatment/:id/items/:itemId', authMiddleware, removeItemFromTreatment);
 
+// Dialysis Management Routes
+router.get('/dialysis/patients', authMiddleware, getDialysisPatients);
+router.get('/dialysis/patient/:id', authMiddleware, getDialysisPatientDetails);
+router.get('/dialysis/records', authMiddleware, getDialysisRecords);
+router.get('/dialysis/record/:id', authMiddleware, getDialysisRecordById);
+router.post('/dialysis/record', authMiddleware, createDialysisRecord);
+router.put('/dialysis/record/:id', authMiddleware, updateDialysisRecord);
+router.delete('/dialysis/record/:id', authMiddleware, deleteDialysisRecord);
+
 module.exports = router;
+

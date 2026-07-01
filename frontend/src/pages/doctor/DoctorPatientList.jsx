@@ -8,18 +8,41 @@ import { formatDate } from '../../utils/dateFormat';
 const DoctorPatientList = () => {
   const [patients, setPatients] = useState([]);
   const [search, setSearch] = useState('');
+  const [subServices, setSubServices] = useState([]);
+
+  useEffect(() => {
+    client.get('/ipd/settings').then(({ data }) => {
+      const list = [];
+      if (data?.sameDayCareCategories) {
+        data.sameDayCareCategories.forEach(cat => {
+          if (cat.isActive !== false) {
+            cat.subServices.forEach(sub => {
+              if (sub.isActive !== false) list.push(sub.name);
+            });
+          }
+        });
+      }
+      setSubServices(list.length > 0 ? list : ['Fracture', 'Minor Injury', 'Minor Stitches', 'Small Burns', 'Mild Allergic Reactions', 'Dialysis']);
+    }).catch(() => {
+      setSubServices(['Fracture', 'Minor Injury', 'Minor Stitches', 'Small Burns', 'Mild Allergic Reactions', 'Dialysis']);
+    });
+  }, []);
 
   const handleSendToSameDay = async (patient) => {
-    const types = ['Fracture', 'Minor Injury', 'Minor Stitches', 'Small Burns', 'Mild Allergic Reactions', 'Dialysis'];
     const chosenType = window.prompt(
-      `Send ${patient.patientName} to Same Day Care?\nEnter one of: ${types.join(', ')}`,
-      'Minor Injury'
+      `Send ${patient.patientName} to Same Day Care?\nEnter one of:\n${subServices.join(', ')}`,
+      subServices.includes('Minor Injury') ? 'Minor Injury' : subServices[0] || 'Dialysis'
     );
     if (chosenType === null) return;
-    if (!types.includes(chosenType)) {
-      toast.error(`Invalid care type! Must be one of: ${types.join(', ')}`);
+    const cleanType = chosenType.trim();
+    if (!subServices.some(s => s.toLowerCase() === cleanType.toLowerCase())) {
+      toast.error(`Invalid care type! Must be one of: ${subServices.join(', ')}`);
       return;
     }
+    
+    // Find exact cased name from subServices list
+    const matchedType = subServices.find(s => s.toLowerCase() === cleanType.toLowerCase());
+
     try {
       const dob = patient.dob;
       const age = dob ? Math.floor((new Date() - new Date(dob)) / (365.25 * 24 * 60 * 60 * 1000)) : null;
@@ -30,10 +53,10 @@ const DoctorPatientList = () => {
         mobile: patient.mobile,
         gender: patient.gender,
         age,
-        treatmentType: chosenType,
+        treatmentType: matchedType,
         status: 'Draft'
       });
-      toast.success(`${patient.patientName} referred to Same Day Care (${chosenType})!`);
+      toast.success(`${patient.patientName} referred to Same Day Care (${matchedType})!`);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to refer patient');
     }

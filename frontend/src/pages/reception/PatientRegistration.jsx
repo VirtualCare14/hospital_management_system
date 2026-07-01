@@ -115,7 +115,7 @@ const PatientRegistration = () => {
     try {
       const payload = {
         ...data,
-        visitType: data.department === 'Same Day Care' ? 'Same Day Care' : 'OPD'
+        visitType: data.department === 'Same Day Care' ? 'Same Day Treatment' : 'OPD'
       };
       const { data: res } = await client.post('/patients/create', payload);
       toast.success(res.message);

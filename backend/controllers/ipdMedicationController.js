@@ -265,8 +265,8 @@ const getAdministrationsByAdmission = async (req, res) => {
 const createAdministrationRecord = async (req, res) => {
   try {
     const { role } = req.user;
-    if (role !== 'ipd' && role !== 'admin') {
-      return res.status(403).json({ message: 'Access denied: Only IPD staff or admins can administer medications' });
+    if (role !== 'ipd' && role !== 'admin' && role !== 'nursing') {
+      return res.status(403).json({ message: 'Access denied: Only IPD staff, nurses, or admins can administer medications' });
     }
 
     const { orderId } = req.params;
@@ -322,8 +322,8 @@ const createAdministrationRecord = async (req, res) => {
 const updateAdministrationRecord = async (req, res) => {
   try {
     const { role } = req.user;
-    if (role !== 'ipd' && role !== 'admin') {
-      return res.status(403).json({ message: 'Access denied: Only IPD staff or admins can modify administration logs' });
+    if (role !== 'ipd' && role !== 'admin' && role !== 'nursing') {
+      return res.status(403).json({ message: 'Access denied: Only IPD staff, nurses, or admins can modify administration logs' });
     }
 
     const { adminId } = req.params;

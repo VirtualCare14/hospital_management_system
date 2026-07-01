@@ -14,10 +14,14 @@ const tenantFilter = (req, query = {}) => (
 // @access  Private
 const admitPatient = async (req, res) => {
   try {
-    const { patientId, roomId, bedId, doctorInCharge, admissionDate, status } = req.body;
+    const { patientId, roomId, bedId, doctorInCharge, admissionDate, status, isSameDayCare } = req.body;
 
-    if (!patientId || !roomId || !bedId || !doctorInCharge) {
-      return res.status(400).json({ message: 'Patient, room, bed, and doctor in charge are required' });
+    if (!patientId || !doctorInCharge) {
+      return res.status(400).json({ message: 'Patient and doctor in charge are required' });
+    }
+
+    if ((roomId && !bedId) || (!roomId && bedId)) {
+      return res.status(400).json({ message: 'Both room and bed are required for allocation' });
     }
 
     // 1. Verify patient exists
@@ -41,14 +45,17 @@ const admitPatient = async (req, res) => {
       return res.status(400).json({ message: 'Selected doctor is invalid or inactive' });
     }
 
-    // 4. Verify bed exists, belongs to room
-    const bed = await Bed.findOne(tenantFilter(req, { _id: bedId, roomId }));
-    if (!bed) {
-      return res.status(404).json({ message: 'Selected bed was not found in this room' });
-    }
+    // 4. Verify bed exists, belongs to room (only if provided)
+    let bed = null;
+    if (bedId && roomId) {
+      bed = await Bed.findOne(tenantFilter(req, { _id: bedId, roomId }));
+      if (!bed) {
+        return res.status(404).json({ message: 'Selected bed was not found in this room' });
+      }
 
-    if (bed.status === 'Occupied') {
-      return res.status(400).json({ message: 'The selected bed is already occupied' });
+      if (bed.status === 'Occupied') {
+        return res.status(400).json({ message: 'The selected bed is already occupied' });
+      }
     }
 
     // 5. Fetch settings and increment sequential counts atomically
@@ -70,24 +77,27 @@ const admitPatient = async (req, res) => {
     const newAdmission = new IpdAdmission({
       hospitalId: req.user.hospitalId,
       patientId,
-      roomId,
-      bedId,
+      roomId: roomId || null,
+      bedId: bedId || null,
       doctorInCharge,
       admissionDate: admissionDate || new Date(),
       ipdNumber: formattedIpdNumber,
       pidNumber: formattedPidNumber,
-      status: status || 'Admitted'
+      status: status || (bedId ? 'Admitted' : 'Pending Allocation'),
+      isSameDayCare: !!isSameDayCare
     });
 
     const savedAdmission = await newAdmission.save();
 
     // 7. Mark Bed as occupied
-    bed.status = 'Occupied';
-    bed.patientId = patientId;
-    bed.admissionId = savedAdmission._id;
-    bed.reservedAt = null;
-    bed.reservedFor = null;
-    await bed.save();
+    if (bed) {
+      bed.status = 'Occupied';
+      bed.patientId = patientId;
+      bed.admissionId = savedAdmission._id;
+      bed.reservedAt = null;
+      bed.reservedFor = null;
+      await bed.save();
+    }
 
     res.status(201).json({ 
       message: 'Patient admitted successfully', 
@@ -158,8 +168,62 @@ const dischargePatient = async (req, res) => {
   }
 };
 
+// @desc    Allocate a bed to a pending IPD admission
+// @route   PUT /api/ipd/admissions/:id/allocate-bed
+// @access  Private
+const allocateBed = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { roomId, bedId } = req.body;
+
+    if (!roomId || !bedId) {
+      return res.status(400).json({ message: 'Room and Bed are required' });
+    }
+
+    const admission = await IpdAdmission.findOne(tenantFilter(req, { _id: id }));
+    if (!admission) {
+      return res.status(404).json({ message: 'Admission record not found' });
+    }
+
+    if (admission.status === 'Discharged') {
+      return res.status(400).json({ message: 'Cannot allocate bed for a discharged patient' });
+    }
+
+    // Verify bed exists and is available
+    const bed = await Bed.findOne(tenantFilter(req, { _id: bedId, roomId }));
+    if (!bed) {
+      return res.status(404).json({ message: 'Selected bed was not found in this room' });
+    }
+
+    if (bed.status === 'Occupied') {
+      return res.status(400).json({ message: 'The selected bed is already occupied' });
+    }
+
+    // Allocate the bed to the admission
+    admission.roomId = roomId;
+    admission.bedId = bedId;
+    admission.status = 'Admitted';
+    await admission.save();
+
+    // Mark bed as occupied
+    bed.status = 'Occupied';
+    bed.patientId = admission.patientId;
+    bed.admissionId = admission._id;
+    await bed.save();
+
+    res.status(200).json({
+      message: 'Bed allocated successfully',
+      admission
+    });
+  } catch (error) {
+    console.error('Allocate Bed Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   admitPatient,
   getAdmissions,
-  dischargePatient
+  dischargePatient,
+  allocateBed
 };

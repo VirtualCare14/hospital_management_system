@@ -25,12 +25,20 @@ const ManageDepartments = () => {
   };
 
   const toggle = async (dept) => {
+    if (dept.departmentName?.toLowerCase() === 'same day care') {
+      toast.error('Same Day Care department cannot be disabled');
+      return;
+    }
     await client.put(`/admin/departments/${dept._id}`, { isActive: !dept.isActive });
     toast.success('Department updated');
     load();
   };
 
   const handleDelete = async (dept) => {
+    if (dept.departmentName?.toLowerCase() === 'same day care') {
+      toast.error('Same Day Care department cannot be deleted');
+      return;
+    }
     const ok = window.confirm(`Are you sure you want to delete the department "${dept.departmentName}"?`);
     if (!ok) return;
 
@@ -55,18 +63,34 @@ const ManageDepartments = () => {
         <button className="btn w-full" type="submit"><Plus className="h-4 w-4" /> Add Department</button>
       </form>
       <div className="card divide-y divide-orange-50">
-        {departments.map((dept) => (
-          <div key={dept._id} className="flex items-center justify-between p-4">
-            <div>
-              <p className="font-bold text-gray-800">{dept.departmentName}</p>
-              <p className="text-sm text-gray-500">{dept.isActive ? 'Active' : 'Inactive'}</p>
+        {departments.map((dept) => {
+          const isSameDayCare = dept.departmentName?.toLowerCase() === 'same day care';
+          return (
+            <div key={dept._id} className="flex items-center justify-between p-4">
+              <div>
+                <p className="font-bold text-gray-800">{dept.departmentName}</p>
+                <p className="text-sm text-gray-500">{dept.isActive ? 'Active' : 'Inactive'}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  className={`btn-secondary ${isSameDayCare ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  onClick={() => toggle(dept)}
+                  disabled={isSameDayCare}
+                >
+                  {dept.isActive ? 'Disable' : 'Enable'}
+                </button>
+                {!isSameDayCare && (
+                  <button
+                    className="btn bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 hover:text-red-700 hover:border-red-200 p-2 rounded-xl transition-all"
+                    onClick={() => handleDelete(dept)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <button className="btn-secondary" onClick={() => toggle(dept)}>{dept.isActive ? 'Disable' : 'Enable'}</button>
-              <button className="btn bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 hover:text-red-700 hover:border-red-200 p-2 rounded-xl transition-all" onClick={() => handleDelete(dept)}><Trash2 className="h-4 w-4" /></button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
