@@ -58,10 +58,9 @@ export default function Loader({ message, overlay = false }) {
       {/* Robot image */}
       <div className="loader-robot">
         <img
-          src="/src/assets/robot.PNG"
-          alt="Medora360 Robot"
-          width="120"
-          height="120"
+          src="/src/assets/robot.png"
+          width="100"
+          height="100"
         />
       </div>
 
