@@ -55,14 +55,6 @@ export default function Loader({ message, overlay = false }) {
         </svg>
       </div>
 
-      {/* Robot image */}
-      <div className="loader-robot">
-        <img
-          src="/src/assets/robot.png"
-          width="100"
-          height="100"
-        />
-      </div>
 
       {/* Brand title */}
       <h1 className="loader-title">
