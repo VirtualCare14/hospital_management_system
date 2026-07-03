@@ -50,7 +50,14 @@ const PatientDetails = () => {
           <div className="rounded-xl bg-orange-50 p-3"><p className="text-xs text-gray-500">Weight</p><p className="font-bold">{patient.demographics?.weight || '-'} kg</p></div>
           <div className="rounded-xl bg-orange-50 p-3"><p className="text-xs text-gray-500">Height</p><p className="font-bold">{patient.demographics?.height || '-'} cm</p></div>
           <div className="rounded-xl bg-orange-50 p-3"><p className="text-xs text-gray-500">BP</p><p className="font-bold">{patient.demographics?.bloodPressure || '-'}</p></div>
-          <div className="rounded-xl bg-orange-50 p-3"><p className="text-xs text-gray-500">Temperature</p><p className="font-bold">{patient.demographics?.temperature || '-'} °C</p></div>
+          <div className="rounded-xl bg-orange-50 p-3">
+            <p className="text-xs text-gray-500">Temperature</p>
+            <p className="font-bold">
+              {patient.demographics?.temperature 
+                ? `${((parseFloat(patient.demographics.temperature) * 9/5) + 32).toFixed(1)} °F` 
+                : '-'}
+            </p>
+          </div>
         </div>
       </div>
       <div className="card p-5">

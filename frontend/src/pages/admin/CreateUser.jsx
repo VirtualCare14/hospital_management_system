@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
-import { Clock, Edit, RefreshCcw, Save, Trash2, UserCog, X } from 'lucide-react';
+import { Clock, Edit, RefreshCcw, Save, Trash2, UserCog, X, Eye, EyeOff } from 'lucide-react';
 import client from '../../api/client';
+import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 import { modules, roles } from '../../utils/options';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -12,11 +13,13 @@ const CreateUser = () => {
   const [departments, setDepartments] = useState([]);
   const [limitData, setLimitData] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [showAvailability, setShowAvailability] = useState(false);
   const [selectedDoctor, setSelectedDoctor] = useState(null);
   const [availableSlots, setAvailableSlots] = useState(
     DAYS.map((day) => ({ day, startTime: '09:00', endTime: '17:00', isAvailable: day !== 'Sunday' }))
   );
+  const [showPassword, setShowPassword] = useState(false);
   const { register, handleSubmit, reset, watch, formState: { errors } } = useForm({
     defaultValues: { role: 'reception', moduleAccess: ['1'] }
   });
@@ -30,6 +33,7 @@ const CreateUser = () => {
   const isLimitReached = limitData && limitData.userCount >= limitData.maxUsers;
 
   const load = async () => {
+    setLoading(true);
     try {
       const [userRes, deptRes, limitRes] = await Promise.all([
         client.get('/admin/users'),
@@ -43,6 +47,8 @@ const CreateUser = () => {
       }
     } catch (error) {
       console.error('Error loading data:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -53,7 +59,13 @@ const CreateUser = () => {
   const onSubmit = async (data) => {
     let moduleAccessRaw = data.moduleAccess;
     if (!moduleAccessRaw || moduleAccessRaw.length === 0) {
-      moduleAccessRaw = data.role === 'doctor' ? [2, 3] : [1];
+      if (data.role === 'doctor') {
+        moduleAccessRaw = [2, 3];
+      } else if (data.role === 'nursing') {
+        moduleAccessRaw = [6];
+      } else {
+        moduleAccessRaw = [1];
+      }
     }
     const moduleAccess = Array.isArray(moduleAccessRaw)
       ? moduleAccessRaw.map(Number)
@@ -65,16 +77,16 @@ const CreateUser = () => {
       await client.put(`/admin/users/${editingUser._id}`, payload);
       toast.success('User updated');
       
-      // If doctor, save availability
-      if (data.role === 'doctor' && availableSlots.length > 0) {
+      // If doctor or same day care, save availability
+      if ((data.role === 'doctor' || data.role === 'nursing') && availableSlots.length > 0) {
         await client.put(`/admin/doctors/${editingUser._id}/availability`, { availableSlots });
       }
     } else {
       const res = await client.post('/admin/create-user', { ...data, moduleAccess });
       toast.success('User created');
       
-      // If doctor, save availability
-      if (data.role === 'doctor' && res.data.user && availableSlots.length > 0) {
+      // If doctor or same day care, save availability
+      if ((data.role === 'doctor' || data.role === 'nursing') && res.data.user && availableSlots.length > 0) {
         await client.put(`/admin/doctors/${res.data.user.id}/availability`, { availableSlots }).catch(() => {});
       }
     }
@@ -117,6 +129,24 @@ const CreateUser = () => {
     reset({ role: 'reception', moduleAccess: ['1'] });
     setAvailableSlots(DAYS.map((day) => ({ day, startTime: '09:00', endTime: '17:00', isAvailable: day !== 'Sunday' })));
   };
+
+  if (loading) {
+    return (
+      <div className="grid gap-6 xl:grid-cols-[420px_1fr] animate-fadeIn">
+        <div className="space-y-4">
+          <div className="card p-5">
+            <SkeletonTable rows={5} columns={1} className="w-full" />
+          </div>
+          <div className="card p-5">
+            <SkeletonTable rows={4} columns={1} className="w-full" />
+          </div>
+        </div>
+        <div className="card p-5">
+          <SkeletonTable rows={6} columns={4} className="w-full" />
+        </div>
+      </div>
+    );
+  }
 
   const deleteUser = async (user) => {
     if (!window.confirm(`Delete user ${user.username}?`)) return;
@@ -165,12 +195,33 @@ const CreateUser = () => {
         </div>
         <input className="input" placeholder="Username" disabled={Boolean(editingUser)} {...register('username', { required: 'Username is required' })} />
         {errors.username && <p className="text-xs text-red-500">{errors.username.message}</p>}
-        <input className="input" placeholder={editingUser ? 'New password optional' : 'Password'} type="password" {...register('password', { required: editingUser ? false : 'Password is required' })} />
+        <div className="relative">
+          <input
+            className="input pr-10"
+            placeholder={editingUser ? 'New password optional' : 'Password'}
+            type={showPassword ? 'text' : 'password'}
+            {...register('password', { required: editingUser ? false : 'Password is required' })}
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-3 top-3 text-gray-400 hover:text-gray-650 transition"
+          >
+            {showPassword ? <EyeOff className="h-4.5 w-4.5" /> : <Eye className="h-4.5 w-4.5" />}
+          </button>
+        </div>
+        {errors.password && <p className="text-xs text-red-500">{errors.password.message}</p>}
         <select className="input font-bold" {...register('role')}>
           {roles.map((item) => <option key={item} value={item}>{item === 'nursing' ? 'same day care' : item}</option>)}
         </select>
-        {role === 'doctor' && <input className="input" placeholder="Doctor name" {...register('doctorName')} />}
-        {role === 'doctor' && (
+        {(role === 'doctor' || role === 'nursing') && (
+          <input 
+            className="input" 
+            placeholder={role === 'nursing' ? "Same Day Care Doctor Name" : "Doctor name"} 
+            {...register('doctorName')} 
+          />
+        )}
+        {(role === 'doctor' || role === 'nursing') && (
           <div className="relative">
             <input className="input pl-8" placeholder="OPD Consultation Fee (₹)" type="number" min="0" step="1" {...register('opdFees')} />
             <span className="absolute left-3 top-2.5 text-gray-400 font-bold text-sm">₹</span>
@@ -182,14 +233,14 @@ const CreateUser = () => {
         </select>
         <input className="input" placeholder="Mobile number" {...register('mobile')} />
         
-        {/* Doctor Availability Time Slots - shown when doctor role is selected */}
-        {(role === 'doctor' || editingUser?.role === 'doctor') && (
+        {/* Doctor Availability Time Slots - shown when doctor or same day care role is selected */}
+        {(role === 'doctor' || role === 'nursing' || editingUser?.role === 'doctor' || editingUser?.role === 'nursing') && (
           <div className="rounded-xl border border-orange-200 p-3">
             <div className="flex items-center gap-2 mb-2">
               <Clock className="h-4 w-4 text-orange-500" />
               <h3 className="text-sm font-bold text-gray-700">Available Time Slots</h3>
             </div>
-            <p className="text-xs text-gray-500 mb-3">Configure weekly availability for this doctor.</p>
+            <p className="text-xs text-gray-500 mb-3">Configure weekly availability.</p>
             <div className="space-y-2 max-h-60 overflow-y-auto">
               {availableSlots.map((slot, index) => (
                 <div key={slot.day} className="flex items-center gap-2 text-xs">
@@ -272,7 +323,7 @@ const CreateUser = () => {
                     {users.map((user) => (
                       <tr key={user._id} className="border-t border-orange-50">
                         <td className="p-3 font-semibold">{user.doctorName || user.username}
-                          {user.role === 'doctor' && user.opdFees > 0 && (
+                          {(user.role === 'doctor' || user.role === 'nursing') && user.opdFees > 0 && (
                             <span className="ml-2 text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded">₹{user.opdFees}</span>
                           )}
                         </td>

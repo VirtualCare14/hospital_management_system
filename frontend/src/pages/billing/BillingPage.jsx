@@ -7,6 +7,7 @@ import {
   ArrowLeft, Stethoscope, Pill, TestTube, BedDouble, Package, Plus, Trash, EyeOff, LayoutDashboard, History, Coins, Ban
 } from 'lucide-react';
 import jsPDF from 'jspdf';
+import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 import html2canvas from 'html2canvas';
 import { useAuth } from '../../context/AuthContext';
 import client from '../../api/client';
@@ -756,9 +757,8 @@ const BillingPage = () => {
               </div>
 
               {loadingList ? (
-                <div className="flex flex-col items-center justify-center p-16 card">
-                  <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
-                  <span className="mt-3 text-sm text-gray-500 font-bold">Scanning hospital databases...</span>
+                <div className="card p-4">
+                  <SkeletonTable rows={4} columns={4} className="w-full" />
                 </div>
               ) : eligiblePatients.length === 0 ? (
                 <div className="card p-16 text-center space-y-4">
@@ -892,9 +892,8 @@ const BillingPage = () => {
               )}
 
               {loading ? (
-                <div className="card p-16 flex flex-col items-center justify-center">
-                  <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
-                  <span className="mt-3 text-xs text-gray-500 font-bold">Consolidating charges across hospital modules...</span>
+                <div className="card p-4">
+                  <SkeletonTable rows={5} columns={7} className="w-full" />
                 </div>
               ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1351,9 +1350,8 @@ const BillingPage = () => {
 
           {/* Invoices List */}
           {loadingInvoices ? (
-            <div className="flex flex-col items-center justify-center p-16 card">
-              <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
-              <span className="mt-2 text-xs text-gray-500 font-bold">Scanning billing records...</span>
+            <div className="card p-4">
+              <SkeletonTable rows={5} columns={8} className="w-full" />
             </div>
           ) : invoices.length === 0 ? (
             <div className="card p-16 text-center text-gray-400 font-bold">
@@ -1429,9 +1427,8 @@ const BillingPage = () => {
       {activeTab === 'dashboard' && (
         <div className="space-y-6 animate-fadeIn">
           {loadingStats ? (
-            <div className="flex flex-col items-center justify-center p-16 card">
-              <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
-              <span className="mt-2 text-xs text-gray-500 font-bold">Scanning ledger totals...</span>
+            <div className="card p-4">
+              <SkeletonTable rows={3} columns={4} className="w-full" />
             </div>
           ) : (
             <>

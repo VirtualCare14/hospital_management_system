@@ -1,4 +1,4 @@
-﻿const mongoose = require('mongoose');
+const mongoose = require('mongoose');
 
 const consultationSchema = new mongoose.Schema({
   hospitalId: {
@@ -39,7 +39,8 @@ const consultationSchema = new mongoose.Schema({
     height: { type: Number },
     temperature: { type: Number },
     bmi: { type: Number },
-    drugAllergy: { type: String }
+    drugAllergy: { type: String },
+    bloodPressure: { type: String }
   },
   tests: [{
     type: String

@@ -100,6 +100,11 @@ const pharmacyBillSchema = new mongoose.Schema({
     ref: 'Prescription',
     default: null
   },
+  admissionId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'IpdAdmission',
+    default: null
+  },
   patientId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Patient',

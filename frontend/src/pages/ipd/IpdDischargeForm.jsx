@@ -18,7 +18,8 @@ import {
   UserCircle,
   Phone,
   Building2,
-  Bed
+  Bed,
+  X
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import client from '../../api/client';
@@ -40,6 +41,21 @@ const IpdDischargeForm = () => {
   const [hospitalInfo, setHospitalInfo] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
+  const [reviewers, setReviewers] = useState([]);
+  const [selectedReviewer, setSelectedReviewer] = useState('');
+  const [showSubmitModal, setShowSubmitModal] = useState(false);
+
+  useEffect(() => {
+    const fetchReviewers = async () => {
+      try {
+        const { data } = await client.get('/ipd/discharge/reviewers');
+        setReviewers(data);
+      } catch (err) {
+        console.warn('Failed to load discharge reviewers:', err);
+      }
+    };
+    fetchReviewers();
+  }, []);
 
   const [form, setForm] = useState({
     admissionId: id || '',
@@ -231,6 +247,45 @@ const IpdDischargeForm = () => {
     }
   };
 
+  const handleSubmitForReview = async (e) => {
+    if (e) e.preventDefault();
+    if (!selectedReviewer) {
+      toast.error('Please select a doctor to review');
+      return;
+    }
+    
+    setSaving(true);
+    try {
+      const payload = {
+        ...form,
+        admissionId: id,
+        admissionDate: form.admissionDate ? new Date(form.admissionDate) : null,
+        dischargeDate: form.dischargeDate ? new Date(form.dischargeDate) : new Date()
+      };
+      
+      let currentDischargeId = dischargeRecord?._id || form._id;
+      if (!currentDischargeId) {
+        const { data } = await client.post('/ipd/discharge', payload);
+        currentDischargeId = data.record._id;
+      } else {
+        await client.put(`/ipd/discharge/${currentDischargeId}`, payload);
+      }
+
+      await client.post('/ipd/discharge/submit-review', {
+        dischargeId: currentDischargeId,
+        reviewerId: selectedReviewer
+      });
+
+      toast.success('Discharge summary submitted to doctor for review');
+      setShowSubmitModal(false);
+      navigate(`/ipd/patient/${id}?tab=discharge-records`);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Submission failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handlePrint = () => {
     if (!dischargeRecord && !form._id) {
       toast.error('Save the record first');
@@ -248,8 +303,11 @@ const IpdDischargeForm = () => {
     window.print();
   };
 
+  const isEffectiveViewMode = viewMode || form.status === 'Pending Review' || form.status === 'Completed';
+  const isEditable = !viewMode && (form.status === 'Draft' || form.status === 'Rejected');
+
   const inputClass = (field) =>
-    `input py-2.5 text-sm ${validationErrors[field] ? 'border-red-400 ring-1 ring-red-200' : ''} ${viewMode ? 'bg-gray-50' : ''}`;
+    `input py-2.5 text-sm ${validationErrors[field] ? 'border-red-400 ring-1 ring-red-200' : ''} ${isEffectiveViewMode ? 'bg-gray-50' : ''}`;
 
   if (loading) {
     return (
@@ -270,54 +328,75 @@ const IpdDischargeForm = () => {
   return (
     <div className="space-y-6 print:space-y-4">
       {/* Header - Hidden when printing */}
-      <div className="no-print">
-        <div className="flex items-center gap-4">
-          <button onClick={() => navigate('/ipd/patients')} className="p-2 rounded-xl hover:bg-orange-100 transition-colors">
-            <ArrowLeft className="h-5 w-5 text-gray-600" />
-          </button>
-          <div className="flex-1">
-            <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">
-              {viewMode ? 'Discharge Summary (Read Only)' : 'Discharge Summary Form'}
-            </h1>
-            <p className="text-sm text-gray-500">
-              IPD: {form.ipdNumber} | PID: {form.pidNumber}
-            </p>
+      <div className="no-print space-y-4">
+        {form.status === 'Rejected' && dischargeRecord?.rejectionRemarks && (
+          <div className="card p-4 border border-red-200 bg-red-50 flex items-start gap-3">
+            <AlertCircle className="text-red-650 h-5 w-5 shrink-0 mt-0.5" />
+            <div>
+              <h4 className="font-extrabold text-red-800 text-xs uppercase tracking-wider">Sent Back by Doctor</h4>
+              <p className="text-xs text-red-700 mt-1 font-semibold">Remark: "{dischargeRecord.rejectionRemarks}"</p>
+              <p className="text-[10px] text-red-500 mt-0.5">Please update the discharge summary fields below and re-submit for review.</p>
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-white p-4 border border-orange-100 rounded-3xl">
+          <div className="flex items-center gap-4">
+            <button onClick={() => navigate(`/ipd/patient/${id}?tab=discharge-records`)} className="p-2 rounded-xl hover:bg-orange-100 transition-colors">
+              <ArrowLeft className="h-5 w-5 text-gray-600" />
+            </button>
+            <div className="flex-1">
+              <h1 className="text-xl font-black text-gray-900 tracking-tight">
+                {isEffectiveViewMode ? 'Discharge Summary (Read Only)' : 'Discharge Summary Form'}
+              </h1>
+              <p className="text-xs text-gray-400 font-semibold mt-0.5">
+                IPD: {form.ipdNumber} | PID: {form.pidNumber}
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-2">
-            {isDischarged ? (
-              <span className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold bg-green-100 text-green-800">
+            {form.status === 'Completed' ? (
+              <span className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold bg-green-100 text-green-800 border border-green-200">
                 <CheckCircle className="h-3 w-3" /> Discharged
               </span>
+            ) : form.status === 'Pending Review' ? (
+              <span className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                <Clock className="h-3 w-3 animate-pulse" /> Pending Review
+              </span>
+            ) : form.status === 'Rejected' ? (
+              <span className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold bg-red-100 text-red-800 border border-red-200">
+                <AlertCircle className="h-3 w-3" /> Sent Back
+              </span>
             ) : (
-              <span className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold bg-yellow-100 text-yellow-800">
-                <Clock className="h-3 w-3" /> {form.status === 'Completed' ? 'Completed' : 'Draft'}
+              <span className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold bg-yellow-100 text-yellow-800 border border-yellow-200">
+                <Clock className="h-3 w-3" /> Draft
               </span>
             )}
           </div>
         </div>
 
-        {!viewMode && !isDischarged && (
-          <div className="flex flex-wrap gap-2 mt-4">
-            <button onClick={handleSave} disabled={saving} className="btn-secondary text-sm py-2.5 px-4 flex items-center gap-2">
+        {isEditable && (
+          <div className="flex flex-wrap gap-2">
+            <button onClick={handleSave} disabled={saving} className="btn-secondary text-sm py-2 px-4 flex items-center gap-2 cursor-pointer">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               Save Draft
             </button>
-            <button onClick={handleCompleteDischarge} disabled={saving} className="btn text-sm py-2.5 px-4 flex items-center gap-2 bg-red-600 hover:bg-red-700">
+            <button onClick={() => setShowSubmitModal(true)} disabled={saving} className="btn text-sm py-2 px-4 flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 cursor-pointer">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
-              Complete Discharge
+              Submit for Review
             </button>
-            <button onClick={() => setShowPreview(!showPreview)} className="btn-secondary text-sm py-2.5 px-4 flex items-center gap-2">
+            <button onClick={() => setShowPreview(!showPreview)} className="btn-secondary text-sm py-2 px-4 flex items-center gap-2 cursor-pointer">
               <Eye className="h-4 w-4" /> {showPreview ? 'Hide Preview' : 'View Report'}
             </button>
           </div>
         )}
 
-        {viewMode && (
-          <div className="flex flex-wrap gap-2 mt-4">
-            <button onClick={handlePrint} className="btn-secondary text-sm py-2.5 px-4 flex items-center gap-2">
+        {form.status === 'Completed' && (
+          <div className="flex flex-wrap gap-2">
+            <button onClick={handlePrint} className="btn-secondary text-sm py-2 px-4 flex items-center gap-2 cursor-pointer">
               <Printer className="h-4 w-4" /> Print
             </button>
-            <button onClick={handleDownloadPdf} className="btn-secondary text-sm py-2.5 px-4 flex items-center gap-2">
+            <button onClick={handleDownloadPdf} className="btn-secondary text-sm py-2 px-4 flex items-center gap-2 cursor-pointer">
               <Download className="h-4 w-4" /> Download PDF
             </button>
           </div>
@@ -525,6 +604,49 @@ const IpdDischargeForm = () => {
         {renderDischargeReport(form, hospitalInfo, user)}
       </div>
 
+      {/* Submit for Review Modal */}
+      {showSubmitModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-orange-100 shadow-2xl space-y-5">
+            <div className="flex justify-between items-center border-b border-orange-50 pb-3">
+              <h2 className="font-extrabold text-gray-900 text-lg flex items-center gap-2">
+                <Clock className="text-orange-500 h-5 w-5" />
+                Submit for Physician Review
+              </h2>
+              <button onClick={() => setShowSubmitModal(false)} className="text-gray-400 hover:text-gray-600 p-1 hover:bg-orange-50 rounded-lg cursor-pointer">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitForReview} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-500">Select Doctor / SDC Operator</label>
+                <select 
+                  className="input py-2 text-xs" 
+                  value={selectedReviewer}
+                  onChange={(e) => setSelectedReviewer(e.target.value)}
+                  required
+                >
+                  <option value="">-- Choose Reviewer --</option>
+                  {reviewers.map((rev) => (
+                    <option key={rev._id} value={rev._id}>
+                      {rev.name} ({rev.role === 'doctor' ? 'Doctor' : rev.role === 'admin' ? 'Admin / Consultant' : 'Nursing'}) {rev.department && `| Dept: ${rev.department}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-2 border-t border-orange-50 pt-4">
+                <button type="button" onClick={() => setShowSubmitModal(false)} className="btn-secondary text-xs py-2 px-4 cursor-pointer">Cancel</button>
+                <button type="submit" className="btn text-xs py-2 px-4 cursor-pointer bg-indigo-600 hover:bg-indigo-700">
+                  Send Review Request
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <style>{`
         @media print {
           body { background: white; font-size: 12pt; }
@@ -628,6 +750,39 @@ const renderDischargeReport = (form, hospitalInfo, user) => {
           <div className="flex"><span className="font-bold text-gray-600 w-36">Medication Prescribed:</span><span className="text-gray-900">{form.medicationPrescribed || '_________________________'}</span></div>
         </div>
       </div>
+
+      {/* Discharge Prescription */}
+      {dischargeRecord?.dischargePrescription?.length > 0 && (
+        <div className="border border-gray-800 rounded-lg mb-4">
+          <div className="bg-gray-100 px-4 py-2 border-b border-gray-800">
+            <h3 className="font-bold text-sm uppercase">Discharge Prescription</h3>
+          </div>
+          <div className="p-4 text-xs font-semibold">
+            <table className="w-full text-left border-collapse border border-gray-300">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-300 text-[10px] uppercase font-bold text-gray-500">
+                  <th className="p-2 border-r border-gray-300">Medicine Name</th>
+                  <th className="p-2 border-r border-gray-300">Dosage</th>
+                  <th className="p-2 border-r border-gray-300">Frequency</th>
+                  <th className="p-2 border-r border-gray-300">Duration</th>
+                  <th className="p-2">Instructions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dischargeRecord.dischargePrescription.map((m, idx) => (
+                  <tr key={idx} className="border-b border-gray-300 text-gray-700">
+                    <td className="p-2 border-r border-gray-300 font-bold">{m.medicineName}</td>
+                    <td className="p-2 border-r border-gray-300">{m.dosage || 'N/A'}</td>
+                    <td className="p-2 border-r border-gray-300">{m.frequency || 'N/A'}</td>
+                    <td className="p-2 border-r border-gray-300">{m.duration || 'N/A'}</td>
+                    <td className="p-2 italic">{m.remarks || 'None'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Physician */}
       <div className="border border-gray-800 rounded-lg mb-4">

@@ -3,6 +3,7 @@ const IpdConsumable = require('../models/IpdConsumable');
 const IpdMedicine = require('../models/IpdMedicine');
 const IpdLabTest = require('../models/IpdLabTest');
 const IpdActivityTimeline = require('../models/IpdActivityTimeline');
+const PharmacyRequest = require('../models/PharmacyRequest');
 const Patient = require('../models/Patient');
 const Bed = require('../models/Bed');
 const User = require('../models/User');
@@ -280,6 +281,30 @@ const addMedicine = async (req, res) => {
 
     const admission = await IpdAdmission.findOne(tenantFilter(req, { _id: admissionId }));
     if (!admission) return res.status(404).json({ message: 'Admission record not found' });
+
+    // Stock Check: Ensure medicine was received from pharmacy and we have available quantity
+    const pharmacyRequests = await PharmacyRequest.find(tenantFilter(req, {
+      admissionId,
+      status: { $in: ['Received', 'Return Sent', 'Return Received'] }
+    }));
+
+    let totalReceived = 0;
+    pharmacyRequests.forEach(request => {
+      const item = request.items.find(i => i.itemName.toLowerCase() === medicineName.toLowerCase().trim());
+      if (item) {
+        totalReceived += (item.receivedQty || 0) - (item.returnedQty || 0) - (item.damagedQty || 0);
+      }
+    });
+
+    const administered = await IpdMedicine.find(tenantFilter(req, { admissionId, medicineName: { $regex: new RegExp('^' + medicineName.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '$', 'i') } }));
+    const totalAdministered = administered.reduce((sum, item) => sum + item.quantity, 0);
+
+    const availableQty = totalReceived - totalAdministered;
+    if (quantity > availableQty) {
+      return res.status(400).json({
+        message: `Only medicines received from the Pharmacy can be administered. Available received stock: ${availableQty}, requested: ${quantity}`
+      });
+    }
 
     // totalAmount is quantity * unitPrice (unitPrice expected to be GST-inclusive when gst provided)
     const totalAmount = quantity * unitPrice;
@@ -676,6 +701,73 @@ const getBillingSummary = async (req, res) => {
   }
 };
 
+// @desc    Get received medicines available to administer
+// @route   GET /api/ipd/services/received-medicines/:admissionId
+// @access  Private
+const getReceivedMedicines = async (req, res) => {
+  try {
+    const { admissionId } = req.params;
+    
+    // Find all Received (or Return Sent/Return Received) requests for this admission
+    const pharmacyRequests = await PharmacyRequest.find(tenantFilter(req, {
+      admissionId,
+      status: { $in: ['Received', 'Return Sent', 'Return Received'] }
+    }));
+
+    // Accumulate total received/returned quantities
+    const receivedMap = {};
+    pharmacyRequests.forEach(request => {
+      request.items.forEach(item => {
+        const nameKey = item.itemName.toLowerCase().trim();
+        if (item.receivedQty > 0) {
+          if (!receivedMap[nameKey]) {
+            receivedMap[nameKey] = {
+              itemName: item.itemName,
+              totalReceived: 0,
+              totalReturned: 0,
+              totalDamaged: 0,
+              unitPrice: item.unitPrice || 0,
+              gst: item.gst || 0,
+              baseUnitPrice: item.baseUnitPrice || item.unitPrice || 0,
+              isCustom: item.isCustom || false
+            };
+          }
+          receivedMap[nameKey].totalReceived += item.receivedQty || 0;
+          receivedMap[nameKey].totalReturned += item.returnedQty || 0;
+          receivedMap[nameKey].totalDamaged += item.damagedQty || 0;
+        }
+      });
+    });
+
+    // Find all already administered medicines
+    const administered = await IpdMedicine.find(tenantFilter(req, { admissionId }));
+    const administeredMap = {};
+    administered.forEach(item => {
+      const nameKey = item.medicineName.toLowerCase().trim();
+      administeredMap[nameKey] = (administeredMap[nameKey] || 0) + item.quantity;
+    });
+
+    // Format list of available medicines
+    const availableMedicines = Object.values(receivedMap).map(med => {
+      const nameKey = med.itemName.toLowerCase().trim();
+      const administeredQty = administeredMap[nameKey] || 0;
+      const netReceived = med.totalReceived - med.totalReturned - med.totalDamaged;
+      const availableQty = Math.max(0, netReceived - administeredQty);
+      
+      return {
+        ...med,
+        administeredQty,
+        availableQty
+      };
+    });
+
+    res.status(200).json(availableMedicines);
+  } catch (error) {
+    console.error('Get Received Medicines Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   getIpdPatientList,
   getIpdPatientDetails,
@@ -690,5 +782,6 @@ module.exports = {
   deleteLabTest,
   getTimeline,
   getPatientDashboard,
-  getBillingSummary
+  getBillingSummary,
+  getReceivedMedicines
 };

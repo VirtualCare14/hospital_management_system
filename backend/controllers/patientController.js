@@ -101,8 +101,8 @@ const createPatient = async (req, res) => {
       return res.status(400).json({ message: 'All required registration fields must be provided' });
     }
 
-    // Verify doctor exists and has role doctor
-    const doctor = await User.findOne(tenantQuery(req, { _id: doctorId, role: 'doctor' }));
+    // Verify doctor exists and has role doctor or nursing
+    const doctor = await User.findOne(tenantQuery(req, { _id: doctorId, role: { $in: ['doctor', 'nursing'] } }));
     if (!doctor) {
       return res.status(400).json({ message: 'Selected doctor is invalid' });
     }
@@ -354,6 +354,12 @@ const getPatients = async (req, res) => {
         const latestVisit = await Visit.findOne(tenantQuery(req, { patientId: pat._id }))
           .populate('doctorId', 'doctorName username department')
           .sort({ createdAt: -1 });
+
+        const Prescription = require('../models/Prescription');
+        const hasPrescription = latestVisit 
+          ? await Prescription.exists(tenantQuery(req, { patientId: pat._id, visitId: latestVisit._id }))
+          : false;
+
         return {
           ...pat.toObject(),
           department: latestVisit?.department || '',
@@ -363,7 +369,8 @@ const getPatients = async (req, res) => {
           appointmentNumber: latestVisit?.appointmentNumber || null,
           registrationNumber: latestVisit?.registrationNumber || '',
           visitType: latestVisit?.visitType || 'OPD',
-          consultationStatus: latestVisit?.consultationStatus || 'pending'
+          consultationStatus: latestVisit?.consultationStatus || 'pending',
+          hasPrescription: !!hasPrescription
         };
       })
     );
@@ -412,7 +419,8 @@ const getPatientById = async (req, res) => {
       appointmentNumber: latestVisit?.appointmentNumber || null,
       registrationNumber: latestVisit?.registrationNumber || '',
       visitType: latestVisit?.visitType || 'OPD',
-      consultationStatus: latestVisit?.consultationStatus || 'pending'
+      consultationStatus: latestVisit?.consultationStatus || 'pending',
+      demographics: latestVisit?.demographics || null
     };
 
     res.status(200).json(responseData);

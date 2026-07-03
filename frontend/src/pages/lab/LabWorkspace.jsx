@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import client from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 import DiagnosisTemplateDesigner from './DiagnosisTemplateDesigner.jsx';
 import DiagnosisDynamicReport from './DiagnosisDynamicReport.jsx';
 
@@ -2771,7 +2772,9 @@ const LabWorkspace = () => {
                       )}
                     </div>
                     {diagnosisTemplateLoading ? (
-                      <EmptyState title="Loading diagnosis template..." />
+                      <div className="rounded-xl border border-orange-100 bg-white p-4">
+                        <SkeletonTable rows={5} columns={4} className="w-full" />
+                      </div>
                     ) : (
                       <DiagnosisDynamicReport
                         template={diagnosisTemplate}
@@ -3696,7 +3699,11 @@ const LabWorkspace = () => {
       </div>
       <div className="space-y-4">
         <main className="space-y-4">
-          {loading ? <div className="flex items-center gap-2 rounded-lg border border-orange-100 bg-white p-6 font-bold text-orange-600"><Loader2 className="h-5 w-5 animate-spin" /> Loading lab module</div> : (
+          {loading ? (
+        <div className="card p-4">
+          <SkeletonTable rows={5} columns={7} className="w-full" />
+        </div>
+      ) : (
             <>
               {['requests', 'tracking', 'reports'].includes(section) && renderTrackingFilters()}
               {section === 'dashboard' && renderDashboard()}

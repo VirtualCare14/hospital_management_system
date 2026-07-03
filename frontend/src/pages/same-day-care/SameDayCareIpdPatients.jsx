@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Search, Bed, RefreshCw, Eye } from 'lucide-react';
 import toast from 'react-hot-toast';
 import client from '../../api/client';
+import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 import { formatUhid } from '../../utils/uhid';
 
 const SameDayCareIpdPatients = () => {
@@ -88,9 +89,8 @@ const SameDayCareIpdPatients = () => {
             <tbody className="divide-y divide-orange-50 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="p-12 text-center text-gray-500 font-medium">
-                    <RefreshCw className="h-5 w-5 animate-spin inline mr-2 text-orange-500" />
-                    Loading IPD patients...
+                  <td colSpan={8} className="p-8">
+                    <SkeletonTable rows={4} columns={8} className="w-full" />
                   </td>
                 </tr>
               ) : filteredAdmissions.length === 0 ? (

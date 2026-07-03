@@ -1,0 +1,181 @@
+/* ============================================================
+   Medora360 — UI Enhancement Styles
+   ============================================================
+   Targets existing classes only. No JSX changes.
+   CSS transitions only. GPU-friendly.
+   ============================================================ */
+
+/* ============================================================
+   TABLE ENHANCEMENTS
+   ============================================================ */
+
+/* ---- Row Hover: background transition only ---- */
+table.w-full.text-left.text-sm tbody tr {
+  transition: background-color 200ms ease;
+}
+
+table.w-full.text-left.text-sm tbody tr:hover {
+  background: rgba(255, 247, 237, 0.85) !important;
+}
+
+/* ---- Subtle inset shadow on hover (no layout shift) ---- */
+table.w-full.text-left.text-sm tbody tr:hover td {
+  box-shadow: inset 0 0 0 3px rgba(251, 146, 60, 0.12);
+}
+
+/* ---- Header color consistency ---- */
+table.w-full.text-left.text-sm thead tr th {
+  color: #9a3412 !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.04em;
+}
+
+/* ---- Action buttons: subtle hover only, no layout shift ---- */
+table.w-full.text-left.text-sm tbody tr td:last-child button {
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+table.w-full.text-left.text-sm tbody tr td:last-child button:hover {
+  background: rgba(251, 146, 60, 0.1);
+  color: #ea580c;
+}
+
+table.w-full.text-left.text-sm tbody tr td:last-child button.text-red-600:hover {
+  background: rgba(220, 38, 38, 0.08);
+  color: #dc2626;
+}
+
+table.w-full.text-left.text-sm tbody tr td:last-child button.text-green-600:hover,
+table.w-full.text-left.text-sm tbody tr td:last-child button.text-blue-600:hover {
+  background: rgba(37, 99, 235, 0.08);
+  color: #2563eb;
+}
+
+/* ---- Ensure table fills container ---- */
+table.w-full {
+  width: 100% !important;
+}
+
+/* ---- Empty / loading state ---- */
+table.w-full.text-left.text-sm tbody tr td[colspan] {
+  text-align: center;
+  color: #9ca3af;
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 768px) {
+  table.w-full.text-left.text-sm thead tr th,
+  table.w-full.text-left.text-sm tbody tr td {
+    font-size: 0.75rem !important;
+  }
+}
+
+/* ============================================================
+   TAB ENHANCEMENTS
+   ============================================================ */
+
+/* ---- Pill-style tabs (Billing, Dialysis, SameDayCare) ---- */
+/* Normal state: soft grey text */
+.flex button.rounded-lg.text-xs.font-bold:not(.bg-orange-500) {
+  background: transparent;
+  color: #6b7280;
+  font-weight: 600 !important;
+  transition: background-color 200ms ease, color 200ms ease;
+}
+
+/* Hover state: subtle orange tint */
+.flex button.rounded-lg.text-xs.font-bold:not(.bg-orange-500):hover {
+  background: rgba(251, 146, 60, 0.1);
+  color: #9a3412;
+}
+
+/* ---- Underline-style tabs (Pharmacy, HospitalSettings, OT) ---- */
+/* Normal state: soft grey text */
+.flex button.border-b-2.text-xs.font-bold:not(.border-orange-500):not(.border-red-500) {
+  color: #6b7280 !important;
+  font-weight: 600 !important;
+  transition: color 200ms ease, border-color 200ms ease, background-color 200ms ease;
+}
+
+/* Hover state for non-active underline tabs */
+.flex button.border-b-2.text-xs.font-bold:not(.border-orange-500):not(.border-red-500):hover {
+  color: #9a3412 !important;
+  background: rgba(251, 146, 60, 0.05);
+}
+
+/* Active underline tab: smooth border transition */
+.flex button.border-b-2.text-xs.font-bold.border-orange-500,
+.flex button.border-b-2.text-xs.font-bold.border-red-500 {
+  transition: border-color 200ms ease, color 200ms ease;
+}
+
+/* ---- Lab Workspace Settings Tabs ---- */
+button.btn-secondary.px-3.py-2.text-sm {
+  transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease;
+}
+
+button.btn-secondary.px-3.py-2.text-sm:hover {
+  border-color: #fb923c;
+  color: #ea580c;
+}
+
+/* ---- Print Layout Switcher (Billing) ---- */
+.flex button.rounded-md.text-xs.font-bold:not(.bg-white) {
+  transition: background-color 200ms ease, color 200ms ease;
+}
+
+.flex button.rounded-md.text-xs.font-bold:not(.bg-white):hover {
+  background: rgba(255, 255, 255, 0.5);
+  color: #374151;
+}
+
+/* ============================================================
+   UTILITY CLASSES (opt-in)
+   ============================================================ */
+
+.medora-badge {
+  display: inline-block;
+  padding: 0.15rem 0.6rem;
+  border-radius: 9999px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.medora-badge-success {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.medora-badge-warning {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.medora-badge-danger {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.medora-badge-info {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.medora-badge-neutral {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.medora-table-loading {
+  padding: 2rem;
+  text-align: center;
+  color: #9ca3af;
+}
+
+.medora-table-empty {
+  padding: 2rem;
+  text-align: center;
+  color: #9ca3af;
+}

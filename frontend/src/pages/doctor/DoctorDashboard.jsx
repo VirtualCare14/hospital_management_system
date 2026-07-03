@@ -235,8 +235,28 @@ const DoctorDashboard = () => {
                         </Link>
                       ) : (
                         <>
-                          <Link className="btn-secondary text-xs" to={`/doctor/consultation/${patient._id}`}><Stethoscope className="h-3 w-3" /> Consult</Link>
-                          <Link className="btn text-xs" to={`/doctor/prescription/${patient._id}`}><FileText className="h-3 w-3" /> Rx</Link>
+                          <Link 
+                            className={`text-xs inline-flex items-center gap-1 px-3 py-1 rounded-lg font-bold transition duration-150 cursor-pointer text-white ${
+                              patient.consultationStatus === 'completed' 
+                                ? 'bg-green-600 hover:bg-green-700' 
+                                : 'bg-orange-500 hover:bg-orange-600'
+                            }`} 
+                            to={`/doctor/consultation/${patient._id}`}
+                          >
+                            <Stethoscope className="h-3 w-3" /> Consult
+                          </Link>
+                          <Link 
+                            className={`text-xs inline-flex items-center gap-1 px-3 py-1 rounded-lg font-bold transition duration-150 cursor-pointer ${
+                              patient.consultationStatus === 'completed' 
+                                ? (patient.hasPrescription 
+                                  ? 'bg-green-600 text-white hover:bg-green-700' 
+                                  : 'bg-orange-500 text-white hover:bg-orange-600') 
+                                : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                            }`} 
+                            to={`/doctor/prescription/${patient._id}`}
+                          >
+                            <FileText className="h-3 w-3" /> Rx
+                          </Link>
                         </>
                       )}
                       <Link className="btn-secondary text-xs text-green-600" to={`/doctor/consultation-track/${patient._id}`}><History className="h-3 w-3" /> Track</Link>

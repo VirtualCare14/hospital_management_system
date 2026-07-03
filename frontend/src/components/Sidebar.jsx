@@ -30,7 +30,8 @@ import {
   Percent,
   Truck,
   Droplets,
-  Clock
+  Clock,
+  DoorOpen
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -48,7 +49,6 @@ const Sidebar = () => {
     { to: '/admin/hospital-settings', label: 'Hospital Settings', icon: Settings },
     { to: '/admin/room-settings', label: 'IPD Administration', icon: Bed },
     { to: '/admin/consumable-services', label: 'Consumable Services', icon: Package },
-    { to: '/admin/medicine-settings', label: 'Medicine Settings', icon: Pill },
     { to: '/admin/ot-settings', label: 'OT Settings', icon: Scissors },
     { to: '/admin/same-day-care', label: 'Same Day Care Settings', icon: Bandage },
   ];
@@ -64,6 +64,7 @@ const Sidebar = () => {
     { to: '/doctor/ipd-patients', label: 'IPD Patients', icon: Bed },
     { to: '/doctor/ot-patients', label: 'OT Patients', icon: Scissors },
     { to: '/doctor/completed', label: 'Completed Consultations', icon: CheckCircle },
+    { to: '/doctor/discharge-requests', label: 'Discharge Requests', icon: DoorOpen },
   ];
 
   const labLinks = [
@@ -82,7 +83,7 @@ const Sidebar = () => {
     { to: '/pharmacy?section=walk-in-billing', section: 'walk-in-billing', label: 'Walk-in Billing', icon: Plus },
     { to: '/pharmacy?section=sales-history', section: 'sales-history', label: 'Sales History', icon: FileText },
     { to: '/pharmacy?section=sales-return', section: 'sales-return', label: 'Sales Return', icon: RotateCcw },
-    { to: '/pharmacy?section=requests', section: 'requests', label: 'Doctor Requests', icon: Activity },
+    { to: '/pharmacy?section=requests', section: 'requests', label: 'IPD Patient Requests', icon: Activity },
     { to: '/pharmacy?section=inventory', section: 'inventory', label: 'Inventory', icon: Package },
     { to: '/pharmacy?section=excel-upload', section: 'excel-upload', label: 'Excel Upload / Purchase', icon: Upload },
     { to: '/pharmacy?section=supplier-management', section: 'supplier-management', label: 'Suppliers', icon: Truck },
@@ -224,34 +225,30 @@ const Sidebar = () => {
             </div>
           </div>
         )}
-        {(hasAccess([6]) || ['doctor', 'reception'].includes(user.role)) && (
+        {hasAccess([6]) && (
           <div className="mt-6">
             <span className="px-4 text-xs font-bold text-orange-400 uppercase tracking-widest block mb-2">Day Care</span>
             <div className="space-y-1">
-              {(user.role === 'admin' || user.role === 'nursing') && hasAccess([6]) && (
-                <NavLink to="/same-day-care" end className={({ isActive }) => isActive && !window.location.search.includes('tab=') ? activeStyle : inactiveStyle}>
-                  <Bandage className="h-5 w-5" />
-                  Same Day Care
-                </NavLink>
-              )}
-              {['admin', 'nursing', 'doctor', 'reception'].includes(user.role) && (
-                <NavLink to="/same-day-care/dialysis" className={({ isActive }) => isActive ? activeStyle : inactiveStyle}>
-                  <Droplets className="h-5 w-5 text-sky-500" />
-                  Dialysis Management
-                </NavLink>
-              )}
-              {['admin', 'nursing', 'doctor', 'reception'].includes(user.role) && (
-                <NavLink to="/same-day-care?tab=completed" className={() => window.location.search.includes('tab=completed') ? activeStyle : inactiveStyle}>
-                  <CheckCircle className="h-5 w-5" />
-                  Treatment Completed
-                </NavLink>
-              )}
-              {['admin', 'nursing', 'doctor', 'reception'].includes(user.role) && (
-                <NavLink to="/same-day-care?tab=pending" className={() => window.location.search.includes('tab=pending') ? activeStyle : inactiveStyle}>
-                  <Clock className="h-5 w-5" />
-                  Treatment Pending
-                </NavLink>
-              )}
+              <NavLink to="/same-day-care" end className={({ isActive }) => isActive && !window.location.search.includes('tab=') ? activeStyle : inactiveStyle}>
+                <Bandage className="h-5 w-5" />
+                Same Day Care
+              </NavLink>
+              <NavLink to="/same-day-care/dialysis" className={({ isActive }) => isActive ? activeStyle : inactiveStyle}>
+                <Droplets className="h-5 w-5 text-sky-500" />
+                Dialysis Management
+              </NavLink>
+              <NavLink to="/same-day-care?tab=completed" className={() => window.location.search.includes('tab=completed') ? activeStyle : inactiveStyle}>
+                <CheckCircle className="h-5 w-5" />
+                Treatment Completed
+              </NavLink>
+              <NavLink to="/same-day-care?tab=pending" className={() => window.location.search.includes('tab=pending') ? activeStyle : inactiveStyle}>
+                <Clock className="h-5 w-5" />
+                Treatment Pending
+              </NavLink>
+              <NavLink to="/same-day-care/discharge-requests" className={({ isActive }) => isActive ? activeStyle : inactiveStyle}>
+                <DoorOpen className="h-5 w-5" />
+                Discharge Requests
+              </NavLink>
             </div>
           </div>
         )}

@@ -14,7 +14,8 @@ const {
   getDoctorAvailability,
   getHospitalTracking,
   getPatientSummary,
-  getUserLimit
+  getUserLimit,
+  getPatientTrackingTimeline
 } = require('../controllers/adminController');
 const authMiddleware = require('../middleware/authMiddleware');
 
@@ -45,5 +46,6 @@ router.put('/doctors/:id/availability', authMiddleware, adminOnly, updateDoctorA
 // Tracking and patient summary routes for admin dashboard
 router.get('/hospital-tracking', authMiddleware, adminOnly, getHospitalTracking);
 router.get('/patient-summary/:id', authMiddleware, adminOnly, getPatientSummary);
+router.get('/patient-tracking/:patientId', authMiddleware, adminOnly, getPatientTrackingTimeline);
 
 module.exports = router;

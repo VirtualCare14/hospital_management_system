@@ -240,7 +240,7 @@ const CompletedConsultationDetails = () => {
       {/* Vitals Card */}
       <div className="card p-5">
         <h2 className="font-bold text-gray-800 mb-4">Vitals</h2>
-        <div className="grid gap-4 md:grid-cols-5">
+        <div className="grid gap-4 md:grid-cols-6">
           <div className="rounded-lg bg-orange-50 p-3">
             <p className="text-xs text-gray-500 font-semibold uppercase">Weight</p>
             <p className="text-lg font-bold text-orange-700">{consultation.vitals?.weight || '-'} kg</p>
@@ -252,6 +252,10 @@ const CompletedConsultationDetails = () => {
           <div className="rounded-lg bg-orange-50 p-3">
             <p className="text-xs text-gray-500 font-semibold uppercase">Temperature</p>
             <p className="text-lg font-bold text-orange-700">{consultation.vitals?.temperature || '-'} °C</p>
+          </div>
+          <div className="rounded-lg bg-orange-50 p-3">
+            <p className="text-xs text-gray-500 font-semibold uppercase">Blood Pressure</p>
+            <p className="text-lg font-bold text-orange-700">{consultation.vitals?.bloodPressure || '-'}</p>
           </div>
           <div className="rounded-lg bg-orange-50 p-3">
             <p className="text-xs text-gray-500 font-semibold uppercase">BMI</p>

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
+import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 import toast from 'react-hot-toast';
 import {
   Pill,
@@ -591,7 +592,9 @@ const InventoryView = () => {
             <tbody className="divide-y divide-orange-50">
               {loading ? (
                 <tr>
-                  <td colSpan="10" className="p-8 text-center"><Loader2 className="h-5 w-5 animate-spin inline mr-2 text-orange-500" /> Loading inventory...</td>
+                  <td colSpan="10" className="p-8">
+                    <SkeletonTable rows={5} columns={10} className="w-full" />
+                  </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
@@ -670,6 +673,58 @@ const ExcelUploadView = ({ loadStats }) => {
   const [uploading, setUploading] = useState(false);
   const [summary, setSummary] = useState(null);
   const [dragActive, setDragActive] = useState(false);
+  const [downloadingStock, setDownloadingStock] = useState(false);
+
+  const downloadCurrentStock = async () => {
+    setDownloadingStock(true);
+    try {
+      const { data } = await client.get('/pharmacy/inventory?limit=1000000&page=1');
+      if (!data || !data.items || data.items.length === 0) {
+        toast.error('No stock items found to download.');
+        return;
+      }
+
+      // Format standard Excel rows matching upload headers:
+      const rows = data.items.map((item, index) => {
+        let expiryStr = '';
+        if (item.expiry) {
+          const date = new Date(item.expiry);
+          if (!isNaN(date.getTime())) {
+            expiryStr = date.toISOString().split('T')[0];
+          }
+        }
+        return {
+          'Sno.': item.sNo || (index + 1),
+          'Item Name': item.itemName,
+          'Old MRP': item.oldMrp || 0,
+          'Pack': item.pack || '0',
+          'MRP': item.mrp || 0,
+          'Quantity': item.quantity || 0,
+          'Free': item.free || 0,
+          'Rate': item.rate || 0,
+          'Dis': item.dis || 0,
+          'Batch': item.batch,
+          'Expiry': expiryStr,
+          'NRate': item.nRate || 0,
+          'HSN': item.hsn || '0',
+          'SGST': item.sgst || 0,
+          'CST': item.cst || 0,
+          'Amount': item.amount || 0
+        };
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(rows);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Current Stock');
+      XLSX.writeFile(workbook, `pharmacy_current_stock_${new Date().toISOString().split('T')[0]}.xlsx`);
+      toast.success('Current stock downloaded successfully!');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to download current stock');
+    } finally {
+      setDownloadingStock(false);
+    }
+  };
 
   // Parse Excel Date helper
   const parseExcelDate = (val) => {
@@ -909,7 +964,7 @@ const ExcelUploadView = ({ loadStats }) => {
 
       {/* Excel Sheet Instructions */}
       <div className="space-y-4">
-        {/* Template Downloads */}
+        {/* Template Downloads & Stock Export */}
         <div className="card p-5 space-y-4">
           <h4 className="font-extrabold text-gray-800 text-sm flex items-center gap-2">
             <Download className="text-orange-500 h-4.5 w-4.5" />
@@ -921,10 +976,36 @@ const ExcelUploadView = ({ loadStats }) => {
           <a 
             href="/sample_inventory.xlsx" 
             download="sample_inventory.xlsx"
-            className="btn-secondary py-2.5 px-4 text-xs flex items-center gap-2 w-full hover:bg-orange-50/50"
+            className="btn-secondary py-2.5 px-4 text-xs flex items-center gap-2 w-full hover:bg-orange-50/50 justify-center font-bold"
           >
             <Download className="h-4 w-4" /> Download Sample File
           </a>
+
+          <div className="border-t border-orange-100/60 pt-4 space-y-3">
+            <h4 className="font-extrabold text-gray-800 text-sm flex items-center gap-2">
+              <FileSpreadsheet className="text-orange-500 h-4.5 w-4.5" />
+              Download Current Stock
+            </h4>
+            <p className="text-xs text-gray-500">
+              Export all existing inventory items into the same standard Excel format. You can edit this file and re-upload it.
+            </p>
+            <button 
+              onClick={downloadCurrentStock}
+              disabled={downloadingStock}
+              className="btn py-2.5 px-4 text-xs flex items-center gap-2 w-full hover:bg-orange-600 justify-center cursor-pointer disabled:bg-orange-300 shadow-md shadow-orange-500/10 font-bold"
+            >
+              {downloadingStock ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Generating Excel...
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4" /> Export Current Stock
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Required Columns */}
@@ -1055,7 +1136,9 @@ const ExpiryMedicinesView = () => {
             <tbody className="divide-y divide-orange-50">
               {loading ? (
                 <tr>
-                  <td colSpan="5" className="p-8 text-center"><Loader2 className="h-5 w-5 animate-spin inline mr-2 text-orange-500" /> Loading details...</td>
+                  <td colSpan="5" className="p-8">
+                    <SkeletonTable rows={4} columns={5} className="w-full" />
+                  </td>
                 </tr>
               ) : currentList.length === 0 ? (
                 <tr>
@@ -1131,7 +1214,9 @@ const OutOfStockView = () => {
             <tbody className="divide-y divide-orange-50">
               {loading ? (
                 <tr>
-                  <td colSpan="5" className="p-8 text-center"><Loader2 className="h-5 w-5 animate-spin inline mr-2 text-orange-500" /> Loading out of stock details...</td>
+                  <td colSpan="5" className="p-8">
+                    <SkeletonTable rows={4} columns={5} className="w-full" />
+                  </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
@@ -1210,17 +1295,23 @@ const RequestsView = () => {
         itemName: item.itemName,
         requestedQty: item.requestedQty,
         approvedQty: item.requestedQty,
-        batch: '',
-        isRejected: false
+        batch: item.isCustom ? 'CUSTOM' : '',
+        isRejected: false,
+        isCustom: item.isCustom || false,
+        isAvailable: true,
+        unitPrice: '',
+        gst: ''
       }));
       setReviewItems(initialReview);
       setRemarks('');
 
-      // Fetch batches for each item
+      // Fetch batches for standard items only
       selectedRequest.items.forEach(item => {
-        fetchBatchesForItem(item.itemName);
+        if (!item.isCustom) {
+          fetchBatchesForItem(item.itemName);
+        }
       });
-    } else if (selectedRequest.status === 'Return Requested') {
+    } else if (selectedRequest.status === 'Return Sent' || selectedRequest.status === 'Return Requested') {
       const initialReturns = selectedRequest.items
         .filter(item => item.returnedQty > 0)
         .map(item => ({
@@ -1242,7 +1333,9 @@ const RequestsView = () => {
 
       // Fetch batches for pending items
       initialRemaining.forEach(item => {
-        fetchBatchesForItem(item.itemName);
+        if (!item.isCustom) {
+          fetchBatchesForItem(item.itemName);
+        }
       });
     }
   }, [selectedRequest]);
@@ -1261,9 +1354,15 @@ const RequestsView = () => {
   const handleReviewSubmit = async () => {
     // Validate batches for approved items
     for (const item of reviewItems) {
-      if (!item.isRejected && item.approvedQty > 0 && !item.batch) {
-        toast.error(`Please select a batch for ${item.itemName}`);
-        return;
+      if (!item.isRejected && item.isAvailable !== false && item.approvedQty > 0) {
+        if (!item.isCustom && !item.batch) {
+          toast.error(`Please select a batch for ${item.itemName}`);
+          return;
+        }
+        if (item.isCustom && (!item.unitPrice || parseFloat(item.unitPrice) < 0)) {
+          toast.error(`Please enter a valid price for custom item ${item.itemName}`);
+          return;
+        }
       }
     }
 
@@ -1307,7 +1406,7 @@ const RequestsView = () => {
   const handleVerifyReturnSubmit = async () => {
     setSubmitting(true);
     try {
-      await client.post(`/pharmacy/requests/${selectedRequest._id}/verify-return`, {
+      await client.post(`/pharmacy/requests/${selectedRequest._id}/return-received`, {
         items: verifyReturnItems,
         remarks
       });
@@ -1487,9 +1586,8 @@ const RequestsView = () => {
                 <tbody className="divide-y divide-orange-50">
                   {loading ? (
                     <tr>
-                      <td colSpan="7" className="p-8 text-center">
-                        <Loader2 className="h-6 w-6 animate-spin text-orange-500 inline mr-2" />
-                        Loading doctor requests...
+                      <td colSpan="7" className="p-8">
+                        <SkeletonTable rows={4} columns={7} className="w-full" />
                       </td>
                     </tr>
                   ) : requests.length === 0 ? (
@@ -1523,9 +1621,10 @@ const RequestsView = () => {
                             req.status === 'Approved' ? 'bg-green-100 text-green-800 border-green-200' :
                             req.status === 'Partially Approved' ? 'bg-orange-100 text-orange-800 border-orange-200' :
                             req.status === 'Rejected' ? 'bg-red-100 text-red-800 border-red-200' :
-                            req.status === 'Issued' ? 'bg-blue-100 text-blue-800 border-blue-200' :
-                            req.status === 'Return Requested' ? 'bg-purple-100 text-purple-800 border-purple-200' :
-                            req.status === 'Return Accepted' ? 'bg-teal-100 text-teal-800 border-teal-200' :
+                            req.status === 'Issued' || req.status === 'Sent' ? 'bg-blue-100 text-blue-800 border-blue-200' :
+                            req.status === 'Received' ? 'bg-indigo-100 text-indigo-800 border-indigo-200' :
+                            req.status === 'Return Sent' || req.status === 'Return Requested' ? 'bg-purple-100 text-purple-800 border-purple-200' :
+                            req.status === 'Return Received' || req.status === 'Return Accepted' ? 'bg-teal-100 text-teal-800 border-teal-200' :
                             req.status === 'Return Rejected' ? 'bg-pink-100 text-pink-800 border-pink-200' :
                             req.status === 'Remaining Items Issued' ? 'bg-sky-100 text-sky-800 border-sky-200' :
                             'bg-gray-100 text-gray-800 border-gray-200'
@@ -1690,11 +1789,18 @@ const RequestsView = () => {
                     </thead>
                     <tbody className="divide-y divide-orange-50">
                       {reviewItems.map((item, idx) => (
-                        <tr key={idx} className={`hover:bg-orange-50/10 ${item.isRejected ? 'bg-red-50/20' : ''}`}>
+                        <tr key={idx} className={`hover:bg-orange-50/10 ${item.isRejected || item.isAvailable === false ? 'bg-red-50/25 opacity-70' : ''}`}>
                           <td className="p-3 pl-4 font-bold text-gray-800">
                             {item.itemName}
+                            {item.isCustom && (
+                              <span className="ml-2 inline-flex items-center gap-1 rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-black text-purple-700 uppercase tracking-wider">
+                                Custom Item
+                              </span>
+                            )}
                             <span className="block text-[9px] font-semibold text-gray-400">
-                              {batchesMap[item.itemName]?.length ? `${batchesMap[item.itemName].length} batch(es) found` : 'No available stock in inventory'}
+                              {item.isCustom 
+                                ? 'Custom request - Set price details' 
+                                : (batchesMap[item.itemName]?.length ? `${batchesMap[item.itemName].length} batch(es) found` : 'No available stock in inventory')}
                             </span>
                           </td>
                           <td className="p-3 font-semibold text-gray-600">{item.requestedQty}</td>
@@ -1703,7 +1809,7 @@ const RequestsView = () => {
                               type="number" 
                               min="0"
                               max={item.requestedQty}
-                              disabled={item.isRejected}
+                              disabled={item.isRejected || item.isAvailable === false}
                               className="input py-1 px-1.5 text-center text-xs w-[80px]"
                               value={item.approvedQty}
                               onChange={(e) => {
@@ -1715,42 +1821,105 @@ const RequestsView = () => {
                             />
                           </td>
                           <td className="p-3">
-                            <select
-                              disabled={item.isRejected}
-                              className="input py-1 text-xs font-semibold"
-                              value={item.batch}
-                              onChange={(e) => {
-                                const updated = [...reviewItems];
-                                updated[idx].batch = e.target.value;
-                                setReviewItems(updated);
-                              }}
-                            >
-                              <option value="">-- Match Batch --</option>
-                              {batchesMap[item.itemName]?.map(b => (
-                                <option key={b.batch} value={b.batch}>
-                                  {b.batch} (Qty: {b.quantity} | mrp: ₹{b.mrp})
-                                </option>
-                              ))}
-                            </select>
+                            {item.isCustom ? (
+                              <div className="flex gap-2">
+                                <div className="w-[100px]">
+                                  <input 
+                                    type="number" 
+                                    placeholder="Unit Price"
+                                    disabled={item.isRejected || item.isAvailable === false}
+                                    className="input py-1 px-1.5 text-xs font-semibold"
+                                    value={item.unitPrice}
+                                    onChange={(e) => {
+                                      const updated = [...reviewItems];
+                                      updated[idx].unitPrice = e.target.value;
+                                      setReviewItems(updated);
+                                    }}
+                                  />
+                                </div>
+                                <div className="w-[85px]">
+                                  <input 
+                                    type="number" 
+                                    placeholder="GST %"
+                                    disabled={item.isRejected || item.isAvailable === false}
+                                    className="input py-1 px-1.5 text-xs font-semibold"
+                                    value={item.gst}
+                                    onChange={(e) => {
+                                      const updated = [...reviewItems];
+                                      updated[idx].gst = e.target.value;
+                                      setReviewItems(updated);
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            ) : (
+                              <select
+                                disabled={item.isRejected}
+                                className="input py-1 text-xs font-semibold"
+                                value={item.batch}
+                                onChange={(e) => {
+                                  const updated = [...reviewItems];
+                                  updated[idx].batch = e.target.value;
+                                  setReviewItems(updated);
+                                }}
+                              >
+                                <option value="">-- Match Batch --</option>
+                                {batchesMap[item.itemName]?.map(b => (
+                                  <option key={b.batch} value={b.batch}>
+                                    {b.batch} (Qty: {b.quantity} | mrp: ₹{b.mrp})
+                                  </option>
+                                ))}
+                              </select>
+                            )}
                           </td>
                           <td className="p-3 pr-4 text-center">
-                            <input 
-                              type="checkbox"
-                              checked={item.isRejected}
-                              className="rounded border-orange-200 text-orange-500 focus:ring-orange-500 h-4 w-4"
-                              onChange={(e) => {
-                                const checked = e.target.checked;
-                                const updated = [...reviewItems];
-                                updated[idx].isRejected = checked;
-                                if (checked) {
-                                  updated[idx].approvedQty = 0;
-                                  updated[idx].batch = '';
-                                } else {
-                                  updated[idx].approvedQty = item.requestedQty;
-                                }
-                                setReviewItems(updated);
-                              }}
-                            />
+                            <div className="flex items-center justify-center gap-4">
+                              <label className="flex items-center gap-1 font-semibold text-[10px] text-gray-500 cursor-pointer">
+                                <input 
+                                  type="checkbox"
+                                  checked={item.isRejected}
+                                  className="rounded border-orange-200 text-orange-500 focus:ring-orange-500 h-4 w-4 cursor-pointer"
+                                  onChange={(e) => {
+                                    const checked = e.target.checked;
+                                    const updated = [...reviewItems];
+                                    updated[idx].isRejected = checked;
+                                    if (checked) {
+                                      updated[idx].approvedQty = 0;
+                                      updated[idx].batch = '';
+                                    } else {
+                                      updated[idx].approvedQty = item.requestedQty;
+                                      if (item.isCustom) updated[idx].batch = 'CUSTOM';
+                                    }
+                                    setReviewItems(updated);
+                                  }}
+                                />
+                                Reject
+                              </label>
+
+                              {item.isCustom && (
+                                <label className="flex items-center gap-1 font-semibold text-[10px] text-red-500 cursor-pointer">
+                                  <input 
+                                    type="checkbox"
+                                    checked={item.isAvailable === false}
+                                    className="rounded border-red-200 text-red-500 focus:ring-red-500 h-4 w-4 cursor-pointer"
+                                    onChange={(e) => {
+                                      const checked = e.target.checked;
+                                      const updated = [...reviewItems];
+                                      updated[idx].isAvailable = !checked;
+                                      if (checked) {
+                                        updated[idx].approvedQty = 0;
+                                        updated[idx].batch = '';
+                                      } else {
+                                        updated[idx].approvedQty = item.requestedQty;
+                                        updated[idx].batch = 'CUSTOM';
+                                      }
+                                      setReviewItems(updated);
+                                    }}
+                                  />
+                                  Not Available
+                                </label>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -1846,14 +2015,14 @@ const RequestsView = () => {
                     className="btn py-2 px-5 text-xs flex items-center gap-1.5 cursor-pointer disabled:bg-orange-300 shadow-md"
                   >
                     {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Truck className="h-4 w-4" />}
-                    Confirm Stock Issuance
+                    Confirm Stock Issuance & Send
                   </button>
                 </div>
               </div>
             )}
 
             {/* Case: Return Requested - Pharmacist verifies doctor returns */}
-            {selectedRequest.status === 'Return Requested' && (
+            {(selectedRequest.status === 'Return Requested' || selectedRequest.status === 'Return Sent') && (
               <div className="space-y-4">
                 <div className="border-l-4 border-purple-500 bg-purple-50/50 p-3.5 rounded-r-2xl text-xs text-purple-800">
                   <p className="font-bold">Verify Returned Items Form</p>

@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import client from '../../api/client';
+import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 import { formatUhid } from '../../utils/uhid';
 
 const statusColors = {
@@ -183,10 +184,6 @@ const IpdPatientList = () => {
 
   const handleViewServices = (admission) => {
     navigate(`/ipd/patient/${admission._id}?tab=services`);
-  };
-
-  const handleViewBilling = (admission) => {
-    navigate(`/ipd/patient/${admission._id}?tab=billing`);
   };
 
   const handleOpenOt = (admission) => {
@@ -362,11 +359,8 @@ const IpdPatientList = () => {
             <tbody className="divide-y divide-orange-50">
               {loading ? (
                 <tr>
-                  <td colSpan="10" className="p-12 text-center">
-                    <div className="flex items-center justify-center gap-2 text-gray-500">
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                      Loading patients...
-                    </div>
+                  <td colSpan="10" className="p-8">
+                    <SkeletonTable rows={4} columns={10} className="w-full" />
                   </td>
                 </tr>
               ) : paginatedData.length === 0 ? (
@@ -481,13 +475,6 @@ const IpdPatientList = () => {
                             title="Open Services"
                           >
                             <Syringe className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleViewBilling(admission)}
-                            className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                            title="View Billing Summary"
-                          >
-                            <CreditCard className="h-4 w-4" />
                           </button>
                           <button
                             onClick={() => handleOpenOt(admission)}

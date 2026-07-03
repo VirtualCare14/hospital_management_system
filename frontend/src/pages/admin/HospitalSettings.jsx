@@ -3,6 +3,8 @@ import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { Building2, Save, Upload, X, Loader2, Info, Percent, Settings, ShieldAlert, FileText, Globe, Mail, PhoneCall } from 'lucide-react';
 import client from '../../api/client';
+import SkeletonCard from '../../components/Skeleton/SkeletonCard';
+import SkeletonInput from '../../components/Skeleton/SkeletonInput';
 
 const HospitalSettings = () => {
   const [settings, setSettings] = useState(null);
@@ -250,8 +252,15 @@ const HospitalSettings = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
+      <div className="space-y-6 max-w-4xl mx-auto py-8">
+        <SkeletonCard className="w-full" />
+        <div className="grid gap-4 md:grid-cols-2">
+          <SkeletonInput />
+          <SkeletonInput />
+          <SkeletonInput />
+          <SkeletonInput />
+        </div>
+        <SkeletonCard className="w-full" />
       </div>
     );
   }
@@ -622,9 +631,8 @@ const HospitalSettings = () => {
             </h3>
 
             {loadingRequests ? (
-              <div className="p-12 text-center text-gray-500 flex flex-col items-center justify-center gap-2">
-                <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
-                <span className="text-xs font-bold">Loading pending discount requests...</span>
+              <div className="p-4">
+                <SkeletonTable rows={4} columns={3} className="w-full" />
               </div>
             ) : discountRequests.length === 0 ? (
               <div className="p-12 text-center border-2 border-dashed border-gray-200 rounded-2xl bg-gray-50">

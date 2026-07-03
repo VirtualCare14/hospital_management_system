@@ -5,6 +5,7 @@ import {
   ArrowLeft, Loader2, Save, CheckCircle, Eye, Printer, Download,
   Plus, Trash2, Edit3, HeartPulse, User, Phone, MapPin, CalendarDays, Droplets, ShieldAlert
 } from 'lucide-react';
+import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 import { useAuth } from '../../context/AuthContext';
 import client from '../../api/client';
 import { formatUhid } from '../../utils/uhid';
@@ -359,10 +360,9 @@ const DialysisRecordForm = () => {
 
   if (loading) {
     return (
-      <div className="flex h-[80vh] items-center justify-center bg-orange-50/10">
-        <div className="text-center space-y-2">
-          <Loader2 className="h-10 w-10 animate-spin text-orange-500 mx-auto" />
-          <p className="text-sm font-bold text-gray-500">Loading dialysis record data...</p>
+      <div className="flex h-[80vh] items-center justify-center bg-orange-50/10 p-4">
+        <div className="w-full max-w-5xl">
+          <SkeletonTable rows={5} columns={5} className="w-full" />
         </div>
       </div>
     );

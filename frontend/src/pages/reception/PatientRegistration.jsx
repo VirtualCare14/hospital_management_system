@@ -6,11 +6,14 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import client from '../../api/client';
 import PatientReceipt from '../../components/PatientReceipt';
+import SkeletonInput from '../../components/Skeleton/SkeletonInput';
 import { formatUhid } from '../../utils/uhid';
 
 const PatientRegistration = () => {
   const [departments, setDepartments] = useState([]);
   const [doctors, setDoctors] = useState([]);
+  const [departmentsLoading, setDepartmentsLoading] = useState(true);
+  const [doctorsLoading, setDoctorsLoading] = useState(false);
   const [bookedSlots, setBookedSlots] = useState([]);
   const [registeredPatient, setRegisteredPatient] = useState(null);
   const [showReceipt, setShowReceipt] = useState(false);
@@ -35,10 +38,14 @@ const PatientRegistration = () => {
   );
 
   useEffect(() => {
-    client.get('/admin/departments').then(({ data }) => {
-      const activeDepts = data.filter((dept) => dept.isActive);
-      setDepartments(activeDepts);
-    });
+    setDepartmentsLoading(true);
+    client.get('/admin/departments')
+      .then(({ data }) => {
+        const activeDepts = data.filter((dept) => dept.isActive);
+        setDepartments(activeDepts);
+      })
+      .catch(() => {})
+      .finally(() => setDepartmentsLoading(false));
   }, []);
 
   useEffect(() => {
@@ -51,19 +58,12 @@ const PatientRegistration = () => {
       return;
     }
 
-    // If "Same Day Care" department is selected, load all doctors (not filtered by dept)
-    if (department === 'Same Day Care') {
-      client
-        .get('/admin/doctors')
-        .then(({ data }) => setDoctors(data))
-        .catch(() => setDoctors([]));
-      return;
-    }
-
+    setDoctorsLoading(true);
     client
       .get(`/admin/doctors?department=${encodeURIComponent(department)}`)
       .then(({ data }) => setDoctors(data))
-      .catch(() => setDoctors([]));
+      .catch(() => setDoctors([]))
+      .finally(() => setDoctorsLoading(false));
   }, [department, setValue]);
 
   useEffect(() => {
@@ -113,9 +113,11 @@ const PatientRegistration = () => {
 
   const onSubmit = async (data) => {
     try {
+      const tempVal = parseFloat(data.temperature);
       const payload = {
         ...data,
-        visitType: data.department === 'Same Day Care' ? 'Same Day Treatment' : 'OPD'
+        visitType: data.department === 'Same Day Care' ? 'Same Day Treatment' : 'OPD',
+        temperature: !isNaN(tempVal) ? ((tempVal - 32) * 5 / 9).toFixed(1) : undefined
       };
       const { data: res } = await client.post('/patients/create', payload);
       toast.success(res.message);
@@ -259,22 +261,30 @@ const PatientRegistration = () => {
           </Field>
 
           <Field label="Department">
+          {departmentsLoading ? (
+            <SkeletonInput />
+          ) : (
             <select className="input" {...register('department', { required: true })}>
               <option value="">Select department</option>
               {departments.map((dept) => (
                 <option key={dept._id} value={dept.departmentName}>{dept.departmentName}</option>
               ))}
             </select>
-          </Field>
+          )}
+        </Field>
 
-          <Field label="Doctor">
+        <Field label="Doctor">
+          {doctorsLoading ? (
+            <SkeletonInput />
+          ) : (
             <select className="input" {...register('doctorId', { required: true })}>
               <option value="">Select doctor</option>
               {doctors.map((doctor) => (
                 <option key={doctor._id} value={doctor._id}>Dr. {doctor.doctorName || doctor.username}</option>
               ))}
             </select>
-          </Field>
+          )}
+        </Field>
 
           <Field label="Appointment Date">
             <input className="input" type="date" {...register('appointmentDate', { required: true })} />
@@ -294,8 +304,8 @@ const PatientRegistration = () => {
           <Field label="Blood Pressure">
             <input className="input" placeholder="Example: 120/80" {...register('bloodPressure')} />
           </Field>
-          <Field label="Body Temperature (°C)">
-            <input className="input" placeholder="°C" type="number" step="0.1" {...register('temperature')} />
+          <Field label="Body Temperature (°F)">
+            <input className="input" placeholder="°F" type="number" step="0.1" {...register('temperature')} />
           </Field>
           <Field label="Address" className="md:col-span-2 xl:col-span-3">
             <textarea className="input min-h-24" placeholder="Enter full address" {...register('address', { required: true })} />

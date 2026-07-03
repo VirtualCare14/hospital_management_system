@@ -5,6 +5,7 @@ import jsPDF from 'jspdf';
 import toast from 'react-hot-toast';
 import client from '../../api/client';
 import PatientReceipt from '../../components/PatientReceipt';
+import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 import { formatUhid } from '../../utils/uhid';
 
 const DEPARTMENTS = ['General', 'Cardiology', 'Orthopedics', 'Pediatrics', 'Neurology', 'Dermatology', 'ENT', 'Ophthalmology', 'Psychiatry'];
@@ -243,12 +244,16 @@ const PatientList = () => {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="8" className="p-8 text-center text-gray-400">Loading...</td></tr>
+                <tr>
+                  <td colSpan="8" className="p-8">
+                    <SkeletonTable rows={4} columns={8} className="w-full" />
+                  </td>
+                </tr>
               ) : registrations.length === 0 ? (
                 <tr><td colSpan="8" className="p-8 text-center text-gray-400">No registrations found.</td></tr>
               ) : (
                 registrations.map((reg) => (
-                  <tr key={reg._id} className="border-t border-orange-50 hover:bg-orange-50/30">
+                  <tr key={reg._id} className="border-t border-orange-50">
                     <td className="p-3 font-mono font-bold text-xs text-blue-700">{reg.registrationNumber}</td>
                     <td className="p-3 font-bold text-orange-700 text-xs">{formatUhid(reg.uhid)}</td>
                     <td className="p-3">{reg.patientName}</td>
@@ -268,26 +273,28 @@ const PatientList = () => {
                         {reg.consultationStatus === 'completed' ? 'Completed' : 'Pending'}
                       </span>
                     </td>
-                    <td className="flex flex-wrap gap-1 p-3">
-                      <button
-                        className="btn-secondary text-[10px] py-1 px-1.5"
-                        onClick={() => openVisitHistory(reg.uhid, reg.patientName)}
-                        title="View Visit History"
-                      >
-                        <Clock className="h-3 w-3" /> History
-                      </button>
-                      <button
-                        className="btn-secondary text-[10px] py-1 px-1.5"
-                        onClick={() => printPatientReceipt(reg)}
-                      >
-                        <Printer className="h-3 w-3" />
-                      </button>
-                      <button
-                        className="btn-secondary text-[10px] py-1 px-1.5 text-red-600"
-                        onClick={() => handleDeletePatient(reg.patientId)}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
+                    <td className="p-3">
+                      <div className="flex flex-wrap gap-1">
+                        <button
+                          className="btn-secondary text-[10px] py-1 px-1.5"
+                          onClick={() => openVisitHistory(reg.uhid, reg.patientName)}
+                          title="View Visit History"
+                        >
+                          <Clock className="h-3 w-3" /> History
+                        </button>
+                        <button
+                          className="btn-secondary text-[10px] py-1 px-1.5"
+                          onClick={() => printPatientReceipt(reg)}
+                        >
+                          <Printer className="h-3 w-3" />
+                        </button>
+                        <button
+                          className="btn-secondary text-[10px] py-1 px-1.5 text-red-600"
+                          onClick={() => handleDeletePatient(reg.patientId)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

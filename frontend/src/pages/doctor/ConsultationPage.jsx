@@ -41,9 +41,10 @@ const ConsultationPage = () => {
         const patientRes = await client.get(`/patients/${patientId}`);
         setPatient(patientRes.data);
         reset({
-          weight: patientRes.data.demographics?.weight,
-          height: patientRes.data.demographics?.height,
-          temperature: patientRes.data.demographics?.temperature
+          weight: patientRes.data.demographics?.weight || '',
+          height: patientRes.data.demographics?.height || '',
+          temperature: patientRes.data.demographics?.temperature || '',
+          bloodPressure: patientRes.data.demographics?.bloodPressure || ''
         });
 
         // Load previous consultations to find latest completed one
@@ -183,7 +184,8 @@ const ConsultationPage = () => {
       height: data.height || previousConsultation?.vitals?.height,
       temperature: data.temperature || previousConsultation?.vitals?.temperature,
       bmi: data.bmi || previousConsultation?.vitals?.bmi,
-      drugAllergy: data.drugAllergy || previousConsultation?.vitals?.drugAllergy
+      drugAllergy: data.drugAllergy || previousConsultation?.vitals?.drugAllergy,
+      bloodPressure: data.bloodPressure || previousConsultation?.vitals?.bloodPressure
     };
 
     // Merge tests
@@ -431,16 +433,17 @@ const ConsultationPage = () => {
       <section className="card space-y-4 p-5 rounded-2xl shadow-sm bg-white">
         <h2 className="font-bold text-gray-800">Vitals</h2>
         {previousConsultation?.vitals && (
-          <div className="grid gap-4 md:grid-cols-5 p-3 bg-gray-100 rounded-xl border border-gray-200 text-gray-600 text-sm mb-4">
-            <div className="col-span-5"><p className="text-xs font-bold text-gray-500 uppercase">Previous Vitals (Read-Only)</p></div>
+          <div className="grid gap-4 md:grid-cols-6 p-3 bg-gray-100 rounded-xl border border-gray-200 text-gray-600 text-sm mb-4">
+            <div className="col-span-6"><p className="text-xs font-bold text-gray-500 uppercase">Previous Vitals (Read-Only)</p></div>
             <div><strong>Weight:</strong> {previousConsultation.vitals.weight ? `${previousConsultation.vitals.weight} kg` : '-'}</div>
             <div><strong>Height:</strong> {previousConsultation.vitals.height ? `${previousConsultation.vitals.height} cm` : '-'}</div>
             <div><strong>Temp:</strong> {previousConsultation.vitals.temperature ? `${previousConsultation.vitals.temperature} °C` : '-'}</div>
+            <div><strong>BP:</strong> {previousConsultation.vitals.bloodPressure || '-'}</div>
             <div><strong>BMI:</strong> {previousConsultation.vitals.bmi || '-'}</div>
             <div><strong>Drug Allergy:</strong> {previousConsultation.vitals.drugAllergy || '-'}</div>
           </div>
         )}
-        <div className="grid gap-4 md:grid-cols-5">
+        <div className="grid gap-4 md:grid-cols-6">
           <div>
             <label className="text-sm text-gray-600">Weight (kg)</label>
             <input className="input" placeholder="Weight" {...register('weight')} />
@@ -452,6 +455,10 @@ const ConsultationPage = () => {
           <div>
             <label className="text-sm text-gray-600">Temperature (°C)</label>
             <input className="input" placeholder="Temperature °C" {...register('temperature')} />
+          </div>
+          <div>
+            <label className="text-sm text-gray-600">Blood Pressure</label>
+            <input className="input" placeholder="e.g. 120/80" {...register('bloodPressure')} />
           </div>
           <div>
             <label className="text-sm text-gray-600">BMI</label>

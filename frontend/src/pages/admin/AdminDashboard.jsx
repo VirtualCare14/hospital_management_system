@@ -18,9 +18,12 @@ import {
   Activity,
   ArrowRight,
   TrendingUp,
-  AlertCircle
+  AlertCircle,
+  ArrowLeft,
+  X
 } from 'lucide-react';
 import client from '../../api/client';
+import SkeletonCard from '../../components/Skeleton/SkeletonCard';
 import StatCard from '../../components/StatCard.jsx';
 import toast from 'react-hot-toast';
 
@@ -46,6 +49,47 @@ const AdminDashboard = () => {
   const [selectedPatientId, setSelectedPatientId] = useState(null);
   const [patientSummary, setPatientSummary] = useState(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
+
+  // Added States for Patients List & Tracking
+  const [patients, setPatients] = useState([]);
+  const [patientsLoading, setPatientsLoading] = useState(false);
+  const [selectedTrackingPatient, setSelectedTrackingPatient] = useState(null);
+  const [patientTrackingData, setPatientTrackingData] = useState(null);
+  const [trackingDetailsLoading, setTrackingDetailsLoading] = useState(false);
+
+  // Fetch patient list when summary tab is opened
+  useEffect(() => {
+    if (activeTab === 'summary') {
+      setPatientsLoading(true);
+      client.get('/patients')
+        .then((res) => {
+          setPatients(res.data);
+        })
+        .catch((err) => {
+          console.error(err);
+          toast.error('Failed to load patient list');
+        })
+        .finally(() => setPatientsLoading(false));
+    }
+  }, [activeTab]);
+
+  // Fetch patient tracking timeline when a patient is selected for tracking
+  useEffect(() => {
+    if (selectedTrackingPatient) {
+      setTrackingDetailsLoading(true);
+      client.get(`/admin/patient-tracking/${selectedTrackingPatient._id || selectedTrackingPatient.patientId?._id || selectedTrackingPatient.patientId}`)
+        .then((res) => {
+          setPatientTrackingData(res.data);
+        })
+        .catch((err) => {
+          console.error(err);
+          toast.error('Failed to load patient tracking timeline');
+        })
+        .finally(() => setTrackingDetailsLoading(false));
+    } else {
+      setPatientTrackingData(null);
+    }
+  }, [selectedTrackingPatient]);
 
   // SEO Update
   useEffect(() => {
@@ -105,18 +149,29 @@ const AdminDashboard = () => {
     setSearchResults([]);
     setPatientSearch('');
     setSummaryLoading(true);
-    client.get(`/admin/patient-summary/${patientId}`)
-      .then((res) => {
-        setPatientSummary(res.data);
+    
+    Promise.all([
+      client.get(`/admin/patient-summary/${patientId}`),
+      client.get(`/admin/patient-tracking/${patientId}`)
+    ])
+      .then(([summaryRes, trackingRes]) => {
+        setPatientSummary(summaryRes.data);
+        setPatientTrackingData(trackingRes.data);
       })
       .catch((err) => {
         console.error(err);
-        toast.error('Failed to load patient summary');
+        toast.error('Failed to load patient summary or tracking logs');
       })
       .finally(() => setSummaryLoading(false));
   };
 
   const doctors = users.filter((user) => user.role === 'doctor');
+  
+  const filteredPatients = patients.filter((p) =>
+    p.patientName?.toLowerCase().includes(patientSearch.toLowerCase()) ||
+    p.uhid?.toLowerCase().includes(patientSearch.toLowerCase()) ||
+    p.mobile?.includes(patientSearch)
+  );
 
   return (
     <div className="space-y-6">
@@ -151,50 +206,72 @@ const AdminDashboard = () => {
       {/* TAB 1: STAFF & DEPARTMENTS */}
       {activeTab === 'staff' && (
         <div className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
-            <StatCard icon={Users} label="Total Users" value={users.length} />
-            <StatCard icon={Stethoscope} label="Doctors" value={doctors.length} />
-            <StatCard icon={Building2} label="Departments" value={departments.length} />
-            <StatCard icon={Workflow} label="Future Modules" value="5" />
-          </div>
+          {loading ? (
+            <div className="space-y-6">
+              <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+                <SkeletonCard className="w-full h-36" headerHeight="1.5rem" bodyLines={2} />
+                <SkeletonCard className="w-full h-36" headerHeight="1.5rem" bodyLines={2} />
+                <SkeletonCard className="w-full h-36" headerHeight="1.5rem" bodyLines={2} />
+                <SkeletonCard className="w-full h-36" headerHeight="1.5rem" bodyLines={2} />
+              </div>
 
-          <div className="card overflow-hidden rounded-2xl border border-orange-100 shadow-sm">
-            <div className="border-b border-orange-100 p-5 bg-gradient-to-r from-orange-50/50 to-white">
-              <h2 className="font-bold text-gray-800 text-lg">Staff Directory & Module Access</h2>
+              <div className="card overflow-hidden rounded-2xl border border-orange-100 shadow-sm bg-white">
+                <div className="border-b border-orange-100 p-5 bg-gradient-to-r from-orange-50/50 to-white">
+                  <SkeletonCard className="w-48 h-10" headerHeight="1rem" bodyLines={1} />
+                </div>
+                <div className="p-5">
+                  <SkeletonCard className="w-full h-72" headerHeight="1.5rem" bodyLines={6} />
+                </div>
+              </div>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-orange-100/50 text-xs uppercase text-orange-950 font-bold">
-                  <tr>
-                    <th className="p-4">Username</th>
-                    <th className="p-4">Role</th>
-                    <th className="p-4">Department</th>
-                    <th className="p-4">Modules Access</th>
-                    <th className="p-4">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map((user) => (
-                    <tr key={user._id} className="border-t border-orange-50/60 hover:bg-orange-50/10 transition duration-150">
-                      <td className="p-4 font-semibold text-gray-900">{user.username}</td>
-                      <td className="p-4 capitalize">
-                        <span className="inline-block px-2 py-0.5 rounded bg-gray-100 text-gray-800 text-xs font-semibold">
-                          {user.role}
-                        </span>
-                      </td>
-                      <td className="p-4 text-gray-600">{user.department || '-'}</td>
-                      <td className="p-4 text-gray-600">{user.moduleAccess?.join(', ') || '-'}</td>
-                      <td className="p-4">
-                        <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${user.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                          {user.isActive ? 'Active' : 'Disabled'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          ) : (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+                <StatCard icon={Users} label="Total Users" value={users.length} />
+                <StatCard icon={Stethoscope} label="Doctors" value={doctors.length} />
+                <StatCard icon={Building2} label="Departments" value={departments.length} />
+                <StatCard icon={Workflow} label="Future Modules" value="5" />
+              </div>
+
+              <div className="card overflow-hidden rounded-2xl border border-orange-100 shadow-sm">
+                <div className="border-b border-orange-100 p-5 bg-gradient-to-r from-orange-50/50 to-white">
+                  <h2 className="font-bold text-gray-800 text-lg">Staff Directory & Module Access</h2>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-orange-100/50 text-xs uppercase text-orange-950 font-bold">
+                      <tr>
+                        <th className="p-4">Username</th>
+                        <th className="p-4">Role</th>
+                        <th className="p-4">Department</th>
+                        <th className="p-4">Modules Access</th>
+                        <th className="p-4">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {users.map((user) => (
+                        <tr key={user._id} className="border-t border-orange-50/60 hover:bg-orange-50/10 transition duration-150">
+                          <td className="p-4 font-semibold text-gray-900">{user.username}</td>
+                          <td className="p-4 capitalize">
+                            <span className="inline-block px-2 py-0.5 rounded bg-gray-100 text-gray-800 text-xs font-semibold">
+                              {user.role}
+                            </span>
+                          </td>
+                          <td className="p-4 text-gray-600">{user.department || '-'}</td>
+                          <td className="p-4 text-gray-600">{user.moduleAccess?.join(', ') || '-'}</td>
+                          <td className="p-4">
+                            <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${user.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                              {user.isActive ? 'Active' : 'Disabled'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -202,8 +279,17 @@ const AdminDashboard = () => {
       {activeTab === 'tracking' && (
         <div className="space-y-6">
           {trackingLoading ? (
-            <div className="card p-8 text-center text-gray-500 font-semibold">
-              Loading hospital tracking data...
+            <div className="space-y-6">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <SkeletonCard className="w-full h-36" headerHeight="1.5rem" bodyLines={2} />
+                <SkeletonCard className="w-full h-36" headerHeight="1.5rem" bodyLines={2} />
+                <SkeletonCard className="w-full h-36" headerHeight="1.5rem" bodyLines={2} />
+                <SkeletonCard className="w-full h-36" headerHeight="1.5rem" bodyLines={2} />
+              </div>
+              <div className="grid gap-6 md:grid-cols-2">
+                <SkeletonCard className="w-full h-96" headerHeight="2rem" bodyLines={6} />
+                <SkeletonCard className="w-full h-96" headerHeight="2rem" bodyLines={6} />
+              </div>
             </div>
           ) : !trackingData ? (
             <div className="card p-8 text-center text-gray-500">
@@ -213,39 +299,39 @@ const AdminDashboard = () => {
             <>
               {/* Stat Grid with Gradients */}
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="card p-5 bg-gradient-to-br from-orange-500 to-red-600 text-white rounded-2xl shadow-md border-0 relative overflow-hidden group">
+                <div className="p-5 bg-gradient-to-br from-orange-500 to-red-600 text-white rounded-2xl shadow-md relative overflow-hidden group">
                   <div className="absolute top-0 right-0 p-4 translate-x-3 -translate-y-3 opacity-20 transition duration-300 group-hover:scale-110">
                     <BadgeIndianRupee className="h-28 w-28" />
                   </div>
                   <p className="text-xs uppercase font-extrabold tracking-wider text-orange-100">Total Billed</p>
-                  <p className="text-3xl font-black mt-2">₹{(trackingData.billing?.totalBilled || 0).toLocaleString('en-IN')}</p>
+                  <p className="text-3xl font-black mt-2 text-white">₹{(trackingData.billing?.totalBilled || 0).toLocaleString('en-IN')}</p>
                   <p className="text-xs text-orange-200 mt-2 font-bold">{trackingData.billing?.billsCount} Invoices generated</p>
                 </div>
 
-                <div className="card p-5 bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-2xl shadow-md border-0 relative overflow-hidden group">
+                <div className="p-5 bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-2xl shadow-md relative overflow-hidden group">
                   <div className="absolute top-0 right-0 p-4 translate-x-3 -translate-y-3 opacity-20 transition duration-300 group-hover:scale-110">
                     <CreditCard className="h-28 w-28" />
                   </div>
                   <p className="text-xs uppercase font-extrabold tracking-wider text-emerald-100">Total Revenue Paid</p>
-                  <p className="text-3xl font-black mt-2">₹{(trackingData.billing?.totalPaid || 0).toLocaleString('en-IN')}</p>
+                  <p className="text-3xl font-black mt-2 text-white">₹{(trackingData.billing?.totalPaid || 0).toLocaleString('en-IN')}</p>
                   <p className="text-xs text-emerald-200 mt-2 font-bold">Received in Cash/UPI/Card</p>
                 </div>
 
-                <div className="card p-5 bg-gradient-to-br from-amber-500 to-orange-600 text-white rounded-2xl shadow-md border-0 relative overflow-hidden group">
+                <div className="p-5 bg-gradient-to-br from-amber-500 to-orange-600 text-white rounded-2xl shadow-md relative overflow-hidden group">
                   <div className="absolute top-0 right-0 p-4 translate-x-3 -translate-y-3 opacity-20 transition duration-300 group-hover:scale-110">
                     <Clock className="h-28 w-28" />
                   </div>
                   <p className="text-xs uppercase font-extrabold tracking-wider text-amber-100">Total Dues Pending</p>
-                  <p className="text-3xl font-black mt-2">₹{(trackingData.billing?.totalDue || 0).toLocaleString('en-IN')}</p>
+                  <p className="text-3xl font-black mt-2 text-white">₹{(trackingData.billing?.totalDue || 0).toLocaleString('en-IN')}</p>
                   <p className="text-xs text-amber-200 mt-2 font-bold">Outstanding billing balances</p>
                 </div>
 
-                <div className="card p-5 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-2xl shadow-md border-0 relative overflow-hidden group">
+                <div className="p-5 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-2xl shadow-md relative overflow-hidden group">
                   <div className="absolute top-0 right-0 p-4 translate-x-3 -translate-y-3 opacity-20 transition duration-300 group-hover:scale-110">
                     <Users className="h-28 w-28" />
                   </div>
                   <p className="text-xs uppercase font-extrabold tracking-wider text-indigo-100">Total Patients</p>
-                  <p className="text-3xl font-black mt-2">{trackingData.totalPatients || 0}</p>
+                  <p className="text-3xl font-black mt-2 text-white">{trackingData.totalPatients || 0}</p>
                   <p className="text-xs text-indigo-200 mt-2 font-bold">Unique registered UHIDs</p>
                 </div>
               </div>
@@ -281,7 +367,16 @@ const AdminDashboard = () => {
                       <h4 className="font-bold text-gray-700 text-xs uppercase tracking-wider">Active Patient List</h4>
                       {/* Active IPD Admitted */}
                       {trackingData.treatmentGoingOn?.ipdList?.map((ipd) => (
-                        <div key={ipd._id} className="border border-indigo-100 bg-indigo-50/10 p-3 rounded-xl flex items-center justify-between text-xs hover:shadow-sm transition">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTrackingPatient({
+                            _id: ipd.patientId?._id || ipd.patientId,
+                            patientName: ipd.patientId?.patientName || 'Unknown',
+                            uhid: ipd.patientId?.uhid || 'N/A'
+                          })}
+                          key={ipd._id}
+                          className="w-full text-left border border-indigo-100 bg-indigo-50/10 p-3 rounded-xl flex items-center justify-between text-xs hover:bg-indigo-50/30 transition cursor-pointer block"
+                        >
                           <div>
                             <p className="font-bold text-gray-800">{ipd.patientId?.patientName}</p>
                             <p className="text-[10px] text-gray-500">IPD: {ipd.ipdNumber} | Doctor: {ipd.doctorInCharge?.doctorName || ipd.doctorInCharge?.username}</p>
@@ -289,12 +384,21 @@ const AdminDashboard = () => {
                           <span className="px-2 py-0.5 rounded-full font-bold bg-indigo-100 text-indigo-700 uppercase text-[9px]">
                             Admitted
                           </span>
-                        </div>
+                        </button>
                       ))}
 
                       {/* Active OPD Pending */}
                       {trackingData.treatmentGoingOn?.opdList?.map((visit) => (
-                        <div key={visit._id} className="border border-orange-100 bg-orange-50/10 p-3 rounded-xl flex items-center justify-between text-xs hover:shadow-sm transition">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTrackingPatient({
+                            _id: visit.patientId?._id || visit.patientId,
+                            patientName: visit.patientId?.patientName || 'Unknown',
+                            uhid: visit.patientId?.uhid || 'N/A'
+                          })}
+                          key={visit._id}
+                          className="w-full text-left border border-orange-100 bg-orange-50/10 p-3 rounded-xl flex items-center justify-between text-xs hover:bg-orange-50/30 transition cursor-pointer block"
+                        >
                           <div>
                             <p className="font-bold text-gray-800">{visit.patientId?.patientName}</p>
                             <p className="text-[10px] text-gray-500">Dept: {visit.department} | Doctor: {visit.doctorId?.doctorName || visit.doctorId?.username}</p>
@@ -302,12 +406,21 @@ const AdminDashboard = () => {
                           <span className="px-2 py-0.5 rounded-full font-bold bg-orange-100 text-orange-700 uppercase text-[9px]">
                             OPD Pending
                           </span>
-                        </div>
+                        </button>
                       ))}
 
                       {/* Active SDT Draft */}
                       {trackingData.treatmentGoingOn?.sdtList?.map((sdt) => (
-                        <div key={sdt._id} className="border border-amber-100 bg-amber-50/10 p-3 rounded-xl flex items-center justify-between text-xs hover:shadow-sm transition">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTrackingPatient({
+                            _id: sdt.patientId?._id || sdt.patientId,
+                            patientName: sdt.patientId?.patientName || sdt.patientName || 'Unknown',
+                            uhid: sdt.patientId?.uhid || sdt.uhid || 'N/A'
+                          })}
+                          key={sdt._id}
+                          className="w-full text-left border border-amber-100 bg-amber-50/10 p-3 rounded-xl flex items-center justify-between text-xs hover:bg-amber-50/30 transition cursor-pointer block"
+                        >
                           <div>
                             <p className="font-bold text-gray-800">{sdt.patientId?.patientName || sdt.patientName}</p>
                             <p className="text-[10px] text-gray-500">Type: {sdt.treatmentType}</p>
@@ -315,7 +428,7 @@ const AdminDashboard = () => {
                           <span className="px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-700 uppercase text-[9px]">
                             SDT Draft
                           </span>
-                        </div>
+                        </button>
                       ))}
 
                       {trackingData.treatmentGoingOn?.total === 0 && (
@@ -446,17 +559,76 @@ const AdminDashboard = () => {
           </div>
 
           {summaryLoading ? (
-            <div className="card p-8 text-center text-gray-500 font-semibold">
-              Retrieving patient records summary...
+            <div className="space-y-6">
+              <SkeletonCard className="w-full h-24" headerHeight="1.75rem" bodyLines={2} />
+              <div className="grid gap-6 xl:grid-cols-[1fr_300px]">
+                <SkeletonCard className="w-full h-96" headerHeight="2rem" bodyLines={6} />
+                <SkeletonCard className="w-full h-96" headerHeight="2rem" bodyLines={6} />
+              </div>
             </div>
           ) : !patientSummary ? (
-            <div className="card p-8 text-center text-gray-500 border border-orange-100/50 rounded-2xl bg-white">
-              <AlertCircle className="h-8 w-8 text-orange-300 mx-auto mb-3" />
-              <p className="text-gray-500 font-semibold">No patient selected</p>
-              <p className="text-xs text-gray-400 mt-1">Enter patient details above to fetch their complete visits, treatments, lab tests, prescriptions and medicine invoice records.</p>
+            <div className="card overflow-hidden rounded-2xl border border-orange-100 shadow-sm bg-white">
+              <div className="border-b border-orange-100 p-5 bg-gradient-to-r from-orange-50/50 to-white">
+                <h2 className="font-bold text-gray-800 text-lg">Registered Patients ({filteredPatients.length})</h2>
+              </div>
+              {patientsLoading ? (
+                <div className="space-y-4 p-5">
+                  <SkeletonCard className="w-full h-32" headerHeight="1.5rem" bodyLines={3} />
+                  <SkeletonCard className="w-full h-32" headerHeight="1.5rem" bodyLines={3} />
+                  <SkeletonCard className="w-full h-32" headerHeight="1.5rem" bodyLines={3} />
+                </div>
+              ) : filteredPatients.length === 0 ? (
+                <div className="p-8 text-center text-gray-400 italic">
+                  No patients found.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-orange-100/50 text-xs uppercase text-orange-950 font-bold">
+                      <tr>
+                        <th className="p-4">UHID</th>
+                        <th className="p-4">Patient Name</th>
+                        <th className="p-4">Mobile</th>
+                        <th className="p-4">Gender</th>
+                        <th className="p-4">Category</th>
+                        <th className="p-4 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredPatients.map((p) => (
+                        <tr key={p._id} className="border-t border-orange-50/60 hover:bg-orange-50/10 transition duration-150">
+                          <td className="p-4 font-semibold text-orange-600">{p.uhid}</td>
+                          <td className="p-4 font-bold text-gray-900">{p.patientName}</td>
+                          <td className="p-4 text-gray-600">{p.mobile}</td>
+                          <td className="p-4 text-gray-600">{p.gender}</td>
+                          <td className="p-4 text-gray-600">{p.category || 'General'}</td>
+                          <td className="p-4 text-right">
+                            <button
+                              onClick={() => handleSelectPatient(p._id)}
+                              className="px-3 py-1.5 text-xs font-bold rounded-lg bg-orange-500 text-white shadow-sm hover:bg-orange-600 transition"
+                            >
+                              View Summary
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-6">
+              <button
+                onClick={() => {
+                  setPatientSummary(null);
+                  setSelectedPatientId(null);
+                }}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-orange-700 bg-orange-100 hover:bg-orange-200 rounded-xl transition"
+              >
+                <ArrowLeft className="h-4 w-4" /> Back to Patient List
+              </button>
+              
               {/* Detailed Summary Dashboard */}
               <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
                 {/* Side Demographics Panel */}
@@ -485,6 +657,43 @@ const AdminDashboard = () => {
 
                 {/* Main Content Dashboard */}
                 <div className="space-y-6">
+                  {/* Patient Treatment Activity Timeline card */}
+                  <div className="card p-5 border border-orange-100 shadow-sm rounded-2xl bg-white animate-fade-in">
+                    <h3 className="font-bold text-gray-800 text-base border-b border-orange-100 pb-2 mb-3 flex items-center gap-1.5">
+                      <Activity className="h-4.5 w-4.5 text-orange-500 animate-pulse" /> Patient Treatment Activity Timeline
+                    </h3>
+                    {!patientTrackingData || patientTrackingData.length === 0 ? (
+                      <p className="text-gray-400 text-center py-3 text-xs italic">No activity logs found for this patient.</p>
+                    ) : (
+                      <div className="relative border-l-2 border-orange-200 ml-4 pl-6 space-y-6 py-2 max-h-[300px] overflow-y-auto">
+                        {patientTrackingData.map((ev, idx) => (
+                          <div key={idx} className="relative">
+                            {/* Timeline Dot Indicator */}
+                            <span className="absolute -left-[31px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-orange-500 ring-4 ring-white shadow-sm">
+                              <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                            </span>
+                            <div className="text-xs">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                                <span className="font-extrabold text-orange-950 uppercase tracking-wider text-[10px] bg-orange-100 px-2 py-0.5 rounded-md">
+                                  {ev.type}
+                                </span>
+                                <span className="text-[10px] font-bold text-gray-400">
+                                  {ev.date} at {ev.time}
+                                </span>
+                              </div>
+                              <h4 className="font-bold text-gray-900 mt-1.5 text-sm">{ev.activity}</h4>
+                              <p className="text-gray-600 mt-1 font-semibold leading-relaxed">{ev.description}</p>
+                              <div className="mt-2 text-[10px] text-gray-400 font-bold flex items-center gap-1">
+                                <span>Performed by:</span>
+                                <span className="text-gray-700 bg-orange-50 px-1.5 py-0.5 rounded">{ev.performedBy}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   {/* Diagnosis aggregated */}
                   <div className="card p-5 border border-orange-100 shadow-sm rounded-2xl bg-white">
                     <h3 className="font-bold text-gray-800 text-base border-b border-orange-100 pb-2 mb-3 flex items-center gap-1.5">
@@ -641,6 +850,83 @@ const AdminDashboard = () => {
               </div>
             </div>
           )}
+        </div>
+      )}
+      {/* Patient Tracking Timeline Modal */}
+      {selectedTrackingPatient && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm transition duration-150">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl flex flex-col max-h-[85vh] border border-orange-100 overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-orange-100 flex items-center justify-between bg-gradient-to-r from-orange-50/50 to-white">
+              <div>
+                <h3 className="font-extrabold text-gray-900 text-lg flex items-center gap-2">
+                  <Activity className="h-5 w-5 text-orange-500 animate-pulse" /> Patient Treatment Activity Timeline
+                </h3>
+                <p className="text-xs text-gray-500 mt-1">
+                  Tracking logs for <span className="font-bold text-gray-800">{selectedTrackingPatient.patientName}</span> (UHID: <span className="font-bold text-orange-700 bg-orange-100/50 px-1.5 py-0.5 rounded">{selectedTrackingPatient.uhid}</span>)
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedTrackingPatient(null)}
+                className="p-1.5 rounded-lg text-gray-400 hover:bg-orange-50 hover:text-orange-600 transition cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto flex-1 space-y-4 bg-orange-50/10">
+              {trackingDetailsLoading ? (
+                <div className="text-center py-12 text-gray-500 font-semibold flex flex-col items-center gap-3">
+                  <Activity className="h-8 w-8 text-orange-500 animate-spin" />
+                  <span>Compiling patient clinical history and activity tracking logs...</span>
+                </div>
+              ) : !patientTrackingData || patientTrackingData.length === 0 ? (
+                <div className="text-center py-12 text-gray-400 italic">
+                  No tracking logs found for this patient.
+                </div>
+              ) : (
+                <div className="relative border-l-2 border-orange-200 ml-4 pl-6 space-y-6 py-2">
+                  {patientTrackingData.map((ev, idx) => (
+                    <div key={idx} className="relative">
+                      {/* Timeline Dot Indicator */}
+                      <span className="absolute -left-[31px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-orange-500 ring-4 ring-white shadow-sm">
+                        <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                      </span>
+                      <div className="text-xs">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                          <span className="font-extrabold text-orange-950 uppercase tracking-wider text-[10px] bg-orange-100 px-2 py-0.5 rounded-md">
+                            {ev.type}
+                          </span>
+                          <span className="text-[10px] font-bold text-gray-400">
+                            {ev.date} at {ev.time}
+                          </span>
+                        </div>
+                        <h4 className="font-bold text-gray-900 mt-1.5 text-sm">{ev.activity}</h4>
+                        <p className="text-gray-600 mt-1 font-semibold leading-relaxed">{ev.description}</p>
+                        <div className="mt-2 text-[10px] text-gray-400 font-bold flex items-center gap-1">
+                          <span>Performed by:</span>
+                          <span className="text-gray-700 bg-orange-50 px-1.5 py-0.5 rounded">{ev.performedBy}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-orange-100 bg-white flex justify-end">
+              <button
+                type="button"
+                onClick={() => setSelectedTrackingPatient(null)}
+                className="btn-secondary px-5 py-2 text-xs font-bold rounded-xl"
+              >
+                Close Logs
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

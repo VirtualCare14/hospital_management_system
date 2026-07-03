@@ -14,7 +14,8 @@ const {
   deleteLabTest,
   getTimeline,
   getPatientDashboard,
-  getBillingSummary
+  getBillingSummary,
+  getReceivedMedicines
 } = require('../controllers/ipdServicesController');
 const authMiddleware = require('../middleware/authMiddleware');
 
@@ -31,6 +32,7 @@ router.delete('/services/consumables/:id', authMiddleware, deleteConsumable);
 router.post('/services/medicines', authMiddleware, addMedicine);
 router.get('/services/medicines/:admissionId', authMiddleware, getMedicines);
 router.delete('/services/medicines/:id', authMiddleware, deleteMedicine);
+router.get('/services/received-medicines/:admissionId', authMiddleware, getReceivedMedicines);
 
 // Lab Tests
 router.post('/services/lab-tests', authMiddleware, addLabTest);

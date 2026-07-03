@@ -21,7 +21,10 @@ const {
   verifyReturn,
   issueRemainingPending,
   completeRequest,
-  dismissNotification
+  dismissNotification,
+  receiveRequest,
+  returnSentRequest,
+  returnReceivedRequest
 } = require('../controllers/pharmacyRequestController');
 const {
   searchPrescriptions,
@@ -59,6 +62,9 @@ router.post('/requests/:id/verify-return', authMiddleware, verifyReturn);
 router.post('/requests/:id/issue-remaining', authMiddleware, issueRemainingPending);
 router.post('/requests/:id/complete', authMiddleware, completeRequest);
 router.post('/requests/:id/dismiss-notification', authMiddleware, dismissNotification);
+router.post('/requests/:id/receive', authMiddleware, receiveRequest);
+router.post('/requests/:id/return-sent', authMiddleware, returnSentRequest);
+router.post('/requests/:id/return-received', authMiddleware, returnReceivedRequest);
 
 // Phase 3 Pharmacy Billing & Prescriptions Routes
 router.get('/billing/prescriptions', authMiddleware, searchPrescriptions);

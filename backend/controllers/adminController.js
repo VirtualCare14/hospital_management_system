@@ -13,6 +13,8 @@ const LabRequest = require('../models/LabRequest');
 const PatientHistory = require('../models/PatientHistory');
 const PharmacyBill = require('../models/PharmacyBill');
 const IpdMedicine = require('../models/IpdMedicine');
+const IpdActivityTimeline = require('../models/IpdActivityTimeline');
+const IpdDischarge = require('../models/IpdDischarge');
 const { v2: cloudinary } = require('cloudinary');
 
 const hospitalFilter = (req, extra = {}) => (
@@ -443,7 +445,7 @@ const deleteDepartment = async (req, res) => {
 const getDoctors = async (req, res) => {
   try {
     const { department, includeInactive } = req.query;
-    const query = hospitalFilter(req, { role: 'doctor' });
+    const query = hospitalFilter(req, { role: { $in: ['doctor', 'nursing'] } });
     if (includeInactive !== 'true' || req.user.role !== 'admin') {
       query.isActive = true;
     }
@@ -464,7 +466,7 @@ const getDoctors = async (req, res) => {
 const updateDoctorAvailability = async (req, res) => {
   try {
     const { availableSlots } = req.body;
-    const doctor = await User.findOne(hospitalFilter(req, { _id: req.params.id, role: 'doctor' }));
+    const doctor = await User.findOne(hospitalFilter(req, { _id: req.params.id, role: { $in: ['doctor', 'nursing'] } }));
 
     if (!doctor) {
       return res.status(404).json({ message: 'Doctor not found' });
@@ -489,7 +491,7 @@ const updateDoctorAvailability = async (req, res) => {
 // @access  Private
 const getDoctorAvailability = async (req, res) => {
   try {
-    const doctor = await User.findOne(hospitalFilter(req, { _id: req.params.id, role: 'doctor' })).select('availableSlots doctorName username');
+    const doctor = await User.findOne(hospitalFilter(req, { _id: req.params.id, role: { $in: ['doctor', 'nursing'] } })).select('availableSlots doctorName username');
 
     if (!doctor) {
       return res.status(404).json({ message: 'Doctor not found' });
@@ -746,6 +748,231 @@ const getUserLimit = async (req, res) => {
   }
 };
 
+const getPatientTrackingTimeline = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    const hospitalId = req.user.hospitalId;
+    const filter = { hospitalId, patientId };
+
+    const events = [];
+
+    // 1. OPD Visits
+    const visits = await Visit.find(filter)
+      .populate('doctorId', 'username doctorName role')
+      .lean();
+    visits.forEach(visit => {
+      // Visit creation
+      events.push({
+        type: 'OPD Visit',
+        activity: 'OPD Visit Registered',
+        description: `Registration Number: ${visit.registrationNumber} | Visit #${visit.visitNumber} to Department "${visit.department}"`,
+        date: visit.registrationDate ? new Date(visit.registrationDate).toLocaleDateString() : new Date(visit.createdAt).toLocaleDateString(),
+        time: visit.registrationDate ? new Date(visit.registrationDate).toLocaleTimeString() : new Date(visit.createdAt).toLocaleTimeString(),
+        performedBy: 'Receptionist',
+        timestamp: visit.registrationDate || visit.createdAt
+      });
+
+      // Consultation completion
+      if (visit.consultationStatus === 'completed') {
+        events.push({
+          type: 'OPD Visit',
+          activity: 'OPD Consultation Completed',
+          description: `Completed by Dr. ${visit.doctorId?.doctorName || visit.doctorId?.username || 'N/A'}`,
+          date: visit.consultationCompletedDate ? new Date(visit.consultationCompletedDate).toLocaleDateString() : new Date(visit.updatedAt).toLocaleDateString(),
+          time: visit.consultationCompletedDate ? new Date(visit.consultationCompletedDate).toLocaleTimeString() : new Date(visit.updatedAt).toLocaleTimeString(),
+          performedBy: visit.doctorId ? `${visit.doctorId.doctorName || visit.doctorId.username} (${visit.doctorId.role === 'nursing' ? 'same day care' : visit.doctorId.role})` : 'Doctor',
+          timestamp: visit.consultationCompletedDate || visit.updatedAt
+        });
+      }
+    });
+
+    // 2. Doctor Consultations
+    const consultations = await Consultation.find(filter)
+      .populate('doctorId', 'username doctorName role')
+      .lean();
+    consultations.forEach(consultation => {
+      const vitalsText = consultation.vitals 
+        ? `BP: ${consultation.vitals.bloodPressure || '-'}, Pulse: ${consultation.vitals.pulse || '-'}, Temp: ${consultation.vitals.temperature ? `${consultation.vitals.temperature} °C` : '-'}`
+        : '';
+      events.push({
+        type: 'Consultation',
+        activity: 'Doctor Consultation Details Recorded',
+        description: `Diagnosis: ${consultation.diagnosisRemark || 'None'}. Chief Complaint: ${consultation.chiefComplaint || 'None'}. ${vitalsText}`,
+        date: new Date(consultation.createdAt).toLocaleDateString(),
+        time: new Date(consultation.createdAt).toLocaleTimeString(),
+        performedBy: consultation.doctorId ? `${consultation.doctorId.doctorName || consultation.doctorId.username} (${consultation.doctorId.role === 'nursing' ? 'same day care' : consultation.doctorId.role})` : 'Doctor',
+        timestamp: consultation.createdAt
+      });
+    });
+
+    // 3. Prescriptions
+    const prescriptions = await Prescription.find(filter)
+      .populate('doctorId', 'username doctorName role')
+      .lean();
+    prescriptions.forEach(prescription => {
+      const medsCount = prescription.medicines?.length || 0;
+      events.push({
+        type: 'Prescription',
+        activity: 'Prescription Issued',
+        description: `Medicines (${medsCount}): ${prescription.medicines?.map(m => m.medicineName).join(', ') || 'None'}`,
+        date: new Date(prescription.createdAt).toLocaleDateString(),
+        time: new Date(prescription.createdAt).toLocaleTimeString(),
+        performedBy: prescription.doctorId ? `${prescription.doctorId.doctorName || prescription.doctorId.username} (${prescription.doctorId.role === 'nursing' ? 'same day care' : prescription.doctorId.role})` : 'Doctor',
+        timestamp: prescription.createdAt
+      });
+    });
+
+    // 4. IPD Admissions
+    const ipdAdmissions = await IpdAdmission.find(filter)
+      .populate('doctorInCharge', 'username doctorName role')
+      .populate('roomId', 'roomName')
+      .populate('bedId', 'bedNumber')
+      .lean();
+    ipdAdmissions.forEach(ipd => {
+      events.push({
+        type: 'IPD Admission',
+        activity: 'IPD Patient Admitted',
+        description: `IPD Number: ${ipd.ipdNumber} | Room: ${ipd.roomId?.roomName || 'N/A'} - Bed: ${ipd.bedId?.bedNumber || 'N/A'} | Diagnosis: ${ipd.provisionalDiagnosis || 'None'}`,
+        date: new Date(ipd.admissionDate).toLocaleDateString(),
+        time: new Date(ipd.admissionDate).toLocaleTimeString(),
+        performedBy: ipd.doctorInCharge ? `${ipd.doctorInCharge.doctorName || ipd.doctorInCharge.username} (Doctor)` : 'Admin',
+        timestamp: ipd.admissionDate || ipd.createdAt
+      });
+    });
+
+    // 5. IPD Activity Timeline
+    const ipdTimelines = await IpdActivityTimeline.find(filter)
+      .populate('performedBy', 'username doctorName role')
+      .lean();
+    ipdTimelines.forEach(ipd => {
+      events.push({
+        type: 'IPD Activity',
+        activity: ipd.activity,
+        description: ipd.description,
+        date: ipd.date || new Date(ipd.createdAt).toLocaleDateString(),
+        time: ipd.time || new Date(ipd.createdAt).toLocaleTimeString(),
+        performedBy: ipd.performedBy ? `${ipd.performedBy.doctorName || ipd.performedBy.username} (${ipd.performedBy.role === 'nursing' ? 'same day care' : ipd.performedBy.role})` : ipd.performedByName || 'System',
+        timestamp: ipd.createdAt
+      });
+    });
+
+    // 6. IPD Discharges
+    const discharges = await IpdDischarge.find(filter).lean();
+    discharges.forEach(discharge => {
+      events.push({
+        type: 'IPD Discharge',
+        activity: 'IPD Patient Discharged',
+        description: `Reason: ${discharge.dischargeReason || 'Completed'} | Summary: ${discharge.treatmentSummary || 'None'}`,
+        date: new Date(discharge.dischargeDate).toLocaleDateString(),
+        time: discharge.dischargeTime || new Date(discharge.dischargeDate).toLocaleTimeString(),
+        performedBy: discharge.dischargingPhysicianFirstName ? `Dr. ${discharge.dischargingPhysicianFirstName}` : 'Doctor',
+        timestamp: discharge.dischargeDate || discharge.createdAt
+      });
+    });
+
+    // 7. Same Day Care (SDT)
+    const sameDayTreatments = await SameDayTreatment.find(filter)
+      .populate('createdBy', 'username doctorName role')
+      .populate('updatedBy', 'username doctorName role')
+      .populate('auditTrail.performedBy', 'username doctorName role')
+      .lean();
+    sameDayTreatments.forEach(sdt => {
+      // Creation event
+      events.push({
+        type: 'Same Day Care',
+        activity: 'Same Day Care Registered',
+        description: `Treatment: ${sdt.treatmentType} | Source: ${sdt.source} | Status: ${sdt.status}`,
+        date: new Date(sdt.createdAt).toLocaleDateString(),
+        time: new Date(sdt.createdAt).toLocaleTimeString(),
+        performedBy: sdt.createdBy ? `${sdt.createdBy.doctorName || sdt.createdBy.username} (${sdt.createdBy.role === 'nursing' ? 'same day care' : sdt.createdBy.role})` : 'Staff',
+        timestamp: sdt.createdAt
+      });
+
+      // Audit Trail
+      sdt.auditTrail?.forEach(audit => {
+        events.push({
+          type: 'Same Day Care Audit',
+          activity: audit.action,
+          description: audit.remarks || `Status updated for same day care: ${sdt.treatmentType}`,
+          date: new Date(audit.timestamp).toLocaleDateString(),
+          time: new Date(audit.timestamp).toLocaleTimeString(),
+          performedBy: audit.performedBy ? `${audit.performedBy.doctorName || audit.performedBy.username} (${audit.performedBy.role === 'nursing' ? 'same day care' : audit.performedBy.role})` : audit.performedByName || 'Staff',
+          timestamp: audit.timestamp
+        });
+      });
+
+      // Dialysis Sessions
+      sdt.dialysisSessions?.forEach(session => {
+        events.push({
+          type: 'Dialysis Session',
+          activity: 'Dialysis Session Logged',
+          description: `Fluid removed: ${session.fluidRemoved || 0} L | Starting BP: ${session.startingBP || '-'} | Ending BP: ${session.endingBP || '-'} | Comments: ${session.comments || 'None'}`,
+          date: new Date(session.date).toLocaleDateString(),
+          time: session.time || 'N/A',
+          performedBy: 'Same Day Care Nurse',
+          timestamp: session.date
+        });
+      });
+    });
+
+    // 8. Lab Requests
+    const labRequests = await LabRequest.find(filter)
+      .populate('doctorId', 'username doctorName role')
+      .lean();
+    labRequests.forEach(req => {
+      events.push({
+        type: 'Lab Request',
+        activity: 'Lab Test Ordered',
+        description: `Tests: ${req.tests?.map(t => t.name).join(', ')} | Status: ${req.status}`,
+        date: new Date(req.createdAt).toLocaleDateString(),
+        time: new Date(req.createdAt).toLocaleTimeString(),
+        performedBy: req.doctorId ? `${req.doctorId.doctorName || req.doctorId.username} (${req.doctorId.role === 'nursing' ? 'same day care' : req.doctorId.role})` : 'Doctor',
+        timestamp: req.createdAt
+      });
+    });
+
+    // 9. PatientHistory / Lab Reports
+    const labReports = await PatientHistory.find(filter)
+      .populate('generatedBy', 'username doctorName role')
+      .lean();
+    labReports.forEach(report => {
+      events.push({
+        type: 'Lab Report',
+        activity: 'Lab Report Generated',
+        description: `Test: ${report.testName} | Status: ${report.reportStatus}`,
+        date: report.generatedDate ? new Date(report.generatedDate).toLocaleDateString() : new Date(report.createdAt).toLocaleDateString(),
+        time: report.generatedTime || (report.generatedDate ? new Date(report.generatedDate).toLocaleTimeString() : new Date(report.createdAt).toLocaleTimeString()),
+        performedBy: report.generatedBy ? `${report.generatedBy.doctorName || report.generatedBy.username} (${report.generatedBy.role === 'nursing' ? 'same day care' : report.generatedBy.role})` : report.generatedByName || 'Lab Staff',
+        timestamp: report.generatedDate || report.createdAt
+      });
+    });
+
+    // 10. Pharmacy Bills
+    const pharmacyBills = await PharmacyBill.find({ hospitalId, patientId })
+      .populate('createdBy', 'username doctorName role')
+      .lean();
+    pharmacyBills.forEach(bill => {
+      events.push({
+        type: 'Pharmacy Bill',
+        activity: `Pharmacy Bill ${bill.status}`,
+        description: `Invoice: ${bill.billNumber} | Amount: ₹${bill.totalAmount} | Items: ${bill.items?.length || 0}`,
+        date: new Date(bill.billDate).toLocaleDateString(),
+        time: new Date(bill.createdAt).toLocaleTimeString(),
+        performedBy: bill.createdBy ? `${bill.createdBy.doctorName || bill.createdBy.username} (${bill.createdBy.role === 'nursing' ? 'same day care' : bill.createdBy.role})` : 'Pharmacist',
+        timestamp: bill.createdAt
+      });
+    });
+
+    // Sort events by timestamp descending (newest first)
+    events.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+    res.status(200).json(events);
+  } catch (error) {
+    console.error('Get Patient Tracking Timeline Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   getHospitalSettings,
   createOrUpdateHospitalSettings,
@@ -764,5 +991,6 @@ module.exports = {
   getDoctorAvailability,
   getHospitalTracking,
   getPatientSummary,
-  getUserLimit
+  getUserLimit,
+  getPatientTrackingTimeline
 };

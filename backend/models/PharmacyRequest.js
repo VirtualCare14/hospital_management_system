@@ -43,6 +43,30 @@ const requestItemSchema = new mongoose.Schema({
     type: String,
     default: '',
     trim: true
+  },
+  isCustom: {
+    type: Boolean,
+    default: false
+  },
+  unitPrice: {
+    type: Number,
+    default: 0
+  },
+  gst: {
+    type: Number,
+    default: 0
+  },
+  isAvailable: {
+    type: Boolean,
+    default: true
+  },
+  receivedQty: {
+    type: Number,
+    default: 0
+  },
+  returnAcceptedQty: {
+    type: Number,
+    default: 0
   }
 }, { _id: false });
 
@@ -111,6 +135,10 @@ const pharmacyRequestSchema = new mongoose.Schema({
       'Partially Approved',
       'Rejected',
       'Issued',
+      'Sent',
+      'Received',
+      'Return Sent',
+      'Return Received',
       'Return Requested',
       'Return Accepted',
       'Return Rejected',

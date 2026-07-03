@@ -7,6 +7,7 @@ import {
   Bandage, Bone, Flame, Wind, Syringe, Droplets, Plus, Trash2,
   ShieldAlert, Sparkles, UploadCloud, PlusCircle, Check, X, FileText, Activity, ListPlus
 } from 'lucide-react';
+import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 import { useAuth } from '../../context/AuthContext';
 import client from '../../api/client';
 import { formatUhid } from '../../utils/uhid';
@@ -603,10 +604,9 @@ const SameDayCareForm = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="flex items-center gap-3 text-gray-500">
-          <Loader2 className="h-6 w-6 animate-spin" />
-          <span className="font-bold">Loading care sheet...</span>
+      <div className="flex items-center justify-center min-h-[60vh] p-4">
+        <div className="w-full max-w-5xl">
+          <SkeletonTable rows={6} columns={6} className="w-full" />
         </div>
       </div>
     );

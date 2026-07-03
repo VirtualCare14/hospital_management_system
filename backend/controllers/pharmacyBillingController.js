@@ -6,6 +6,7 @@ const Prescription = require('../models/Prescription');
 const Patient = require('../models/Patient');
 const Visit = require('../models/Visit');
 const HospitalSettings = require('../models/HospitalSettings');
+const IpdAdmission = require('../models/IpdAdmission');
 
 const tenantFilter = (req, query = {}) => (
   req.user.hospitalId ? { ...query, hospitalId: req.user.hospitalId } : query
@@ -148,10 +149,19 @@ const createBill = async (req, res) => {
     const billNumber = `PB-${10001 + count}`;
     const balanceAmount = Math.max(0, grandTotal - (paidAmount || 0));
 
+    let admissionId = null;
+    if (patientId) {
+      const activeAdmission = await IpdAdmission.findOne({ patientId, status: { $ne: 'Discharged' } });
+      if (activeAdmission) {
+        admissionId = activeAdmission._id;
+      }
+    }
+
     const finalBill = await PharmacyBill.create({
       hospitalId,
       billNumber,
       prescriptionId: prescriptionId || null,
+      admissionId,
       patientId: patientId || null,
       customerDetails: customerDetails || { name: '', mobile: '', age: null, gender: '' },
       doctorId: doctorId || null,

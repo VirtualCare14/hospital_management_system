@@ -7,9 +7,19 @@ const {
   getDischargesByAdmission,
   getDischargesByPatient,
   getDischargeById,
-  checkDischargeStatus
+  checkDischargeStatus,
+  listDischargeReviewers,
+  submitForReview,
+  getPendingReviews,
+  reviewDischarge
 } = require('../controllers/dischargeController');
 const authMiddleware = require('../middleware/authMiddleware');
+
+// Review workflow
+router.get('/discharge/reviewers', authMiddleware, listDischargeReviewers);
+router.post('/discharge/submit-review', authMiddleware, submitForReview);
+router.get('/discharge/pending-reviews', authMiddleware, getPendingReviews);
+router.post('/discharge/review', authMiddleware, reviewDischarge);
 
 // Check discharge status
 router.get('/discharge/check/:admissionId', authMiddleware, checkDischargeStatus);

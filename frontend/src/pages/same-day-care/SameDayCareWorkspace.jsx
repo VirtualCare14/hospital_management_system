@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 import toast from 'react-hot-toast';
 import {
   Activity, Search, User, Loader2, Eye,
@@ -598,7 +599,11 @@ const SameDayCareWorkspace = () => {
                   </thead>
                   <tbody className="divide-y divide-orange-50 font-medium">
                     {loadingQueue ? (
-                      <tr><td colSpan="9" className="p-8 text-center"><Loader2 className="h-5 w-5 animate-spin inline mr-2 text-orange-500" /> Loading...</td></tr>
+                      <tr>
+                        <td colSpan="9" className="p-8">
+                          <SkeletonTable rows={5} columns={9} className="w-full" />
+                        </td>
+                      </tr>
                     ) : queue.filter(item => {
                       if (pendingSourceFilter === 'Doctor') return item.source === 'Doctor Referral';
                       if (pendingSourceFilter === 'Reception') return item.source === 'Registration';
@@ -749,8 +754,8 @@ const SameDayCareWorkspace = () => {
                   <tbody className="divide-y divide-orange-50">
                     {loadingCompleted ? (
                       <tr>
-                        <td colSpan="7" className="p-8 text-center">
-                          <Loader2 className="h-5 w-5 animate-spin inline mr-2 text-orange-500" /> Loading completed list...
+                        <td colSpan="7" className="p-8">
+                          <SkeletonTable rows={4} columns={7} className="w-full" />
                         </td>
                       </tr>
                     ) : completedList.filter(item => {
@@ -868,7 +873,11 @@ const SameDayCareWorkspace = () => {
                     </thead>
                     <tbody className="divide-y divide-orange-50">
                       {loadingFollowups ? (
-                        <tr><td colSpan="8" className="p-8 text-center"><Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading...</td></tr>
+                        <tr>
+                          <td colSpan="8" className="p-8">
+                            <SkeletonTable rows={4} columns={8} className="w-full" />
+                          </td>
+                        </tr>
                       ) : followups.length === 0 ? (
                         <tr><td colSpan="8" className="p-8 text-center text-gray-400"><CalendarDays className="h-8 w-8 mx-auto mb-2 opacity-50" /><p className="font-bold">No follow-ups scheduled for this date</p></td></tr>
                       ) : (
@@ -966,9 +975,8 @@ const SameDayCareWorkspace = () => {
                     <tbody className="divide-y divide-orange-50 font-medium text-gray-700 bg-white">
                       {loadingDatewise ? (
                         <tr>
-                          <td colSpan="8" className="p-12 text-center text-gray-450 font-bold">
-                            <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-orange-500" />
-                            <span>Loading date-wise list...</span>
+                          <td colSpan="8" className="p-8">
+                            <SkeletonTable rows={5} columns={8} className="w-full" />
                           </td>
                         </tr>
                       ) : datewiseRecords.length === 0 ? (
@@ -1076,7 +1084,11 @@ const SameDayCareWorkspace = () => {
                     </thead>
                     <tbody className="divide-y divide-orange-50">
                       {loading ? (
-                        <tr><td colSpan="6" className="p-8 text-center"><Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading...</td></tr>
+                        <tr>
+                          <td colSpan="6" className="p-8">
+                            <SkeletonTable rows={4} columns={6} className="w-full" />
+                          </td>
+                        </tr>
                       ) : patients.length === 0 ? (
                         <tr><td colSpan="6" className="p-8 text-center text-gray-400"><User className="h-8 w-8 mx-auto mb-2 opacity-50" /><p className="font-bold">No patients found</p></td></tr>
                       ) : (
@@ -1171,7 +1183,27 @@ const SameDayCareWorkspace = () => {
               <h3 className="font-extrabold text-gray-900 flex items-center gap-2"><Activity className="h-5 w-5 text-orange-500" /> Treatment History</h3>
             </div>
             {treatmentsLoading ? (
-              <div className="p-8 text-center"><Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading...</div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 text-xs font-bold uppercase text-gray-500 border-b border-orange-100">
+                      <th className="p-3 pl-4">Date</th>
+                      <th className="p-3">Care Type</th>
+                      <th className="p-3">Diagnosis</th>
+                      <th className="p-3">Status</th>
+                      <th className="p-3">Created By</th>
+                      <th className="p-3 pr-4 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-orange-50">
+                    <tr>
+                      <td colSpan="6" className="p-8">
+                        <SkeletonTable rows={4} columns={6} className="w-full" />
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             ) : patientTreatments.length === 0 ? (
               <div className="p-8 text-center text-gray-400">
                 <Activity className="h-8 w-8 mx-auto mb-2 opacity-50" />

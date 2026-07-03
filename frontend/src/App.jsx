@@ -1,7 +1,9 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { useAuth } from './context/AuthContext.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import AppLayout from './layouts/AppLayout.jsx';
 import Home from './pages/Home.jsx';
+import Loader from './components/Loader.jsx';
 import ModulePlaceholder from './pages/ModulePlaceholder.jsx';
 import Login from './pages/auth/Login.jsx';
 import AdminDashboard from './pages/admin/AdminDashboard.jsx';
@@ -19,6 +21,7 @@ import PrescriptionPage from './pages/doctor/PrescriptionPage.jsx';
 import PatientConsultationTrack from './pages/doctor/PatientConsultationTrack.jsx';
 import DoctorOtPatients from './pages/doctor/DoctorOtPatients.jsx';
 import DoctorOtForm from './pages/doctor/DoctorOtForm.jsx';
+import DischargeRequestsView from './pages/doctor/DischargeRequestsView.jsx';
 import SuperAdminLogin from './pages/superadmin/SuperAdminLogin.jsx';
 import SuperAdminDashboard from './pages/superadmin/SuperAdminDashboard.jsx';
 import LabWorkspace from './pages/lab/LabWorkspace.jsx';
@@ -27,7 +30,6 @@ import LabAssistantPortal from './pages/lab/LabAssistantPortal.jsx';
 import HospitalSettings from './pages/admin/HospitalSettings.jsx';
 import IpdAdminWorkspace from './pages/admin/IpdAdminWorkspace.jsx';
 import ConsumableServiceSettings from './pages/admin/ConsumableServiceSettings.jsx';
-import MedicineSettings from './pages/admin/MedicineSettings.jsx';
 import IpdAdmission from './pages/ipd/IpdAdmission.jsx';
 import IpdPatientList from './pages/ipd/IpdPatientList.jsx';
 import IpdPatientDetails from './pages/ipd/IpdPatientDetails.jsx';
@@ -50,6 +52,13 @@ import DoctorIpdPatients from './pages/doctor/DoctorIpdPatients.jsx';
 import IpdMedicationChart from './pages/ipd/IpdMedicationChart.jsx';
 
 function App() {
+  const { loading } = useAuth();
+
+  // Show branded loader while verifying session on startup
+  if (loading) {
+    return <Loader />;
+  }
+
   return (
     <Routes>
       <Route path="/" element={<Home />} />
@@ -72,7 +81,6 @@ function App() {
           <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
             <Route path="/admin/room-settings" element={<IpdAdminWorkspace />} />
             <Route path="/admin/consumable-services" element={<ConsumableServiceSettings />} />
-            <Route path="/admin/medicine-settings" element={<MedicineSettings />} />
             <Route path="/admin/ot-settings" element={<OperationTheatreSettings />} />
             <Route path="/admin/same-day-care" element={<SameDayCareSettings />} />
           </Route>
@@ -93,6 +101,7 @@ function App() {
             <Route path="/doctor/ot/:id" element={<DoctorOtForm />} />
             <Route path="/doctor/ipd-patients" element={<DoctorIpdPatients />} />
             <Route path="/doctor/ipd-chart/:id" element={<IpdMedicationChart />} />
+            <Route path="/doctor/discharge-requests" element={<DischargeRequestsView />} />
           </Route>
           <Route path="/module/:moduleId" element={<ModulePlaceholder />} />
           <Route element={<ProtectedRoute allowedRoles={['admin', 'billing']} requiredModule={8} />}>
@@ -119,10 +128,9 @@ function App() {
             <Route path="/same-day-care/treatment/:patientId" element={<SameDayCareForm />} />
             <Route path="/same-day-care/ipd-patients" element={<SameDayCareIpdPatients />} />
             <Route path="/same-day-care/ipd-chart/:id" element={<IpdMedicationChart />} />
-          </Route>
-          <Route element={<ProtectedRoute allowedRoles={['admin', 'nursing', 'doctor', 'reception']} />}>
             <Route path="/same-day-care/dialysis" element={<DialysisWorkspace />} />
             <Route path="/same-day-care/dialysis/treatment/:patientId" element={<DialysisRecordForm />} />
+            <Route path="/same-day-care/discharge-requests" element={<DischargeRequestsView />} />
           </Route>
           <Route element={<ProtectedRoute allowedRoles={['admin', 'pharmacy']} requiredModule={7} />}>
             <Route path="/pharmacy" element={<PharmacyWorkspace />} />

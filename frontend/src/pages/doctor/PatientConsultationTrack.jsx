@@ -299,7 +299,7 @@ const PatientConsultationTrack = () => {
                         )}
 
                         {/* Vitals */}
-                        {consultation.vitals && (consultation.vitals.weight || consultation.vitals.height || consultation.vitals.temperature) && (
+                        {consultation.vitals && (consultation.vitals.weight || consultation.vitals.height || consultation.vitals.temperature || consultation.vitals.bloodPressure) && (
                           <div>
                             <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Vitals</h4>
                             <div className="flex flex-wrap gap-3">
@@ -316,6 +316,11 @@ const PatientConsultationTrack = () => {
                               {consultation.vitals.temperature && (
                                 <span className="text-xs bg-blue-50 px-2 py-1 rounded text-blue-700 font-medium">
                                   Temp: {consultation.vitals.temperature}°C
+                                </span>
+                              )}
+                              {consultation.vitals.bloodPressure && (
+                                <span className="text-xs bg-blue-50 px-2 py-1 rounded text-blue-700 font-medium">
+                                  BP: {consultation.vitals.bloodPressure}
                                 </span>
                               )}
                             </div>

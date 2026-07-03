@@ -114,6 +114,23 @@ const checkBillableItems = async (patientId) => {
   // Check if patient already has a Final bill
   const hasExistingBills = finalizedBills.length > 0;
 
+  // Fetch all pharmacy bills for the patient
+  const pharmacyBills = await PharmacyBill.find({ patientId });
+
+  // Build a map of paid medicine quantities
+  const paidMedicinesQty = {}; // medicineName.toLowerCase() -> quantity
+  pharmacyBills.forEach(pBill => {
+    if (pBill.paymentStatus === 'Paid' && pBill.status !== 'Cancelled') {
+      pBill.items.forEach(pItem => {
+        const nameKey = pItem.itemName.toLowerCase().trim();
+        const qty = pItem.quantity - pItem.returnedQty;
+        if (qty > 0) {
+          paidMedicinesQty[nameKey] = (paidMedicinesQty[nameKey] || 0) + qty;
+        }
+      });
+    }
+  });
+
   // Check OPD Visits (Registrations)
   const visits = await Visit.find({ patientId, visitType: 'OPD' }).populate('doctorId', 'opdFees');
   const pendingVisits = visits.filter(v => !billedSourceIds.has(v._id.toString()));
@@ -166,8 +183,6 @@ const checkBillableItems = async (patientId) => {
         const roomCharge = bed.pricePerDay * daysAdmitted;
         if (!categories.includes('BedCharge')) categories.push('BedCharge');
         totalPendingAmount += roomCharge;
-
-
       }
 
       // Consumables
@@ -182,15 +197,33 @@ const checkBillableItems = async (patientId) => {
       const medicines = await IpdMedicine.find({ admissionId: admission._id });
       const pendingMedicines = medicines.filter(m => !billedSourceIds.has(m._id.toString()));
       if (pendingMedicines.length > 0) {
-        if (!categories.includes('Medicine')) categories.push('Medicine');
-        totalPendingAmount += pendingMedicines.reduce((sum, m) => sum + (m.totalAmount || 0), 0);
+        let hasUnpaidMeds = false;
+        pendingMedicines.forEach(m => {
+          const nameKey = m.medicineName.toLowerCase().trim();
+          let unpaidQty = m.quantity;
+          if (paidMedicinesQty[nameKey] && paidMedicinesQty[nameKey] > 0) {
+            if (paidMedicinesQty[nameKey] >= m.quantity) {
+              paidMedicinesQty[nameKey] -= m.quantity;
+              unpaidQty = 0;
+            } else {
+              unpaidQty = m.quantity - paidMedicinesQty[nameKey];
+              paidMedicinesQty[nameKey] = 0;
+            }
+          }
+          if (unpaidQty > 0) {
+            hasUnpaidMeds = true;
+            totalPendingAmount += (m.unitPrice || 0) * unpaidQty;
+          }
+        });
+        if (hasUnpaidMeds && !categories.includes('Medicine')) {
+          categories.push('Medicine');
+        }
       }
     }
   }
 
   // Check Pharmacy Bills (consistently with generateBillItems)
-  const pharmacyBills = await PharmacyBill.find({ patientId, paymentStatus: { $ne: 'Paid' } });
-  const pendingPharmacyBills = pharmacyBills.filter(pb => !billedSourceIds.has(pb._id.toString()));
+  const pendingPharmacyBills = pharmacyBills.filter(pb => pb.paymentStatus !== 'Paid' && !billedSourceIds.has(pb._id.toString()));
   if (pendingPharmacyBills.length > 0) {
     if (!categories.includes('Medicine')) categories.push('Medicine');
     pendingPharmacyBills.forEach(pBill => {
@@ -463,6 +496,27 @@ const generateBillItems = async (req, res) => {
         .populate('bedId', 'bedNumber pricePerDay bedType')
         .sort({ createdAt: -1 });
 
+      const pharmacyBillsAll = await PharmacyBill.find(tenantFilter(req, { patientId: patient._id }));
+      const paidMedicinesQty = {}; // medicineName.toLowerCase() -> { quantity: number, paymentTimes: Date[] }
+      pharmacyBillsAll.forEach(pBill => {
+        if (pBill.paymentStatus === 'Paid' && pBill.status !== 'Cancelled') {
+          pBill.items.forEach(pItem => {
+            const nameKey = pItem.itemName.toLowerCase().trim();
+            const qty = pItem.quantity - pItem.returnedQty;
+            if (qty > 0) {
+              if (!paidMedicinesQty[nameKey]) {
+                paidMedicinesQty[nameKey] = {
+                  quantity: 0,
+                  paymentTimes: []
+                };
+              }
+              paidMedicinesQty[nameKey].quantity += qty;
+              paidMedicinesQty[nameKey].paymentTimes.push(pBill.updatedAt || pBill.createdAt);
+            }
+          });
+        }
+      });
+
       for (const admission of admissions) {
         if (billedSourceIds.has(admission._id.toString())) continue;
         
@@ -504,17 +558,63 @@ const generateBillItems = async (req, res) => {
         const medicines = await IpdMedicine.find({ admissionId: admission._id });
         for (const m of medicines) {
           if (billedSourceIds.has(m._id.toString())) continue;
+          const nameKey = m.medicineName.toLowerCase().trim();
           const price = await getItemLatestPrice(req.user.hospitalId, m.medicineName, 'Medicine', m.unitPrice, adminSettings);
-          items.push({
-            category: 'Medicine',
-            date: m.date || fmtDate(m.createdAt),
-            description: m.medicineName,
-            price,
-            quantity: m.quantity || 1,
-            total: price * (m.quantity || 1),
-            sourceId: m._id,
-            sourceModel: 'IpdMedicine'
-          });
+          
+          let isPaid = false;
+          let paidTimeStr = '';
+          
+          if (paidMedicinesQty[nameKey] && paidMedicinesQty[nameKey].quantity > 0) {
+            const mQty = m.quantity;
+            const paidQty = paidMedicinesQty[nameKey].quantity;
+            
+            if (paidQty >= mQty) {
+              isPaid = true;
+              paidMedicinesQty[nameKey].quantity -= mQty;
+            } else {
+              isPaid = true;
+              paidMedicinesQty[nameKey].quantity = 0;
+              m.quantity = mQty - paidQty;
+            }
+            
+            const pTime = paidMedicinesQty[nameKey].paymentTimes[0] || new Date();
+            paidTimeStr = new Date(pTime).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+          }
+
+          if (isPaid && m.quantity === 0) {
+            items.push({
+              category: 'Medicine',
+              date: m.date || fmtDate(m.createdAt),
+              description: `${m.medicineName} (Paid at Pharmacy on ${paidTimeStr})`,
+              price: 0,
+              quantity: m.quantity || 1,
+              total: 0,
+              sourceId: m._id,
+              sourceModel: 'IpdMedicine'
+            });
+          } else if (isPaid && m.quantity > 0) {
+            items.push({
+              category: 'Medicine',
+              date: m.date || fmtDate(m.createdAt),
+              description: `${m.medicineName} (${m.quantity} unpaid, others paid at Pharmacy on ${paidTimeStr})`,
+              price,
+              quantity: m.quantity,
+              total: price * m.quantity,
+              sourceId: m._id,
+              sourceModel: 'IpdMedicine'
+            });
+          } else {
+            items.push({
+              category: 'Medicine',
+              date: m.date || fmtDate(m.createdAt),
+              description: m.medicineName,
+              price,
+              quantity: m.quantity || 1,
+              total: price * (m.quantity || 1),
+              sourceId: m._id,
+              sourceModel: 'IpdMedicine'
+            });
+          }
         }
       }
     }
@@ -543,11 +643,12 @@ const generateBillItems = async (req, res) => {
       });
     }
 
-    // 6. Pharmacy Charges (from unpaid Pharmacy Bills)
+    // 6. Pharmacy Charges
     if (!billType || billType === 'All' || billType === 'Pharmacy') {
-      const pharmacyBills = await PharmacyBill.find(tenantFilter(req, { patientId: patient._id, paymentStatus: { $ne: 'Paid' } })).sort({ createdAt: -1 });
+      const pharmacyBills = await PharmacyBill.find(tenantFilter(req, { patientId: patient._id })).sort({ createdAt: -1 });
       for (const pBill of pharmacyBills) {
         if (billedSourceIds.has(pBill._id.toString())) continue;
+        const isPaid = pBill.paymentStatus === 'Paid';
         for (const pItem of pBill.items) {
           const remainingQty = pItem.quantity - pItem.returnedQty;
           if (remainingQty > 0) {
@@ -562,12 +663,15 @@ const generateBillItems = async (req, res) => {
               }
             }
 
-            const price = await getItemLatestPrice(req.user.hospitalId, pItem.itemName, itemCategory, pItem.unitPrice, adminSettings);
+            const price = isPaid ? 0 : await getItemLatestPrice(req.user.hospitalId, pItem.itemName, itemCategory, pItem.unitPrice, adminSettings);
+            const paidTimeStr = isPaid ? new Date(pBill.updatedAt || pBill.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
 
             items.push({
               category: itemCategory,
               date: fmtDate(pBill.billDate || pBill.createdAt),
-              description: `Pharmacy Bill ${pBill.billNumber}: ${pItem.itemName}`,
+              description: isPaid 
+                ? `Pharmacy Bill ${pBill.billNumber}: ${pItem.itemName} (Paid at Pharmacy on ${paidTimeStr})`
+                : `Pharmacy Bill ${pBill.billNumber}: ${pItem.itemName}`,
               price,
               quantity: remainingQty,
               total: price * remainingQty,

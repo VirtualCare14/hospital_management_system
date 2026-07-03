@@ -176,8 +176,8 @@ const uploadInventory = async (req, res) => {
       });
 
       if (existing) {
-        // Accumulate quantity
-        existing.quantity += quantity;
+        // Overwrite quantity with Excel value
+        existing.quantity = quantity;
         existing.sNo = sNo;
         existing.oldMrp = oldMrp;
         existing.pack = pack;
@@ -190,7 +190,7 @@ const uploadInventory = async (req, res) => {
         existing.hsn = hsn;
         existing.sgst = sgst;
         existing.cst = cst;
-        existing.amount = amount;
+        existing.amount = existing.rate * existing.quantity;
 
         await existing.save();
         updatedCount++;
