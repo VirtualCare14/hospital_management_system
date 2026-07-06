@@ -540,9 +540,11 @@ const getTimeline = async (req, res) => {
 const getPatientDashboard = async (req, res) => {
   try {
     const admission = await IpdAdmission.findOne(tenantFilter(req, { _id: req.params.admissionId }))
-      .populate('patientId', 'patientName uhid mobile dob gender')
+      .populate('patientId', 'patientName uhid dob gender mobile address')
       .populate('roomId', 'roomType')
       .populate('bedId', 'bedNumber bedType pricePerDay')
+      .populate('bedHistory.roomId', 'roomType')
+      .populate('bedHistory.bedId', 'bedNumber bedType pricePerDay')
       .populate('doctorInCharge', 'doctorName username');
 
     if (!admission) return res.status(404).json({ message: 'Admission record not found' });
@@ -558,12 +560,24 @@ const getPatientDashboard = async (req, res) => {
     const completedReports = labTests.filter(t => t.reportStatus === 'Completed' || t.reportStatus === 'Approved').length;
 
     // Calculate billing
-    const bedPricePerDay = admission.bedId?.pricePerDay || 0;
-    const admissionDate = new Date(admission.admissionDate);
-    const currentDate = admission.status === 'Discharged' && admission.dischargeDate
-      ? new Date(admission.dischargeDate) : new Date();
-    const daysAdmitted = Math.max(1, Math.ceil((currentDate - admissionDate) / (1000 * 60 * 60 * 24)));
-    const roomCharges = bedPricePerDay * daysAdmitted;
+    let roomCharges = 0;
+    let daysAdmitted = 0;
+    if (admission.bedHistory && admission.bedHistory.length > 0) {
+      admission.bedHistory.forEach(hist => {
+        const startDate = new Date(hist.startDate);
+        const endDate = hist.endDate ? new Date(hist.endDate) : new Date();
+        const days = Math.max(1, Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)));
+        daysAdmitted += days;
+        roomCharges += (hist.pricePerDay || 0) * days;
+      });
+    } else {
+      const bedPricePerDay = admission.bedId?.pricePerDay || 0;
+      const admissionDate = new Date(admission.admissionDate);
+      const currentDate = admission.status === 'Discharged' && admission.dischargeDate
+        ? new Date(admission.dischargeDate) : new Date();
+      daysAdmitted = Math.max(1, Math.ceil((currentDate - admissionDate) / (1000 * 60 * 60 * 24)));
+      roomCharges = bedPricePerDay * daysAdmitted;
+    }
 
     const consumableCharges = (await IpdConsumable.find(
       tenantFilter(req, { admissionId: req.params.admissionId })
@@ -620,17 +634,30 @@ const getPatientDashboard = async (req, res) => {
 const getBillingSummary = async (req, res) => {
   try {
     const admission = await IpdAdmission.findOne(tenantFilter(req, { _id: req.params.admissionId }))
-      .populate('bedId', 'pricePerDay');
+      .populate('bedId', 'pricePerDay')
+      .populate('bedHistory.bedId', 'pricePerDay');
 
     if (!admission) return res.status(404).json({ message: 'Admission record not found' });
 
-    const bedPricePerDay = admission.bedId?.pricePerDay || 0;
-    const admissionDate = new Date(admission.admissionDate);
-    const currentDate = admission.status === 'Discharged' && admission.dischargeDate
-      ? new Date(admission.dischargeDate) : new Date();
-    const daysAdmitted = Math.max(1, Math.ceil((currentDate - admissionDate) / (1000 * 60 * 60 * 24)));
+    let roomCharges = 0;
+    let daysAdmitted = 0;
+    if (admission.bedHistory && admission.bedHistory.length > 0) {
+      admission.bedHistory.forEach(hist => {
+        const startDate = new Date(hist.startDate);
+        const endDate = hist.endDate ? new Date(hist.endDate) : new Date();
+        const days = Math.max(1, Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)));
+        daysAdmitted += days;
+        roomCharges += (hist.pricePerDay || 0) * days;
+      });
+    } else {
+      const bedPricePerDay = admission.bedId?.pricePerDay || 0;
+      const admissionDate = new Date(admission.admissionDate);
+      const currentDate = admission.status === 'Discharged' && admission.dischargeDate
+        ? new Date(admission.dischargeDate) : new Date();
+      daysAdmitted = Math.max(1, Math.ceil((currentDate - admissionDate) / (1000 * 60 * 60 * 24)));
+      roomCharges = bedPricePerDay * daysAdmitted;
+    }
 
-    const roomCharges = bedPricePerDay * daysAdmitted;
     const bedCharges = 0; // Included in room charges
 
     const consumables = await IpdConsumable.find(

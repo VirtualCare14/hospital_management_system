@@ -1,8 +1,10 @@
 import { useAuth } from '../context/AuthContext';
+import { useLocation } from 'react-router-dom';
 import { LogOut, User, Activity } from 'lucide-react';
 
 const Navbar = () => {
   const { user, logout } = useAuth();
+  const location = useLocation();
 
   if (!user) return null;
 
@@ -36,7 +38,9 @@ const Navbar = () => {
             <p className="text-sm font-semibold text-gray-800 leading-tight">
               {user.doctorName || user.username}
             </p>
-            <p className="text-xs text-gray-500 capitalize">{user.role}</p>
+            <p className="text-xs text-gray-500 capitalize">
+              {location.pathname.startsWith('/same-day-care') && user.role === 'nursing' ? 'doctor' : user.role}
+            </p>
           </div>
         </div>
 

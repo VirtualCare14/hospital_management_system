@@ -120,7 +120,14 @@ const sameDayTreatmentSchema = new mongoose.Schema({
   updatedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
-  }
+  },
+  referredByDoctorRemarks: { type: String, default: '' },
+  assignedStaffId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false
+  },
+  assignedStaffName: { type: String, default: '' }
 }, { timestamps: true });
 
 sameDayTreatmentSchema.index({ patientId: 1 });

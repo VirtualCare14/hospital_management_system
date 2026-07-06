@@ -25,8 +25,8 @@ const createPrescription = async (req, res) => {
       return res.status(404).json({ message: 'Patient not found' });
     }
 
-    if (!medicines || !Array.isArray(medicines) || medicines.length === 0) {
-      return res.status(400).json({ message: 'Medicines list cannot be empty' });
+    if (!medicines || !Array.isArray(medicines)) {
+      return res.status(400).json({ message: 'Medicines list is required' });
     }
 
     // 1. Find the latest pending consultation OR the latest consultation to mark completed
@@ -116,7 +116,7 @@ const createPrescription = async (req, res) => {
       );
     } else {
       // Fallback: update latest pending visit for patient/doctor
-      await Visit.updateOne(
+      await Visit.findOneAndUpdate(
         tenantQuery(req, { patientId, doctorId, consultationStatus: 'pending' }),
         { consultationStatus: 'completed', consultationCompletedDate: new Date() },
         { sort: { createdAt: -1 } }

@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 import toast from 'react-hot-toast';
+import BillingSettingsView from './BillingSettingsView';
+import ExcelUploadView from './ExcelUploadView';
 import {
   Pill,
   Search,
@@ -226,7 +228,7 @@ const PharmacyWorkspace = () => {
       {currentSection === 'gst-reports' && <GstReportsView />}
       {currentSection === 'expiry' && <ExpiryMedicinesView />}
       {currentSection === 'out-of-stock' && <OutOfStockView />}
-      {currentSection === 'billing-settings' && <BillingSettingsView />}
+      {currentSection === 'billing-settings' && <BillingSettingsView isAdmin={false} />}
     </div>
   );
 };
@@ -667,369 +669,8 @@ const InventoryView = () => {
   );
 };
 
-// ==================== EXCEL UPLOAD VIEW ====================
-const ExcelUploadView = ({ loadStats }) => {
-  const [file, setFile] = useState(null);
-  const [uploading, setUploading] = useState(false);
-  const [summary, setSummary] = useState(null);
-  const [dragActive, setDragActive] = useState(false);
-  const [downloadingStock, setDownloadingStock] = useState(false);
 
-  const downloadCurrentStock = async () => {
-    setDownloadingStock(true);
-    try {
-      const { data } = await client.get('/pharmacy/inventory?limit=1000000&page=1');
-      if (!data || !data.items || data.items.length === 0) {
-        toast.error('No stock items found to download.');
-        return;
-      }
 
-      // Format standard Excel rows matching upload headers:
-      const rows = data.items.map((item, index) => {
-        let expiryStr = '';
-        if (item.expiry) {
-          const date = new Date(item.expiry);
-          if (!isNaN(date.getTime())) {
-            expiryStr = date.toISOString().split('T')[0];
-          }
-        }
-        return {
-          'Sno.': item.sNo || (index + 1),
-          'Item Name': item.itemName,
-          'Old MRP': item.oldMrp || 0,
-          'Pack': item.pack || '0',
-          'MRP': item.mrp || 0,
-          'Quantity': item.quantity || 0,
-          'Free': item.free || 0,
-          'Rate': item.rate || 0,
-          'Dis': item.dis || 0,
-          'Batch': item.batch,
-          'Expiry': expiryStr,
-          'NRate': item.nRate || 0,
-          'HSN': item.hsn || '0',
-          'SGST': item.sgst || 0,
-          'CST': item.cst || 0,
-          'Amount': item.amount || 0
-        };
-      });
-
-      const worksheet = XLSX.utils.json_to_sheet(rows);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Current Stock');
-      XLSX.writeFile(workbook, `pharmacy_current_stock_${new Date().toISOString().split('T')[0]}.xlsx`);
-      toast.success('Current stock downloaded successfully!');
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to download current stock');
-    } finally {
-      setDownloadingStock(false);
-    }
-  };
-
-  // Parse Excel Date helper
-  const parseExcelDate = (val) => {
-    if (!val) return new Date();
-    if (val instanceof Date) return val;
-    if (typeof val === 'number') {
-      return new Date(Math.round((val - 25569) * 86400 * 1000));
-    }
-    const str = String(val).trim();
-    const parsed = Date.parse(str);
-    if (!isNaN(parsed)) return new Date(parsed);
-
-    // Try parsing MM/YY or MM/YYYY or MM-YY or MM-YYYY
-    const match = str.match(/^(\d{1,2})[-/](\d{2,4})$/);
-    if (match) {
-      const month = parseInt(match[1]) - 1;
-      let year = parseInt(match[2]);
-      if (year < 100) year += 2000;
-      return new Date(year, month + 1, 0); // last day of that month
-    }
-    return new Date(); // fallback
-  };
-
-  const handleDrag = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setDragActive(true);
-    } else if (e.type === 'dragleave') {
-      setDragActive(false);
-    }
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      setFile(e.dataTransfer.files[0]);
-    }
-  };
-
-  const handleFileChange = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
-    }
-  };
-
-  const processUpload = async () => {
-    if (!file) {
-      toast.error('Please select a file first.');
-      return;
-    }
-
-    const extension = file.name.split('.').pop().toLowerCase();
-    if (extension !== 'xlsx' && extension !== 'xls') {
-      toast.error('Invalid file format. Please upload a .xlsx or .xls file.');
-      return;
-    }
-
-    setUploading(true);
-    setSummary(null);
-
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      try {
-        const data = new Uint8Array(evt.evt ? evt.evt.target.result : evt.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        const rawRows = XLSX.utils.sheet_to_json(worksheet);
-
-        if (rawRows.length === 0) {
-          toast.error('The uploaded Excel sheet contains no rows.');
-          setUploading(false);
-          return;
-        }
-
-        // Validate Column Structure
-        const headers = XLSX.utils.sheet_to_json(worksheet, { header: 1 })[0] || [];
-        const requiredColumns = [
-          'Sno.', 'Item Name', 'Old MRP', 'Pack', 'MRP', 'Quantity', 'Free', 
-          'Rate', 'Dis', 'Batch', 'Expiry', 'NRate', 'HSN', 'SGST', 'CST', 'Amount'
-        ];
-
-        const normalizedHeaders = headers.map(h => String(h).trim().toLowerCase());
-        const missing = [];
-        requiredColumns.forEach(col => {
-          if (!normalizedHeaders.includes(col.toLowerCase())) {
-            missing.push(col);
-          }
-        });
-
-        if (missing.length > 0) {
-          toast.error(`Columns missing from Excel: ${missing.join(', ')}`);
-          setUploading(false);
-          return;
-        }
-
-        // Map and parse columns, ensuring defaults to 0 for missing values
-        const parsedItems = rawRows.map(row => {
-          const getVal = (colName, defaultVal = 0) => {
-            const key = Object.keys(row).find(k => k.trim().toLowerCase() === colName.toLowerCase());
-            const val = key ? row[key] : undefined;
-            return val === undefined || val === null || val === "" ? defaultVal : val;
-          };
-
-          const rawExpiry = getVal('Expiry', null);
-          const expiryDate = rawExpiry ? parseExcelDate(rawExpiry) : new Date();
-
-          return {
-            sNo: Number(getVal('Sno.', 0)),
-            itemName: String(getVal('Item Name', '')).trim(),
-            oldMrp: Number(getVal('Old MRP', 0)),
-            pack: String(getVal('Pack', '0')).trim(),
-            mrp: Number(getVal('MRP', 0)),
-            quantity: Number(getVal('Quantity', 0)),
-            free: Number(getVal('Free', 0)),
-            rate: Number(getVal('Rate', 0)),
-            dis: Number(getVal('Dis', 0)),
-            batch: String(getVal('Batch', '')).trim(),
-            expiry: expiryDate.toISOString(),
-            nRate: Number(getVal('NRate', 0)),
-            hsn: String(getVal('HSN', '0')).trim(),
-            sgst: Number(getVal('SGST', 0)),
-            cst: Number(getVal('CST', 0)),
-            amount: Number(getVal('Amount', 0))
-          };
-        });
-
-        const validItems = parsedItems.filter(item => item.itemName && item.batch);
-        if (validItems.length === 0) {
-          toast.error('No valid records found in Excel sheet.');
-          setUploading(false);
-          return;
-        }
-
-        // POST JSON payload to backend
-        const { data: uploadRes } = await client.post('/pharmacy/inventory/upload', {
-          items: validItems,
-          fileName: file.name
-        });
-
-        toast.success(uploadRes.message || 'Import successful!');
-        setSummary(uploadRes);
-        setFile(null);
-        loadStats();
-      } catch (err) {
-        console.error(err);
-        toast.error(err.response?.data?.message || 'Error processing Excel sheet');
-      } finally {
-        setUploading(false);
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  };
-
-  return (
-    <div className="grid gap-6 md:grid-cols-3 animate-fade-in">
-      {/* Upload Box */}
-      <div className="md:col-span-2 space-y-4">
-        <div 
-          onDragEnter={handleDrag}
-          onDragOver={handleDrag}
-          onDragLeave={handleDrag}
-          onDrop={handleDrop}
-          className={`card p-8 text-center border-2 border-dashed flex flex-col items-center justify-center min-h-[300px] transition duration-200 ${
-            dragActive 
-              ? 'border-orange-500 bg-orange-50/50' 
-              : 'border-orange-200 bg-white hover:border-orange-400'
-          }`}
-        >
-          <FileSpreadsheet className="h-12 w-12 text-orange-400 mb-4" />
-          <h3 className="font-extrabold text-gray-800 text-lg">Upload Stock Spreadsheet</h3>
-          <p className="text-xs text-gray-500 mt-1 max-w-sm">
-            Drag and drop your Excel file here, or browse files on your computer. Supports .xlsx and .xls formats.
-          </p>
-
-          <label className="btn text-xs py-2.5 px-4 mt-6 cursor-pointer">
-            Browse Files
-            <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleFileChange} />
-          </label>
-
-          {file && (
-            <div className="mt-6 p-3 bg-orange-50 border border-orange-100 rounded-2xl flex items-center gap-3 max-w-md">
-              <Check className="text-green-600 h-5 w-5 bg-green-50 rounded-full p-0.5 border border-green-200" />
-              <div className="text-left">
-                <p className="text-xs font-bold text-gray-800 truncate max-w-[200px]">{file.name}</p>
-                <p className="text-[10px] text-gray-400 font-semibold">{(file.size / 1024).toFixed(1)} KB</p>
-              </div>
-              <button onClick={() => setFile(null)} className="text-gray-400 hover:text-gray-600 ml-auto p-1">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          )}
-
-          {file && (
-            <button 
-              onClick={processUpload} 
-              disabled={uploading}
-              className="btn text-xs py-2.5 px-6 mt-4 shadow-lg shadow-orange-500/10 cursor-pointer disabled:bg-orange-300"
-            >
-              {uploading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Importing records...
-                </>
-              ) : 'Start Import'}
-            </button>
-          )}
-        </div>
-
-        {/* Upload Summary Card */}
-        {summary && (
-          <div className="card p-6 bg-gradient-to-br from-white to-green-50/10 border-green-100 space-y-4 shadow-lg">
-            <h4 className="font-black text-green-800 text-sm flex items-center gap-2">
-              <Check className="h-5 w-5 bg-green-100 text-green-700 rounded-full p-0.5" />
-              Import Completed Successfully
-            </h4>
-            <div className="grid grid-cols-3 gap-4 text-center">
-              <div className="p-3 bg-white border border-green-50 rounded-xl">
-                <span className="block text-[10px] font-bold text-gray-400 uppercase">Rows Read</span>
-                <span className="text-2xl font-black text-gray-800">{summary.totalRows}</span>
-              </div>
-              <div className="p-3 bg-white border border-green-50 rounded-xl">
-                <span className="block text-[10px] font-bold text-green-600 uppercase">New Items</span>
-                <span className="text-2xl font-black text-green-700">{summary.insertedCount}</span>
-              </div>
-              <div className="p-3 bg-white border border-green-50 rounded-xl">
-                <span className="block text-[10px] font-bold text-blue-600 uppercase">Updated</span>
-                <span className="text-2xl font-black text-blue-700">{summary.updatedCount}</span>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Excel Sheet Instructions */}
-      <div className="space-y-4">
-        {/* Template Downloads & Stock Export */}
-        <div className="card p-5 space-y-4">
-          <h4 className="font-extrabold text-gray-800 text-sm flex items-center gap-2">
-            <Download className="text-orange-500 h-4.5 w-4.5" />
-            Download Excel Template
-          </h4>
-          <p className="text-xs text-gray-500">
-            Download our standard formatted Excel template to populate your records before importing. Do not change the column headers.
-          </p>
-          <a 
-            href="/sample_inventory.xlsx" 
-            download="sample_inventory.xlsx"
-            className="btn-secondary py-2.5 px-4 text-xs flex items-center gap-2 w-full hover:bg-orange-50/50 justify-center font-bold"
-          >
-            <Download className="h-4 w-4" /> Download Sample File
-          </a>
-
-          <div className="border-t border-orange-100/60 pt-4 space-y-3">
-            <h4 className="font-extrabold text-gray-800 text-sm flex items-center gap-2">
-              <FileSpreadsheet className="text-orange-500 h-4.5 w-4.5" />
-              Download Current Stock
-            </h4>
-            <p className="text-xs text-gray-500">
-              Export all existing inventory items into the same standard Excel format. You can edit this file and re-upload it.
-            </p>
-            <button 
-              onClick={downloadCurrentStock}
-              disabled={downloadingStock}
-              className="btn py-2.5 px-4 text-xs flex items-center gap-2 w-full hover:bg-orange-600 justify-center cursor-pointer disabled:bg-orange-300 shadow-md shadow-orange-500/10 font-bold"
-            >
-              {downloadingStock ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Generating Excel...
-                </>
-              ) : (
-                <>
-                  <Download className="h-4 w-4" /> Export Current Stock
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Required Columns */}
-        <div className="card p-5 space-y-3">
-          <h4 className="font-extrabold text-gray-800 text-sm">Required Format Columns</h4>
-          <ul className="text-xs text-gray-500 space-y-1.5 list-disc pl-4 font-semibold">
-            <li><b>Sno.</b>: Row sequence number</li>
-            <li><b>Item Name</b>: Brand or generic name</li>
-            <li><b>Pack</b>: Strip size (e.g. 10 Tab, 1 Bottle)</li>
-            <li><b>MRP</b>: Maximum Retail Price (Number)</li>
-            <li><b>Quantity</b>: Number of items (Integer)</li>
-            <li><b>Free</b>: Promotional free items count</li>
-            <li><b>Rate</b>: Purchase cost per unit</li>
-            <li><b>Batch</b>: Unique manufacturing batch ID</li>
-            <li><b>Expiry</b>: Expiry date (MM/YYYY or DD/MM/YYYY)</li>
-            <li><b>HSN</b>: Harmonized System Nomenclature</li>
-            <li><b>SGST / CST</b>: Tax percentages</li>
-            <li><b>Amount</b>: Rate * Quantity total cost</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 // ==================== EXPIRY MEDICINES VIEW ====================
 const ExpiryMedicinesView = () => {
@@ -2592,31 +2233,32 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
       const itemDiscount = itemSubtotal * (item.discount / 100);
       const itemNetAfterDiscount = itemSubtotal - itemDiscount;
 
-      // Reverse GST calculation: unit price is inclusive of GST.
+      // GST calculation: unit price is exclusive of GST (GST is added on top of MRP after discount).
       let gstAmt = 0;
       let gstRate = 0;
       if (gstMode === 'default') {
-        gstRate = item.sgst + item.cst;
+        gstRate = (item.sgst || 0) + (item.cst || 0);
       } else if (gstMode === 'custom') {
         gstRate = parseFloat(customGstRate) || 0;
       }
 
       if (gstMode !== 'none') {
-        const taxableVal = itemNetAfterDiscount / (1 + gstRate / 100);
-        gstAmt = itemNetAfterDiscount - taxableVal;
+        gstAmt = itemNetAfterDiscount * (gstRate / 100);
       }
+
+      const itemTotalWithGst = itemNetAfterDiscount + gstAmt;
 
       subTotal += itemSubtotal;
       totalDiscount += itemDiscount;
       totalGst += gstAmt;
-      grandTotal += itemNetAfterDiscount;
+      grandTotal += itemTotalWithGst;
 
       return {
         ...item,
         unitPrice: item.mrp,
         gstPercentage: gstRate,
         gstAmount: gstAmt,
-        amount: itemNetAfterDiscount
+        amount: itemTotalWithGst
       };
     });
 
@@ -2962,11 +2604,8 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
                     </td>
                   </tr>
                 ) : (
-                  billItems.map((item, idx) => {
-                    const rowGst = gstMode === 'custom' ? customGstRate : (gstMode === 'default' ? (item.sgst + item.cst) : 0);
-                    const rowSub = item.mrp * item.quantity;
-                    const rowDisc = rowSub * (item.discount / 100);
-                    const rowNet = rowSub - rowDisc;
+                  totals.itemsCalculated.map((item, idx) => {
+                    const rowGst = item.gstPercentage;
 
                     return (
                       <tr key={idx} className="hover:bg-orange-50/10">
@@ -3011,12 +2650,12 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
                         {gstMode !== 'none' && (
                           <td className="p-3 text-[10px] text-gray-500 font-semibold">
                             {rowGst}%
-                            <span className="block text-[9px] text-gray-405">
-                              (₹{(rowNet - (rowNet / (1 + rowGst / 100))).toFixed(2)})
+                            <span className="block text-[9px] text-gray-450">
+                              (₹{item.gstAmount.toFixed(2)})
                             </span>
                           </td>
                         )}
-                        <td className="p-3 font-bold text-gray-950">₹{rowNet.toFixed(2)}</td>
+                        <td className="p-3 font-bold text-gray-950">₹{item.amount.toFixed(2)}</td>
                         <td className="p-3 pr-4 text-center">
                           <button 
                             type="button"
@@ -3055,8 +2694,8 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
               <span className="font-bold text-red-655">- ₹{totals.discount.toFixed(2)}</span>
             </div>
             {gstMode !== 'none' && (
-              <div className="flex justify-between items-center text-gray-400 font-semibold">
-                <span>Inclusive GST Tax</span>
+              <div className="flex justify-between items-center text-gray-550 font-semibold">
+                <span>GST Tax (Added)</span>
                 <span className="font-mono">₹{totals.gstAmount.toFixed(2)}</span>
               </div>
             )}
@@ -3401,8 +3040,8 @@ const InvoicePrintModal = ({ billId, onClose }) => {
                   <span className="font-bold text-red-600">- ₹{(data.bill.discount || 0).toFixed(2)}</span>
                 </div>
                 {data.pharmacySetting?.gstEnabled && (
-                  <div className="flex justify-between items-center text-[10px] text-gray-400 font-semibold">
-                    <span>Inclusive GST Tax Summary</span>
+                  <div className="flex justify-between items-center text-[10px] text-gray-500 font-semibold">
+                    <span>GST Tax Summary</span>
                     <span className="font-mono">₹{data.bill.gstAmount.toFixed(2)}</span>
                   </div>
                 )}
@@ -4621,153 +4260,7 @@ const GstReportsView = () => {
   );
 };
 
-// ==================== PHARMACY SETTINGS VIEW ====================
-const BillingSettingsView = () => {
-  const [gstEnabled, setGstEnabled] = useState(true);
-  const [emailAddress, setEmailAddress] = useState('');
-  const [gstNumber, setGstNumber] = useState('');
-  const [termsAndConditions, setTermsAndConditions] = useState('');
-  const [thankYouMessage, setThankYouMessage] = useState('');
-  
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
 
-  const fetchSettings = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { data } = await client.get('/pharmacy/billing/settings');
-      setGstEnabled(data.gstEnabled);
-      setEmailAddress(data.emailAddress || '');
-      setGstNumber(data.gstNumber || '');
-      setTermsAndConditions(data.termsAndConditions || '');
-      setThankYouMessage(data.thankYouMessage || '');
-    } catch (err) {
-      toast.error('Failed to load pharmacy settings');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
-  useEffect(() => {
-    fetchSettings();
-  }, [fetchSettings]);
-
-  const handleSubmitSettings = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      await client.put('/pharmacy/billing/settings', {
-        gstEnabled,
-        emailAddress,
-        gstNumber,
-        termsAndConditions,
-        thankYouMessage
-      });
-      toast.success('Pharmacy settings saved successfully!');
-    } catch (err) {
-      toast.error('Failed to save settings changes');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="max-w-2xl animate-fade-in text-gray-700">
-      <div className="card p-6 bg-white border border-orange-100 shadow-lg space-y-4">
-        <div className="flex items-center gap-2 border-b border-orange-50 pb-2">
-          <Settings className="text-orange-500 h-5 w-5" />
-          <h3 className="font-extrabold text-gray-900 text-sm">Configure Pharmacy billing & Tax Parameters</h3>
-        </div>
-
-        {loading ? (
-          <div className="py-12 text-center text-gray-400">
-            <Loader2 className="h-6 w-6 animate-spin text-orange-500 inline mr-1" /> Loading configurations...
-          </div>
-        ) : (
-          <form onSubmit={handleSubmitSettings} className="space-y-4 text-xs">
-            
-            {/* GST Config Toggle */}
-            <div className="flex items-center justify-between p-3.5 bg-orange-50/20 border border-orange-100 rounded-2xl">
-              <div>
-                <p className="font-extrabold text-gray-800">GST Invoice Calculations</p>
-                <p className="text-[10px] text-gray-400 font-semibold mt-0.5">When disabled, item tax rates are ignored during bill calculations.</p>
-              </div>
-              <button 
-                type="button"
-                onClick={() => setGstEnabled(!gstEnabled)}
-                className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors duration-350 focus:outline-none cursor-pointer ${
-                  gstEnabled ? 'bg-orange-500' : 'bg-gray-300'
-                }`}
-              >
-                <span className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform duration-300 ${
-                  gstEnabled ? 'translate-x-6' : 'translate-x-0'
-                }`}></span>
-              </button>
-            </div>
-
-            {/* Email and GSTIN inputs */}
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <label className="mb-1 block font-bold text-gray-550">Pharmacy GSTIN Number</label>
-                <input 
-                  type="text" 
-                  disabled={!gstEnabled}
-                  className="input py-2 text-xs font-mono uppercase" 
-                  placeholder="e.g. 27AAAAA1111A1Z1"
-                  value={gstNumber}
-                  onChange={(e) => setGstNumber(e.target.value.toUpperCase())}
-                />
-              </div>
-              <div>
-                <label className="mb-1 block font-bold text-gray-550">Support Email Address</label>
-                <input 
-                  type="email" 
-                  className="input py-2 text-xs" 
-                  placeholder="e.g. pharmacy@hospital.com"
-                  value={emailAddress}
-                  onChange={(e) => setEmailAddress(e.target.value)}
-                />
-              </div>
-            </div>
-
-            {/* Terms & Conditions */}
-            <div>
-              <label className="mb-1 block font-bold text-gray-550">Custom Invoice Terms & Conditions</label>
-              <textarea 
-                className="input py-2 text-xs h-[80px] whitespace-pre-line leading-relaxed" 
-                placeholder="Write invoice guidelines (e.g. Medicines once sold cannot be returned after 7 days)..."
-                value={termsAndConditions}
-                onChange={(e) => setTermsAndConditions(e.target.value)}
-              />
-            </div>
-
-            {/* Thank you message */}
-            <div>
-              <label className="mb-1 block font-bold text-gray-550">A4 Invoice Footnote (Thank you message)</label>
-              <input 
-                type="text" 
-                className="input py-2 text-xs" 
-                placeholder="e.g. Thank you for choosing our pharmacy! Get well soon."
-                value={thankYouMessage}
-                onChange={(e) => setThankYouMessage(e.target.value)}
-              />
-            </div>
-
-            <div className="flex justify-end border-t border-orange-50 pt-4">
-              <button 
-                type="submit" 
-                disabled={saving}
-                className="btn py-2 px-6 text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:bg-orange-300"
-              >
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                Save Settings Configuration
-              </button>
-            </div>
-          </form>
-        )}
-      </div>
-    </div>
-  );
-};
 
 export default PharmacyWorkspace;

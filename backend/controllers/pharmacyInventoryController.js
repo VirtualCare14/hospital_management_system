@@ -268,7 +268,6 @@ const getExpiryMedicines = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
-
 // @desc    Get out of stock medicines
 // @route   GET /api/pharmacy/inventory/out-of-stock
 // @access  Private
@@ -285,10 +284,101 @@ const getOutOfStockMedicines = async (req, res) => {
   }
 };
 
+// @desc    Update a pharmacy inventory item
+// @route   PUT /api/pharmacy/inventory/:id
+// @access  Private
+const updateInventoryItem = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+    
+    // Do not allow updating hospitalId
+    delete updateData.hospitalId;
+
+    const item = await PharmacyInventory.findOneAndUpdate(
+      tenantFilter(req, { _id: id }),
+      { $set: updateData },
+      { new: true, runValidators: true }
+    );
+
+    if (!item) {
+      return res.status(404).json({ message: 'Inventory item not found' });
+    }
+
+    res.status(200).json({ message: 'Inventory item updated successfully', item });
+  } catch (error) {
+    console.error('Update Inventory Item Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Delete a pharmacy inventory item
+// @route   DELETE /api/pharmacy/inventory/:id
+// @access  Private
+const deleteInventoryItem = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const item = await PharmacyInventory.findOneAndDelete(
+      tenantFilter(req, { _id: id })
+    );
+
+    if (!item) {
+      return res.status(404).json({ message: 'Inventory item not found' });
+    }
+
+    res.status(200).json({ message: 'Inventory item deleted successfully' });
+  } catch (error) {
+    console.error('Delete Inventory Item Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Create a new pharmacy inventory item
+// @route   POST /api/pharmacy/inventory
+// @access  Private
+const createInventoryItem = async (req, res) => {
+  try {
+    const itemData = req.body;
+    
+    // Add hospitalId
+    itemData.hospitalId = req.user.hospitalId;
+
+    // Check unique index: hospitalId, itemName, batch
+    const existing = await PharmacyInventory.findOne({
+      hospitalId: req.user.hospitalId,
+      itemName: itemData.itemName.trim(),
+      batch: itemData.batch.trim()
+    });
+
+    if (existing) {
+      return res.status(400).json({ message: 'A medicine with this item name and batch already exists in stock' });
+    }
+
+    // Resolve default fields
+    if (itemData.quantity === undefined) itemData.quantity = 0;
+    if (itemData.rate === undefined) itemData.rate = 0;
+    
+    // Auto-calculate amount
+    itemData.amount = (itemData.quantity || 0) * (itemData.rate || 0);
+
+    const newItem = new PharmacyInventory(itemData);
+    await newItem.save();
+
+    res.status(201).json({ message: 'Medicine added to inventory successfully', item: newItem });
+  } catch (error) {
+    console.error('Create Inventory Item Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   getDashboardStats,
   getInventory,
   uploadInventory,
   getExpiryMedicines,
-  getOutOfStockMedicines
+  getOutOfStockMedicines,
+  updateInventoryItem,
+  deleteInventoryItem,
+  createInventoryItem
 };

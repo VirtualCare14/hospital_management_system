@@ -70,6 +70,7 @@ const IpdAdmission = () => {
   const [referredDoctorId, setReferredDoctorId] = useState(''); // Referred Doctor
   const [selectedStatus, setSelectedStatus] = useState('Admitted');
   const [admissionDate, setAdmissionDate] = useState(new Date().toISOString().substring(0, 16)); // format: YYYY-MM-DDTHH:MM
+  const [provisionalDiagnosis, setProvisionalDiagnosis] = useState('');
 
   // Post-Admission Print modal states
   const [receiptModalAdmission, setReceiptModalAdmission] = useState(null);
@@ -257,6 +258,7 @@ const IpdAdmission = () => {
     if (referral.referredByDoctor?._id) {
       setReferredDoctorId(referral.referredByDoctor._id);
     }
+    setProvisionalDiagnosis(referral.notes || referral.diagnosis || '');
     // Switch to admit-existing tab
     setActiveTab('admit-existing');
     toast.success(`Patient ${referral.patientName} loaded from OPD referral`);
@@ -339,7 +341,8 @@ const IpdAdmission = () => {
         doctorInCharge: selectedDoctorId,
         referredDoctor: referredDoctorId || undefined,
         status: selectedStatus,
-        admissionDate: admissionDate
+        admissionDate: admissionDate,
+        provisionalDiagnosis: provisionalDiagnosis
       };
 
       const { data } = await client.post('/ipd/admit', admitPayload);
@@ -374,6 +377,7 @@ const IpdAdmission = () => {
       setSelectedBedId('');
       setReferredDoctorId('');
       setSelectedReferral(null);
+      setProvisionalDiagnosis('');
       
       // Clear new patient registration inputs
       setNewPatientName('');
@@ -742,6 +746,15 @@ const IpdAdmission = () => {
                   ))}
                 </select>
               </label>
+              <label className="block col-span-2">
+                <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-500">Provisional Diagnosis / Remarks</span>
+                <textarea
+                  className="input py-2.5 text-xs text-gray-600 h-20 resize-none border border-gray-200 rounded-xl"
+                  placeholder="Enter provisional diagnosis or clinical remarks..."
+                  value={provisionalDiagnosis}
+                  onChange={(e) => setProvisionalDiagnosis(e.target.value)}
+                />
+              </label>
 
               <label className="block">
                 <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-500">Initial Status</span>
@@ -835,6 +848,11 @@ const IpdAdmission = () => {
                           <span className="font-mono text-indigo-700 text-[9px] block font-bold">
                             {formatUhid(ref.uhid)}
                           </span>
+                          {ref.notes && (
+                            <p className="text-[10px] text-gray-500 italic mt-0.5 max-w-xs bg-indigo-50/30 p-1 rounded border border-indigo-50">
+                              Remarks: {ref.notes}
+                            </p>
+                          )}
                         </td>
                         <td className="p-2 text-[10px]">
                           Dr. {ref.referredByDoctor?.doctorName || ref.referredByDoctor?.username || 'N/A'}

@@ -150,6 +150,12 @@ const DoctorOtPatients = () => {
                         <p className="line-clamp-2"><span className="font-bold text-gray-700">Procedure:</span> {record.proceduresPerformed}</p>
                       </div>
                     )}
+                    {admission.provisionalDiagnosis && (
+                      <div className="flex items-start gap-2 pt-1.5 border-t border-dashed border-orange-100 mt-1">
+                        <span className="font-bold text-orange-600 block text-[10px] whitespace-nowrap">Remarks:</span>
+                        <p className="text-[10px] text-gray-500 italic line-clamp-2">{admission.provisionalDiagnosis}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
 

@@ -146,9 +146,35 @@ const PrescriptionPage = () => {
       }
       
       if (redirectAfterSave) navigate('/doctor/completed');
+      return true;
     } catch (error) {
       toast.error('Error saving prescription');
       console.error(error);
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveAndPrint = async () => {
+    setIsSaving(true);
+    try {
+      const success = await savePrescription(false);
+      if (!success) {
+        return;
+      }
+      
+      // Wait a moment for state and DOM to synchronize
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      const pdf = await generateA4Print();
+      pdf.autoPrint();
+      window.open(pdf.output('bloburl'), '_blank');
+      
+      navigate('/doctor/completed');
+    } catch (error) {
+      console.error('Save & Print error:', error);
+      toast.error('Error auto-printing prescription. Please check popup blocker.');
     } finally {
       setIsSaving(false);
     }
@@ -263,13 +289,17 @@ const PrescriptionPage = () => {
 
   const handleSendToIpd = async () => {
     if (!patient) return;
+    const defaultNotes = `Referred from OPD by Dr. ${user?.doctorName || user?.username || 'Doctor'}. Diagnosis: ${translatedDiagnosisRemark || consultation?.diagnosisRemark || 'N/A'}`;
+    const customRemarks = window.prompt("Enter remarks for IPD Referral:", defaultNotes);
+    if (customRemarks === null) return;
+
     setSendingToIpd(true);
     try {
       const consultationId = consultation?._id || null;
       await client.post('/ipd/referrals', {
         patientId: patient._id,
         consultationId,
-        notes: `Referred from OPD by Dr. ${user?.doctorName || user?.username || 'Doctor'}. Diagnosis: ${translatedDiagnosisRemark || consultation?.diagnosisRemark || 'N/A'}`
+        notes: customRemarks
       });
       toast.success(`${patient.patientName} has been referred to IPD successfully!`);
       setReferralSent(true);
@@ -401,9 +431,7 @@ const PrescriptionPage = () => {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <button className="btn-secondary" disabled={isSaving} onClick={() => savePrescription(true)}><Save className="h-4 w-4" /> {isSaving ? 'Saving...' : 'Save'}</button>
-        <button className="btn" disabled={isSaving} onClick={() => makePdf('download')}><Download className="h-4 w-4" /> Download PDF</button>
-        <button className="btn-secondary" disabled={isSaving} onClick={() => makePdf('print')}><Printer className="h-4 w-4" /> Print</button>
+        <button className="btn-secondary" disabled={isSaving} onClick={handleSaveAndPrint}><Save className="h-4 w-4" /> {isSaving ? 'Saving...' : 'Save'}</button>
         <button className="btn-secondary" disabled={isSaving} onClick={shareWhatsApp}><MessageCircle className="h-4 w-4" /> WhatsApp</button>
         {referralSent ? (
           <span className="btn-secondary bg-green-50 text-green-700 border-green-200 cursor-default">

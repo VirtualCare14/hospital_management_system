@@ -169,6 +169,14 @@ const IpdPatientDetails = () => {
   const [dischargeRecordsLoading, setDischargeRecordsLoading] = useState(false);
   const [consumableServicesList, setConsumableServicesList] = useState([]);
 
+  // Bed Change States
+  const [showChangeBedModal, setShowChangeBedModal] = useState(false);
+  const [newRoomType, setNewRoomType] = useState('');
+  const [newBedId, setNewBedId] = useState('');
+  const [changeBedRooms, setChangeBedRooms] = useState([]);
+  const [changeBedBeds, setChangeBedBeds] = useState([]);
+  const [changingBed, setChangingBed] = useState(false);
+
   // Pharmacy Requests Phase 2 State
   const [pharmacyRequests, setPharmacyRequests] = useState([]);
   const [requestsLoading, setRequestsLoading] = useState(false);
@@ -180,6 +188,20 @@ const IpdPatientDetails = () => {
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [showConsumeModal, setShowConsumeModal] = useState(false);
   const [consumeForm, setConsumeForm] = useState([]);
+
+  useEffect(() => {
+    if (newRoomType) {
+      client.get(`/rooms/beds?roomType=${encodeURIComponent(newRoomType)}`)
+        .then(({ data }) => {
+          setChangeBedBeds(data.filter(b => b.status === 'Available'));
+          setNewBedId('');
+        })
+        .catch(() => {
+          setChangeBedBeds([]);
+          setNewBedId('');
+        });
+    }
+  }, [newRoomType]);
 
   const loadAdmission = useCallback(async () => {
     setLoading(true);
@@ -506,6 +528,48 @@ const IpdPatientDetails = () => {
     }
   };
 
+  const handleOpenChangeBedModal = async () => {
+    try {
+      const { data: rooms } = await client.get('/rooms');
+      setChangeBedRooms(rooms);
+      setNewRoomType(admission?.roomId?.roomType || rooms[0]?.roomType || '');
+      setNewBedId('');
+      setShowChangeBedModal(true);
+    } catch (err) {
+      toast.error('Failed to load rooms configuration');
+    }
+  };
+
+  const handleChangeBedSubmit = async (e) => {
+    e.preventDefault();
+    if (!newRoomType || !newBedId) {
+      toast.error('Please select room type and bed number');
+      return;
+    }
+    const chosenRoom = changeBedRooms.find(r => r.roomType === newRoomType);
+    if (!chosenRoom) {
+      toast.error('Invalid room type selected');
+      return;
+    }
+    setChangingBed(true);
+    try {
+      await client.put(`/ipd/admissions/${id}/change-bed`, {
+        newRoomId: chosenRoom._id,
+        newBedId: newBedId
+      });
+      toast.success('Bed changed successfully');
+      setShowChangeBedModal(false);
+      loadAdmission();
+      loadBilling();
+      loadDashboard();
+      loadTimeline();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to change bed');
+    } finally {
+      setChangingBed(false);
+    }
+  };
+
   const filteredLabTests = labTestSearch
     ? availableLabTests.filter(t => (t.title || t.test || '').toLowerCase().includes(labTestSearch.toLowerCase()) || (t.category || '').toLowerCase().includes(labTestSearch.toLowerCase()))
     : availableLabTests;
@@ -653,7 +717,20 @@ const IpdPatientDetails = () => {
             </div>
           </div>
           <div className="card p-5 space-y-4">
-            <div className="flex items-center gap-2 border-b border-orange-100 pb-3"><Bed className="h-5 w-5 text-orange-500" /><h3 className="font-extrabold text-gray-900">Bed Information</h3></div>
+            <div className="flex items-center justify-between border-b border-orange-100 pb-3">
+              <div className="flex items-center gap-2">
+                <Bed className="h-5 w-5 text-orange-500" />
+                <h3 className="font-extrabold text-gray-900">Bed Information</h3>
+              </div>
+              {admission.status !== 'Discharged' && (
+                <button
+                  onClick={handleOpenChangeBedModal}
+                  className="btn-secondary text-xs py-1 px-2.5 flex items-center gap-1 text-orange-600 border-orange-200 hover:bg-orange-50"
+                >
+                  <RefreshCw className="h-3.5 w-3.5 text-orange-500 animate-hover" /> Change Bed
+                </button>
+              )}
+            </div>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div><span className="block text-[10px] font-bold uppercase text-gray-400">Room Type</span><div className="flex items-center gap-1 font-bold text-gray-800"><Building2 className="h-3.5 w-3.5 text-gray-400" />{admission.roomId?.roomType || 'N/A'}</div></div>
               <div><span className="block text-[10px] font-bold uppercase text-gray-400">Bed Type</span><span className="font-bold text-gray-800">{admission.bedId?.bedType || 'N/A'}</span></div>
@@ -1712,6 +1789,82 @@ const IpdPatientDetails = () => {
                     <button type="button" onClick={() => { setShowReturnModal(false); setSelectedRequest(null); }} className="btn-secondary text-xs py-2 px-4 cursor-pointer">Cancel</button>
                     <button type="submit" className="btn text-xs py-2 px-4 cursor-pointer bg-purple-600 hover:bg-purple-700">
                       Send Return Request
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+          {/* Change Bed Modal */}
+          {showChangeBedModal && (
+            <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-orange-100 shadow-2xl relative animate-in fade-in zoom-in duration-200">
+                <button
+                  type="button"
+                  onClick={() => setShowChangeBedModal(false)}
+                  className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-1 hover:bg-orange-50 rounded-lg cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+                <div className="mb-4">
+                  <h2 className="font-extrabold text-gray-900 text-lg flex items-center gap-2">
+                    <RefreshCw className="text-orange-500 h-5 w-5 animate-spin" style={{ animationDuration: '3s' }} />
+                    Change Patient Bed
+                  </h2>
+                  <p className="text-xs text-gray-400 font-semibold mt-0.5">Select a new room type and bed number</p>
+                </div>
+
+                <form onSubmit={handleChangeBedSubmit} className="space-y-4">
+                  <div>
+                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-500">Room Type</label>
+                    <select
+                      className="input py-2 text-sm text-gray-600"
+                      value={newRoomType}
+                      onChange={(e) => setNewRoomType(e.target.value)}
+                      required
+                    >
+                      <option value="">-- Select Room Type --</option>
+                      {[...new Set(changeBedRooms.map(r => r.roomType))].map((type) => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-500">New Bed Number</label>
+                    <select
+                      className="input py-2 text-sm text-gray-600"
+                      value={newBedId}
+                      onChange={(e) => setNewBedId(e.target.value)}
+                      required
+                      disabled={!newRoomType}
+                    >
+                      <option value="">-- Select Bed --</option>
+                      {changeBedBeds.map((bed) => (
+                        <option key={bed._id} value={bed._id}>
+                          {bed.bedNumber} | {bed.bedType} | ₹{bed.pricePerDay}/day
+                        </option>
+                      ))}
+                    </select>
+                    {changeBedBeds.length === 0 && newRoomType && (
+                      <p className="text-xs text-red-500 mt-1 font-semibold">No available beds in this room type.</p>
+                    )}
+                  </div>
+
+                  <div className="flex justify-end gap-2 border-t border-orange-50 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowChangeBedModal(false)}
+                      className="btn-secondary text-xs py-2 px-4 cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={changingBed || !newBedId}
+                      className="btn text-xs py-2 px-4 cursor-pointer bg-orange-500 hover:bg-orange-600"
+                    >
+                      {changingBed ? 'Changing...' : 'Change Bed'}
                     </button>
                   </div>
                 </form>

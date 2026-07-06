@@ -9,7 +9,10 @@ const {
   getInventory,
   uploadInventory,
   getExpiryMedicines,
-  getOutOfStockMedicines
+  getOutOfStockMedicines,
+  updateInventoryItem,
+  deleteInventoryItem,
+  createInventoryItem
 } = require('../controllers/pharmacyInventoryController');
 const {
   getRequests,
@@ -50,6 +53,9 @@ router.get('/inventory', authMiddleware, getInventory);
 router.post('/inventory/upload', authMiddleware, uploadInventory);
 router.get('/inventory/expiry', authMiddleware, getExpiryMedicines);
 router.get('/inventory/out-of-stock', authMiddleware, getOutOfStockMedicines);
+router.post('/inventory', authMiddleware, createInventoryItem);
+router.put('/inventory/:id', authMiddleware, updateInventoryItem);
+router.delete('/inventory/:id', authMiddleware, deleteInventoryItem);
 
 // Phase 2 Doctor-to-Pharmacy Request Routes
 router.get('/requests', authMiddleware, getRequests);

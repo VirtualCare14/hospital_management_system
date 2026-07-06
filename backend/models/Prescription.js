@@ -1,4 +1,4 @@
-﻿const mongoose = require('mongoose');
+const mongoose = require('mongoose');
 
 const prescriptionSchema = new mongoose.Schema({
   hospitalId: {
@@ -28,7 +28,7 @@ const prescriptionSchema = new mongoose.Schema({
   },
   medicines: [{
     medicine: { type: String, required: true },
-    duration: { type: String, required: true },
+    duration: { type: String, default: '' },
     morning: { type: Boolean, default: false },
     afternoon: { type: Boolean, default: false },
     night: { type: Boolean, default: false },

@@ -116,7 +116,7 @@ const PatientRegistration = () => {
       const tempVal = parseFloat(data.temperature);
       const payload = {
         ...data,
-        visitType: data.department === 'Same Day Care' ? 'Same Day Treatment' : 'OPD',
+        visitType: (data.department && data.department.toLowerCase().trim() === 'same day care') ? 'Same Day Treatment' : 'OPD',
         temperature: !isNaN(tempVal) ? ((tempVal - 32) * 5 / 9).toFixed(1) : undefined
       };
       const { data: res } = await client.post('/patients/create', payload);

@@ -170,7 +170,10 @@ const createPatient = async (req, res) => {
     );
 
     // Determine visit type
-    const finalVisitType = visitType || 'OPD';
+    let finalVisitType = visitType || 'OPD';
+    if (department && department.toLowerCase().trim() === 'same day care') {
+      finalVisitType = 'Same Day Treatment';
+    }
 
     // Create a Visit record
     const visit = new Visit({
@@ -318,7 +321,7 @@ const getPatients = async (req, res) => {
       const sdtPatientIds = await SameDayTreatment.find(tenantQuery(req)).distinct('patientId');
       const sdtVisitPatientIds = await Visit.find(tenantQuery(req, {
         $or: [
-          { department: 'Same Day Care' },
+          { department: { $regex: /^same day care$/i } },
           { visitType: 'Same Day Treatment' }
         ]
       })).distinct('patientId');

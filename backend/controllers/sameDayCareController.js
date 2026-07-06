@@ -26,7 +26,8 @@ const createTreatment = async (req, res) => {
       treatmentPlan, procedure, productsMedicinesUsed,
       procedureNotes, anaesthesiaUsed, anaesthesiaType,
       complications, prescriptionMedicines,
-      reviewNotes, nextProcedurePlanned
+      reviewNotes, nextProcedurePlanned,
+      referredByDoctorRemarks, assignedStaffId, assignedStaffName
     } = req.body;
 
     if (!patientId || !treatmentType) {
@@ -91,6 +92,9 @@ const createTreatment = async (req, res) => {
       updatedBy: req.user._id,
       source: finalSource,
       referredByDoctorName: finalReferredBy,
+      referredByDoctorRemarks: referredByDoctorRemarks || '',
+      assignedStaffId: assignedStaffId || null,
+      assignedStaffName: assignedStaffName || '',
       chiefComplaint: chiefComplaint || '',
       presentIllness: presentIllness || '',
       clinicalFindings: clinicalFindings || '',
@@ -414,7 +418,7 @@ const getDialysisPatients = async (req, res) => {
     const sdtPatientIds = await SameDayTreatment.find(tenantFilter(req)).distinct('patientId');
     const sdtVisitPatientIds = await Visit.find(tenantFilter(req, {
       $or: [
-        { department: 'Same Day Care' },
+        { department: { $regex: /^same day care$/i } },
         { visitType: 'Same Day Treatment' }
       ]
     })).distinct('patientId');

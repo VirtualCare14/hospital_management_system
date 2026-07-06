@@ -1,14 +1,37 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, Stethoscope, FileText, Send, History } from 'lucide-react';
+import { Search, Stethoscope, FileText, Send, History, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import client from '../../api/client';
 import { formatDate } from '../../utils/dateFormat';
+import { useAuth } from '../../context/AuthContext';
 
 const DoctorPatientList = () => {
+  const { user } = useAuth();
   const [patients, setPatients] = useState([]);
   const [search, setSearch] = useState('');
   const [subServices, setSubServices] = useState([]);
+  const [sameDayModalPatient, setSameDayModalPatient] = useState(null);
+  const [sdCareType, setSdCareType] = useState('Minor Injury');
+  const [sdSelectedDocId, setSdSelectedDocId] = useState('');
+  const [sdRemarks, setSdRemarks] = useState('');
+  const [sdDoctors, setSdDoctors] = useState([]);
+  const [loadingSdDoctors, setLoadingSdDoctors] = useState(false);
+
+  useEffect(() => {
+    if (sameDayModalPatient) {
+      setLoadingSdDoctors(true);
+      client.get('/admin/doctors')
+        .then(({ data }) => {
+          setSdDoctors(data || []);
+        })
+        .catch(err => {
+          console.error(err);
+          toast.error("Failed to load Same Day Care providers list");
+        })
+        .finally(() => setLoadingSdDoctors(false));
+    }
+  }, [sameDayModalPatient]);
 
   useEffect(() => {
     client.get('/ipd/settings').then(({ data }) => {
@@ -28,35 +51,38 @@ const DoctorPatientList = () => {
     });
   }, []);
 
-  const handleSendToSameDay = async (patient) => {
-    const chosenType = window.prompt(
-      `Send ${patient.patientName} to Same Day Care?\nEnter one of:\n${subServices.join(', ')}`,
-      subServices.includes('Minor Injury') ? 'Minor Injury' : subServices[0] || 'Dialysis'
-    );
-    if (chosenType === null) return;
-    const cleanType = chosenType.trim();
-    if (!subServices.some(s => s.toLowerCase() === cleanType.toLowerCase())) {
-      toast.error(`Invalid care type! Must be one of: ${subServices.join(', ')}`);
+  const handleSendToSameDayOpen = (patient) => {
+    setSameDayModalPatient(patient);
+    setSdCareType(subServices.includes('Minor Injury') ? 'Minor Injury' : subServices[0] || 'Dialysis');
+    setSdSelectedDocId('');
+    setSdRemarks(`Referred to Same Day Care by Dr. ${user?.doctorName || user?.username || 'Doctor'}.`);
+  };
+
+  const handleSendToSameDaySubmit = async (e) => {
+    e.preventDefault();
+    if (!sdCareType) {
+      toast.error('Please select care type');
       return;
     }
-    
-    // Find exact cased name from subServices list
-    const matchedType = subServices.find(s => s.toLowerCase() === cleanType.toLowerCase());
-
+    const chosenDoc = sdDoctors.find(d => d._id === sdSelectedDocId);
     try {
-      const dob = patient.dob;
+      const dob = sameDayModalPatient.dob;
       const age = dob ? Math.floor((new Date() - new Date(dob)) / (365.25 * 24 * 60 * 60 * 1000)) : null;
       await client.post('/same-day-care/treatment', {
-        patientId: patient._id,
-        patientName: patient.patientName,
-        uhid: patient.uhid,
-        mobile: patient.mobile,
-        gender: patient.gender,
+        patientId: sameDayModalPatient._id,
+        patientName: sameDayModalPatient.patientName,
+        uhid: sameDayModalPatient.uhid,
+        mobile: sameDayModalPatient.mobile,
+        gender: sameDayModalPatient.gender,
         age,
-        treatmentType: matchedType,
+        treatmentType: sdCareType,
+        referredByDoctorRemarks: sdRemarks,
+        assignedStaffId: sdSelectedDocId || null,
+        assignedStaffName: chosenDoc ? (chosenDoc.doctorName || chosenDoc.username) : '',
         status: 'Draft'
       });
-      toast.success(`${patient.patientName} referred to Same Day Care (${matchedType})!`);
+      toast.success(`${sameDayModalPatient.patientName} referred to Same Day Care (${sdCareType})!`);
+      setSameDayModalPatient(null);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to refer patient');
     }
@@ -147,11 +173,13 @@ const DoctorPatientList = () => {
                         >
                           <FileText className="h-3 w-3" /> Rx
                         </Link>
-                        <button className="btn-secondary text-xs inline-flex items-center gap-1 text-indigo-600"
+                         <button className="btn-secondary text-xs inline-flex items-center gap-1 text-indigo-600"
                           onClick={async () => {
-                            if (!window.confirm(`Send ${patient.patientName} to OT (Operation Theatre)?`)) return;
+                            const defaultNotes = `Referred to OT from Doctor Patient List by Dr. ${user?.doctorName || user?.username || 'Doctor'}`;
+                            const customRemarks = window.prompt("Enter remarks for OT Referral:", defaultNotes);
+                            if (customRemarks === null) return;
                             try {
-                              await client.post('/ipd/referrals', { patientId: patient._id, notes: 'Referred to OT from Doctor Patient List' });
+                              await client.post('/ipd/referrals', { patientId: patient._id, notes: customRemarks });
                               toast.success(`${patient.patientName} sent to OT!`);
                             } catch (err) { toast.error(err.response?.data?.message || 'Failed to send to OT'); }
                           }}>
@@ -161,7 +189,7 @@ const DoctorPatientList = () => {
                           <History className="h-3 w-3" /> Track
                         </Link>
                         <button className="btn-secondary text-xs inline-flex items-center gap-1 text-orange-600 font-bold"
-                          onClick={() => handleSendToSameDay(patient)}>
+                          onClick={() => handleSendToSameDayOpen(patient)}>
                           <Send className="h-3 w-3" /> Same Day Care
                         </button>
                       </div>
@@ -173,6 +201,86 @@ const DoctorPatientList = () => {
           </table>
         </div>
       </div>
+
+      {sameDayModalPatient && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="card w-full max-w-md p-6 relative bg-white border border-gray-100 shadow-2xl rounded-2xl animate-in fade-in zoom-in duration-200">
+            <button
+              type="button"
+              onClick={() => setSameDayModalPatient(null)}
+              className="absolute top-4 right-4 p-1 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <h3 className="text-lg font-black text-gray-900 mb-4 flex items-center gap-2">
+              <Send className="h-5 w-5 text-orange-500" />
+              Refer to Same Day Care
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Select Care Type</label>
+                <select
+                  className="input w-full text-sm"
+                  value={sdCareType}
+                  onChange={(e) => setSdCareType(e.target.value)}
+                  required
+                >
+                  {subServices.map(type => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Assign to Provider / Doctor (Optional)</label>
+                {loadingSdDoctors ? (
+                  <p className="text-xs text-gray-400">Loading providers...</p>
+                ) : (
+                  <select
+                    className="input w-full text-sm"
+                    value={sdSelectedDocId}
+                    onChange={(e) => setSdSelectedDocId(e.target.value)}
+                  >
+                    <option value="">-- Select Provider --</option>
+                    {sdDoctors.map(doc => (
+                      <option key={doc._id} value={doc._id}>
+                        {doc.doctorName || doc.username} ({doc.role === 'nursing' ? 'same day care' : doc.role})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Referral Remarks</label>
+                <textarea
+                  className="input w-full text-sm h-24 p-2.5 resize-none border border-gray-200 rounded-xl"
+                  placeholder="Enter custom remarks for the patient..."
+                  value={sdRemarks}
+                  onChange={(e) => setSdRemarks(e.target.value)}
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setSameDayModalPatient(null)}
+                  className="btn-secondary text-xs px-4 py-2"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSendToSameDaySubmit}
+                  className="btn text-xs px-4 py-2"
+                >
+                  Send Referral
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -674,6 +674,28 @@ const SameDayCareForm = () => {
         </div>
       )}
 
+      {/* Referral Remarks Alert */}
+      {record?.referredByDoctorRemarks && (
+        <div className="flex flex-col gap-2 p-4 bg-orange-50 border border-orange-200 rounded-2xl animate-in fade-in slide-in-from-top-1 shadow-sm no-print">
+          <div className="flex items-start gap-2.5">
+            <Activity className="h-5 w-5 text-orange-600 mt-0.5" />
+            <div className="w-full">
+              <p className="text-xs font-black text-orange-950 uppercase tracking-wide">
+                OPD Doctor Referral Remarks
+              </p>
+              <p className="text-xs text-gray-700 font-semibold mt-1 bg-white/70 p-2.5 rounded-xl border border-orange-100 italic">
+                "{record.referredByDoctorRemarks}"
+              </p>
+              {record.assignedStaffName && (
+                <p className="text-[10px] text-orange-700 font-bold mt-2">
+                  Assigned Clinician: <span className="underline">{record.assignedStaffName}</span>
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Patient Header Block */}
       <div className={`card p-5 ${meta.bg} border border-orange-100 shadow-sm rounded-2xl relative overflow-hidden`}>
         <div className="absolute right-4 top-4 opacity-5 pointer-events-none">

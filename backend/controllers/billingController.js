@@ -177,12 +177,23 @@ const checkBillableItems = async (patientId) => {
   if (activeAdmissions.length > 0) {
     for (const admission of activeAdmissions) {
       // Bed charges
-      const bed = await Bed.findById(admission.bedId);
-      if (bed?.pricePerDay) {
-        const daysAdmitted = Math.ceil((new Date(admission.dischargeDate || new Date()) - new Date(admission.admissionDate)) / (1000 * 60 * 60 * 24)) || 1;
-        const roomCharge = bed.pricePerDay * daysAdmitted;
-        if (!categories.includes('BedCharge')) categories.push('BedCharge');
-        totalPendingAmount += roomCharge;
+      if (admission.bedHistory && admission.bedHistory.length > 0) {
+        admission.bedHistory.forEach(hist => {
+          const startDate = new Date(hist.startDate);
+          const endDate = hist.endDate ? new Date(hist.endDate) : new Date();
+          const days = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) || 1;
+          const charge = (hist.pricePerDay || 0) * days;
+          if (!categories.includes('BedCharge')) categories.push('BedCharge');
+          totalPendingAmount += charge;
+        });
+      } else {
+        const bed = await Bed.findById(admission.bedId);
+        if (bed?.pricePerDay) {
+          const daysAdmitted = Math.ceil((new Date(admission.dischargeDate || new Date()) - new Date(admission.admissionDate)) / (1000 * 60 * 60 * 24)) || 1;
+          const roomCharge = bed.pricePerDay * daysAdmitted;
+          if (!categories.includes('BedCharge')) categories.push('BedCharge');
+          totalPendingAmount += roomCharge;
+        }
       }
 
       // Consumables
@@ -494,6 +505,8 @@ const generateBillItems = async (req, res) => {
       const admissions = await IpdAdmission.find(tenantFilter(req, { patientId: patient._id }))
         .populate('roomId', 'roomType')
         .populate('bedId', 'bedNumber pricePerDay bedType')
+        .populate('bedHistory.roomId', 'roomType')
+        .populate('bedHistory.bedId', 'bedNumber pricePerDay bedType')
         .sort({ createdAt: -1 });
 
       const pharmacyBillsAll = await PharmacyBill.find(tenantFilter(req, { patientId: patient._id }));
@@ -521,7 +534,25 @@ const generateBillItems = async (req, res) => {
         if (billedSourceIds.has(admission._id.toString())) continue;
         
         // Bed charges
-        if (admission.bedId?.pricePerDay) {
+        if (admission.bedHistory && admission.bedHistory.length > 0) {
+          admission.bedHistory.forEach((hist) => {
+            if (!hist.bedId) return;
+            const startDate = new Date(hist.startDate);
+            const endDate = hist.endDate ? new Date(hist.endDate) : new Date();
+            const days = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) || 1;
+            const charge = (hist.pricePerDay || 0) * days;
+            items.push({
+              category: 'BedCharge',
+              date: fmtDate(startDate),
+              description: `Room Stay: ${hist.roomId?.roomType || 'N/A'} (Bed: ${hist.bedId?.bedNumber || 'N/A'}) - ${days} day(s) @ ₹${hist.pricePerDay || 0}/day`,
+              price: hist.pricePerDay || 0,
+              quantity: days,
+              total: charge,
+              sourceId: admission._id,
+              sourceModel: 'IpdAdmission'
+            });
+          });
+        } else if (admission.bedId?.pricePerDay) {
           const daysAdmitted = Math.ceil((new Date(admission.dischargeDate || new Date()) - new Date(admission.admissionDate)) / (1000 * 60 * 60 * 24)) || 1;
           const roomCharge = admission.bedId.pricePerDay * daysAdmitted;
           items.push({
@@ -534,7 +565,6 @@ const generateBillItems = async (req, res) => {
             sourceId: admission._id,
             sourceModel: 'IpdAdmission'
           });
-
         }
 
         // IPD Consumables

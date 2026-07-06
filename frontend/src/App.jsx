@@ -42,6 +42,7 @@ import OperationTheatreSettings from './pages/admin/OperationTheatreSettings.jsx
 import IpdOtDashboard from './pages/ipd/IpdOtDashboard.jsx';
 import IpdSameDayDashboard from './pages/ipd/IpdSameDayDashboard.jsx';
 import SameDayCareSettings from './pages/admin/SameDayCareSettings.jsx';
+import PharmacySettings from './pages/admin/PharmacySettings.jsx';
 import SameDayCareWorkspace from './pages/same-day-care/SameDayCareWorkspace.jsx';
 import SameDayCareForm from './pages/same-day-care/SameDayCareForm.jsx';
 import SameDayCareIpdPatients from './pages/same-day-care/SameDayCareIpdPatients.jsx';
@@ -83,6 +84,7 @@ function App() {
             <Route path="/admin/consumable-services" element={<ConsumableServiceSettings />} />
             <Route path="/admin/ot-settings" element={<OperationTheatreSettings />} />
             <Route path="/admin/same-day-care" element={<SameDayCareSettings />} />
+            <Route path="/admin/pharmacy-settings" element={<PharmacySettings />} />
           </Route>
           <Route element={<ProtectedRoute allowedRoles={['admin', 'reception']} requiredModule={1} />}>
             <Route path="/reception/register" element={<PatientRegistration />} />
@@ -123,7 +125,7 @@ function App() {
             <Route path="/ipd/ot-management" element={<IpdOtDashboard />} />
             <Route path="/ipd/same-day" element={<IpdSameDayDashboard />} />
           </Route>
-          <Route element={<ProtectedRoute allowedRoles={['admin', 'nursing']} requiredModule={6} />}>
+          <Route element={<ProtectedRoute allowedRoles={['admin', 'nursing', 'reception']} requiredModule={6} />}>
             <Route path="/same-day-care" element={<SameDayCareWorkspace />} />
             <Route path="/same-day-care/treatment/:patientId" element={<SameDayCareForm />} />
             <Route path="/same-day-care/ipd-patients" element={<SameDayCareIpdPatients />} />

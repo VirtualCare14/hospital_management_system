@@ -51,6 +51,7 @@ const Sidebar = () => {
     { to: '/admin/consumable-services', label: 'Consumable Services', icon: Package },
     { to: '/admin/ot-settings', label: 'OT Settings', icon: Scissors },
     { to: '/admin/same-day-care', label: 'Same Day Care Settings', icon: Bandage },
+    { to: '/admin/pharmacy-settings', label: 'Pharmacy Settings', icon: Settings },
   ];
 
   const receptionLinks = [
@@ -91,7 +92,7 @@ const Sidebar = () => {
     { to: '/pharmacy?section=gst-reports', section: 'gst-reports', label: 'GST Reports', icon: Percent },
     { to: '/pharmacy?section=expiry', section: 'expiry', label: 'Expiry Medicines', icon: CalendarDays },
     { to: '/pharmacy?section=out-of-stock', section: 'out-of-stock', label: 'Out of Stock', icon: AlertTriangle },
-    { to: '/pharmacy?section=billing-settings', section: 'billing-settings', label: 'Settings', icon: Settings },
+    { to: '/pharmacy?section=billing-settings', section: 'billing-settings', label: 'Pharmacy Settings', icon: Settings },
   ];
 
   const activeStyle = "flex items-center gap-3 rounded-xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-md shadow-orange-500/20 transition-all duration-300";
@@ -139,7 +140,7 @@ const Sidebar = () => {
         )}
 
         {/* Reception Links (Module 1) */}
-        {hasAccess([1]) && (
+        {!location.pathname.startsWith('/admin') && hasAccess([1]) && (
           <div className={user.role === 'admin' ? "mt-6" : ""}>
             <span className="px-4 text-xs font-bold text-orange-400 uppercase tracking-widest block mb-2">Patient Services</span>
             <div className="space-y-1">
@@ -159,7 +160,7 @@ const Sidebar = () => {
         )}
 
         {/* Doctor Links (Module 2 & 3) */}
-        {hasAccess([2]) && (
+        {!location.pathname.startsWith('/admin') && hasAccess([2]) && (
           <div className="mt-6">
             <span className="px-4 text-xs font-bold text-orange-400 uppercase tracking-widest block mb-2">Clinical Portal</span>
             <div className="space-y-1">
@@ -177,7 +178,7 @@ const Sidebar = () => {
             </div>
           </div>
         )}
-        {hasAccess([4]) && (
+        {!location.pathname.startsWith('/admin') && hasAccess([4]) && (
           <div className="mt-6">
             <span className="px-4 text-xs font-bold text-orange-400 uppercase tracking-widest block mb-2">Diagnostics</span>
             <NavLink to="/lab" className={({ isActive }) => isActive ? activeStyle : inactiveStyle}>
@@ -198,7 +199,7 @@ const Sidebar = () => {
             </div>
           </div>
         )}
-        {hasAccess([5]) && (
+        {!location.pathname.startsWith('/admin') && hasAccess([5]) && (
           <div className="mt-6">
             <span className="px-4 text-xs font-bold text-orange-400 uppercase tracking-widest block mb-2">Inpatient Services</span>
             <div className="space-y-1">
@@ -225,7 +226,7 @@ const Sidebar = () => {
             </div>
           </div>
         )}
-        {hasAccess([6]) && (
+        {!location.pathname.startsWith('/admin') && hasAccess([6]) && (
           <div className="mt-6">
             <span className="px-4 text-xs font-bold text-orange-400 uppercase tracking-widest block mb-2">Day Care</span>
             <div className="space-y-1">
@@ -252,7 +253,7 @@ const Sidebar = () => {
             </div>
           </div>
         )}
-        {hasAccess([7]) && (
+        {!location.pathname.startsWith('/admin') && hasAccess([7]) && (
           <div className="mt-6">
             <span className="px-4 text-xs font-bold text-orange-400 uppercase tracking-widest block mb-2">Pharmacy</span>
             <NavLink to="/pharmacy" className={({ isActive }) => isActive ? activeStyle : inactiveStyle}>

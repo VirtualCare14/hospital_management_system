@@ -618,7 +618,14 @@ const SameDayCareWorkspace = () => {
                         return true;
                       }).map(item => (
                         <tr key={item._id} className="hover:bg-orange-50/20">
-                          <td className="p-3 pl-4 font-bold text-gray-800">{item.patientName}</td>
+                          <td className="p-3 pl-4">
+                            <span className="font-bold text-gray-800 block">{item.patientName}</span>
+                            {item.referredByDoctorRemarks && (
+                              <p className="text-[10px] text-gray-500 italic mt-0.5 max-w-xs bg-orange-50/40 p-1 rounded border border-orange-100/50">
+                                Remarks: {item.referredByDoctorRemarks}
+                              </p>
+                            )}
+                          </td>
                           <td className="p-3 font-mono text-xs font-bold text-orange-700">{formatUhid(item.uhid)}</td>
                           <td className="p-3 text-xs">{item.mobile}</td>
                           <td className="p-3 text-xs">{item.gender}</td>
@@ -632,6 +639,11 @@ const SameDayCareWorkspace = () => {
                             }`} title={item.referredByDoctorName ? `Referred by: ${item.referredByDoctorName}` : undefined}>
                               {item.source === 'Doctor Referral' ? `Dr. Referral (${item.referredByDoctorName || 'Doc'})` : 'Registration'}
                             </span>
+                            {item.assignedStaffName && (
+                              <span className="block text-[9px] text-indigo-600 font-bold mt-1">
+                                Assigned: {item.assignedStaffName}
+                              </span>
+                            )}
                           </td>
                           <td className="p-3 text-xs">{new Date(item.treatmentDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
                           <td className="p-3 pr-4 text-center flex items-center justify-center gap-2">
