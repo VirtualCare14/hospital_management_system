@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -32,7 +33,9 @@ import {
   Droplets,
   Clock,
   DoorOpen,
-  Trash2
+  Trash2,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -40,6 +43,9 @@ const Sidebar = () => {
   const location = useLocation();
   const currentLabSection = new URLSearchParams(location.search).get('section') || 'dashboard';
   const currentPharmacySection = new URLSearchParams(location.search).get('section') || 'dashboard';
+  const [billingExpanded, setBillingExpanded] = useState(
+    currentPharmacySection === 'new-bill' || currentPharmacySection === 'walk-in-billing'
+  );
 
   if (!user) return null;
 
@@ -82,8 +88,7 @@ const Sidebar = () => {
   const pharmacyLinks = [
     { to: '/pharmacy?section=dashboard', section: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/pharmacy?section=opd-prescriptions', section: 'opd-prescriptions', label: 'OPD Prescriptions', icon: ClipboardList },
-    { to: '/pharmacy?section=new-bill', section: 'new-bill', label: 'New Bill', icon: BadgeIndianRupee },
-    { to: '/pharmacy?section=walk-in-billing', section: 'walk-in-billing', label: 'Walk-in Billing', icon: Plus },
+    { section: 'billing-group', label: 'Billing', icon: BadgeIndianRupee },
     { to: '/pharmacy?section=sales-history', section: 'sales-history', label: 'Sales History', icon: FileText },
     { to: '/pharmacy?section=sales-return', section: 'sales-return', label: 'Sales Return', icon: RotateCcw },
     { to: '/pharmacy?section=requests', section: 'requests', label: 'IPD Patient Requests', icon: Activity },
@@ -269,16 +274,74 @@ const Sidebar = () => {
               Pharmacy Workspace
             </NavLink>
             <div className="mt-2 space-y-1">
-              {pharmacyLinks.map((link) => (
-                <NavLink 
-                  key={link.to}
-                  to={link.to}
-                  className={() => currentPharmacySection === link.section ? activeSubStyle : inactiveSubStyle}
-                >
-                  <link.icon className="h-4 w-4" />
-                  {link.label}
-                </NavLink>
-              ))}
+              {pharmacyLinks.map((link) => {
+                if (link.section === 'billing-group') {
+                  const isChildActive = currentPharmacySection === 'new-bill' || currentPharmacySection === 'walk-in-billing';
+                  return (
+                    <div key="billing-group" className="space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => setBillingExpanded(!billingExpanded)}
+                        className={`w-full text-left cursor-pointer flex items-center justify-between rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 ${
+                          isChildActive 
+                            ? 'bg-orange-50 text-orange-600 border-l-4 border-orange-500 pl-3' 
+                            : 'text-gray-700 hover:bg-orange-50 hover:text-orange-600'
+                        }`}
+                      >
+                        <span className="flex items-center gap-3">
+                          <link.icon className="h-5 w-5" />
+                          <span>{link.label}</span>
+                        </span>
+                        <span>
+                          {billingExpanded ? (
+                            <ChevronDown className="h-4 w-4 text-orange-500" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-gray-400" />
+                          )}
+                        </span>
+                      </button>
+                      
+                      {billingExpanded && (
+                        <div className="ml-6 pl-3 border-l border-orange-200 space-y-1 mt-1">
+                          <NavLink
+                            to="/pharmacy?section=new-bill"
+                            className={() =>
+                              currentPharmacySection === 'new-bill'
+                                ? "flex items-center gap-2.5 rounded-lg py-1.5 px-3 text-xs font-bold text-orange-600 bg-orange-50/50 transition-all duration-200"
+                                : "flex items-center gap-2.5 rounded-lg py-1.5 px-3 text-xs text-gray-500 hover:text-orange-600 transition-all duration-200"
+                            }
+                          >
+                            <BadgeIndianRupee className="h-3.5 w-3.5" />
+                            OPD Bill
+                          </NavLink>
+                          <NavLink
+                            to="/pharmacy?section=walk-in-billing"
+                            className={() =>
+                              currentPharmacySection === 'walk-in-billing'
+                                ? "flex items-center gap-2.5 rounded-lg py-1.5 px-3 text-xs font-bold text-orange-600 bg-orange-50/50 transition-all duration-200"
+                                : "flex items-center gap-2.5 rounded-lg py-1.5 px-3 text-xs text-gray-500 hover:text-orange-600 transition-all duration-200"
+                            }
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            Walk-in Bill
+                          </NavLink>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
+                return (
+                  <NavLink 
+                    key={link.to}
+                    to={link.to}
+                    className={() => currentPharmacySection === link.section ? activeSubStyle : inactiveSubStyle}
+                  >
+                    <link.icon className="h-4 w-4" />
+                    {link.label}
+                  </NavLink>
+                );
+              })}
             </div>
           </div>
         )}
