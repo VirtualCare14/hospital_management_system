@@ -361,9 +361,17 @@ const IpdPatientDetails = () => {
 
   const loadPharmacyMeds = useCallback(async () => {
     try {
-      const { data } = await client.get('/pharmacy/inventory?limit=1000');
-      const uniqueNames = [...new Set(data.items.map(item => item.itemName))];
-      setPharmacyMedsList(uniqueNames);
+      const { data } = await client.get('/pharmacy/inventory?limit=5000');
+      const items = data.items || [];
+      const seen = new Set();
+      const uniqueMeds = [];
+      for (const item of items) {
+        if (!seen.has(item.itemName)) {
+          seen.add(item.itemName);
+          uniqueMeds.push(item);
+        }
+      }
+      setPharmacyMedsList(uniqueMeds);
     } catch (err) {
       console.warn('Could not load pharmacy inventory for searching:', err.message);
     }
@@ -391,10 +399,11 @@ const IpdPatientDetails = () => {
     loadAvailableLabTests();
     loadOtHospitalInfo();
     loadDischargeRecords();
-  }, [loadAdmission, loadAdminSettings, loadAvailableLabTests, loadOtHospitalInfo, loadDischargeRecords]);
+    loadPharmacyMeds();
+  }, [loadAdmission, loadAdminSettings, loadAvailableLabTests, loadOtHospitalInfo, loadDischargeRecords, loadPharmacyMeds]);
 
   useEffect(() => {
-    if (activeTab === 'services') { loadConsumables(); loadMedicines(); loadReceivedMedicines(); loadLabTests(); }
+    if (activeTab === 'services') { loadConsumables(); loadMedicines(); loadReceivedMedicines(); loadLabTests(); loadPharmacyMeds(); }
     if (activeTab === 'billing') { loadBilling(); loadConsumables(); loadMedicines(); loadLabTests(); }
     if (activeTab === 'dashboard') loadDashboard();
     if (activeTab === 'timeline') loadTimeline();
@@ -469,24 +478,21 @@ const IpdPatientDetails = () => {
   };
 
   const handleReceivedMedicineSelect = (itemName) => {
-    const med = receivedMedicines.find(m => m.itemName === itemName);
-    setSelectedReceivedMed(med);
+    const med = pharmacyMedsList.find(m => m.itemName === itemName);
     if (med) {
+      const totalGst = (med.sgst || 0) + (med.cst || 0);
       setMedicineForm({
         medicineName: med.itemName,
         quantity: '1',
-        unitPrice: String(med.unitPrice),
-        gst: String(med.gst),
-        baseUnitPrice: String(med.baseUnitPrice)
+        unitPrice: String(med.mrp || 0),
+        gst: String(totalGst),
+        baseUnitPrice: String(med.rate || med.mrp || 0)
       });
     } else {
-      setMedicineForm({
-        medicineName: '',
-        quantity: '1',
-        unitPrice: '',
-        gst: '',
-        baseUnitPrice: ''
-      });
+      setMedicineForm(p => ({
+        ...p,
+        medicineName: itemName
+      }));
     }
   };
 
@@ -650,6 +656,18 @@ const IpdPatientDetails = () => {
         </button>
       </div>
 
+      {admission.status === 'Discharged' && (
+        <div className="card p-4 border border-gray-255 bg-gray-50 flex items-center gap-3 no-print">
+          <AlertCircle className="text-gray-500 h-6 w-6 shrink-0" />
+          <div>
+            <h4 className="font-extrabold text-gray-800 text-xs uppercase tracking-wider">Patient is Discharged</h4>
+            <p className="text-[11px] text-gray-650 mt-0.5 font-semibold">
+              This patient has been discharged from the hospital. The IPD case record is read-only. No further modifications, charges, or clinical chart updates can be performed.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Patient Profile Header */}
       <div className="card p-5 bg-gradient-to-br from-orange-50 to-white border-orange-200">
         <div className="flex flex-col sm:flex-row items-start gap-4">
@@ -802,14 +820,16 @@ const IpdPatientDetails = () => {
             <div className="card overflow-hidden">
               <div className="p-4 border-b border-orange-100 flex items-center justify-between bg-orange-50/30">
                 <h3 className="font-extrabold text-gray-900 flex items-center gap-2"><Activity className="h-5 w-5 text-orange-500" /> Consumable Services</h3>
-                <button onClick={() => setShowAddConsumable(!showAddConsumable)} className="btn text-xs py-2 px-3"><Plus className="h-3.5 w-3.5" /> Add Service</button>
+                {admission.status !== 'Discharged' && (
+                  <button onClick={() => setShowAddConsumable(!showAddConsumable)} className="btn text-xs py-2 px-3"><Plus className="h-3.5 w-3.5" /> Add Service</button>
+                )}
               </div>
               {showAddConsumable && (
                 <div className="p-4 border-b border-orange-100 bg-orange-50/20">
                   <form onSubmit={handleAddConsumable} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="sm:col-span-2">
                       <label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">Service Name</label>
-                      <input list="consumable-services" className="input py-2 text-xs" placeholder="Search or select service" value={consumableForm.serviceName}
+                      <input list="ipd-consumables-datalist" className="input py-2 text-xs" placeholder="Search or select service" value={consumableForm.serviceName}
                         onChange={(e) => {
                           const val = e.target.value;
                           setConsumableForm(p => {
@@ -822,7 +842,6 @@ const IpdPatientDetails = () => {
                             };
                           });
                         }} />
-                      <datalist id="consumable-services">{consumableServicesList.map((s, i) => <option key={i} value={s.name} />)}</datalist>
                     </div>
                     <div><label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">Qty</label><input type="number" min="1" className="input py-2 text-xs" value={consumableForm.quantity} onChange={(e) => setConsumableForm(p => ({ ...p, quantity: e.target.value }))} /></div>
                     <div className="col-span-full flex justify-end gap-2"><button type="button" onClick={() => { setShowAddConsumable(false); setConsumableForm({ serviceName: '', price: '', gst: '', quantity: '1' }); }} className="btn-secondary text-xs py-2 px-4">Cancel</button><button type="submit" className="btn text-xs py-2 px-4"><Plus className="h-3.5 w-3.5" /> Add</button></div>
@@ -845,7 +864,11 @@ const IpdPatientDetails = () => {
                         <td className="p-3 pl-4 text-xs">{c.date}</td><td className="p-3 text-xs">{c.time}</td>
                         <td className="p-3 font-bold text-gray-800">{c.serviceName}</td><td className="p-3">{c.quantity}</td>
                         <td className="p-3 text-xs text-gray-500">{c.addedBy?.doctorName || c.addedBy?.username || 'N/A'}</td>
-                        <td className="p-3 pr-4 text-center"><button onClick={() => handleDeleteConsumable(c._id)} className="p-1 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="h-3.5 w-3.5" /></button></td>
+                        <td className="p-3 pr-4 text-center">
+                          {admission.status !== 'Discharged' && (
+                            <button onClick={() => handleDeleteConsumable(c._id)} className="p-1 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="h-3.5 w-3.5" /></button>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -858,34 +881,31 @@ const IpdPatientDetails = () => {
             <div className="card overflow-hidden">
               <div className="p-4 border-b border-orange-100 flex items-center justify-between bg-orange-50/30">
                 <h3 className="font-extrabold text-gray-900 flex items-center gap-2"><Pill className="h-5 w-5 text-orange-500" /> Administered Medicines</h3>
-                <button onClick={() => setShowAddMedicine(!showAddMedicine)} className="btn text-xs py-2 px-3"><Plus className="h-3.5 w-3.5" /> Administer Medicine</button>
+                {admission.status !== 'Discharged' && (
+                  <button onClick={() => setShowAddMedicine(!showAddMedicine)} className="btn text-xs py-2 px-3"><Plus className="h-3.5 w-3.5" /> Administer Medicine</button>
+                )}
               </div>
               {showAddMedicine && (
                 <div className="p-4 border-b border-orange-100 bg-orange-50/20">
                   <form onSubmit={handleAddMedicine} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="sm:col-span-2">
-                      <label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">Select Received Medicine</label>
-                      <select 
+                      <label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">Medicine Name</label>
+                      <input 
+                        type="text"
+                        list="ipd-pharmacy-medicines-datalist"
                         className="input py-2 text-xs" 
+                        placeholder="Search or select medicine from pharmacy"
                         value={medicineForm.medicineName}
                         onChange={(e) => handleReceivedMedicineSelect(e.target.value)}
-                      >
-                        <option value="">-- Choose Received Medicine (Available Qty) --</option>
-                        {receivedMedicines.map((m, i) => (
-                          <option key={i} value={m.itemName}>
-                            {m.itemName} (Available: {m.availableQty})
-                          </option>
-                        ))}
-                      </select>
+                      />
                     </div>
                     <div>
                       <label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">
-                        Qty {selectedReceivedMed && `(Max: ${selectedReceivedMed.availableQty})`}
+                        Qty
                       </label>
                       <input 
                         type="number" 
                         min="1" 
-                        max={selectedReceivedMed?.availableQty || undefined} 
                         className="input py-2 text-xs" 
                         value={medicineForm.quantity} 
                         onChange={(e) => setMedicineForm(p => ({ ...p, quantity: e.target.value }))} 
@@ -941,9 +961,11 @@ const IpdPatientDetails = () => {
                           <td className="p-3">{m.quantity}</td>
                           <td className="p-3 text-xs text-gray-500">{m.addedBy?.doctorName || m.addedBy?.username || 'N/A'}</td>
                           <td className="p-3 pr-4 text-center">
-                            <button onClick={() => handleDeleteMedicine(m._id)} className="p-1 text-red-500 hover:bg-red-50 rounded-lg">
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
+                            {admission.status !== 'Discharged' && (
+                              <button onClick={() => handleDeleteMedicine(m._id)} className="p-1 text-red-500 hover:bg-red-50 rounded-lg">
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))
@@ -958,7 +980,9 @@ const IpdPatientDetails = () => {
             <div className="card overflow-hidden">
               <div className="p-4 border-b border-orange-100 flex items-center justify-between bg-orange-50/30">
                 <h3 className="font-extrabold text-gray-900 flex items-center gap-2"><FlaskConical className="h-5 w-5 text-orange-500" /> Lab Tests</h3>
-                <button onClick={() => setShowAddLabTest(!showAddLabTest)} className="btn text-xs py-2 px-3"><Plus className="h-3.5 w-3.5" /> Add Lab Test</button>
+                {admission.status !== 'Discharged' && (
+                  <button onClick={() => setShowAddLabTest(!showAddLabTest)} className="btn text-xs py-2 px-3"><Plus className="h-3.5 w-3.5" /> Add Lab Test</button>
+                )}
               </div>
               {showAddLabTest && (
                 <div className="p-4 border-b border-orange-100 bg-orange-50/20">
@@ -1025,7 +1049,9 @@ const IpdPatientDetails = () => {
                             {t.labRequestId && (t.reportStatus === 'Completed' || t.reportStatus === 'Approved') && (
                               <a href={`/lab?section=tracking&requestId=${t.labRequestId?._id || t.labRequestId}`} target="_blank" rel="noopener noreferrer" className="p-1 text-blue-600 hover:bg-blue-50 rounded-lg" title="View Report"><Eye className="h-3.5 w-3.5" /></a>
                             )}
-                            <button onClick={() => handleDeleteLabTest(t._id)} className="p-1 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="h-3.5 w-3.5" /></button>
+                            {admission.status !== 'Discharged' && (
+                              <button onClick={() => handleDeleteLabTest(t._id)} className="p-1 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="h-3.5 w-3.5" /></button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1048,7 +1074,9 @@ const IpdPatientDetails = () => {
           <div className="card overflow-hidden">
             <div className="p-4 border-b border-orange-100 flex items-center justify-between bg-gradient-to-r from-indigo-50 to-white">
               <h3 className="font-extrabold text-gray-900 flex items-center gap-2"><Scissors className="h-5 w-5 text-indigo-500" /> OT Records</h3>
-              <button onClick={() => navigate(`/ipd/ot/${id}`)} className="btn text-xs py-2 px-3 flex items-center gap-1"><Plus className="h-3.5 w-3.5" /> New OT Record</button>
+              {admission.status !== 'Discharged' && (
+                <button onClick={() => navigate(`/ipd/ot/${id}`)} className="btn text-xs py-2 px-3 flex items-center gap-1"><Plus className="h-3.5 w-3.5" /> New OT Record</button>
+              )}
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
@@ -1072,7 +1100,9 @@ const IpdPatientDetails = () => {
                         <td className="p-3 pr-4">
                           <div className="flex items-center justify-center gap-1">
                             <button onClick={() => navigate(`/ipd/ot/${id}?otId=${record._id}`)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="View"><Eye className="h-3.5 w-3.5" /></button>
-                            <button onClick={() => navigate(`/ipd/ot/${id}?otId=${record._id}`)} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg" title="Edit"><Edit3 className="h-3.5 w-3.5" /></button>
+                            {admission.status !== 'Discharged' && (
+                              <button onClick={() => navigate(`/ipd/ot/${id}?otId=${record._id}`)} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg" title="Edit"><Edit3 className="h-3.5 w-3.5" /></button>
+                            )}
                             <button onClick={() => { navigate(`/ipd/ot/${id}?otId=${record._id}`); setTimeout(() => window.print(), 1500); }} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg" title="Print"><Printer className="h-3.5 w-3.5" /></button>
                             <button onClick={() => { navigate(`/ipd/ot/${id}?otId=${record._id}`); setTimeout(() => { toast.success('Use browser Print → Save as PDF'); window.print(); }, 1500); }} className="p-1.5 text-purple-600 hover:bg-purple-50 rounded-lg" title="Download PDF"><Download className="h-3.5 w-3.5" /></button>
                           </div>
@@ -1095,7 +1125,23 @@ const IpdPatientDetails = () => {
             <div className="p-4 border-b border-orange-100 flex items-center justify-between bg-gradient-to-r from-red-50 to-white">
               <h3 className="font-extrabold text-gray-900 flex items-center gap-2"><DoorOpen className="h-5 w-5 text-red-500" /> Discharge Records</h3>
               {admission.status !== 'Discharged' && (
-                <button onClick={() => navigate(`/ipd/discharge/${id}`)} className="btn text-xs py-2 px-3 flex items-center gap-1 bg-red-600 hover:bg-red-700"><DoorOpen className="h-3.5 w-3.5" /> Discharge Patient</button>
+                <button 
+                  onClick={() => {
+                    const existing = dischargeRecords[0];
+                    if (existing) {
+                      if (existing.status === 'Completed' || existing.status === 'Pending Review') {
+                        navigate(`/ipd/discharge/${id}?dischargeId=${existing._id}&view=true`);
+                      } else {
+                        navigate(`/ipd/discharge/${id}?dischargeId=${existing._id}`);
+                      }
+                    } else {
+                      navigate(`/ipd/discharge/${id}`);
+                    }
+                  }} 
+                  className="btn text-xs py-2 px-3 flex items-center gap-1 bg-red-600 hover:bg-red-700"
+                >
+                  <DoorOpen className="h-3.5 w-3.5" /> Discharge Patient
+                </button>
               )}
             </div>
             <div className="overflow-x-auto">
@@ -1239,8 +1285,8 @@ const IpdPatientDetails = () => {
               </h3>
               <p className="text-xs text-gray-500">Submit, track, and manage procedure stock requests</p>
             </div>
-            {/* Create Request button - only for doctor/admin role */}
-            {(user.role === 'doctor' || user.role === 'admin') && (
+            {/* Create Request button - only for doctor/admin/nursing/ipd role */}
+            {(user.role === 'doctor' || user.role === 'admin' || user.role === 'nursing' || user.role === 'ipd') && (
               <button 
                 onClick={() => {
                   setShowAddRequest(true);
@@ -1490,18 +1536,12 @@ const IpdPatientDetails = () => {
                         </label>
                         <input 
                           type="text" 
-                          list="search-meds-datalist"
+                          list={requestItemType === 'medicine' ? "ipd-pharmacy-medicines-datalist" : "ipd-consumables-datalist"}
                           className="input py-1.5 text-xs"
                           placeholder={requestItemType === 'medicine' ? "Type or search medicine" : "Type or search consumable"}
                           value={searchItemQuery}
                           onChange={(e) => setSearchItemQuery(e.target.value)}
                         />
-                        <datalist id="search-meds-datalist">
-                          {requestItemType === 'medicine'
-                            ? pharmacyMedsList.map((m, i) => <option key={i} value={m} />)
-                            : consumableServicesList.map((c, i) => <option key={i} value={c.name} />)
-                          }
-                        </datalist>
                       </div>
                       <div>
                         <label className="mb-0.5 block text-[10px] uppercase font-bold text-gray-400">Qty</label>
@@ -1873,6 +1913,16 @@ const IpdPatientDetails = () => {
           )}
         </div>
       )}
+      <datalist id="ipd-pharmacy-medicines-datalist">
+        {pharmacyMedsList.map((m, i) => (
+          <option key={i} value={m.itemName} />
+        ))}
+      </datalist>
+      <datalist id="ipd-consumables-datalist">
+        {consumableServicesList.map((c, i) => (
+          <option key={i} value={c.name} />
+        ))}
+      </datalist>
     </div>
   );
 };

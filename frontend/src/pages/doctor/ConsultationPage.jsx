@@ -305,8 +305,25 @@ const ConsultationPage = () => {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" autoComplete="off">
+      {patient.isDischarged && (
+        <div className="card p-4 border border-gray-255 bg-gray-50 flex items-center gap-3">
+          <ShieldAlert className="text-gray-500 h-6 w-6 shrink-0" />
+          <div>
+            <h4 className="font-extrabold text-gray-800 text-sm uppercase tracking-wider">Patient is Discharged</h4>
+            <p className="text-xs text-gray-650 mt-0.5 font-semibold">
+              This patient has been discharged from the hospital. The OPD case record is read-only. No new consultations, referrals, or prescriptions can be saved.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="card p-5">
-        <p className="text-sm font-bold text-orange-600">{patient.uhid}</p>
+        <p className="text-sm font-bold text-orange-600">
+          <span>{patient.uhid}</span>
+          {patient.registeredBy && patient.registeredBy !== 'N/A' && (
+            <span className="text-gray-500 font-bold"> • Registered by: <span className="capitalize text-orange-650">{patient.registeredBy}</span></span>
+          )}
+        </p>
         <h1 className="text-2xl font-extrabold text-gray-900">{patient.patientName}</h1>
         <p className="text-sm text-gray-500">{patient.gender} • {patient.mobile} • {formatDate(patient.appointmentDate)} {patient.slot}</p>
       </div>
@@ -605,53 +622,60 @@ const ConsultationPage = () => {
             onChange={(e) => setFollowUpDate(e.target.value)}
           />
         </div>
-        <div className="flex gap-2 flex-wrap">
-          <button className="btn" type="submit" disabled={saving}>
-            <Save className="h-4 w-4" /> {saving ? 'Saving...' : 'Save Consultation'}
-          </button>
-          <Link className="btn-secondary" to={`/doctor/prescription/${patientId}`}>Create Prescription</Link>
-          {referralSent ? (
-            <span className="btn-secondary bg-green-50 text-green-700 border-green-200 cursor-default">
-              ✓ Referred to IPD
-            </span>
-          ) : (
+        {patient.isDischarged && (
+          <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200 font-medium">
+            This patient has been discharged and the consultation cannot be updated.
+          </div>
+        )}
+        {!patient.isDischarged && (
+          <div className="flex gap-2 flex-wrap">
+            <button className="btn" type="submit" disabled={saving}>
+              <Save className="h-4 w-4" /> {saving ? 'Saving...' : 'Save Consultation'}
+            </button>
+            <Link className="btn-secondary" to={`/doctor/prescription/${patientId}`}>Create Prescription</Link>
+            {referralSent ? (
+              <span className="btn-secondary bg-green-50 text-green-700 border-green-200 cursor-default">
+                ✓ Referred to IPD
+              </span>
+            ) : (
+              <button
+                type="button"
+                className="btn bg-indigo-600 hover:bg-indigo-700 text-white"
+                onClick={handleSendToIpd}
+                disabled={sendingToIpd}
+              >
+                <Send className="h-4 w-4" /> {sendingToIpd ? 'Sending...' : 'Send to IPD'}
+              </button>
+            )}
             <button
               type="button"
-              className="btn bg-indigo-600 hover:bg-indigo-700 text-white"
-              onClick={handleSendToIpd}
-              disabled={sendingToIpd}
+              className="btn bg-orange-600 hover:bg-orange-700 text-white"
+              onClick={handleSendToSameDayOpen}
             >
-              <Send className="h-4 w-4" /> {sendingToIpd ? 'Sending...' : 'Send to IPD'}
+              <Send className="h-4 w-4" /> Send to Same Day Care
             </button>
-          )}
-          <button
-            type="button"
-            className="btn bg-orange-600 hover:bg-orange-700 text-white"
-            onClick={handleSendToSameDayOpen}
-          >
-            <Send className="h-4 w-4" /> Send to Same Day Care
-          </button>
-          <button
-            type="button"
-            className="btn bg-rose-600 hover:bg-rose-700 text-white"
-            onClick={async () => {
-              const defaultNotes = `Referred to OT by Dr. ${user?.doctorName || user?.username || 'Doctor'}. Diagnosis: ${diagnosisRemark || 'N/A'}`;
-              const customRemarks = window.prompt("Enter remarks for OT Referral:", defaultNotes);
-              if (customRemarks === null) return;
-              try {
-                await client.post('/ipd/referrals', {
-                  patientId: patient._id,
-                  notes: customRemarks
-                });
-                toast.success(`${patient.patientName} referred to OT successfully!`);
-              } catch (err) {
-                toast.error(err.response?.data?.message || 'Failed to send to OT');
-              }
-            }}
-          >
-            <Scissors className="h-4 w-4" /> Send to OT
-          </button>
-        </div>
+            <button
+              type="button"
+              className="btn bg-rose-600 hover:bg-rose-700 text-white"
+              onClick={async () => {
+                const defaultNotes = `Referred to OT by Dr. ${user?.doctorName || user?.username || 'Doctor'}. Diagnosis: ${diagnosisRemark || 'N/A'}`;
+                const customRemarks = window.prompt("Enter remarks for OT Referral:", defaultNotes);
+                if (customRemarks === null) return;
+                try {
+                  await client.post('/ipd/referrals', {
+                    patientId: patient._id,
+                    notes: customRemarks
+                  });
+                  toast.success(`${patient.patientName} referred to OT successfully!`);
+                } catch (err) {
+                  toast.error(err.response?.data?.message || 'Failed to send to OT');
+                }
+              }}
+            >
+              <Scissors className="h-4 w-4" /> Send to OT
+            </button>
+          </div>
+        )}
       </section>
 
       {showSameDayModal && (

@@ -24,6 +24,7 @@ const buildHospitalResponse = async (req, hospital) => {
     loginId: hospital.loginId,
     isActive: hospital.isActive,
     maxUsers: hospital.maxUsers || 10,
+    allowDataDeletion: Boolean(hospital.allowDataDeletion),
     userCount,
     loginLink: hospitalLink(req, hospital._id),
     createdAt: hospital.createdAt,
@@ -68,7 +69,7 @@ const createHospital = async (req, res) => {
     const exists = await Hospital.findOne({ loginId });
     if (exists) return res.status(400).json({ message: 'Hospital login ID already exists' });
 
-    const hospital = await Hospital.create({ name, loginId, password, isActive: true, maxUsers: parseInt(maxUsers) || 10 });
+    const hospital = await Hospital.create({ name, loginId, password, isActive: true, maxUsers: parseInt(maxUsers) || 10, allowDataDeletion: false });
     await User.create({
       hospitalId: hospital._id,
       username: loginId,
@@ -87,7 +88,7 @@ const createHospital = async (req, res) => {
 };
 
 const updateHospital = async (req, res) => {
-  const { name, loginId, password, isActive, maxUsers } = req.body;
+  const { name, loginId, password, isActive, maxUsers, allowDataDeletion } = req.body;
   const hospital = await Hospital.findById(req.params.id);
   if (!hospital) return res.status(404).json({ message: 'Hospital not found' });
 
@@ -101,6 +102,7 @@ const updateHospital = async (req, res) => {
     hospital.loginId = normalizedLoginId;
   }
   if (password) hospital.password = password;
+  if (allowDataDeletion !== undefined) hospital.allowDataDeletion = Boolean(allowDataDeletion);
   if (isActive !== undefined) {
     hospital.isActive = isActive;
     if (!isActive) hospital.currentSessionId = null;

@@ -709,10 +709,16 @@ const SameDayCareForm = () => {
             <div>
               <span className="text-[9px] font-black uppercase text-orange-600/80 tracking-widest leading-none">Inpatient Care Sheet</span>
               <h2 className="text-xl font-extrabold text-gray-900 mt-0.5 leading-none">{patient?.patientName || form.patientName}</h2>
-              <div className="flex items-center gap-2 mt-1.5 text-xs font-medium text-gray-500">
+              <div className="flex items-center gap-2 mt-1.5 text-xs font-medium text-gray-500 flex-wrap">
                 <span className="font-mono font-bold text-orange-700 bg-orange-100/50 px-2 py-0.5 rounded-full">{formatUhid(patient?.uhid)}</span>
                 <span>•</span>
                 <span>{patient?.gender} / {patient?.dob ? ageFromDob(patient.dob) : form.age} years</span>
+                {patient?.registeredBy && patient.registeredBy !== 'N/A' && (
+                  <>
+                    <span>•</span>
+                    <span className="font-bold text-gray-600">Registered by: <span className="capitalize text-orange-600">{patient.registeredBy}</span></span>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -730,9 +736,11 @@ const SameDayCareForm = () => {
             <p className="text-gray-500">
               <strong className="text-gray-700">Admission Queue Source:</strong>
             </p>
-            <span className="inline-flex items-center gap-1 font-bold text-orange-800">
+            <span className="inline-flex items-center gap-1 font-bold text-orange-850">
               <Activity className="h-3.5 w-3.5" />
-              {record?.source === 'Doctor Referral' ? `Dr. Referral (${record.referredByDoctorName || 'Consultant'})` : 'Registration Desk'}
+              {record?.source === 'Doctor Referral' 
+                ? `Dr. Referral (${record.referredByDoctorName || 'Consultant'})` 
+                : `Registration Desk (${record?.createdBy?.doctorName || record?.createdBy?.username || patient?.registeredBy || 'Receptionist'})`}
             </span>
           </div>
         </div>
@@ -1814,6 +1822,7 @@ const SameDayCareForm = () => {
             <div><strong>{TRANSLATIONS[printLanguage]?.mobile || 'Mobile'}:</strong> {patient?.mobile || form.mobile}</div>
             <div><strong>{TRANSLATIONS[printLanguage]?.date || 'Date'}:</strong> {new Date(form.treatmentDate).toLocaleDateString('en-IN')}</div>
             <div><strong>{TRANSLATIONS[printLanguage]?.procedure || 'Procedure'}:</strong> {form.treatmentType}</div>
+            <div className="col-span-2"><strong>Registered / Referred By:</strong> {record?.source === 'Doctor Referral' ? `Dr. Referral (${record.referredByDoctorName || 'Doctor'})` : `Registration (${record?.createdBy?.doctorName || record?.createdBy?.username || patient?.registeredBy || 'Receptionist'})`}</div>
           </div>
         </div>
 

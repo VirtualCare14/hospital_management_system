@@ -75,10 +75,11 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await client.post('/super-admin/login', { username, password });
       const { token, user: userData } = response.data;
+      const normalizedUser = { ...userData, role: userData.role?.toLowerCase?.().trim?.() };
 
       localStorage.setItem('hms_token', token);
-      localStorage.setItem('hms_user', JSON.stringify(userData));
-      setUser(userData);
+      localStorage.setItem('hms_user', JSON.stringify(normalizedUser));
+      setUser(normalizedUser);
       toast.success('Super admin logged in successfully!');
       return userData;
     } catch (error) {

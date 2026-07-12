@@ -27,8 +27,8 @@ const IpdSameDayDashboard = () => {
     setLoading(true);
     try {
       const { data } = await client.get('/ipd/admissions');
-      // Filter only Same Day Care admissions
-      const filtered = (data || []).filter(adm => adm.isSameDayCare);
+      // Filter only Same Day Care admissions who are not discharged
+      const filtered = (data || []).filter(adm => adm.isSameDayCare && adm.status !== 'Discharged');
       setAdmissions(filtered);
     } catch (err) {
       toast.error('Failed to load Same Day Care admissions');
@@ -231,7 +231,7 @@ const IpdSameDayDashboard = () => {
                             </button>
                           )}
                           <button
-                            onClick={() => navigate('/same-day-care/ipd-patients')}
+                            onClick={() => navigate(`/ipd/chart/${adm._id}`)}
                             className="btn-secondary py-1.5 px-3 text-[10px] font-bold border-orange-200 text-orange-755 hover:bg-orange-50 flex items-center gap-1 rounded-lg"
                           >
                             <ClipboardCheck className="h-3 w-3" /> View Charts

@@ -73,6 +73,20 @@ const pharmacyInventorySchema = new mongoose.Schema({
   amount: {
     type: Number,
     default: 0
+  },
+  supplierId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Supplier',
+    default: null
+  },
+  supplierName: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  lastPurchaseDate: {
+    type: Date,
+    default: null
   }
 }, { timestamps: true });
 

@@ -144,6 +144,14 @@ const CompletedConsultationDetails = () => {
               <p className="text-xs text-gray-500 font-semibold uppercase">Patient Name</p>
               <p className="text-sm font-semibold">{patient.patientName}</p>
             </div>
+            {consultation?.visitId?.createdBy && (
+              <div>
+                <p className="text-xs text-gray-500 font-semibold uppercase">Registered By</p>
+                <p className="text-sm font-bold text-orange-705 capitalize">
+                  {consultation.visitId.createdBy.doctorName || consultation.visitId.createdBy.username}
+                </p>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <p className="text-xs text-gray-500 font-semibold uppercase">Age</p>

@@ -522,15 +522,18 @@ const LabWorkspace = () => {
   };
 
   const handleSelectPatient = async (patient) => {
-    setSelectedPatient(patient);
     setSearchedPatients([]);
     try {
+      const { data: fullPatient } = await client.get(`/patients/${patient._id}`);
+      setSelectedPatient(fullPatient);
+      
       const res = await client.get(`/lab/patients/${patient._id}/recommended-tests`);
       setRecommendedTests(res.data.recommendedTests || []);
       setConsultationInfo(res.data.consultation || null);
       setDirectTests(res.data.recommendedTests || []);
     } catch (err) {
-      console.error('Error fetching recommended tests', err);
+      console.error('Error fetching full patient or recommended tests', err);
+      setSelectedPatient(patient);
     }
   };
 
@@ -3352,6 +3355,18 @@ const LabWorkspace = () => {
               {/* Selected Patient Demographics Card */}
               {selectedPatient && (
                 <div className="space-y-4 text-left">
+                  {selectedPatient.isDischarged && (
+                    <div className="p-4 border border-red-200 bg-red-50 text-red-700 flex items-center gap-3 rounded-xl">
+                      <AlertCircle className="h-5 w-5 shrink-0" />
+                      <div>
+                        <h4 className="font-extrabold text-xs uppercase tracking-wider">Patient is Discharged</h4>
+                        <p className="text-[11px] mt-0.5 font-semibold">
+                          This patient has been discharged from the hospital. The case is read-only. No new lab requests can be created.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4 rounded-lg border border-orange-100 bg-white p-4 text-xs relative shadow-sm">
                     <button
                       type="button"
@@ -3435,110 +3450,90 @@ const LabWorkspace = () => {
                   )}
 
                   {/* Add Additional Tests Section */}
-                  <div className="border border-orange-100 rounded-lg p-4 bg-orange-50/10 space-y-3">
-                    <h4 className="text-xs font-bold uppercase text-orange-900 tracking-wider">2. Add Tests / Request Items</h4>
-                    
-                    <div className="grid gap-3 md:grid-cols-3 items-end">
-                      <Field label="Test Category">
-                        <SearchableDropdown
-                          value={selectedCategory}
-                          options={categoryOptions}
-                          getLabel={(category) => category.name}
-                          placeholder="Search category..."
-                          onSelect={(category) => {
-                            setSelectedCategory(category.name);
+                  {!selectedPatient.isDischarged && (
+                    <div className="border border-orange-100 rounded-lg p-4 bg-orange-50/10 space-y-3">
+                      <h4 className="text-xs font-bold uppercase text-orange-900 tracking-wider">2. Add Tests / Request Items</h4>
+                      
+                      <div className="grid gap-3 md:grid-cols-3 items-end">
+                        <Field label="Test Category">
+                          <SearchableDropdown
+                            value={selectedCategory}
+                            options={categoryOptions}
+                            getLabel={(category) => category.name}
+                            placeholder="Search category..."
+                            onSelect={(category) => {
+                              setSelectedCategory(category.name);
+                              setSelectedTestTitle('');
+                            }}
+                            onCreate={async (name) => {
+                              const category = await createCategory(name);
+                              if (category) setSelectedCategory(category.name);
+                            }}
+                            createLabel={(name) => `+ Create new category "${name}"`}
+                          />
+                        </Field>
+                        <Field label="Test Title">
+                          <SearchableDropdown
+                            value={selectedTestTitle}
+                            options={tests.filter(t => normalizeKey(t.category) === normalizeKey(selectedCategory))}
+                            getLabel={(test) => test.title}
+                            placeholder={selectedCategory ? 'Search test...' : 'Select category first'}
+                            disabled={!selectedCategory}
+                            onSelect={(test) => setSelectedTestTitle(test.title)}
+                            onCreate={(name) => createTestForCategory(name, selectedCategory, true)}
+                            createLabel={(name) => `+ Create new test "${name}"`}
+                            renderOption={(test) => (
+                              <div>
+                                <p className="font-bold text-gray-900">{test.title}</p>
+                                <p className="text-xs font-semibold text-gray-500">{test.category} | {money(test.totalAmount)}</p>
+                              </div>
+                            )}
+                          />
+                        </Field>
+                        <button
+                          type="button"
+                          className="btn py-2 text-xs flex items-center justify-center gap-1"
+                          onClick={() => {
+                            handleAddAdditionalTest(selectedTestTitle);
                             setSelectedTestTitle('');
                           }}
-                          onCreate={async (name) => {
-                            const category = await createCategory(name);
-                            if (category) setSelectedCategory(category.name);
-                          }}
-                          createLabel={(name) => `+ Create new category "${name}"`}
-                        />
-                      </Field>
-                      <Field label="Test Title">
-                        <SearchableDropdown
-                          value={selectedTestTitle}
-                          options={tests.filter(t => normalizeKey(t.category) === normalizeKey(selectedCategory))}
-                          getLabel={(test) => test.title}
-                          placeholder={selectedCategory ? 'Search test...' : 'Select category first'}
-                          disabled={!selectedCategory}
-                          onSelect={(test) => setSelectedTestTitle(test.title)}
-                          onCreate={(name) => createTestForCategory(name, selectedCategory, true)}
-                          createLabel={(name) => `+ Create new test "${name}"`}
-                          renderOption={(test) => (
-                            <div>
-                              <p className="font-bold text-gray-900">{test.title}</p>
-                              <p className="text-xs font-semibold text-gray-500">{test.category} | {money(test.totalAmount)}</p>
-                            </div>
-                          )}
-                        />
-                      </Field>
-                      <button
-                        type="button"
-                        className="btn py-2 text-xs flex items-center justify-center gap-1"
-                        onClick={() => {
-                          handleAddAdditionalTest(selectedTestTitle);
-                          setSelectedTestTitle('');
-                        }}
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                        <span>Add Test</span>
-                      </button>
-                    </div>
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          <span>Add Test</span>
+                        </button>
+                      </div>
 
-                    {/* Selected Tests List */}
-                    <div className="space-y-2 pt-2 border-t border-orange-100/50">
-                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Selected Tests for Assignment:</p>
-                      {directTests.length === 0 ? (
-                        <p className="text-xs text-gray-400 italic">No tests selected yet. Add or select doctor recommendations.</p>
-                      ) : (
-                        <div className="flex flex-wrap gap-2">
-                          {directTests.map((testTitle) => {
-                            const master = testByTitle.get(normalizeKey(testTitle));
-                            return (
-                            <div key={testTitle} className="bg-orange-100 text-orange-800 text-xs font-bold py-1.5 px-3 rounded-full flex items-center gap-1.5 border border-orange-200">
-                              {master?.category && <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] uppercase tracking-wide text-orange-700">{master.category}</span>}
-                              <span>{testTitle}</span>
-                              <button
-                                type="button"
-                                className="text-orange-600 hover:text-rose-600 font-extrabold focus:outline-none"
-                                onClick={() => handleRemoveDirectTest(testTitle)}
-                              >
-                                &times;
-                              </button>
-                            </div>
-                            );
-                          })}
-                        </div>
-                      )}
+                      {/* Selected Tests List */}
+                      <div className="space-y-2 pt-2 border-t border-orange-100/50">
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Selected Tests for Assignment:</p>
+                        {directTests.length === 0 ? (
+                          <p className="text-xs text-gray-400 italic">No tests selected yet. Add or select doctor recommendations.</p>
+                        ) : (
+                          <div className="flex flex-wrap gap-2">
+                            {directTests.map((testTitle) => {
+                              const master = testByTitle.get(normalizeKey(testTitle));
+                              return (
+                              <div key={testTitle} className="bg-orange-100 text-orange-800 text-xs font-bold py-1.5 px-3 rounded-full flex items-center gap-1.5 border border-orange-200">
+                                {master?.category && <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] uppercase tracking-wide text-orange-700">{master.category}</span>}
+                                <span>{testTitle}</span>
+                                <button
+                                  type="button"
+                                  className="text-orange-600 hover:text-rose-600 font-extrabold focus:outline-none"
+                                  onClick={() => handleRemoveDirectTest(testTitle)}
+                                >
+                                  &times;
+                                </button>
+                              </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Booking Settings Form */}
-                  <form className="space-y-4" onSubmit={handleCreateDirectRequest}>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <Field label="Collection Type">
-                        <select
-                          className="input text-xs"
-                          value={directCollectionType}
-                          onChange={(e) => setDirectCollectionType(e.target.value)}
-                        >
-                          <option value="Lab Visit">Lab Visit (Walk-in)</option>
-                          <option value="Home Sample Collection">Home Sample Collection</option>
-                        </select>
-                      </Field>
-                    </div>
-
-                    <Field label="Remarks / Booking Notes">
-                      <textarea
-                        className="input min-h-20 text-xs"
-                        placeholder="E.g. urgent delivery, fasting sample, preferred collection times..."
-                        value={directRemarks}
-                        onChange={(e) => setDirectRemarks(e.target.value)}
-                      />
-                    </Field>
-
+                  {selectedPatient.isDischarged ? (
                     <div className="flex justify-end gap-2 border-t border-orange-100 pt-4">
                       <button
                         type="button"
@@ -3549,17 +3544,55 @@ const LabWorkspace = () => {
                           setDirectTests([]);
                         }}
                       >
-                        Cancel
-                      </button>
-                      <button
-                        type="submit"
-                        className="btn text-xs px-5"
-                        disabled={directTests.length === 0}
-                      >
-                        Create Lab Request(s)
+                        Close
                       </button>
                     </div>
-                  </form>
+                  ) : (
+                    <form className="space-y-4" onSubmit={handleCreateDirectRequest}>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Field label="Collection Type">
+                          <select
+                            className="input text-xs"
+                            value={directCollectionType}
+                            onChange={(e) => setDirectCollectionType(e.target.value)}
+                          >
+                            <option value="Lab Visit">Lab Visit (Walk-in)</option>
+                            <option value="Home Sample Collection">Home Sample Collection</option>
+                          </select>
+                        </Field>
+                      </div>
+
+                      <Field label="Remarks / Booking Notes">
+                        <textarea
+                          className="input min-h-20 text-xs"
+                          placeholder="E.g. urgent delivery, fasting sample, preferred collection times..."
+                          value={directRemarks}
+                          onChange={(e) => setDirectRemarks(e.target.value)}
+                        />
+                      </Field>
+
+                      <div className="flex justify-end gap-2 border-t border-orange-100 pt-4">
+                        <button
+                          type="button"
+                          className="btn-secondary text-xs"
+                          onClick={() => {
+                            setModal(null);
+                            setSelectedPatient(null);
+                            setDirectTests([]);
+                          }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          className="btn text-xs px-5"
+                          disabled={directTests.length === 0}
+                        >
+                          Create Lab Request(s)
+                        </button>
+                      </div>
+                    </form>
+                  )}
                 </div>
               )}
             </div>

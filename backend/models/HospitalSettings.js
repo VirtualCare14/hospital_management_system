@@ -69,6 +69,11 @@ const hospitalSettingsSchema = new mongoose.Schema({
     default: '',
     trim: true
   },
+  dlNumber: {
+    type: String,
+    default: '',
+    trim: true
+  },
   invoiceFooterMessage: {
     type: String,
     default: '',
@@ -139,6 +144,14 @@ const hospitalSettingsSchema = new mongoose.Schema({
   accessDiscount: {
     type: Boolean,
     default: false
+  },
+  medicationGracePeriod: {
+    type: Number,
+    default: 30
+  },
+  medicationMissedThreshold: {
+    type: Number,
+    default: 60
   },
 
   // Audit Logs for Discount and Settings Activity

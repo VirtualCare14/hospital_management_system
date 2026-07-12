@@ -42,12 +42,13 @@ const createOrUpdateHospitalSettings = asyncHandler(async (req, res) => {
   try {
     const { 
       hospitalName, mobileNumbers, address, hospitalHeading, logoUrl, logoPublicId,
-      alternateMobileNumber, emailAddress, website, gstNumber, panNumber, registrationNumber, invoiceFooterMessage,
+      alternateMobileNumber, emailAddress, website, gstNumber, panNumber, registrationNumber, dlNumber, invoiceFooterMessage,
       invoicePrefix, invoiceCounter, invoiceFormat,
       gstEnabled, gstPercentage, gstRules,
       discountEnabled, discountReasons,
       discountPercentage, discountFixedAmount, patientSpecificDiscounts,
-      sdtPricingInBilling, accessDiscount
+      sdtPricingInBilling, accessDiscount,
+      medicationGracePeriod, medicationMissedThreshold
     } = req.body;
     
     // Validate required fields
@@ -79,6 +80,7 @@ const createOrUpdateHospitalSettings = asyncHandler(async (req, res) => {
       gstNumber: gstNumber || '',
       panNumber: panNumber || '',
       registrationNumber: registrationNumber || '',
+      dlNumber: dlNumber || '',
       invoiceFooterMessage: invoiceFooterMessage || '',
       invoicePrefix: invoicePrefix || 'HOSP-INV-2026-',
       invoiceCounter: invoiceCounter !== undefined ? Number(invoiceCounter) : 1,
@@ -92,7 +94,9 @@ const createOrUpdateHospitalSettings = asyncHandler(async (req, res) => {
       discountFixedAmount: discountFixedAmount !== undefined ? Number(discountFixedAmount) : 0,
       patientSpecificDiscounts: patientSpecificDiscounts || 'Staff:10,EWS:100',
       sdtPricingInBilling: sdtPricingInBilling !== undefined ? Boolean(sdtPricingInBilling) : true,
-      accessDiscount: accessDiscount !== undefined ? Boolean(accessDiscount) : false
+      accessDiscount: accessDiscount !== undefined ? Boolean(accessDiscount) : false,
+      medicationGracePeriod: medicationGracePeriod !== undefined ? Number(medicationGracePeriod) : 30,
+      medicationMissedThreshold: medicationMissedThreshold !== undefined ? Number(medicationMissedThreshold) : 60
     };
 
     if (settings) {

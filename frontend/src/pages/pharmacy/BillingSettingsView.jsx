@@ -282,7 +282,7 @@ const BillingSettingsView = ({ isAdmin = false }) => {
 
       {/* PARAMETERS CONFIGURATION PANEL */}
       {activeSubTab === 'parameters' && (
-        <div className="max-w-2xl animate-fade-in">
+        <div className="space-y-4 animate-fade-in">
           <div className="card p-6 bg-white border border-orange-100 shadow-lg space-y-4">
             <div className="flex items-center gap-2 border-b border-orange-50 pb-2">
               <Settings className="text-orange-500 h-5 w-5" />

@@ -32,7 +32,7 @@ const ipdMedicationAdministrationSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['Given', 'Not Given', 'Delayed', 'Skipped', 'Patient Refused', 'Hold', 'Completed'],
+    enum: ['Given', 'Not Given', 'Delayed', 'Skipped', 'Patient Refused', 'Hold', 'Completed', 'On Time', 'Missed Dose'],
     default: 'Given',
     required: true
   },
@@ -40,6 +40,14 @@ const ipdMedicationAdministrationSchema = new mongoose.Schema({
     type: String,
     enum: ['Morning', 'Afternoon', 'Evening', 'Night'],
     required: true
+  },
+  scheduledTime: {
+    type: String,
+    default: ''
+  },
+  doctorNotifiedOfMissed: {
+    type: Boolean,
+    default: false
   },
   remarks: {
     type: String,

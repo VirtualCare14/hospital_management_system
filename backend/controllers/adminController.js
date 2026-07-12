@@ -15,6 +15,16 @@ const PharmacyBill = require('../models/PharmacyBill');
 const IpdMedicine = require('../models/IpdMedicine');
 const IpdActivityTimeline = require('../models/IpdActivityTimeline');
 const IpdDischarge = require('../models/IpdDischarge');
+const PharmacyDispense = require('../models/PharmacyDispense');
+const SdtItem = require('../models/SdtItem');
+const LabBill = require('../models/LabBill');
+const IpdConsumable = require('../models/IpdConsumable');
+const IpdLabTest = require('../models/IpdLabTest');
+const IpdReferral = require('../models/IpdReferral');
+const IpdOtRecord = require('../models/IpdOtRecord');
+const OtBooking = require('../models/OtBooking');
+const OtDocument = require('../models/OtDocument');
+const Bed = require('../models/Bed');
 const { v2: cloudinary } = require('cloudinary');
 
 const hospitalFilter = (req, extra = {}) => (
@@ -507,6 +517,7 @@ const getDoctorAvailability = async (req, res) => {
 const getHospitalTracking = async (req, res) => {
   try {
     const filter = hospitalFilter(req);
+    const hospitalScope = req.user?.hospitalId ? { hospitalId: req.user.hospitalId } : {};
 
     // 1. Billing stats
     const bills = await Billing.find(filter);
@@ -576,6 +587,53 @@ const getHospitalTracking = async (req, res) => {
 
     const treatmentDoneCount = dischargedIpdCount + completedOpdCount + completedSdtCount;
 
+    // 5. Edited Invoice Dates (Pharmacy + General)
+    const [pharmacyEdited, billingEdited] = await Promise.all([
+      PharmacyBill.find({ ...hospitalScope, 'auditTrail.action': 'Invoice Date Modified' }).lean(),
+      Billing.find({ ...hospitalScope, 'auditTrail.action': 'Invoice Date Modified' }).lean()
+    ]);
+
+    const editedLogs = [];
+
+    pharmacyEdited.forEach(bill => {
+      const trail = Array.isArray(bill.auditTrail) ? bill.auditTrail : [];
+      trail.forEach(log => {
+        if (log.action === 'Invoice Date Modified') {
+          editedLogs.push({
+            billId: bill._id,
+            billNumber: bill.billNumber,
+            billType: 'Pharmacy',
+            patientName: bill.customerDetails?.name || 'Walk-in Customer',
+            uhid: bill.uhid || 'N/A',
+            remarks: log.remarks,
+            performedByName: log.performedByName,
+            timestamp: log.timestamp
+          });
+        }
+      });
+    });
+
+    billingEdited.forEach(bill => {
+      const trail = Array.isArray(bill.auditTrail) ? bill.auditTrail : [];
+      trail.forEach(log => {
+        if (log.action === 'Invoice Date Modified') {
+          editedLogs.push({
+            billId: bill._id,
+            billNumber: bill.invoiceNo || bill.billNo || 'N/A',
+            billType: bill.billType || 'General',
+            patientName: bill.patientName || 'N/A',
+            uhid: bill.uhid || 'N/A',
+            remarks: log.remarks,
+            performedByName: log.performedByName,
+            timestamp: log.timestamp
+          });
+        }
+      });
+    });
+
+    // Sort editedLogs by timestamp descending (newest first)
+    editedLogs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
     res.status(200).json({
       billing: {
         totalBilled,
@@ -601,11 +659,262 @@ const getHospitalTracking = async (req, res) => {
         ipdList: dischargedIpd,
         opdList: completedOpd,
         sdtList: completedSdt
-      }
+      },
+      editedInvoices: editedLogs
     });
   } catch (error) {
     console.error('Get Hospital Tracking Error:', error);
     res.status(500).json({ message: 'Server error' });
+  }
+};
+
+const getDeleteDataPermission = async (req, res) => {
+  try {
+    const hospital = await Hospital.findById(req.user.hospitalId).select('allowDataDeletion');
+    res.status(200).json({ enabled: Boolean(hospital?.allowDataDeletion) });
+  } catch (error) {
+    console.error('Get Delete Data Permission Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+const deletePatientData = async (req, res) => {
+  try {
+    const { patientId } = req.body;
+    if (!patientId) {
+      return res.status(400).json({ message: 'Patient ID is required' });
+    }
+
+    const hospital = await Hospital.findById(req.user.hospitalId).select('allowDataDeletion');
+    if (!hospital?.allowDataDeletion) {
+      return res.status(403).json({ message: 'Delete data is not enabled for this hospital' });
+    }
+
+    const patient = await Patient.findOne(hospitalFilter(req, { _id: patientId }));
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient not found' });
+    }
+
+    const visits = await Visit.find(hospitalFilter(req, { patientId }));
+    const visitIds = visits.map((visit) => visit._id);
+    const relatedPatientIds = [patientId, ...visitIds.map(String)];
+    const deleteQuery = { patientId: { $in: relatedPatientIds } };
+    const tenantDeleteQuery = hospitalFilter(req, deleteQuery);
+
+    await Promise.all([
+      Consultation.deleteMany(tenantDeleteQuery),
+      Prescription.deleteMany(tenantDeleteQuery),
+      LabRequest.deleteMany(tenantDeleteQuery),
+      LabBill.deleteMany(tenantDeleteQuery),
+      Billing.deleteMany(tenantDeleteQuery),
+      PharmacyBill.deleteMany(tenantDeleteQuery),
+      SameDayTreatment.deleteMany(tenantDeleteQuery),
+      SdtItem.deleteMany(tenantDeleteQuery),
+      PharmacyDispense.deleteMany(tenantDeleteQuery),
+      PatientHistory.deleteMany(tenantDeleteQuery),
+      IpdAdmission.deleteMany(tenantDeleteQuery),
+      IpdDischarge.deleteMany(tenantDeleteQuery),
+      IpdConsumable.deleteMany(tenantDeleteQuery),
+      IpdMedicine.deleteMany(tenantDeleteQuery),
+      IpdLabTest.deleteMany(tenantDeleteQuery),
+      IpdReferral.deleteMany(tenantDeleteQuery),
+      IpdActivityTimeline.deleteMany(tenantDeleteQuery),
+      IpdOtRecord.deleteMany(tenantDeleteQuery),
+      OtBooking.deleteMany(tenantDeleteQuery),
+      OtDocument.deleteMany(tenantDeleteQuery)
+    ]);
+
+    await Bed.updateMany(hospitalFilter(req, { patientId }), {
+      $set: {
+        patientId: null,
+        admissionId: null,
+        status: 'Available',
+        reservedAt: null,
+        reservedFor: null
+      }
+    });
+
+    await Promise.all([
+      Visit.deleteMany(hospitalFilter(req, { patientId })),
+      Patient.deleteOne(hospitalFilter(req, { _id: patientId }))
+    ]);
+
+    res.status(200).json({ message: 'Patient and all related data deleted successfully' });
+  } catch (error) {
+    console.error('Delete Patient Data Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Search items for deletion page based on category
+// @route   GET /api/admin/delete-data/search
+// @access  Private (Admin only)
+const searchDeleteItems = async (req, res) => {
+  try {
+    const { query, category } = req.query;
+    const hospitalId = req.user.hospitalId;
+
+    if (!query || query.trim().length < 2) {
+      return res.status(200).json([]);
+    }
+
+    const searchQuery = query.trim();
+    const results = [];
+
+    if (category === 'patient') {
+      const patients = await Patient.find({
+        hospitalId,
+        $or: [
+          { patientName: new RegExp(searchQuery, 'i') },
+          { uhid: new RegExp(searchQuery, 'i') },
+          { mobile: new RegExp(searchQuery, 'i') }
+        ]
+      }).limit(10);
+      patients.forEach(p => {
+        results.push({
+          id: p._id,
+          title: p.patientName,
+          subtitle: `UHID: ${p.uhid} | Mobile: ${p.mobile}`,
+          details: p
+        });
+      });
+    } else if (category === 'pharmacy') {
+      const bills = await PharmacyBill.find({
+        hospitalId,
+        billNumber: new RegExp(searchQuery, 'i')
+      }).limit(10);
+      bills.forEach(b => {
+        results.push({
+          id: b._id,
+          title: `Bill No: ${b.billNumber}`,
+          subtitle: `Customer: ${b.customerDetails?.name || 'Walk-in'} | Date: ${new Date(b.billDate || b.createdAt).toLocaleDateString('en-GB')} | Total: ₹${b.totalAmount}`,
+          details: b
+        });
+      });
+    } else if (category === 'billing') {
+      const bills = await Billing.find({
+        hospitalId,
+        $or: [
+          { invoiceNo: new RegExp(searchQuery, 'i') },
+          { billNo: new RegExp(searchQuery, 'i') }
+        ]
+      }).limit(10);
+      bills.forEach(b => {
+        results.push({
+          id: b._id,
+          title: `Invoice No: ${b.invoiceNo || b.billNo}`,
+          subtitle: `Patient: ${b.patientName || 'Walk-in'} | Date: ${new Date(b.createdAt).toLocaleDateString('en-GB')} | Total: ₹${b.grandTotal}`,
+          details: b
+        });
+      });
+    } else if (category === 'prescription') {
+      const prescriptions = await Prescription.find({ hospitalId })
+        .populate('patientId', 'patientName uhid')
+        .populate('doctorId', 'doctorName username')
+        .lean();
+
+      const searchRegex = new RegExp(searchQuery, 'i');
+      const filtered = prescriptions.filter(p => {
+        return (
+          p._id.toString().includes(searchQuery) ||
+          (p.patientId && searchRegex.test(p.patientId.patientName)) ||
+          (p.patientId && searchRegex.test(p.patientId.uhid)) ||
+          (p.medicines && p.medicines.some(m => searchRegex.test(m.medicine)))
+        );
+      }).slice(0, 10);
+
+      filtered.forEach(p => {
+        results.push({
+          id: p._id,
+          title: `Prescription ID: ${p._id.toString().slice(-6).toUpperCase()}`,
+          subtitle: `Patient: ${p.patientId?.patientName || 'N/A'} | Doctor: ${p.doctorId?.doctorName || p.doctorId?.username || 'N/A'} | Meds Count: ${p.medicines?.length || 0}`,
+          details: p
+        });
+      });
+    }
+
+    res.status(200).json(results);
+  } catch (error) {
+    console.error('Search Delete Items Error:', error);
+    res.status(500).json({ message: 'Server error searching items for deletion.' });
+  }
+};
+
+// @desc    Delete a specific pharmacy invoice
+// @route   DELETE /api/admin/delete-data/pharmacy-bill/:id
+// @access  Private (Admin only)
+const deletePharmacyInvoice = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const hospitalId = req.user.hospitalId;
+
+    const hospital = await Hospital.findById(hospitalId).select('allowDataDeletion');
+    if (!hospital?.allowDataDeletion) {
+      return res.status(403).json({ message: 'Delete data is not enabled for this hospital' });
+    }
+
+    const bill = await PharmacyBill.findOne({ _id: id, hospitalId });
+    if (!bill) {
+      return res.status(404).json({ message: 'Pharmacy bill not found' });
+    }
+
+    await PharmacyBill.deleteOne({ _id: id, hospitalId });
+    res.status(200).json({ message: 'Pharmacy invoice deleted successfully' });
+  } catch (error) {
+    console.error('Delete Pharmacy Invoice Error:', error);
+    res.status(500).json({ message: 'Server error deleting pharmacy invoice' });
+  }
+};
+
+// @desc    Delete a specific general billing invoice
+// @route   DELETE /api/admin/delete-data/billing-invoice/:id
+// @access  Private (Admin only)
+const deleteGeneralInvoice = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const hospitalId = req.user.hospitalId;
+
+    const hospital = await Hospital.findById(hospitalId).select('allowDataDeletion');
+    if (!hospital?.allowDataDeletion) {
+      return res.status(403).json({ message: 'Delete data is not enabled for this hospital' });
+    }
+
+    const bill = await Billing.findOne({ _id: id, hospitalId });
+    if (!bill) {
+      return res.status(404).json({ message: 'General invoice not found' });
+    }
+
+    await Billing.deleteOne({ _id: id, hospitalId });
+    res.status(200).json({ message: 'General invoice deleted successfully' });
+  } catch (error) {
+    console.error('Delete General Invoice Error:', error);
+    res.status(500).json({ message: 'Server error deleting general invoice' });
+  }
+};
+
+// @desc    Delete a specific prescription
+// @route   DELETE /api/admin/delete-data/prescription/:id
+// @access  Private (Admin only)
+const deletePrescription = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const hospitalId = req.user.hospitalId;
+
+    const hospital = await Hospital.findById(hospitalId).select('allowDataDeletion');
+    if (!hospital?.allowDataDeletion) {
+      return res.status(403).json({ message: 'Delete data is not enabled for this hospital' });
+    }
+
+    const prescription = await Prescription.findOne({ _id: id, hospitalId });
+    if (!prescription) {
+      return res.status(404).json({ message: 'Prescription not found' });
+    }
+
+    await Prescription.deleteOne({ _id: id, hospitalId });
+    res.status(200).json({ message: 'Prescription deleted successfully' });
+  } catch (error) {
+    console.error('Delete Prescription Error:', error);
+    res.status(500).json({ message: 'Server error deleting prescription' });
   }
 };
 
@@ -961,6 +1270,44 @@ const getPatientTrackingTimeline = async (req, res) => {
         performedBy: bill.createdBy ? `${bill.createdBy.doctorName || bill.createdBy.username} (${bill.createdBy.role === 'nursing' ? 'same day care' : bill.createdBy.role})` : 'Pharmacist',
         timestamp: bill.createdAt
       });
+
+      bill.auditTrail?.forEach(log => {
+        events.push({
+          type: 'Invoice Date Modification Tracking',
+          activity: log.action,
+          description: log.remarks || `Action: ${log.action}`,
+          date: new Date(log.timestamp).toLocaleDateString(),
+          time: new Date(log.timestamp).toLocaleTimeString(),
+          performedBy: log.performedByName || 'Pharmacist',
+          timestamp: log.timestamp
+        });
+      });
+    });
+
+    // 11. General Bills
+    const generalBills = await Billing.find({ hospitalId, patientId }).lean();
+    generalBills.forEach(b => {
+      events.push({
+        type: 'General Bill',
+        activity: `General Bill ${b.status}`,
+        description: `Invoice: ${b.invoiceNo || b.billNo || 'N/A'} | Amount: ₹${b.grandTotal} | Status: ${b.status}`,
+        date: new Date(b.createdAt).toLocaleDateString(),
+        time: new Date(b.createdAt).toLocaleTimeString(),
+        performedBy: 'Billing Staff',
+        timestamp: b.createdAt
+      });
+
+      b.auditTrail?.forEach(log => {
+        events.push({
+          type: 'Invoice Date Modification Tracking',
+          activity: log.action,
+          description: log.remarks || `Action: ${log.action}`,
+          date: new Date(log.timestamp).toLocaleDateString(),
+          time: new Date(log.timestamp).toLocaleTimeString(),
+          performedBy: log.performedByName || 'Admin',
+          timestamp: log.timestamp
+        });
+      });
     });
 
     // Sort events by timestamp descending (newest first)
@@ -970,6 +1317,253 @@ const getPatientTrackingTimeline = async (req, res) => {
   } catch (error) {
     console.error('Get Patient Tracking Timeline Error:', error);
     res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Get COMBINED bills list (Pharmacy + Billing) for a patient
+// @route   GET /api/admin/bills/patient/:patientId
+// @access  Private (Admin only)
+// @desc    Get COMBINED bills list (Pharmacy + Billing) for a patient
+// @route   GET /api/admin/bills/patient/:patientId
+// @access  Private (Admin only)
+const getPatientBills = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    const hospitalId = req.user.hospitalId;
+
+    const patientObj = await Patient.findById(patientId);
+
+    // Fetch General Bills for this patient
+    const generalBills = await Billing.find({ hospitalId, patientId }).sort({ createdAt: -1 });
+
+    // Fetch Pharmacy Bills for this patient (with fallback to patient name & mobile if patientId is not populated on the bill)
+    let pharmacyQuery = { hospitalId };
+    if (patientObj) {
+      pharmacyQuery.$or = [
+        { patientId },
+        { 'customerDetails.mobile': patientObj.mobile },
+        { 'customerDetails.name': new RegExp('^' + patientObj.patientName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '$', 'i') }
+      ];
+    } else {
+      pharmacyQuery.patientId = patientId;
+    }
+    const pharmacyBills = await PharmacyBill.find(pharmacyQuery).sort({ billDate: -1 });
+
+    // Combine them
+    const combined = [];
+
+    pharmacyBills.forEach(b => {
+      combined.push({
+        _id: b._id,
+        billNumber: b.billNumber,
+        billType: 'Pharmacy',
+        date: b.billDate || b.createdAt,
+        amount: b.totalAmount || b.grandTotal || 0,
+        status: b.status,
+        paymentStatus: b.paymentStatus
+      });
+    });
+
+    generalBills.forEach(b => {
+      combined.push({
+        _id: b._id,
+        billNumber: b.invoiceNo || b.billNo,
+        billType: b.billType || 'General',
+        date: b.createdAt,
+        amount: b.grandTotal || 0,
+        status: b.status,
+        paymentStatus: b.paymentStatus
+      });
+    });
+
+    // Sort combined by date descending
+    combined.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    res.status(200).json(combined);
+  } catch (error) {
+    console.error('Get Patient Bills Error:', error);
+    res.status(500).json({ message: 'Server error loading patient bills.' });
+  }
+};
+
+// @desc    Search patients and invoices/bills by name, mobile, UHID, or invoice number
+// @route   GET /api/admin/bills/search
+// @access  Private (Admin only)
+const searchBills = async (req, res) => {
+  try {
+    const { query } = req.query;
+    const hospitalId = req.user.hospitalId;
+
+    if (!query || query.trim().length < 2) {
+      return res.status(200).json([]);
+    }
+
+    const searchQuery = query.trim();
+    const results = [];
+
+    // 1. Search Patients
+    const patients = await Patient.find({
+      hospitalId,
+      $or: [
+        { patientName: new RegExp(searchQuery, 'i') },
+        { uhid: new RegExp(searchQuery, 'i') },
+        { mobile: new RegExp(searchQuery, 'i') }
+      ]
+    }).limit(10);
+
+    patients.forEach(p => {
+      results.push({
+        type: 'patient',
+        id: p._id,
+        title: p.patientName,
+        subtitle: `UHID: ${p.uhid} | Mobile: ${p.mobile}`,
+        data: p
+      });
+    });
+
+    // 2. Search Pharmacy Bills directly by Bill Number
+    const pharmacyBills = await PharmacyBill.find({
+      hospitalId,
+      billNumber: new RegExp(searchQuery, 'i')
+    }).limit(10);
+
+    pharmacyBills.forEach(b => {
+      results.push({
+        type: 'bill',
+        id: b._id,
+        billType: 'Pharmacy',
+        title: `Pharmacy Bill: ${b.billNumber}`,
+        subtitle: `Customer: ${b.customerDetails?.name || 'Walk-in'} | Date: ${new Date(b.billDate).toLocaleDateString('en-GB')} | Amt: ₹${b.totalAmount}`,
+        data: {
+          _id: b._id,
+          billNumber: b.billNumber,
+          billType: 'Pharmacy',
+          date: b.billDate || b.createdAt,
+          amount: b.totalAmount || 0,
+          status: b.status
+        }
+      });
+    });
+
+    // 3. Search General Bills directly by Invoice/Bill Number
+    const generalBills = await Billing.find({
+      hospitalId,
+      $or: [
+        { invoiceNo: new RegExp(searchQuery, 'i') },
+        { billNo: new RegExp(searchQuery, 'i') }
+      ]
+    }).limit(10);
+
+    generalBills.forEach(b => {
+      results.push({
+        type: 'bill',
+        id: b._id,
+        billType: b.billType || 'General',
+        title: `General Invoice: ${b.invoiceNo || b.billNo}`,
+        subtitle: `Patient: ${b.patientName || 'Walk-in'} | Date: ${new Date(b.createdAt).toLocaleDateString('en-GB')} | Amt: ₹${b.grandTotal}`,
+        data: {
+          _id: b._id,
+          billNumber: b.invoiceNo || b.billNo,
+          billType: b.billType || 'General',
+          date: b.createdAt,
+          amount: b.grandTotal || 0,
+          status: b.status
+        }
+      });
+    });
+
+    res.status(200).json(results);
+  } catch (error) {
+    console.error('Search Bills Error:', error);
+    res.status(500).json({ message: 'Server error searching bills.' });
+  }
+};
+
+// @desc    Update bill date of a pharmacy or general billing invoice
+// @route   PUT /api/admin/bills/:billType/:billId/date
+// @access  Private (Admin only)
+const updateBillDate = async (req, res) => {
+  try {
+    const { billType, billId } = req.params;
+    const { newDate } = req.body;
+    const hospitalId = req.user.hospitalId;
+
+    if (!newDate) {
+      return res.status(400).json({ message: 'New date is required.' });
+    }
+
+    const parsedDate = new Date(newDate);
+    if (isNaN(parsedDate.getTime())) {
+      return res.status(400).json({ message: 'Invalid date format.' });
+    }
+
+    if (billType.toLowerCase() === 'pharmacy') {
+      const bill = await PharmacyBill.findOne({ _id: billId, hospitalId });
+      if (!bill) {
+        return res.status(404).json({ message: 'Pharmacy bill not found.' });
+      }
+
+      const oldDateStr = new Date(bill.billDate || bill.createdAt).toLocaleString('en-IN');
+      const newDateStr = new Date(parsedDate).toLocaleString('en-IN');
+      const logRemarks = `Invoice date changed from ${oldDateStr} to ${newDateStr}`;
+
+      // Update both billDate and createdAt
+      await PharmacyBill.updateOne(
+        { _id: billId, hospitalId },
+        { 
+          $set: { 
+            billDate: parsedDate,
+            createdAt: parsedDate 
+          },
+          $push: {
+            auditTrail: {
+              action: 'Invoice Date Modified',
+              performedBy: req.user._id,
+              performedByName: req.user.doctorName || req.user.username || 'Admin',
+              timestamp: new Date(),
+              remarks: logRemarks
+            }
+          }
+        },
+        { timestamps: false }
+      );
+      
+      return res.status(200).json({ message: 'Pharmacy bill date updated successfully.' });
+    } else {
+      const bill = await Billing.findOne({ _id: billId, hospitalId });
+      if (!bill) {
+        return res.status(404).json({ message: 'Billing module invoice not found.' });
+      }
+
+      const oldDateStr = new Date(bill.createdAt).toLocaleString('en-IN');
+      const newDateStr = new Date(parsedDate).toLocaleString('en-IN');
+      const logRemarks = `Invoice date changed from ${oldDateStr} to ${newDateStr}`;
+
+      // Update createdAt
+      await Billing.updateOne(
+        { _id: billId, hospitalId },
+        { 
+          $set: { 
+            createdAt: parsedDate 
+          },
+          $push: {
+            auditTrail: {
+              action: 'Invoice Date Modified',
+              performedBy: req.user._id,
+              performedByName: req.user.doctorName || req.user.username || 'Admin',
+              timestamp: new Date(),
+              remarks: logRemarks
+            }
+          }
+        },
+        { timestamps: false }
+      );
+
+      return res.status(200).json({ message: 'General invoice date updated successfully.' });
+    }
+  } catch (error) {
+    console.error('Update Bill Date Error:', error);
+    res.status(500).json({ message: 'Server error updating invoice date.' });
   }
 };
 
@@ -990,7 +1584,16 @@ module.exports = {
   updateDoctorAvailability,
   getDoctorAvailability,
   getHospitalTracking,
+  getDeleteDataPermission,
+  deletePatientData,
+  searchDeleteItems,
+  deletePharmacyInvoice,
+  deleteGeneralInvoice,
+  deletePrescription,
   getPatientSummary,
   getUserLimit,
-  getPatientTrackingTimeline
+  getPatientTrackingTimeline,
+  getPatientBills,
+  searchBills,
+  updateBillDate
 };

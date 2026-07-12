@@ -27,7 +27,8 @@ const buildPatientData = (visit) => {
     appointmentDate: visit.appointmentDate || '',
     slot: visit.slot || '',
     consultationStatus: visit.consultationStatus || 'pending',
-    createdAt: visit.createdAt || patientObj.createdAt
+    createdAt: visit.createdAt || patientObj.createdAt,
+    registeredBy: visit.createdBy ? (visit.createdBy.doctorName || visit.createdBy.username) : 'N/A'
   };
 };
 
@@ -78,6 +79,14 @@ const createConsultation = async (req, res) => {
     const patient = await Patient.findOne(tenantQuery(req, { _id: patientId }));
     if (!patient) {
       return res.status(404).json({ message: 'Patient not found' });
+    }
+
+    const IpdAdmission = require('../models/IpdAdmission');
+    const latestIpdAdmission = await IpdAdmission.findOne(
+      tenantQuery(req, { patientId: patient._id })
+    ).sort({ createdAt: -1 });
+    if (latestIpdAdmission?.status === 'Discharged') {
+      return res.status(400).json({ message: 'Patient is discharged. No further actions can be performed.' });
     }
 
     // 1. Save new symptoms to the Symptom autocomplete index
@@ -157,6 +166,14 @@ const updateConsultation = async (req, res) => {
 
     if (!consultation) {
       return res.status(404).json({ message: 'Consultation not found' });
+    }
+
+    const IpdAdmission = require('../models/IpdAdmission');
+    const latestIpdAdmission = await IpdAdmission.findOne(
+      tenantQuery(req, { patientId: consultation.patientId })
+    ).sort({ createdAt: -1 });
+    if (latestIpdAdmission?.status === 'Discharged') {
+      return res.status(400).json({ message: 'Patient is discharged. No further actions can be performed.' });
     }
 
     const {
@@ -254,6 +271,7 @@ const getDoctorAppointments = async (req, res) => {
         consultationStatus: { $ne: 'completed' }
       }))
         .populate('patientId')
+        .populate('createdBy', 'username doctorName role')
         .sort({ appointmentDate: -1, slot: 1 });
       
       patients = visits.map(buildPatientData).filter(Boolean);
@@ -306,6 +324,7 @@ const getDoctorAppointments = async (req, res) => {
         consultationStatus: { $ne: 'completed' }
       }))
         .populate('patientId')
+        .populate('createdBy', 'username doctorName role')
         .sort({ slot: 1 });
       
       patients = visits.map(buildPatientData).filter(Boolean);
@@ -358,6 +377,7 @@ const getDoctorAppointments = async (req, res) => {
         consultationStatus: { $ne: 'completed' }
       }))
         .populate('patientId')
+        .populate('createdBy', 'username doctorName role')
         .sort({ appointmentDate: 1, slot: 1 });
       
       patients = visits.map(buildPatientData).filter(Boolean);
@@ -514,6 +534,14 @@ const getCompletedConsultations = async (req, res) => {
     const consultations = await Consultation.find(query)
       .populate('patientId', 'uhid patientName mobile gender dob department')
       .populate('doctorId', 'doctorName username department')
+      .populate({
+        path: 'visitId',
+        select: 'createdBy',
+        populate: {
+          path: 'createdBy',
+          select: 'username doctorName role'
+        }
+      })
       .sort({ consultationCompletedDate: -1, updatedAt: -1 });
 
     res.json(consultations);
@@ -538,6 +566,14 @@ const getAllPatientConsultations = async (req, res) => {
     const consultations = await Consultation.find(tenantQuery(req, { patientId }))
       .populate('doctorId', 'doctorName username department')
       .populate('patientId', 'uhid patientName mobile gender dob')
+      .populate({
+        path: 'visitId',
+        select: 'createdBy',
+        populate: {
+          path: 'createdBy',
+          select: 'username doctorName role'
+        }
+      })
       .sort({ consultationDateTime: -1, createdAt: -1 });
 
     // Also get ALL related prescriptions  
@@ -559,7 +595,15 @@ const getCompletedConsultationDetails = async (req, res) => {
   try {
     const consultation = await Consultation.findOne(tenantQuery(req, { _id: req.params.consultationId }))
       .populate('patientId', 'uhid patientName mobile gender dob department appointmentDate slot address aadhaar')
-      .populate('doctorId', 'doctorName username department');
+      .populate('doctorId', 'doctorName username department')
+      .populate({
+        path: 'visitId',
+        select: 'createdBy',
+        populate: {
+          path: 'createdBy',
+          select: 'username doctorName role'
+        }
+      });
 
     if (!consultation) return res.status(404).json({ message: 'Consultation not found' });
 

@@ -143,7 +143,14 @@ const DoctorPatientList = () => {
                 patients.map((patient) => (
                   <tr key={patient._id} className="border-t border-orange-50">
                     <td className="p-3 font-bold text-orange-700">{patient.uhid}</td>
-                    <td className="p-3">{patient.patientName}</td>
+                    <td className="p-3">
+                      <span className="font-bold text-gray-950 block">{patient.patientName}</span>
+                      {patient.registeredBy && patient.registeredBy !== 'N/A' && (
+                        <span className="text-[10px] text-gray-500 font-bold block mt-0.5">
+                          Registered by: <span className="capitalize text-orange-600">{patient.registeredBy}</span>
+                        </span>
+                      )}
+                    </td>
                     <td className="p-3">{patient.mobile}</td>
                     <td className="p-3">
                       Dr. {patient.doctorId?.doctorName || patient.doctorId?.username || 'N/A'}

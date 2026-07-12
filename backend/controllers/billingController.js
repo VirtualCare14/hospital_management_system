@@ -779,21 +779,31 @@ const createBill = async (req, res) => {
 
     const activeItems = items.filter(i => !i.isRemoved);
     const removedItems = items.filter(i => i.isRemoved);
-    const subtotal = activeItems.reduce((sum, i) => sum + i.total, 0);
+    
+    let computedSubtotal = 0;
+    let computedGstAmount = 0;
+    
+    activeItems.forEach(i => {
+      const baseAmount = (parseFloat(i.price) - parseFloat(i.discountAmount || 0)) * parseInt(i.quantity || 1);
+      const gstAmt = baseAmount * (parseFloat(i.gstPercentage || 0) / 100);
+      i.gstAmount = Number(gstAmt.toFixed(2));
+      i.total = Number((baseAmount + gstAmt).toFixed(2));
+      
+      computedSubtotal += baseAmount;
+      computedGstAmount += gstAmt;
+    });
 
-    // Use the GST rate sent in request directly
     const finalGstPercentage = parseFloat(gstPercentage || 0);
-
-    // Calculate sum of item-wise discounts
-    const itemDiscountTotal = activeItems.reduce((sum, i) => sum + ((i.discountAmount || 0) * i.quantity), 0);
-
-    // General discount from percentage
-    const percentDiscountAmt = subtotal * (parseFloat(discountPercentage || 0) / 100);
-    const discountedSubtotal = Math.max(0, subtotal - percentDiscountAmt);
-    const gstAmt = discountedSubtotal * (finalGstPercentage / 100);
+    const percentDiscountAmt = computedSubtotal * (parseFloat(discountPercentage || 0) / 100);
+    const discountedSubtotal = Math.max(0, computedSubtotal - percentDiscountAmt);
+    const invoiceGstAmt = discountedSubtotal * (finalGstPercentage / 100);
+    
+    const gstAmt = computedGstAmount + invoiceGstAmt;
     const grandTotal = discountedSubtotal + gstAmt;
-
+    const itemDiscountTotal = activeItems.reduce((sum, i) => sum + ((parseFloat(i.discountAmount || 0)) * parseInt(i.quantity || 1)), 0);
     const discountAmt = itemDiscountTotal + percentDiscountAmt;
+
+    const subtotal = computedSubtotal;
 
     let invoiceNo = undefined;
     if (status === 'Final') {
@@ -972,18 +982,30 @@ const updateBill = async (req, res) => {
     if (discountRequestStatus !== undefined) bill.discountRequestStatus = discountRequestStatus;
     if (status) bill.status = status;
 
-    const subtotal = bill.items.reduce((sum, i) => sum + i.total, 0);
-    bill.subtotal = subtotal;
+    let computedSubtotal = 0;
+    let computedGstAmount = 0;
+    
+    bill.items.forEach(i => {
+      const baseAmount = (parseFloat(i.price) - parseFloat(i.discountAmount || 0)) * parseInt(i.quantity || 1);
+      const gstAmt = baseAmount * (parseFloat(i.gstPercentage || 0) / 100);
+      i.gstAmount = Number(gstAmt.toFixed(2));
+      i.total = Number((baseAmount + gstAmt).toFixed(2));
+      
+      computedSubtotal += baseAmount;
+      computedGstAmount += gstAmt;
+    });
 
-    // Use the GST rate sent in request directly
+    bill.subtotal = computedSubtotal;
     let finalGstPercentage = parseFloat(bill.gstPercentage || 0);
     bill.gstPercentage = finalGstPercentage;
 
-    const itemDiscountTotal = bill.items.reduce((sum, i) => sum + ((i.discountAmount || 0) * i.quantity), 0);
-    const percentDiscountAmt = subtotal * (bill.discountPercentage / 100);
+    const itemDiscountTotal = bill.items.reduce((sum, i) => sum + ((parseFloat(i.discountAmount || 0)) * parseInt(i.quantity || 1)), 0);
+    const percentDiscountAmt = computedSubtotal * (bill.discountPercentage / 100);
     bill.discountAmount = itemDiscountTotal + percentDiscountAmt;
-    const discountedSubtotal = Math.max(0, subtotal - percentDiscountAmt);
-    bill.gstAmount = discountedSubtotal * (bill.gstPercentage / 100);
+    const discountedSubtotal = Math.max(0, computedSubtotal - percentDiscountAmt);
+    const invoiceGstAmt = discountedSubtotal * (finalGstPercentage / 100);
+    
+    bill.gstAmount = computedGstAmount + invoiceGstAmt;
     bill.grandTotal = discountedSubtotal + bill.gstAmount;
     bill.updatedBy = req.user._id;
 

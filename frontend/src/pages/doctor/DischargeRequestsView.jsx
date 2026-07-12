@@ -18,6 +18,21 @@ const DischargeRequestsView = () => {
   const [remarks, setRemarks] = useState('');
   const [prescription, setPrescription] = useState([]);
   
+  const [pharmacyMedicines, setPharmacyMedicines] = useState([]);
+  useEffect(() => {
+    const fetchPharmacyMedicines = async () => {
+      try {
+        const { data } = await client.get('/pharmacy/inventory?limit=5000');
+        const items = data.items || [];
+        const uniqueNames = Array.from(new Set(items.map(item => item.itemName))).sort();
+        setPharmacyMedicines(uniqueNames);
+      } catch (err) {
+        console.warn('Failed to fetch pharmacy inventory:', err);
+      }
+    };
+    fetchPharmacyMedicines();
+  }, []);
+
   // New drug input state
   const [newDrug, setNewDrug] = useState({
     medicineName: '',
@@ -298,11 +313,17 @@ const DischargeRequestsView = () => {
                         <label className="text-[10px] font-bold text-gray-500">Medicine Name</label>
                         <input
                           type="text"
+                          list="discharge-prescription-medicines"
                           className="input py-1.5 px-2 text-xs"
-                          placeholder="e.g. Paracetamol 650"
+                          placeholder="Type to search/select..."
                           value={newDrug.medicineName}
                           onChange={(e) => setNewDrug({ ...newDrug, medicineName: e.target.value })}
                         />
+                        <datalist id="discharge-prescription-medicines">
+                          {pharmacyMedicines.map((med, idx) => (
+                            <option key={idx} value={med} />
+                          ))}
+                        </datalist>
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-gray-500">Dosage</label>

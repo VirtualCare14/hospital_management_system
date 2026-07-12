@@ -77,11 +77,15 @@ const visitSchema = new mongoose.Schema({
   visitNumber: {
     type: Number // Sequential visit number for this patient (1st visit, 2nd visit, etc.)
   },
-  // Same Day Treatment link
   sameDayTreatmentId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'SameDayTreatment',
     default: null
+  },
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false
   }
 }, { timestamps: true });
 

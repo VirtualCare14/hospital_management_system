@@ -197,7 +197,8 @@ const createPatient = async (req, res) => {
         height: height || undefined,
         bloodPressure: bloodPressure || undefined,
         temperature: temperature || undefined
-      }
+      },
+      createdBy: req.user._id
     });
 
     await visit.save();
@@ -356,6 +357,7 @@ const getPatients = async (req, res) => {
       patients.map(async (pat) => {
         const latestVisit = await Visit.findOne(tenantQuery(req, { patientId: pat._id }))
           .populate('doctorId', 'doctorName username department')
+          .populate('createdBy', 'username doctorName role')
           .sort({ createdAt: -1 });
 
         const Prescription = require('../models/Prescription');
@@ -373,7 +375,8 @@ const getPatients = async (req, res) => {
           registrationNumber: latestVisit?.registrationNumber || '',
           visitType: latestVisit?.visitType || 'OPD',
           consultationStatus: latestVisit?.consultationStatus || 'pending',
-          hasPrescription: !!hasPrescription
+          hasPrescription: !!hasPrescription,
+          registeredBy: latestVisit?.createdBy ? (latestVisit.createdBy.doctorName || latestVisit.createdBy.username) : 'N/A'
         };
       })
     );
@@ -411,7 +414,14 @@ const getPatientById = async (req, res) => {
 
     const latestVisit = await Visit.findOne(tenantQuery(req, { patientId: patient._id }))
       .populate('doctorId', 'doctorName username department')
+      .populate('createdBy', 'username doctorName role')
       .sort({ createdAt: -1 });
+
+    const IpdAdmission = require('../models/IpdAdmission');
+    const latestIpdAdmission = await IpdAdmission.findOne(
+      tenantQuery(req, { patientId: patient._id })
+    ).sort({ createdAt: -1 });
+    const isDischarged = latestIpdAdmission?.status === 'Discharged';
 
     const responseData = {
       ...patient.toObject(),
@@ -423,7 +433,9 @@ const getPatientById = async (req, res) => {
       registrationNumber: latestVisit?.registrationNumber || '',
       visitType: latestVisit?.visitType || 'OPD',
       consultationStatus: latestVisit?.consultationStatus || 'pending',
-      demographics: latestVisit?.demographics || null
+      demographics: latestVisit?.demographics || null,
+      isDischarged,
+      registeredBy: latestVisit?.createdBy ? (latestVisit.createdBy.doctorName || latestVisit.createdBy.username) : 'N/A'
     };
 
     res.status(200).json(responseData);

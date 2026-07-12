@@ -317,6 +317,18 @@ const PrescriptionPage = () => {
 
   return (
     <div className="space-y-5">
+      {patient.isDischarged && (
+        <div className="card p-4 border border-gray-255 bg-gray-50 flex items-center gap-3">
+          <ShieldAlert className="text-gray-500 h-6 w-6 shrink-0" />
+          <div>
+            <h4 className="font-extrabold text-gray-800 text-sm uppercase tracking-wider">Patient is Discharged</h4>
+            <p className="text-xs text-gray-650 mt-0.5 font-semibold">
+              This patient has been discharged from the hospital. The OPD case record is read-only. No new consultations, referrals, or prescriptions can be saved.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="card flex flex-col gap-3 p-5 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-2xl font-extrabold text-gray-900">Digital Prescription</h1>
@@ -431,20 +443,28 @@ const PrescriptionPage = () => {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <button className="btn-secondary" disabled={isSaving} onClick={handleSaveAndPrint}><Save className="h-4 w-4" /> {isSaving ? 'Saving...' : 'Save'}</button>
-        <button className="btn-secondary" disabled={isSaving} onClick={shareWhatsApp}><MessageCircle className="h-4 w-4" /> WhatsApp</button>
-        {referralSent ? (
-          <span className="btn-secondary bg-green-50 text-green-700 border-green-200 cursor-default">
-            ✓ Referred to IPD
-          </span>
+        {patient.isDischarged ? (
+          <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200 font-medium">
+            This patient has been discharged and the prescription cannot be updated.
+          </div>
         ) : (
-          <button
-            className="btn bg-indigo-600 hover:bg-indigo-700 text-white"
-            onClick={handleSendToIpd}
-            disabled={sendingToIpd}
-          >
-            <Send className="h-4 w-4" /> {sendingToIpd ? 'Sending...' : 'Send to IPD'}
-          </button>
+          <>
+            <button className="btn-secondary" disabled={isSaving} onClick={handleSaveAndPrint}><Save className="h-4 w-4" /> {isSaving ? 'Saving...' : 'Save'}</button>
+            <button className="btn-secondary" disabled={isSaving} onClick={shareWhatsApp}><MessageCircle className="h-4 w-4" /> WhatsApp</button>
+            {referralSent ? (
+              <span className="btn-secondary bg-green-50 text-green-700 border-green-200 cursor-default">
+                ✓ Referred to IPD
+              </span>
+            ) : (
+              <button
+                className="btn bg-indigo-600 hover:bg-indigo-700 text-white"
+                onClick={handleSendToIpd}
+                disabled={sendingToIpd}
+              >
+                <Send className="h-4 w-4" /> {sendingToIpd ? 'Sending...' : 'Send to IPD'}
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>

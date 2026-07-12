@@ -20,7 +20,8 @@ import {
   TrendingUp,
   AlertCircle,
   ArrowLeft,
-  X
+  X,
+  Loader2
 } from 'lucide-react';
 import client from '../../api/client';
 import SkeletonCard from '../../components/Skeleton/SkeletonCard';
@@ -33,8 +34,258 @@ const ageFromDob = (dob) => {
   return Math.abs(new Date(diff).getUTCFullYear() - 1970);
 };
 
+// Admin Invoice Editor component
+const AdminInvoiceEditor = () => {
+  const [patientSearch, setPatientSearch] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [selectedPatient, setSelectedPatient] = useState(null);
+  const [bills, setBills] = useState([]);
+  const [loadingBills, setLoadingBills] = useState(false);
+  const [editingBill, setEditingBill] = useState(null);
+  const [newDate, setNewDate] = useState('');
+  const [updating, setUpdating] = useState(false);
+
+  // Search patients or invoices on typing
+  useEffect(() => {
+    if (patientSearch.trim().length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    const delayDebounceFn = setTimeout(async () => {
+      try {
+        const { data } = await client.get(`/admin/bills/search?query=${patientSearch}`);
+        setSearchResults(data || []);
+      } catch (err) {
+        console.error('Error searching:', err);
+      }
+    }, 300);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [patientSearch]);
+
+  // Load bills for selected patient or direct bill match
+  const handleSelectResult = async (item) => {
+    setPatientSearch('');
+    setSearchResults([]);
+    
+    if (item.type === 'patient') {
+      setSelectedPatient(item.data);
+      setLoadingBills(true);
+      try {
+        const { data } = await client.get(`/admin/bills/patient/${item.id}`);
+        setBills(data || []);
+      } catch (err) {
+        toast.error('Failed to load patient invoices.');
+      } finally {
+        setLoadingBills(false);
+      }
+    } else if (item.type === 'bill') {
+      setSelectedPatient({
+        patientName: item.billType === 'Pharmacy' ? 'Walk-in / Search Match' : 'Search Match',
+        uhid: 'N/A'
+      });
+      setBills([item.data]);
+    }
+  };
+
+  const handleOpenEdit = (bill) => {
+    setEditingBill(bill);
+    // Format date for datetime-local (yyyy-MM-ddThh:mm)
+    const d = new Date(bill.date);
+    // Adjust to local ISO string
+    const tzoffset = d.getTimezoneOffset() * 60000;
+    const localISOTime = (new Date(d.getTime() - tzoffset)).toISOString().slice(0, 16);
+    setNewDate(localISOTime);
+  };
+
+  const handleUpdateDate = async () => {
+    if (!newDate) return;
+    setUpdating(true);
+    try {
+      await client.put(`/admin/bills/${editingBill.billType}/${editingBill._id}/date`, { newDate });
+      toast.success('Bill date updated successfully!');
+      setEditingBill(null);
+      // Reload bills
+      if (selectedPatient && selectedPatient._id) {
+        const { data } = await client.get(`/admin/bills/patient/${selectedPatient._id}`);
+        setBills(data || []);
+      } else {
+        // Direct search match update local state
+        const updated = { ...editingBill, date: new Date(newDate).toISOString() };
+        setBills([updated]);
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update bill date.');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Patient & Invoice Search */}
+      <div className="card p-5 border border-orange-100 shadow-sm rounded-2xl bg-white relative">
+        <h3 className="font-extrabold text-gray-800 mb-2 text-base">Edit Patient Invoice Dates</h3>
+        <p className="text-xs text-gray-500 mb-4">Search for a patient by name/UHID, or search an invoice directly by Invoice/Bill number (e.g. PB-10001, INV123456).</p>
+        
+        <div className="relative">
+          <Search className="absolute left-3.5 top-3 h-4 w-4 text-orange-400" />
+          <input
+            type="text"
+            placeholder="Type patient name, UHID, mobile, or Invoice/Bill number to search..."
+            value={patientSearch}
+            onChange={(e) => setPatientSearch(e.target.value)}
+            className="input pl-10 text-xs py-2.5"
+          />
+        </div>
+
+        {searchResults.length > 0 && (
+          <div className="absolute left-5 right-5 top-[115px] z-50 bg-white border border-orange-100 rounded-xl shadow-xl max-h-[250px] overflow-y-auto divide-y divide-orange-50">
+            {searchResults.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => handleSelectResult(item)}
+                className="w-full text-left p-3 hover:bg-orange-50/55 flex items-center justify-between text-xs transition font-semibold"
+              >
+                <div>
+                  <p className="text-gray-900 font-bold text-sm">{item.title}</p>
+                  <p className="text-gray-500 mt-0.5 font-mono">{item.subtitle}</p>
+                </div>
+                <ArrowRight className="h-4 w-4 text-orange-500" />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {selectedPatient && (
+        <div className="card p-5 border border-orange-100 shadow-sm rounded-2xl bg-white space-y-4">
+          <div className="flex justify-between items-center border-b border-orange-50 pb-2.5">
+            <div>
+              <span className="text-[10px] uppercase font-bold text-orange-600">Selected Patient</span>
+              <h4 className="font-extrabold text-gray-855 text-sm">{selectedPatient.patientName} (UHID: {selectedPatient.uhid})</h4>
+            </div>
+            <button 
+              type="button" 
+              onClick={() => { setSelectedPatient(null); setBills([]); }} 
+              className="text-xs text-red-500 font-bold hover:underline cursor-pointer"
+            >
+              Deselect Patient
+            </button>
+          </div>
+
+          {loadingBills ? (
+            <div className="py-8 text-center text-gray-400 text-xs">
+              <Loader2 className="h-5 w-5 animate-spin text-orange-500 inline mr-2" /> Loading invoices list...
+            </div>
+          ) : bills.length === 0 ? (
+            <div className="py-8 text-center text-gray-400 text-xs font-bold">
+              No bills found for this patient in the Pharmacy or Billing modules.
+            </div>
+          ) : (
+            <div className="overflow-x-auto border border-orange-100 rounded-xl">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="bg-gradient-to-r from-orange-50 to-amber-50 text-gray-600 font-bold uppercase border-b border-orange-100 text-[10px]">
+                    <th className="p-3">Invoice / Bill Number</th>
+                    <th className="p-3">Module / Type</th>
+                    <th className="p-3">Current Date</th>
+                    <th className="p-3 text-right">Amount (₹)</th>
+                    <th className="p-3 text-center">Status</th>
+                    <th className="p-3 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-orange-50 font-semibold text-gray-700">
+                  {bills.map(b => (
+                    <tr key={b._id} className="hover:bg-orange-50/10 align-middle">
+                      <td className="p-3 font-mono font-bold text-orange-700">{b.billNumber}</td>
+                      <td className="p-3 text-gray-600">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          b.billType === 'Pharmacy' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-purple-50 text-purple-700 border border-purple-200'
+                        }`}>
+                          {b.billType}
+                        </span>
+                      </td>
+                      <td className="p-3 text-gray-500">{new Date(b.date).toLocaleString('en-IN')}</td>
+                      <td className="p-3 text-right font-black text-gray-800">₹{Number(b.amount).toFixed(2)}</td>
+                      <td className="p-3 text-center">
+                        <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
+                          b.status === 'Draft' ? 'bg-gray-100 text-gray-600' :
+                          b.status === 'Cancelled' ? 'bg-red-50 text-red-650' :
+                          'bg-green-50 text-green-700'
+                        }`}>
+                          {b.status}
+                        </span>
+                      </td>
+                      <td className="p-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEdit(b)}
+                          className="px-2.5 py-1 text-[10px] font-bold text-orange-600 bg-orange-50 hover:bg-orange-100 rounded-lg border border-orange-200 cursor-pointer"
+                        >
+                          Change Date
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Date Editor Modal */}
+      {editingBill && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-orange-100 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b border-orange-50 pb-2.5">
+              <h3 className="font-extrabold text-gray-800 text-sm">Update Bill Date</h3>
+              <button type="button" onClick={() => setEditingBill(null)} className="text-gray-400 hover:text-gray-600 cursor-pointer">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="space-y-3 text-xs">
+              <p>Editing Date for invoice: <span className="font-mono font-bold text-orange-700">{editingBill.billNumber}</span></p>
+              <div>
+                <label className="block mb-1 font-bold text-gray-500">Invoice Date *</label>
+                <input
+                  type="datetime-local"
+                  required
+                  value={newDate}
+                  onChange={(e) => setNewDate(e.target.value)}
+                  className="input py-2 text-xs font-semibold"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-orange-50 pt-4">
+              <button 
+                type="button" 
+                onClick={() => setEditingBill(null)} 
+                className="btn-secondary text-xs py-2 px-4 font-bold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                onClick={handleUpdateDate} 
+                disabled={updating}
+                className="btn text-xs py-2 px-5 font-bold cursor-pointer disabled:bg-orange-300"
+              >
+                {updating ? 'Saving...' : 'Update Date'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const AdminDashboard = () => {
-  const [activeTab, setActiveTab] = useState('staff'); // 'staff', 'tracking', 'summary'
+  const [activeTab, setActiveTab] = useState('staff'); // 'staff', 'tracking', 'summary', 'invoices'
   const [users, setUsers] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -199,6 +450,12 @@ const AdminDashboard = () => {
             className={`px-4 py-2 text-xs font-bold rounded-lg transition duration-200 ${activeTab === 'summary' ? 'bg-orange-500 text-white shadow-sm' : 'text-orange-950 hover:bg-orange-100/50'}`}
           >
             Patient Summary
+          </button>
+          <button
+            onClick={() => setActiveTab('invoices')}
+            className={`px-4 py-2 text-xs font-bold rounded-lg transition duration-200 ${activeTab === 'invoices' ? 'bg-orange-500 text-white shadow-sm' : 'text-orange-950 hover:bg-orange-100/50'}`}
+          >
+            Invoice Date Editor
           </button>
         </div>
       </div>
@@ -510,6 +767,41 @@ const AdminDashboard = () => {
                       )}
                     </div>
                   </div>
+                </div>
+              </div>
+
+              <div className="card border border-amber-100 shadow-sm rounded-2xl overflow-hidden bg-white">
+                <div className="border-b border-amber-100 p-5 bg-gradient-to-r from-amber-50/20 to-white flex items-center justify-between">
+                  <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-amber-500" /> Edited Patient Invoice Dates
+                  </h3>
+                  <span className="bg-amber-100 text-amber-800 font-extrabold px-3 py-1 rounded-full text-xs">
+                    {trackingData.editedInvoices?.length || 0} Edited
+                  </span>
+                </div>
+                <div className="p-5 space-y-3 max-h-[380px] overflow-y-auto">
+                  {trackingData.editedInvoices?.length > 0 ? (
+                    trackingData.editedInvoices.map((invoice, index) => (
+                      <div key={`${invoice.billId}-${invoice.timestamp || index}`} className="border border-amber-100 bg-amber-50/10 p-3 rounded-xl text-xs">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="font-bold text-gray-800">{invoice.patientName}</p>
+                            <p className="text-[10px] text-gray-500">UHID: {invoice.uhid} | {invoice.billType} • {invoice.billNumber}</p>
+                          </div>
+                          <span className="px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-700 uppercase text-[9px]">
+                            {invoice.billType}
+                          </span>
+                        </div>
+                        <div className="mt-2 text-[11px] text-gray-600 space-y-1">
+                          <p><span className="font-semibold text-gray-700">Edited by:</span> {invoice.performedByName || 'Unknown'}</p>
+                          <p><span className="font-semibold text-gray-700">Changed on:</span> {invoice.timestamp ? new Date(invoice.timestamp).toLocaleString('en-IN') : 'N/A'}</p>
+                          {invoice.remarks && <p><span className="font-semibold text-gray-700">Note:</span> {invoice.remarks}</p>}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-gray-400 text-center py-4 text-xs italic">No edited invoice dates found</p>
+                  )}
                 </div>
               </div>
             </>
@@ -852,6 +1144,12 @@ const AdminDashboard = () => {
           )}
         </div>
       )}
+
+      {/* TAB 4: INVOICES DATE EDITOR */}
+      {activeTab === 'invoices' && (
+        <AdminInvoiceEditor />
+      )}
+
       {/* Patient Tracking Timeline Modal */}
       {selectedTrackingPatient && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm transition duration-150">

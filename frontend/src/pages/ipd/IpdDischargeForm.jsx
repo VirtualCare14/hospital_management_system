@@ -106,8 +106,20 @@ const IpdDischargeForm = () => {
         const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
         const initials = nameParts.map(n => n.charAt(0).toUpperCase()).join('').slice(0, 3);
 
-        if (dischargeId) {
-          const { data: disData } = await client.get(`/ipd/discharge/${dischargeId}`);
+        let activeDischargeId = dischargeId;
+        if (!activeDischargeId) {
+          try {
+            const { data: disList } = await client.get(`/ipd/discharge/admission/${id}`);
+            if (disList && disList.length > 0) {
+              activeDischargeId = disList[0]._id;
+            }
+          } catch (err) {
+            console.warn('Could not load existing discharge records', err);
+          }
+        }
+
+        if (activeDischargeId) {
+          const { data: disData } = await client.get(`/ipd/discharge/${activeDischargeId}`);
           setDischargeRecord(disData);
           setForm({
             admissionId: id,
@@ -412,14 +424,14 @@ const IpdDischargeForm = () => {
               <h3 className="font-extrabold">Discharge Summary Preview</h3>
             </div>
             <div className="bg-white rounded-xl border border-gray-200 shadow-lg print:shadow-none">
-              {renderDischargeReport(form, hospitalInfo, user)}
+              {renderDischargeReport(form, hospitalInfo, user, dischargeRecord)}
             </div>
           </div>
         </div>
       )}
 
       {/* Main Form */}
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-2 no-print">
         {/* Patient & Admission Information */}
         <div className="card p-5 space-y-4 lg:col-span-2">
           <div className="flex items-center gap-2 border-b border-orange-100 pb-3">
@@ -601,7 +613,7 @@ const IpdDischargeForm = () => {
 
       {/* Print-only Discharge Summary */}
       <div className="hidden print:block">
-        {renderDischargeReport(form, hospitalInfo, user)}
+        {renderDischargeReport(form, hospitalInfo, user, dischargeRecord)}
       </div>
 
       {/* Submit for Review Modal */}
@@ -650,7 +662,7 @@ const IpdDischargeForm = () => {
       <style>{`
         @media print {
           body { background: white; font-size: 12pt; }
-          .no-print { display: none !important; }
+          aside, header, nav, .no-print { display: none !important; }
           .print\\:block { display: block !important; }
           .card { border: 1px solid #ddd !important; box-shadow: none !important; }
           @page { margin: 15mm; }
@@ -660,7 +672,7 @@ const IpdDischargeForm = () => {
   );
 };
 
-const renderDischargeReport = (form, hospitalInfo, user) => {
+const renderDischargeReport = (form, hospitalInfo, user, dischargeRecord) => {
   const now = new Date();
   const formattedDate = now.toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
   const formattedTime = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });

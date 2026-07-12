@@ -89,8 +89,9 @@ const IpdServices = () => {
       const params = new URLSearchParams();
       if (searchQuery) params.append('search', searchQuery);
       const { data } = await client.get(`/ipd/patients?${params.toString()}`);
-      setAdmissions(data);
-      setFilteredAdmissions(data);
+      const activeAdmissions = data.filter(a => a.status !== 'Discharged');
+      setAdmissions(activeAdmissions);
+      setFilteredAdmissions(activeAdmissions);
     } catch (err) {
       toast.error('Failed to load IPD patient list');
     } finally {

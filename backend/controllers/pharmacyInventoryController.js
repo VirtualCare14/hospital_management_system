@@ -1,5 +1,8 @@
 const PharmacyInventory = require('../models/PharmacyInventory');
 const PharmacyUploadHistory = require('../models/PharmacyUploadHistory');
+const Supplier = require('../models/Supplier');
+const Purchase = require('../models/Purchase');
+const PharmacyStockMovement = require('../models/PharmacyStockMovement');
 
 const tenantFilter = (req, query = {}) => (
   req.user.hospitalId ? { ...query, hospitalId: req.user.hospitalId } : query
@@ -126,7 +129,7 @@ const getInventory = async (req, res) => {
 // @access  Private
 const uploadInventory = async (req, res) => {
   try {
-    const { items, fileName } = req.body;
+    const { items, fileName, totalRows, failedRowsCount, importLog, supplierId } = req.body;
 
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: 'No items provided for upload' });
@@ -135,6 +138,30 @@ const uploadInventory = async (req, res) => {
     const hospitalId = req.user.hospitalId;
     const uploadedBy = req.user._id;
 
+    // Find selected or default Excel Upload supplier
+    let supplier;
+    if (supplierId) {
+      supplier = await Supplier.findOne({ hospitalId, _id: supplierId });
+    }
+    if (!supplier) {
+      supplier = await Supplier.findOne({ hospitalId, name: 'Excel Import Supplier' });
+    }
+    if (!supplier) {
+      supplier = await Supplier.create({
+        hospitalId,
+        name: 'Excel Import Supplier',
+        code: 'SUP-EXCEL',
+        mobile: '9999999999',
+        email: 'excel-import@hms.com',
+        address: 'System Generated Supplier Profile for Excel Imports',
+        status: 'Active',
+        createdBy: uploadedBy,
+        updatedBy: uploadedBy
+      });
+    }
+
+    const invoiceNumber = `INV-EXCEL-${Date.now()}`;
+    const purchaseItems = [];
     let insertedCount = 0;
     let updatedCount = 0;
 
@@ -175,14 +202,16 @@ const uploadInventory = async (req, res) => {
         batch: { $regex: new RegExp('^' + batch.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '$', 'i') }
       });
 
+      const previousStock = existing ? existing.quantity : 0;
+
       if (existing) {
-        // Overwrite quantity with Excel value
-        existing.quantity = quantity;
-        existing.sNo = sNo;
-        existing.oldMrp = oldMrp;
+        // Increase quantity (exactly like manual purchase save logic)
+        existing.quantity += quantity;
+        existing.free += free;
+        existing.sNo = sNo || existing.sNo;
+        existing.oldMrp = oldMrp || existing.oldMrp;
         existing.pack = pack;
         existing.mrp = mrp;
-        existing.free = free;
         existing.rate = rate;
         existing.dis = dis;
         existing.expiry = expiryDate;
@@ -191,12 +220,28 @@ const uploadInventory = async (req, res) => {
         existing.sgst = sgst;
         existing.cst = cst;
         existing.amount = existing.rate * existing.quantity;
+        existing.supplierId = supplier._id;
+        existing.supplierName = supplier.name;
+        existing.lastPurchaseDate = new Date();
 
         await existing.save();
+
+        await PharmacyStockMovement.create({
+          hospitalId,
+          itemName: existing.itemName,
+          batch: existing.batch,
+          type: 'Excel Upload',
+          quantity,
+          previousStock,
+          newStock: existing.quantity,
+          performedBy: uploadedBy,
+          remarks: `Excel import update. Inv: ${invoiceNumber}`
+        });
+
         updatedCount++;
       } else {
         // Create new item
-        await PharmacyInventory.create({
+        const newStock = await PharmacyInventory.create({
           hospitalId,
           sNo,
           itemName,
@@ -213,32 +258,97 @@ const uploadInventory = async (req, res) => {
           hsn,
           sgst,
           cst,
-          amount
+          amount,
+          supplierId: supplier._id,
+          supplierName: supplier.name,
+          lastPurchaseDate: new Date()
         });
+
+        await PharmacyStockMovement.create({
+          hospitalId,
+          itemName: newStock.itemName,
+          batch: newStock.batch,
+          type: 'Excel Upload',
+          quantity,
+          previousStock: 0,
+          newStock: newStock.quantity,
+          performedBy: uploadedBy,
+          remarks: `Excel import insert. Inv: ${invoiceNumber}`
+        });
+
         insertedCount++;
       }
+
+      // Add to purchase item list
+      purchaseItems.push({
+        itemName,
+        batch,
+        expiry: expiryDate,
+        pack,
+        quantity,
+        free,
+        rate,
+        mrp,
+        discountPercent: dis,
+        discountAmount: (rate * quantity) * (dis / 100),
+        sgst,
+        cgst: cst, // CST mapped to CGST
+        igst: 0,
+        hsn,
+        totalAmount: amount,
+        returnedQty: 0
+      });
+    }
+
+    // Save corresponding Purchase Entry if items were uploaded
+    if (purchaseItems.length > 0) {
+      const totalPurchaseAmt = purchaseItems.reduce((sum, item) => sum + item.totalAmount, 0);
+
+      await Purchase.create({
+        hospitalId,
+        purchaseInvoiceNumber: invoiceNumber,
+        supplierId: supplier._id,
+        invoiceDate: new Date(),
+        receiveDate: new Date(),
+        paymentType: 'Cash',
+        purchaseStatus: 'Completed',
+        notes: `Automatically created from excel file upload: ${fileName || 'excel_upload'}`,
+        items: purchaseItems,
+        totalAmount: totalPurchaseAmt,
+        paidAmount: totalPurchaseAmt,
+        pendingAmount: 0,
+        createdBy: uploadedBy,
+        receivedBy: req.user.username || 'Staff'
+      });
     }
 
     // Save to upload history
+    const successfulRows = insertedCount + updatedCount;
+    const failedRows = Number(failedRowsCount) || 0;
+    const finalTotalRows = Number(totalRows) || (successfulRows + failedRows);
+
     await PharmacyUploadHistory.create({
       hospitalId,
       fileName: fileName || 'excel_upload',
       uploadedBy,
-      totalRows: items.length,
-      insertedCount,
-      updatedCount
+      totalRows: finalTotalRows,
+      successfulRows,
+      failedRows,
+      purchaseInvoiceCreated: invoiceNumber,
+      status: failedRows > 0 ? (successfulRows > 0 ? 'Partial' : 'Failed') : 'Completed',
+      importLog: importLog || []
     });
 
     res.status(200).json({
       success: true,
-      message: 'Excel processed successfully',
+      message: 'Excel processed and purchase invoice generated successfully.',
       insertedCount,
       updatedCount,
-      totalRows: items.length
+      totalRows: finalTotalRows
     });
   } catch (error) {
     console.error('Upload Inventory Error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Server error during excel upload processing' });
   }
 };
 
@@ -372,6 +482,21 @@ const createInventoryItem = async (req, res) => {
   }
 };
 
+// @desc    Get Excel upload history
+// @route   GET /api/pharmacy/inventory/upload-history
+// @access  Private
+const getUploadHistory = async (req, res) => {
+  try {
+    const history = await PharmacyUploadHistory.find(tenantFilter(req))
+      .populate('uploadedBy', 'username')
+      .sort({ createdAt: -1 });
+    res.status(200).json(history);
+  } catch (error) {
+    console.error('Get Upload History Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   getDashboardStats,
   getInventory,
@@ -380,5 +505,6 @@ module.exports = {
   getOutOfStockMedicines,
   updateInventoryItem,
   deleteInventoryItem,
-  createInventoryItem
+  createInventoryItem,
+  getUploadHistory
 };

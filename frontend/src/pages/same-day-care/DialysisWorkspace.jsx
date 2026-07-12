@@ -287,7 +287,14 @@ const DialysisWorkspace = () => {
                             year: 'numeric'
                           })}
                         </td>
-                        <td className="p-3 font-bold text-gray-800">{rec.patientName}</td>
+                        <td className="p-3">
+                          <span className="font-bold text-gray-955 block">{rec.patientName}</span>
+                          <span className="text-[10px] text-gray-500 font-bold block mt-0.5">
+                            {rec.source === 'Doctor Referral' 
+                              ? `Referred by: Dr. ${rec.referredByDoctorName || 'Doctor'}` 
+                              : `Registered by: ${rec.createdBy?.doctorName || rec.createdBy?.username || 'Receptionist'}`}
+                          </span>
+                        </td>
                         <td className="p-3 font-mono text-xs font-bold text-orange-700">{formatUhid(rec.uhid)}</td>
                         <td className="p-3 text-xs">
                           <div>{rec.physicianName || 'N/A'}</div>
@@ -408,7 +415,14 @@ const DialysisWorkspace = () => {
                   ) : (
                     patients.map((p) => (
                       <tr key={p._id} className="hover:bg-orange-50/20">
-                        <td className="p-3 pl-4 font-bold text-gray-800">{p.patientName}</td>
+                        <td className="p-3 pl-4">
+                          <span className="font-bold text-gray-955 block">{p.patientName}</span>
+                          {p.registeredBy && p.registeredBy !== 'N/A' && (
+                            <span className="text-[10px] text-gray-500 font-bold block mt-0.5">
+                              Registered by: <span className="capitalize text-orange-600">{p.registeredBy}</span>
+                            </span>
+                          )}
+                        </td>
                         <td className="p-3 font-mono text-xs font-bold text-orange-700">{formatUhid(p.uhid)}</td>
                         <td className="p-3 text-xs">{p.mobile}</td>
                         <td className="p-3 text-xs">{p.gender}</td>

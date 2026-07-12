@@ -39,7 +39,11 @@ import {
   BadgeIndianRupee,
   Printer,
   Trash2,
-  FileText
+  Edit,
+  History,
+  FileText,
+  TrendingUp,
+  ShieldAlert
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import client from '../../api/client';
@@ -224,6 +228,8 @@ const PharmacyWorkspace = () => {
       {currentSection === 'inventory' && <InventoryView />}
       {currentSection === 'excel-upload' && <ExcelUploadView loadStats={loadStats} />}
       {currentSection === 'supplier-management' && <SupplierManagementView />}
+      {currentSection === 'purchase-entry' && <PurchaseEntryView />}
+      {currentSection === 'purchase-history' && <PurchaseHistoryView />}
       {currentSection === 'billing-reports' && <BillingReportsView />}
       {currentSection === 'gst-reports' && <GstReportsView />}
       {currentSection === 'expiry' && <ExpiryMedicinesView />}
@@ -234,231 +240,216 @@ const PharmacyWorkspace = () => {
 };
 
 // ==================== DASHBOARD VIEW ====================
-const DashboardView = ({ changeSection, stats, statsLoading, billingStats, billingStatsLoading }) => {
+const DashboardView = ({ changeSection }) => {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const fetchDashboard = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data: res } = await client.get('/pharmacy/analytics/dashboard');
+      setData(res);
+    } catch (err) {
+      toast.error('Failed to load dashboard metrics.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchDashboard();
+  }, [fetchDashboard]);
+
+  if (loading) {
+    return (
+      <div className="p-8 text-center text-gray-400">
+        <Loader2 className="h-6 w-6 animate-spin text-orange-550 inline mr-2" /> Loading dashboard analytics...
+      </div>
+    );
+  }
+
+  const summary = data?.summary || {};
+  const graphs = data?.graphs || {};
+
   return (
-    <div className="space-y-8 animate-fade-in text-gray-700">
+    <div className="space-y-6 animate-fade-in text-gray-700">
       
-      {/* Billing Stats Section */}
-      <div className="space-y-4">
-        <h3 className="font-extrabold text-gray-800 text-sm flex items-center gap-2 border-b border-orange-100 pb-2">
-          <BadgeIndianRupee className="text-orange-500 h-4.5 w-4.5" />
-          Today's Sales & Revenue Summary
-        </h3>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {/* Today's Bills */}
-          <div 
-            onClick={() => changeSection('sales-history')}
-            className="card p-6 cursor-pointer hover:border-indigo-300 hover:shadow-indigo-100/50 hover:-translate-y-0.5 transition duration-300 group bg-gradient-to-br from-white to-indigo-50/20"
-          >
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Today's Invoices</p>
-                <h3 className="text-3xl font-black text-gray-800 mt-2">
-                  {billingStatsLoading ? <Loader2 className="h-7 w-7 animate-spin text-indigo-550" /> : billingStats?.totalBills || 0}
-                </h3>
-              </div>
-              <div className="p-3 bg-indigo-50 rounded-2xl text-indigo-600 group-hover:bg-indigo-500 group-hover:text-white transition duration-300">
-                <FileText className="h-6 w-6" />
-              </div>
-            </div>
-            <p className="text-xs font-semibold text-indigo-650 mt-4">View sales log &rarr;</p>
+      {/* Dynamic Alerts Banner */}
+      {(summary.lowStock > 0 || summary.expired > 0 || summary.expiringSoon > 0 || summary.pendingSupplierPayments > 0) && (
+        <div className="bg-red-50 border border-red-200 rounded-3xl p-4 flex flex-col gap-2.5 text-xs text-red-800">
+          <div className="flex items-center gap-2 font-black">
+            <AlertCircle className="h-5 w-5 text-red-650" />
+            <span>CRITICAL PHARMACY ALERTS</span>
           </div>
+          <div className="grid gap-2.5 sm:grid-cols-2 md:grid-cols-4 font-semibold">
+            {summary.lowStock > 0 && (
+              <div className="bg-white/65 p-2.5 rounded-xl border border-red-100 flex justify-between items-center">
+                <span>⚠️ Low Stock Items</span>
+                <span className="font-black font-mono text-red-650 bg-red-100 px-2 py-0.5 rounded-md">{summary.lowStock}</span>
+              </div>
+            )}
+            {summary.expired > 0 && (
+              <div className="bg-white/65 p-2.5 rounded-xl border border-red-100 flex justify-between items-center">
+                <span>🚫 Expired Batches</span>
+                <span className="font-black font-mono text-red-650 bg-red-100 px-2 py-0.5 rounded-md">{summary.expired}</span>
+              </div>
+            )}
+            {summary.expiringSoon > 0 && (
+              <div className="bg-white/65 p-2.5 rounded-xl border border-red-100 flex justify-between items-center">
+                <span>⏳ Expiring Soon (90d)</span>
+                <span className="font-black font-mono text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md">{summary.expiringSoon}</span>
+              </div>
+            )}
+            {summary.pendingSupplierPayments > 0 && (
+              <div className="bg-white/65 p-2.5 rounded-xl border border-red-100 flex justify-between items-center">
+                <span>💸 Outstanding Bills</span>
+                <span className="font-black font-mono text-red-650 bg-red-100 px-2 py-0.5 rounded-md">₹{summary.pendingSupplierPayments.toFixed(0)}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
-          {/* Total Revenue */}
-          <div 
-            onClick={() => changeSection('billing-reports')}
-            className="card p-6 cursor-pointer hover:border-green-300 hover:shadow-green-100/50 hover:-translate-y-0.5 transition duration-300 group bg-gradient-to-br from-white to-green-50/20"
-          >
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Today's Revenue</p>
-                <h3 className="text-3xl font-black text-green-700 mt-2">
-                  ₹{billingStatsLoading ? <Loader2 className="h-7 w-7 animate-spin text-green-550" /> : (billingStats?.totalRevenue || 0).toFixed(2)}
-                </h3>
-              </div>
-              <div className="p-3 bg-green-50 rounded-2xl text-green-600 group-hover:bg-green-500 group-hover:text-white transition duration-300">
-                <BadgeIndianRupee className="h-6 w-6" />
-              </div>
-            </div>
-            <p className="text-xs font-semibold text-green-650 mt-4">View revenue reports &rarr;</p>
-          </div>
-
-          {/* Medicines Sold */}
-          <div 
-            className="card p-6 hover:-translate-y-0.5 transition duration-300 group bg-gradient-to-br from-white to-orange-50/20 border-orange-100"
-          >
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Total Units Sold</p>
-                <h3 className="text-3xl font-black text-gray-800 mt-2">
-                  {billingStatsLoading ? <Loader2 className="h-7 w-7 animate-spin text-orange-550" /> : billingStats?.totalMedicinesSold || 0}
-                </h3>
-              </div>
-              <div className="p-3 bg-orange-50 rounded-2xl text-orange-500 group-hover:bg-orange-500 group-hover:text-white transition duration-300">
-                <Pill className="h-6 w-6" />
-              </div>
-            </div>
-            <p className="text-xs font-semibold text-orange-650 mt-4 font-mono">Medicines issued today</p>
-          </div>
-
-          {/* GST Collected */}
-          <div 
-            onClick={() => changeSection('gst-reports')}
-            className="card p-6 cursor-pointer hover:border-purple-300 hover:shadow-purple-100/50 hover:-translate-y-0.5 transition duration-300 group bg-gradient-to-br from-white to-purple-50/20"
-          >
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-gray-400">GST Collected</p>
-                <h3 className="text-3xl font-black text-purple-700 mt-2">
-                  ₹{billingStatsLoading ? <Loader2 className="h-7 w-7 animate-spin text-purple-550" /> : (billingStats?.totalGSTCollected || 0).toFixed(2)}
-                </h3>
-              </div>
-              <div className="p-3 bg-purple-50 rounded-2xl text-purple-600 group-hover:bg-purple-500 group-hover:text-white transition duration-300">
-                <Percent className="h-6 w-6" />
-              </div>
-            </div>
-            <p className="text-xs font-semibold text-purple-650 mt-4 font-mono">View tax reports &rarr;</p>
-          </div>
+      {/* Main KPI Summary Widgets */}
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 text-xs">
+        {/* Today's Sales */}
+        <div className="card p-5 bg-gradient-to-br from-white to-green-50/10 border-green-100 shadow-sm cursor-pointer hover:-translate-y-0.5 transition duration-300" onClick={() => changeSection('sales')}>
+          <span className="text-[10px] uppercase font-bold text-gray-400">Today's Sales</span>
+          <h3 className="text-2xl font-black text-green-700 mt-1">₹{summary.todaySales.toFixed(2)}</h3>
+          <p className="text-[10px] text-gray-400 mt-2">Monthly: <span className="font-bold text-gray-700">₹{summary.monthlySales.toFixed(0)}</span></p>
+        </div>
+        {/* Today's Purchases */}
+        <div className="card p-5 bg-gradient-to-br from-white to-blue-50/10 border-blue-100 shadow-sm cursor-pointer hover:-translate-y-0.5 transition duration-300" onClick={() => changeSection('purchases')}>
+          <span className="text-[10px] uppercase font-bold text-gray-400">Today's Purchases</span>
+          <h3 className="text-2xl font-black text-blue-700 mt-1">₹{summary.todayPurchase.toFixed(2)}</h3>
+          <p className="text-[10px] text-gray-400 mt-2">Monthly: <span className="font-bold text-gray-700">₹{summary.monthlyPurchase.toFixed(0)}</span></p>
+        </div>
+        {/* Current Stock Valuation */}
+        <div className="card p-5 bg-gradient-to-br from-white to-orange-50/10 border-orange-100 shadow-sm cursor-pointer hover:-translate-y-0.5 transition duration-300" onClick={() => changeSection('inventory')}>
+          <span className="text-[10px] uppercase font-bold text-gray-400">Inventory Valuation</span>
+          <h3 className="text-2xl font-black text-orange-700 mt-1">₹{summary.inventoryValue.toFixed(2)}</h3>
+          <p className="text-[10px] text-gray-400 mt-2">Medicines: <span className="font-bold text-gray-700">{summary.totalMedicines}</span></p>
+        </div>
+        {/* Outstanding supplier balances */}
+        <div className="card p-5 bg-gradient-to-br from-white to-red-50/10 border-red-100 shadow-sm cursor-pointer hover:-translate-y-0.5 transition duration-300" onClick={() => changeSection('purchases')}>
+          <span className="text-[10px] uppercase font-bold text-gray-400">Supplier Outstanding</span>
+          <h3 className="text-2xl font-black text-red-750 mt-1">₹{summary.pendingSupplierPayments.toFixed(2)}</h3>
+          <p className="text-[10px] text-gray-400 mt-2">Active Suppliers: <span className="font-bold text-gray-700">{summary.totalSuppliers}</span></p>
         </div>
       </div>
 
-      {/* Inventory Stats Section */}
-      <div className="space-y-4">
-        <h3 className="font-extrabold text-gray-800 text-sm flex items-center gap-2 border-b border-orange-100 pb-2">
-          <Package className="text-orange-500 h-4.5 w-4.5" />
-          Real-time Inventory & Stock Levels
-        </h3>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {/* Total Items */}
-          <div 
-            onClick={() => changeSection('inventory')}
-            className="card p-6 cursor-pointer hover:border-green-300 hover:shadow-green-100/50 hover:-translate-y-0.5 transition duration-300 group bg-gradient-to-br from-white to-green-50/20"
-          >
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Total Items</p>
-                <h3 className="text-3xl font-black text-gray-800 mt-2">
-                  {statsLoading ? <Loader2 className="h-7 w-7 animate-spin text-green-500" /> : stats.totalItems}
-                </h3>
-              </div>
-              <div className="p-3 bg-green-50 rounded-2xl text-green-600 group-hover:bg-green-500 group-hover:text-white transition duration-300">
-                <Layers className="h-6 w-6" />
-              </div>
-            </div>
-            <p className="text-xs font-semibold text-green-600 mt-4">View complete inventory &rarr;</p>
-          </div>
-
-          {/* Out of Stock */}
-          <div 
-            onClick={() => changeSection('out-of-stock')}
-            className="card p-6 cursor-pointer hover:border-yellow-300 hover:shadow-yellow-100/50 hover:-translate-y-0.5 transition duration-300 group bg-gradient-to-br from-white to-yellow-50/20"
-          >
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Out of Stock</p>
-                <h3 className="text-3xl font-black text-gray-800 mt-2">
-                  {statsLoading ? <Loader2 className="h-7 w-7 animate-spin text-yellow-500" /> : stats.outOfStockCount}
-                </h3>
-              </div>
-              <div className="p-3 bg-yellow-50 rounded-2xl text-yellow-600 group-hover:bg-yellow-500 group-hover:text-white transition duration-300">
-                <TrendingDown className="h-6 w-6" />
-              </div>
-            </div>
-            <p className="text-xs font-semibold text-yellow-600 mt-4">Quantity less than 50 &rarr;</p>
-          </div>
-
-          {/* Expiry Warning */}
-          <div 
-            onClick={() => changeSection('expiry')}
-            className="card p-6 cursor-pointer hover:border-orange-300 hover:shadow-orange-100/50 hover:-translate-y-0.5 transition duration-300 group bg-gradient-to-br from-white to-orange-50/20"
-          >
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Expiry Warnings</p>
-                <h3 className="text-3xl font-black text-gray-800 mt-2">
-                  {statsLoading ? <Loader2 className="h-7 w-7 animate-spin text-orange-550" /> : stats.expiryWarningCount}
-                </h3>
-              </div>
-              <div className="p-3 bg-orange-50 rounded-2xl text-orange-600 group-hover:bg-orange-500 group-hover:text-white transition duration-300">
-                <CalendarDays className="h-6 w-6" />
-              </div>
-            </div>
-            <p className="text-xs font-semibold text-orange-600 mt-4">Expiring within 30 days &rarr;</p>
-          </div>
-
-          {/* Expired */}
-          <div 
-            onClick={() => changeSection('expiry')}
-            className="card p-6 cursor-pointer hover:border-red-300 hover:shadow-red-100/50 hover:-translate-y-0.5 transition duration-300 group bg-gradient-to-br from-white to-red-50/20"
-          >
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Expired Medicines</p>
-                <h3 className="text-3xl font-black text-gray-800 mt-2 text-red-650 font-mono">
-                  {statsLoading ? <Loader2 className="h-7 w-7 animate-spin text-red-500" /> : stats.expiredCount}
-                </h3>
-              </div>
-              <div className="p-3 bg-red-50 rounded-2xl text-red-500 group-hover:bg-red-500 group-hover:text-white transition duration-300">
-                <AlertCircle className="h-6 w-6" />
-              </div>
-            </div>
-            <p className="text-xs font-semibold text-red-650 mt-4">Already expired items &rarr;</p>
-          </div>
+      {/* Grid count stats */}
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-4 text-xs font-bold text-gray-500">
+        <div className="p-3.5 bg-white border border-orange-100 rounded-2xl text-center shadow-sm">
+          <span className="text-gray-400 font-bold block text-[10px] uppercase">Purchase Invoices</span>
+          <span className="text-lg font-black text-gray-800 font-mono mt-1 block">{summary.totalPurchaseInvoices}</span>
+        </div>
+        <div className="p-3.5 bg-white border border-orange-100 rounded-2xl text-center shadow-sm">
+          <span className="text-gray-400 font-bold block text-[10px] uppercase">Sales Invoices</span>
+          <span className="text-lg font-black text-gray-800 font-mono mt-1 block">{summary.totalSalesInvoices}</span>
+        </div>
+        <div className="p-3.5 bg-white border border-orange-100 rounded-2xl text-center shadow-sm cursor-pointer" onClick={() => changeSection('inventory')}>
+          <span className="text-gray-400 font-bold block text-[10px] uppercase">Low Stock Limit</span>
+          <span className="text-lg font-black text-red-500 font-mono mt-1 block">{summary.lowStock}</span>
+        </div>
+        <div className="p-3.5 bg-white border border-orange-100 rounded-2xl text-center shadow-sm cursor-pointer" onClick={() => changeSection('inventory')}>
+          <span className="text-gray-400 font-bold block text-[10px] uppercase">Expired Items</span>
+          <span className="text-lg font-black text-red-750 font-mono mt-1 block">{summary.expired}</span>
         </div>
       </div>
 
-      {/* Color Coding Rules Quick Reference */}
-      <div className="card p-6 space-y-4">
-        <h4 className="font-extrabold text-gray-800 text-sm flex items-center gap-2">
-          <AlertTriangle className="text-orange-500 h-4.5 w-4.5" />
-          Color Coding System Reference
-        </h4>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-xs font-semibold text-gray-700">
-          <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-100 rounded-xl">
-            <span className="h-3 w-3 rounded-full bg-green-500"></span>
-            <div>
-              <p className="text-xs font-bold text-green-800">Green (Valid)</p>
-              <p className="text-[10px] text-gray-500">Qty &ge; 50, not expired</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 p-3 bg-yellow-50 border border-yellow-100 rounded-xl">
-            <span className="h-3 w-3 rounded-full bg-yellow-500"></span>
-            <div>
-              <p className="text-xs font-bold text-yellow-800">Yellow (Low Stock)</p>
-              <p className="text-[10px] text-gray-500">Qty &lt; 50, not expired</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 p-3 bg-red-50 border border-red-100 rounded-xl">
-            <span className="h-3 w-3 rounded-full bg-red-500"></span>
-            <div>
-              <p className="text-xs font-bold text-red-800">Red (Expired)</p>
-              <p className="text-[10px] text-gray-500">Expiry date passed</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-100 rounded-xl">
-            <span className="h-3 w-3 rounded-full bg-blue-500"></span>
-            <div>
-              <p className="text-xs font-bold text-blue-800">Blue (Critical Alert)</p>
-              <p className="text-[10px] text-gray-500">Expired/Near Expiry AND Qty &lt; 50</p>
-            </div>
+      {/* Visual Analytics graphs */}
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Top Selling Medicines */}
+        <div className="card p-5 space-y-4 bg-white border border-orange-100 shadow-sm">
+          <h4 className="font-extrabold text-gray-800 text-xs border-b border-orange-50 pb-2 flex items-center gap-1.5">
+            <TrendingUp className="text-green-600 h-4.5 w-4.5" /> Top Selling Medicines (Units)
+          </h4>
+          <div className="space-y-3">
+            {graphs.topSellingMeds?.length === 0 ? (
+              <p className="text-xs text-gray-400 py-4 text-center font-bold">No sales logged.</p>
+            ) : (
+              graphs.topSellingMeds?.map((med, idx) => {
+                const maxVal = Math.max(...graphs.topSellingMeds.map(m => m.totalQty));
+                const pct = maxVal > 0 ? (med.totalQty / maxVal) * 100 : 0;
+                return (
+                  <div key={idx} className="space-y-1 text-xs">
+                    <div className="flex justify-between font-bold text-gray-700">
+                      <span>{med._id}</span>
+                      <span className="font-mono text-orange-700">{med.totalQty} Units</span>
+                    </div>
+                    <div className="w-full bg-orange-50 h-2.5 rounded-full overflow-hidden">
+                      <div className="bg-gradient-to-r from-orange-400 to-amber-500 h-full rounded-full transition-all duration-500" style={{ width: `${pct}%` }}></div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
-      </div>
 
-      {/* Welcome Banner */}
-      <div className="bg-gradient-to-r from-orange-500 to-amber-500 rounded-3xl p-6 text-white shadow-lg flex flex-col md:flex-row items-center justify-between gap-6">
-        <div className="space-y-2 text-center md:text-left">
-          <h3 className="text-xl font-black">Stock Up via Excel Sheets</h3>
-          <p className="text-xs text-orange-50 opacity-90 max-w-xl">
-            Quickly bulk-import your medicine inventory, pricing, batch codes, and expiry schedules. Our system processes duplicate checks and handles empty inputs automatically.
-          </p>
+        {/* Top Purchased Medicines */}
+        <div className="card p-5 space-y-4 bg-white border border-orange-100 shadow-sm">
+          <h4 className="font-extrabold text-gray-800 text-xs border-b border-orange-50 pb-2 flex items-center gap-1.5">
+            <Package className="text-indigo-650 h-4.5 w-4.5" /> Top Purchased Medicines (Units)
+          </h4>
+          <div className="space-y-3">
+            {graphs.topPurchasedMeds?.length === 0 ? (
+              <p className="text-xs text-gray-400 py-4 text-center font-bold">No purchases logged.</p>
+            ) : (
+              graphs.topPurchasedMeds?.map((med, idx) => {
+                const maxVal = Math.max(...graphs.topPurchasedMeds.map(m => m.totalQty));
+                const pct = maxVal > 0 ? (med.totalQty / maxVal) * 100 : 0;
+                return (
+                  <div key={idx} className="space-y-1 text-xs">
+                    <div className="flex justify-between font-bold text-gray-700">
+                      <span>{med._id}</span>
+                      <span className="font-mono text-indigo-700">{med.totalQty} Units</span>
+                    </div>
+                    <div className="w-full bg-indigo-50 h-2.5 rounded-full overflow-hidden">
+                      <div className="bg-gradient-to-r from-indigo-400 to-blue-500 h-full rounded-full transition-all duration-500" style={{ width: `${pct}%` }}></div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
-        <button 
-          onClick={() => changeSection('excel-upload')} 
-          className="bg-white hover:bg-orange-50 text-orange-600 font-bold px-6 py-3 rounded-2xl shadow-md transition whitespace-nowrap flex items-center gap-2 text-sm"
-        >
-          <Upload className="h-4 w-4" /> Go to Excel Upload
-        </button>
+
+        {/* Supplier Purchase share */}
+        <div className="card p-5 space-y-4 bg-white border border-orange-100 shadow-sm md:col-span-2">
+          <h4 className="font-extrabold text-gray-800 text-xs border-b border-orange-50 pb-2 flex items-center gap-1.5">
+            <Truck className="text-orange-500 h-4.5 w-4.5" /> Supplier Procurement Share (₹ Value)
+          </h4>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2.5">
+              {graphs.supplierPurchases?.length === 0 ? (
+                <p className="text-xs text-gray-400 py-4 text-center font-bold">No supplier purchases logged.</p>
+              ) : (
+                graphs.supplierPurchases?.slice(0, 5).map((sup, idx) => {
+                  const totalSum = graphs.supplierPurchases.reduce((acc, s) => acc + s.totalPurchases, 0);
+                  const pct = totalSum > 0 ? (sup.totalPurchases / totalSum) * 100 : 0;
+                  return (
+                    <div key={idx} className="space-y-1 text-xs">
+                      <div className="flex justify-between font-bold text-gray-700">
+                        <span>{sup.supplierName}</span>
+                        <span className="font-mono text-gray-850">₹{sup.totalPurchases.toFixed(0)} ({pct.toFixed(0)}%)</span>
+                      </div>
+                      <div className="w-full bg-orange-50/50 h-2 rounded-full overflow-hidden">
+                        <div className="bg-amber-500 h-full rounded-full" style={{ width: `${pct}%` }}></div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+            <div className="flex flex-col justify-center items-center p-4 bg-orange-50/10 rounded-2xl border border-orange-100/50 text-xs text-gray-500 text-center">
+              <span className="font-bold text-[10px] uppercase">Procurement Ledger Total</span>
+              <span className="text-xl font-black text-orange-700 font-mono mt-1">₹{graphs.supplierPurchases?.reduce((acc, s) => acc + s.totalPurchases, 0).toFixed(0)}</span>
+              <span className="text-[10px] text-gray-400 font-medium mt-1">Total aggregated purchase cost</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -471,6 +462,7 @@ const InventoryView = () => {
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [selectedMedForHistory, setSelectedMedForHistory] = useState(null);
 
   // Filters state
   const [search, setSearch] = useState('');
@@ -575,7 +567,7 @@ const InventoryView = () => {
               <tr className="bg-gradient-to-r from-orange-50 to-amber-50 text-xs font-bold uppercase text-gray-600 border-b border-orange-100 select-none">
                 <th className="p-3 pl-4">Sno.</th>
                 <th onClick={() => toggleSort('itemName')} className="p-3 cursor-pointer hover:text-orange-600 transition">
-                  Item Name {sortBy === 'itemName' ? (sortOrder === 'asc' ? '▲' : '▼') : ''}
+                  Medicine {sortBy === 'itemName' ? (sortOrder === 'asc' ? '▲' : '▼') : ''}
                 </th>
                 <th className="p-3">Batch</th>
                 <th onClick={() => toggleSort('quantity')} className="p-3 cursor-pointer hover:text-orange-600 transition">
@@ -586,8 +578,10 @@ const InventoryView = () => {
                 </th>
                 <th className="p-3">Pack</th>
                 <th className="p-3">MRP / Rate</th>
+                <th className="p-3">Supplier</th>
                 <th className="p-3">GST Details</th>
                 <th className="p-3">Amount</th>
+                <th className="p-3">Last Purchase Date</th>
                 <th className="p-3 pr-4 text-center">Status</th>
               </tr>
             </thead>
@@ -612,7 +606,7 @@ const InventoryView = () => {
                   return (
                     <tr key={item._id} className="hover:bg-orange-50/10 transition">
                       <td className="p-3 pl-4 font-bold text-gray-400">{item.sNo || idx + 1}</td>
-                      <td className="p-3 font-bold text-gray-800">{item.itemName}</td>
+                      <td className="p-3 font-bold text-orange-650 hover:underline cursor-pointer" onClick={() => setSelectedMedForHistory(item.itemName)}>{item.itemName}</td>
                       <td className="p-3"><span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-mono text-xs border border-gray-200">{item.batch}</span></td>
                       <td className={`p-3 font-bold ${stat.textClass}`}>{item.quantity} {item.free > 0 && <span className="text-[10px] text-orange-500">(+{item.free} Free)</span>}</td>
                       <td className="p-3 font-semibold text-gray-600">{new Date(item.expiry).toLocaleDateString('en-GB', { month: '2-digit', year: 'numeric' })}</td>
@@ -621,11 +615,15 @@ const InventoryView = () => {
                         <div className="text-xs font-bold text-green-700">₹{item.mrp.toFixed(2)} <span className="text-[10px] text-gray-400 font-normal">MRP</span></div>
                         <div className="text-[10px] text-gray-500">Rate: ₹{item.rate.toFixed(2)}</div>
                       </td>
+                      <td className="p-3 text-xs text-gray-650">{item.supplierId?.name || item.supplierName || 'System / Import'}</td>
                       <td className="p-3 text-xs">
                         <span className="block text-[10px] text-gray-400">HSN: {item.hsn}</span>
                         <span>S:{item.sgst}% | C:{item.cst}%</span>
                       </td>
                       <td className="p-3 font-bold text-gray-800">₹{item.amount.toFixed(2)}</td>
+                      <td className="p-3 text-xs text-gray-500 font-mono">
+                        {item.lastPurchaseDate ? new Date(item.lastPurchaseDate).toLocaleDateString('en-GB') : new Date(item.updatedAt).toLocaleDateString('en-GB')}
+                      </td>
                       <td className="p-3 pr-4 text-center">
                         <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold border ${stat.colorClass}`}>
                           <span className={`h-1.5 w-1.5 rounded-full ${stat.badgeColor}`}></span>
@@ -665,6 +663,12 @@ const InventoryView = () => {
           </div>
         )}
       </div>
+      {selectedMedForHistory && (
+        <MedicineHistoryModal
+          itemName={selectedMedForHistory}
+          onClose={() => setSelectedMedForHistory(null)}
+        />
+      )}
     </div>
   );
 };
@@ -2896,8 +2900,9 @@ const InvoicePrintModal = ({ billId, onClose }) => {
                 <p className="text-xs text-gray-550 mt-1 whitespace-pre-line max-w-md">
                   {data.hospitalSettings?.address || 'Hospital Address details'}
                 </p>
-                <p className="text-xs text-gray-500 mt-1 font-semibold">
-                  Phone: {data.hospitalSettings?.phoneNumber || 'N/A'} | Email: {data.pharmacySetting?.emailAddress || data.hospitalSettings?.emailAddress || 'N/A'}
+                <p className="text-xs text-gray-550 mt-1 font-semibold">
+                  Phone: {data.hospitalSettings?.mobileNumbers?.join(', ') || data.hospitalSettings?.phoneNumber || 'N/A'} | Email: {data.pharmacySetting?.emailAddress || data.hospitalSettings?.emailAddress || 'N/A'}
+                  {data.hospitalSettings?.dlNumber && ` | DL No: ${data.hospitalSettings.dlNumber}`}
                 </p>
                 {data.pharmacySetting?.gstNumber && (
                   <p className="text-[10px] font-mono font-bold text-gray-700 bg-gray-50 border border-gray-150 inline-block px-2 py-0.5 mt-2 rounded">
@@ -2986,11 +2991,23 @@ const InvoicePrintModal = ({ billId, onClose }) => {
                   <tr key={idx} className="align-middle">
                     <td className="p-2.5 font-bold text-gray-400">{idx + 1}</td>
                     <td className="p-2.5">
-                      <span className="font-extrabold text-gray-900">{item.itemName}</span>
+                      <span className={`font-extrabold text-gray-900 ${item.returnedQty === item.quantity ? 'line-through text-red-500' : ''}`}>
+                        {item.itemName}
+                      </span>
                       {item.pack && <span className="text-[10px] text-gray-400 ml-1.5 font-semibold">({item.pack})</span>}
+                      {item.returnedQty === item.quantity && (
+                        <span className="text-[9px] font-black uppercase text-red-600 bg-red-50 border border-red-200 px-1 py-0.5 rounded ml-2">
+                          Fully Returned
+                        </span>
+                      )}
                     </td>
                     <td className="p-2.5 font-mono text-gray-655 font-bold">{item.batch}</td>
-                    <td className="p-2.5 text-center font-bold">{item.quantity}</td>
+                    <td className="p-2.5 text-center font-bold">
+                      <div>{item.quantity - item.returnedQty}</div>
+                      {item.returnedQty > 0 && (
+                        <div className="text-[9px] font-black text-red-650 uppercase">Ret: {item.returnedQty}</div>
+                      )}
+                    </td>
                     <td className="p-2.5 text-right font-semibold">₹{item.unitPrice.toFixed(2)}</td>
                     <td className="p-2.5 text-center font-semibold">{item.discount || 0}%</td>
                     {data.pharmacySetting?.gstEnabled && (
@@ -3065,7 +3082,7 @@ const InvoicePrintModal = ({ billId, onClose }) => {
             {/* Bottom Thank You message */}
             <div className="text-center border-t border-gray-200 pt-6 mt-12 print-footer">
               <p className="text-xs font-bold text-orange-600">Thank you for visiting! Wishing you a speedy recovery.</p>
-              <p className="text-[9px] text-gray-450 mt-1 uppercase font-semibold">COMPUTER GENERATED INVOICE - NO SIGNATURE REQUIRED</p>
+              <p className="text-[9px] text-gray-450 mt-1 uppercase font-semibold">Billed By: {data.bill.createdBy?.username || data.bill.createdBy || 'Pharmacy Staff'} | COMPUTER GENERATED INVOICE - NO SIGNATURE REQUIRED</p>
             </div>
           </div>
         )}
@@ -3399,33 +3416,64 @@ const SalesReturnView = () => {
       {foundBill && (
         <div className="grid gap-6 lg:grid-cols-3 items-start">
           
-          {/* Bill summary info */}
-          <div className="card p-6 bg-gradient-to-br from-white to-orange-50/10 border-orange-100 space-y-4">
-            <h4 className="font-black text-gray-900 text-sm border-b border-orange-50 pb-2 uppercase tracking-wide">
-              Invoice Information
-            </h4>
-            <div className="space-y-3 text-xs">
-              <div>
-                <span className="block text-[10px] font-bold text-gray-400 uppercase">Bill Number / Date</span>
-                <span className="font-mono font-bold text-orange-700 text-sm">{foundBill.billNumber}</span>
-                <span className="block text-gray-500 font-semibold">{new Date(foundBill.billDate).toLocaleString('en-IN')}</span>
+          <div className="space-y-6">
+            {/* Bill summary info */}
+            <div className="card p-6 bg-gradient-to-br from-white to-orange-50/10 border-orange-100 space-y-4">
+              <h4 className="font-black text-gray-900 text-sm border-b border-orange-50 pb-2 uppercase tracking-wide">
+                Invoice Information
+              </h4>
+              <div className="space-y-3 text-xs">
+                <div>
+                  <span className="block text-[10px] font-bold text-gray-400 uppercase">Bill Number / Date</span>
+                  <span className="font-mono font-bold text-orange-700 text-sm">{foundBill.billNumber}</span>
+                  <span className="block text-gray-500 font-semibold">{new Date(foundBill.billDate).toLocaleString('en-IN')}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-bold text-gray-400 uppercase">Customer Name</span>
+                  <span className="font-bold text-gray-805">
+                    {foundBill.patientId?.patientName || foundBill.customerDetails?.name || 'Walk-in Customer'}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-bold text-gray-400 uppercase">Grand Invoice Total</span>
+                  <span className="text-base font-black text-green-700">₹{foundBill.grandTotal.toFixed(2)}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-bold text-gray-400 uppercase">Current Refund Status</span>
+                  <span className="inline-block mt-0.5 px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-850 border border-orange-200 font-bold">
+                    {foundBill.status}
+                  </span>
+                </div>
               </div>
-              <div>
-                <span className="block text-[10px] font-bold text-gray-400 uppercase">Customer Name</span>
-                <span className="font-bold text-gray-805">
-                  {foundBill.patientId?.patientName || foundBill.customerDetails?.name || 'Walk-in Customer'}
-                </span>
+            </div>
+
+            {/* Returns History Logs */}
+            <div className="card p-6 space-y-3.5 bg-white">
+              <div className="border-b border-orange-50 pb-2">
+                <h4 className="font-black text-gray-900 text-xs uppercase tracking-wider">
+                  Returns History
+                </h4>
               </div>
-              <div>
-                <span className="block text-[10px] font-bold text-gray-400 uppercase">Grand Invoice Total</span>
-                <span className="text-base font-black text-green-700">₹{foundBill.grandTotal.toFixed(2)}</span>
-              </div>
-              <div>
-                <span className="block text-[10px] font-bold text-gray-400 uppercase">Current Refund Status</span>
-                <span className="inline-block mt-0.5 px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-850 border border-orange-200 font-bold">
-                  {foundBill.status}
-                </span>
-              </div>
+              {(() => {
+                const returnLogs = foundBill.auditTrail?.filter(log => log.action === 'Returns Processed') || [];
+                return returnLogs.length === 0 ? (
+                  <p className="text-[10px] text-gray-400 font-bold italic">
+                    No previous return logs found for this invoice.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {returnLogs.map((log, idx) => (
+                      <div key={idx} className="p-3 rounded-xl border border-orange-100 bg-orange-50/10 text-[10px] space-y-1">
+                        <div className="flex justify-between items-center text-gray-500 font-semibold">
+                          <span>{new Date(log.timestamp).toLocaleString('en-IN')}</span>
+                          <span className="font-bold text-orange-600">{log.performedByName}</span>
+                        </div>
+                        <p className="text-gray-700 font-bold leading-relaxed">{log.remarks}</p>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
@@ -3520,205 +3568,840 @@ const SalesReturnView = () => {
   );
 };
 
-// ==================== SUPPLIER MANAGEMENT VIEW ====================
-const SupplierManagementView = () => {
-  const [suppliers, setSuppliers] = useState(() => {
-    const saved = localStorage.getItem('pharmacy_suppliers');
-    return saved ? JSON.parse(saved) : [
-      { id: 1, name: 'Cipla Healthcare India', contact: 'Anil Mehta', mobile: '9822334455', email: 'cipla@healthcare.com', gstin: '27AAAAA1111A1Z1', address: 'Bandra West, Mumbai' },
-      { id: 2, name: 'Sun Pharmaceutical Industries', contact: 'Vikram Shah', mobile: '9811223344', email: 'sunpharma@sun.com', gstin: '27BBBBB2222B2Z2', address: 'Vadodara, Gujarat' }
-    ];
-  });
+// ==================== WORKSPACE STYLING HELPER ====================
+const tabClass = (active) =>
+  `px-4 py-2.5 rounded-xl font-bold text-xs cursor-pointer transition-all duration-300 ${
+    active
+      ? 'bg-orange-500 text-white shadow-md shadow-orange-500/10'
+      : 'bg-white hover:bg-orange-50 text-gray-600 border border-orange-100'
+  }`;
 
-  const [form, setForm] = useState({ name: '', contact: '', mobile: '', email: '', gstin: '', address: '' });
-  const [showAddModal, setShowAddModal] = useState(false);
+// ==================== BILLING WORKSPACE ====================
+const BillingWorkspace = ({ selectedPrescription, setSelectedPrescription }) => {
+  const [mode, setMode] = useState('opd'); // 'opd', 'walk-in', 'ipd', 'manual'
 
   useEffect(() => {
-    localStorage.setItem('pharmacy_suppliers', JSON.stringify(suppliers));
-  }, [suppliers]);
-
-  const handleSaveSupplier = (e) => {
-    e.preventDefault();
-    if (!form.name || !form.mobile) {
-      toast.error('Name and Mobile number are required.');
-      return;
+    if (selectedPrescription) {
+      setMode('manual');
     }
-    const newSupp = {
-      id: Date.now(),
-      ...form
-    };
-    setSuppliers([...suppliers, newSupp]);
-    setForm({ name: '', contact: '', mobile: '', email: '', gstin: '', address: '' });
-    setShowAddModal(false);
-    toast.success('Supplier profile added successfully!');
-  };
-
-  const handleDeleteSupplier = (id) => {
-    if (window.confirm('Are you sure you want to remove this supplier profile?')) {
-      setSuppliers(suppliers.filter(s => s.id !== id));
-      toast.success('Supplier removed.');
-    }
-  };
+  }, [selectedPrescription]);
 
   return (
-    <div className="space-y-4 animate-fade-in text-gray-700">
-      
-      {/* Header and trigger */}
-      <div className="flex justify-between items-center border-b border-orange-100 pb-2">
-        <h3 className="font-extrabold text-gray-800 text-sm flex items-center gap-2">
-          <Truck className="text-orange-500 h-4.5 w-4.5" />
-          Active Medicine & Stock Suppliers
-        </h3>
-        <button 
-          type="button"
-          onClick={() => setShowAddModal(true)}
-          className="btn py-1.5 px-4 text-xs font-bold flex items-center gap-1 cursor-pointer"
-        >
-          <Plus className="h-3.5 w-3.5" /> Add New Supplier
+    <div className="space-y-6 animate-fade-in">
+      <div className="flex flex-wrap gap-2.5 pb-2 border-b border-orange-50">
+        <button type="button" className={tabClass(mode === 'opd')} onClick={() => { setMode('opd'); setSelectedPrescription(null); }}>
+          OPD Prescription
+        </button>
+        <button type="button" className={tabClass(mode === 'walk-in')} onClick={() => { setMode('walk-in'); setSelectedPrescription(null); }}>
+          Walk-in Customer
+        </button>
+        <button type="button" className={tabClass(mode === 'ipd')} onClick={() => { setMode('ipd'); setSelectedPrescription(null); }}>
+          IPD Requests
+        </button>
+        <button type="button" className={tabClass(mode === 'manual')} onClick={() => setMode('manual')}>
+          Manual Bill
         </button>
       </div>
 
-      {/* Suppliers Table */}
+      <div className="bg-white p-6 rounded-3xl border border-orange-100 shadow-sm">
+        {mode === 'opd' && (
+          <OpdPrescriptionsView
+            changeSection={() => setMode('manual')}
+            setSelectedPrescription={setSelectedPrescription}
+          />
+        )}
+        {mode === 'walk-in' && (
+          <NewBillView isWalkIn={true} selectedPrescription={null} clearPrescription={() => {}} />
+        )}
+        {mode === 'ipd' && <RequestsView />}
+        {mode === 'manual' && (
+          <NewBillView
+            selectedPrescription={selectedPrescription}
+            clearPrescription={() => setSelectedPrescription(null)}
+          />
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ==================== INVENTORY WORKSPACE ====================
+const InventoryWorkspace = () => {
+  const [tab, setTab] = useState('stock'); // 'stock', 'expiry', 'out-of-stock', 'adjustment', 'ledger'
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <div className="flex flex-wrap gap-2.5 pb-2 border-b border-orange-50">
+        <button type="button" className={tabClass(tab === 'stock')} onClick={() => setTab('stock')}>
+          Current Stock
+        </button>
+        <button type="button" className={tabClass(tab === 'expiry')} onClick={() => setTab('expiry')}>
+          Expiry Warnings
+        </button>
+        <button type="button" className={tabClass(tab === 'out-of-stock')} onClick={() => setTab('out-of-stock')}>
+          Out of Stock
+        </button>
+        <button type="button" className={tabClass(tab === 'adjustment')} onClick={() => setTab('adjustment')}>
+          Stock Adjustment
+        </button>
+        <button type="button" className={tabClass(tab === 'ledger')} onClick={() => setTab('ledger')}>
+          Stock Ledger
+        </button>
+      </div>
+
+      <div className="bg-white p-6 rounded-3xl border border-orange-100 shadow-sm">
+        {tab === 'stock' && <InventoryView />}
+        {tab === 'expiry' && <ExpiryMedicinesView />}
+        {tab === 'out-of-stock' && <OutOfStockView />}
+        {tab === 'adjustment' && <StockAdjustmentView />}
+        {tab === 'ledger' && <StockLedgerView />}
+      </div>
+    </div>
+  );
+};
+
+// ==================== PURCHASES WORKSPACE ====================
+const PurchasesWorkspace = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [tab, setTab] = useState('history'); // 'entry', 'history', 'suppliers', 'import'
+
+  const editId = searchParams.get('editId');
+
+  useEffect(() => {
+    if (editId) {
+      setTab('entry');
+    }
+  }, [editId]);
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <div className="flex flex-wrap gap-2.5 pb-2 border-b border-orange-50">
+        <button type="button" className={tabClass(tab === 'history')} onClick={() => { setTab('history'); setSearchParams({ section: 'purchases' }); }}>
+          Purchase History
+        </button>
+        <button type="button" className={tabClass(tab === 'entry')} onClick={() => setTab('entry')}>
+          {editId ? 'Edit Purchase Invoice' : 'Purchase Entry (GRN)'}
+        </button>
+        <button type="button" className={tabClass(tab === 'suppliers')} onClick={() => { setTab('suppliers'); setSearchParams({ section: 'purchases' }); }}>
+          Suppliers
+        </button>
+        <button type="button" className={tabClass(tab === 'import')} onClick={() => { setTab('import'); setSearchParams({ section: 'purchases' }); }}>
+          Excel Import
+        </button>
+      </div>
+
+      <div className="bg-white p-6 rounded-3xl border border-orange-100 shadow-sm">
+        {tab === 'entry' && <PurchaseEntryView editId={editId} onSaveComplete={() => setTab('history')} />}
+        {tab === 'history' && <PurchaseHistoryView onEditClick={(id) => setSearchParams({ section: 'purchases', editId: id })} />}
+        {tab === 'suppliers' && <SupplierManagementView />}
+        {tab === 'import' && <ExcelUploadView />}
+      </div>
+    </div>
+  );
+};
+
+// ==================== SALES WORKSPACE ====================
+const SalesWorkspace = () => {
+  const [tab, setTab] = useState('history'); // 'history', 'return'
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <div className="flex flex-wrap gap-2.5 pb-2 border-b border-orange-50">
+        <button type="button" className={tabClass(tab === 'history')} onClick={() => setTab('history')}>
+          Sales History
+        </button>
+        <button type="button" className={tabClass(tab === 'return')} onClick={() => setTab('return')}>
+          Sales Return
+        </button>
+      </div>
+
+      <div className="bg-white p-6 rounded-3xl border border-orange-100 shadow-sm">
+        {tab === 'history' && <SalesHistoryView />}
+        {tab === 'return' && <SalesReturnView />}
+      </div>
+    </div>
+  );
+};
+
+// ==================== REPORTS WORKSPACE ====================
+const ReportsWorkspace = () => {
+  const [reportType, setReportType] = useState('purchase');
+  const [fromDate, setFromDate] = useState(new Date().toISOString().split('T')[0]);
+  const [toDate, setToDate] = useState(new Date().toISOString().split('T')[0]);
+  const [supplierId, setSupplierId] = useState('');
+  const [itemName, setItemName] = useState('');
+  const [patientName, setPatientName] = useState('');
+  const [doctorName, setDoctorName] = useState('');
+  const [paymentMode, setPaymentMode] = useState('');
+
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [suppliers, setSuppliers] = useState([]);
+
+  useEffect(() => {
+    const fetchSuppliers = async () => {
+      try {
+        const { data } = await client.get('/pharmacy/suppliers');
+        setSuppliers(data);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    fetchSuppliers();
+  }, []);
+
+  const loadReport = useCallback(async () => {
+    setLoading(true);
+    setRecords([]);
+    try {
+      const params = new URLSearchParams({
+        reportType,
+        fromDate,
+        toDate,
+        supplierId,
+        itemName,
+        patientName,
+        doctorName,
+        paymentMode
+      });
+      const { data } = await client.get(`/pharmacy/reports?${params.toString()}`);
+      setRecords(data);
+    } catch (err) {
+      toast.error('Failed to generate report.');
+    } finally {
+      setLoading(false);
+    }
+  }, [reportType, fromDate, toDate, supplierId, itemName, patientName, doctorName, paymentMode]);
+
+  const exportExcel = () => {
+    if (records.length === 0) {
+      toast.error('No data available to export.');
+      return;
+    }
+    const worksheet = XLSX.utils.json_to_sheet(records);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Report Output');
+    XLSX.writeFile(workbook, `pharmacy_${reportType}_report_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast.success('Spreadsheet report downloaded successfully!');
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <div className="space-y-6 animate-fade-in text-xs text-gray-700">
+      
+      {/* Filtering Options card */}
+      <div className="card p-5 space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+          <div>
+            <label className="mb-1 block font-bold text-gray-550">Choose Report Type *</label>
+            <select
+              className="input py-2 text-xs font-semibold"
+              value={reportType}
+              onChange={(e) => setReportType(e.target.value)}
+            >
+              <option value="purchase">Purchase Report (GRNs)</option>
+              <option value="purchase-return">Purchase Return Report</option>
+              <option value="sales">Sales & Revenue Report</option>
+              <option value="sales-return">Sales Returns Report</option>
+              <option value="inventory">Current Inventory Stock</option>
+              <option value="expiry">Expiry Warnings Ledger</option>
+              <option value="out-of-stock">Out of Stock Ledger</option>
+              <option value="stock-adjustment">Stock Adjustments Log</option>
+              <option value="supplier-outstanding">Supplier Outstanding Balances</option>
+              <option value="profit">Sales Profit Margins Analysis</option>
+              <option value="gst">GST Tax Liability Summary</option>
+              <option value="patient">Patient Sales Summary</option>
+              <option value="doctor">Prescription Sales (Doctor-wise)</option>
+              <option value="ipd">IPD Dispenses Report</option>
+              <option value="walk-in">Walk-in Customer Sales</option>
+              <option value="stock-ledger">Stock Movements Ledger</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-1 block font-bold text-gray-550">From Date</label>
+            <input type="date" className="input py-2 text-xs" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+          </div>
+
+          <div>
+            <label className="mb-1 block font-bold text-gray-550">To Date</label>
+            <input type="date" className="input py-2 text-xs" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+          </div>
+
+          <div className="flex items-end gap-2">
+            <button type="button" onClick={loadReport} className="btn flex-1 py-2 px-4 text-xs font-bold cursor-pointer">
+              Generate Report
+            </button>
+          </div>
+        </div>
+
+        {/* Dynamic Filters depending on chosen type */}
+        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4 border-t border-orange-50 pt-3">
+          {(reportType === 'purchase' || reportType === 'supplier-outstanding' || reportType === 'stock-ledger') && (
+            <div>
+              <label className="mb-1 block font-bold text-gray-550">Filter by Supplier</label>
+              <select className="input py-2 text-xs" value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+                <option value="">-- All Suppliers --</option>
+                {suppliers.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+              </select>
+            </div>
+          )}
+
+          {(reportType === 'inventory' || reportType === 'expiry' || reportType === 'profit' || reportType === 'stock-ledger') && (
+            <div>
+              <label className="mb-1 block font-bold text-gray-550">Filter by Medicine Name</label>
+              <input type="text" className="input py-2 text-xs" placeholder="e.g. Paracetamol" value={itemName} onChange={(e) => setItemName(e.target.value)} />
+            </div>
+          )}
+
+          {(reportType === 'sales' || reportType === 'patient') && (
+            <div>
+              <label className="mb-1 block font-bold text-gray-555">Filter by Patient Name</label>
+              <input type="text" className="input py-2 text-xs" placeholder="e.g. John Doe" value={patientName} onChange={(e) => setPatientName(e.target.value)} />
+            </div>
+          )}
+
+          {reportType === 'doctor' && (
+            <div>
+              <label className="mb-1 block font-bold text-gray-555">Filter by Doctor Name</label>
+              <input type="text" className="input py-2 text-xs" placeholder="e.g. Dr. Roy" value={doctorName} onChange={(e) => setDoctorName(e.target.value)} />
+            </div>
+          )}
+
+          {reportType === 'sales' && (
+            <div>
+              <label className="mb-1 block font-bold text-gray-550">Payment Mode</label>
+              <select className="input py-2 text-xs" value={paymentMode} onChange={(e) => setPaymentMode(e.target.value)}>
+                <option value="">-- All Modes --</option>
+                <option value="Cash">Cash</option>
+                <option value="UPI">UPI</option>
+                <option value="Card">Card</option>
+                <option value="Bank Transfer">Bank Transfer</option>
+              </select>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Report results grid */}
+      <div className="card overflow-hidden bg-white border border-orange-100 shadow-sm print:border-none print:shadow-none">
+        <div className="flex justify-between items-center p-4 border-b border-orange-50 print:hidden">
+          <span className="font-extrabold text-gray-800 text-xs">Report Results Ledger ({records.length} records)</span>
+          <div className="flex gap-2">
+            <button type="button" onClick={exportExcel} className="btn-secondary py-1.5 px-3.5 text-xs font-bold border-orange-200 hover:bg-orange-50 flex items-center gap-1.5 cursor-pointer">
+              <Download className="h-4 w-4 text-orange-500" /> Export Excel
+            </button>
+            <button type="button" onClick={handlePrint} className="btn py-1.5 px-3.5 text-xs font-bold flex items-center gap-1.5 cursor-pointer">
+              <Printer className="h-4 w-4" /> Print Document
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto p-2">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="bg-orange-50/30 text-xs font-bold text-gray-600 border-b border-orange-100">
+                <th className="p-3 pl-4">Sno.</th>
+                {reportType === 'purchase' && (
+                  <>
+                    <th className="p-3">Invoice No</th>
+                    <th className="p-3">Supplier</th>
+                    <th className="p-3">Invoice Date</th>
+                    <th className="p-3 text-right">Grand Total (₹)</th>
+                    <th className="p-3 text-right">Paid (₹)</th>
+                    <th className="p-3 text-right">Pending (₹)</th>
+                    <th className="p-3 text-center">Status</th>
+                  </>
+                )}
+                {reportType === 'purchase-return' && (
+                  <>
+                    <th className="p-3">Return Ref</th>
+                    <th className="p-3">Invoice Ref</th>
+                    <th className="p-3">Supplier</th>
+                    <th className="p-3">Date</th>
+                    <th className="p-3">Reason</th>
+                  </>
+                )}
+                {(reportType === 'sales' || reportType === 'sales-return' || reportType === 'walk-in' || reportType === 'ipd' || reportType === 'patient' || reportType === 'doctor') && (
+                  <>
+                    <th className="p-3">Bill No</th>
+                    <th className="p-3">Patient / Customer</th>
+                    <th className="p-3">Bill Date</th>
+                    <th className="p-3 text-center">Payment Mode</th>
+                    <th className="p-3 text-right">Total Amount (₹)</th>
+                    <th className="p-3">Prescribing Doctor</th>
+                    <th className="p-3 text-center">Status</th>
+                  </>
+                )}
+                {(reportType === 'inventory' || reportType === 'current-stock' || reportType === 'expiry' || reportType === 'out-of-stock') && (
+                  <>
+                    <th className="p-3">Medicine Name</th>
+                    <th className="p-3">Batch</th>
+                    <th className="p-3">Expiry</th>
+                    <th className="p-3 text-center">Pack</th>
+                    <th className="p-3 text-center">Qty</th>
+                    <th className="p-3 text-right">MRP (₹)</th>
+                    <th className="p-3 text-right">Purchase Rate (₹)</th>
+                    <th className="p-3">Supplier</th>
+                  </>
+                )}
+                {reportType === 'stock-adjustment' && (
+                  <>
+                    <th className="p-3">Medicine</th>
+                    <th className="p-3">Batch</th>
+                    <th className="p-3 text-center">Qty</th>
+                    <th className="p-3 text-center">Type</th>
+                    <th className="p-3">Reason</th>
+                    <th className="p-3">Remarks</th>
+                    <th className="p-3">Approved By</th>
+                  </>
+                )}
+                {reportType === 'supplier-outstanding' && (
+                  <>
+                    <th className="p-3">Supplier Name</th>
+                    <th className="p-3">Code</th>
+                    <th className="p-3">GSTIN</th>
+                    <th className="p-3 text-right">Total Outstanding Balance (₹)</th>
+                  </>
+                )}
+                {reportType === 'profit' && (
+                  <>
+                    <th className="p-3">Bill Ref</th>
+                    <th className="p-3">Medicine</th>
+                    <th className="p-3 text-center">Qty</th>
+                    <th className="p-3 text-right">MRP (₹)</th>
+                    <th className="p-3 text-right">Purchase Rate (₹)</th>
+                    <th className="p-3 text-right">Discount (₹)</th>
+                    <th className="p-3 text-right">GST (₹)</th>
+                    <th className="p-3 text-right text-green-700">Gross Sale (₹)</th>
+                    <th className="p-3 text-right text-indigo-650">Net Profit (₹)</th>
+                    <th className="p-3 text-right">Profit %</th>
+                  </>
+                )}
+                {reportType === 'gst' && (
+                  <>
+                    <th className="p-3 text-right">Sales Tax Output (₹)</th>
+                    <th className="p-3 text-right">Purchase CGST Input (₹)</th>
+                    <th className="p-3 text-right">Purchase SGST Input (₹)</th>
+                    <th className="p-3 text-right">Purchase IGST Input (₹)</th>
+                    <th className="p-3 text-right text-purple-750 font-black">Net GST Liability (₹)</th>
+                  </>
+                )}
+                {reportType === 'stock-ledger' && (
+                  <>
+                    <th className="p-3">Timestamp</th>
+                    <th className="p-3">Medicine</th>
+                    <th className="p-3">Batch</th>
+                    <th className="p-3 text-center">Opening</th>
+                    <th className="p-3 text-center">In / Out</th>
+                    <th className="p-3 text-center">Closing</th>
+                    <th className="p-3 text-center">Type</th>
+                    <th className="p-3">Remarks / User</th>
+                  </>
+                )}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-orange-50 font-semibold text-gray-700">
+              {loading ? (
+                <tr>
+                  <td colSpan="12" className="p-8 text-center text-gray-400">
+                    <Loader2 className="h-5 w-5 animate-spin text-orange-550 inline mr-2" /> Generating report table...
+                  </td>
+                </tr>
+              ) : records.length === 0 ? (
+                <tr>
+                  <td colSpan="12" className="p-8 text-center text-gray-400 font-bold">No records found matching filters.</td>
+                </tr>
+              ) : (
+                records.map((r, idx) => (
+                  <tr key={idx} className="hover:bg-orange-50/10">
+                    <td className="p-2.5 pl-4 font-bold text-gray-400">{idx + 1}</td>
+                    {reportType === 'purchase' && (
+                      <>
+                        <td className="p-2.5 font-mono font-bold text-orange-700">{r.purchaseInvoiceNumber}</td>
+                        <td className="p-2.5 font-bold text-gray-800">{r.supplierId?.name || r.supplierName || 'Direct Purchase'}</td>
+                        <td className="p-2.5 text-gray-500">{new Date(r.invoiceDate).toLocaleDateString('en-GB')}</td>
+                        <td className="p-2.5 text-right font-black text-gray-850">₹{r.totalAmount.toFixed(2)}</td>
+                        <td className="p-2.5 text-right text-green-700">₹{r.paidAmount.toFixed(2)}</td>
+                        <td className="p-2.5 text-right text-red-650">₹{r.pendingAmount.toFixed(2)}</td>
+                        <td className="p-2.5 text-center">
+                          <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-black uppercase ${
+                            r.paymentStatus === 'Paid' ? 'bg-green-50 text-green-700' :
+                            r.paymentStatus === 'Partially Paid' ? 'bg-yellow-50 text-yellow-750' : 'bg-red-50 text-red-750'
+                          }`}>{r.paymentStatus}</span>
+                        </td>
+                      </>
+                    )}
+                    {reportType === 'purchase-return' && (
+                      <>
+                        <td className="p-2.5 font-mono font-bold text-orange-700">{r.invoiceNumber}-RET</td>
+                        <td className="p-2.5 font-mono text-gray-655">{r.invoiceNumber}</td>
+                        <td className="p-2.5 font-bold text-gray-800">{r.supplierId?.name || r.supplierName || 'Direct Purchase'}</td>
+                        <td className="p-2.5 text-gray-500">{new Date(r.returnDate || r.createdAt).toLocaleDateString('en-GB')}</td>
+                        <td className="p-2.5 text-gray-600">{r.reason}</td>
+                      </>
+                    )}
+                    {(reportType === 'sales' || reportType === 'sales-return' || reportType === 'walk-in' || reportType === 'ipd' || reportType === 'patient' || reportType === 'doctor') && (
+                      <>
+                        <td className="p-2.5 font-mono font-bold text-orange-700">{r.billNumber}</td>
+                        <td className="p-2.5 font-bold text-gray-800">{r.customerDetails?.name || r.patientId?.name || 'Walk-in'}</td>
+                        <td className="p-2.5 text-gray-500">{new Date(r.billDate).toLocaleDateString('en-GB')}</td>
+                        <td className="p-2.5 text-center">{r.paymentMethod}</td>
+                        <td className="p-2.5 text-right font-black text-gray-850">₹{r.grandTotal.toFixed(2)}</td>
+                        <td className="p-2.5 text-gray-600 font-semibold">{r.doctorName || 'Self / Hospital'}</td>
+                        <td className="p-2.5 text-center">
+                          <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-black uppercase ${
+                            r.status === 'Active' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-750'
+                          }`}>{r.status}</span>
+                        </td>
+                      </>
+                    )}
+                    {(reportType === 'inventory' || reportType === 'current-stock' || reportType === 'expiry' || reportType === 'out-of-stock') && (
+                      <>
+                        <td className="p-2.5 font-bold text-gray-800">{r.itemName}</td>
+                        <td className="p-2.5 font-mono text-gray-650 bg-gray-50 border border-gray-100 rounded px-1.5">{r.batch}</td>
+                        <td className="p-2.5 text-gray-500">{new Date(r.expiry).toLocaleDateString('en-GB', { month: '2-digit', year: 'numeric' })}</td>
+                        <td className="p-2.5 text-center">{r.pack}</td>
+                        <td className="p-2.5 text-center font-bold text-orange-700">{r.quantity}</td>
+                        <td className="p-2.5 text-right font-mono">₹{r.mrp.toFixed(2)}</td>
+                        <td className="p-2.5 text-right font-mono">₹{r.rate.toFixed(2)}</td>
+                        <td className="p-2.5 text-gray-550">{r.supplierId?.name || r.supplierName || 'Excel upload'}</td>
+                      </>
+                    )}
+                    {reportType === 'stock-adjustment' && (
+                      <>
+                        <td className="p-2.5 font-bold text-gray-800">{r.itemName}</td>
+                        <td className="p-2.5 font-mono text-gray-650">{r.batch}</td>
+                        <td className="p-2.5 text-center font-bold">{r.quantity}</td>
+                        <td className="p-2.5 text-center">
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase ${
+                            r.type === 'Increase' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-750'
+                          }`}>{r.type}</span>
+                        </td>
+                        <td className="p-2.5 text-gray-600">{r.reason}</td>
+                        <td className="p-2.5 text-gray-500">{r.remarks || '-'}</td>
+                        <td className="p-2.5 text-gray-600 font-bold">{r.approvedBy}</td>
+                      </>
+                    )}
+                    {reportType === 'supplier-outstanding' && (
+                      <>
+                        <td className="p-2.5 font-bold text-gray-800">{r.name}</td>
+                        <td className="p-2.5 font-mono text-orange-700">{r.code}</td>
+                        <td className="p-2.5 font-mono text-gray-500">{r.gstin || '-'}</td>
+                        <td className="p-2.5 text-right font-black text-red-650 font-mono">₹{r.outstandingAmount.toFixed(2)}</td>
+                      </>
+                    )}
+                    {reportType === 'profit' && (
+                      <>
+                        <td className="p-2.5 font-mono font-bold text-gray-500">{r.billNumber}</td>
+                        <td className="p-2.5 font-bold text-gray-800">{r.itemName}</td>
+                        <td className="p-2.5 text-center font-bold">{r.quantity}</td>
+                        <td className="p-2.5 text-right font-mono">₹{r.sellingPrice.toFixed(2)}</td>
+                        <td className="p-2.5 text-right font-mono">₹{r.purchaseRate.toFixed(2)}</td>
+                        <td className="p-2.5 text-right text-red-650">₹{r.discount.toFixed(2)}</td>
+                        <td className="p-2.5 text-right text-gray-500">₹{r.gstAmount.toFixed(2)}</td>
+                        <td className="p-2.5 text-right text-green-700 font-bold font-mono">₹{r.netSale.toFixed(2)}</td>
+                        <td className="p-2.5 text-right text-indigo-650 font-black font-mono">₹{r.grossProfit.toFixed(2)}</td>
+                        <td className={`p-2.5 text-right font-bold font-mono ${r.profitPercent > 0 ? 'text-green-700' : 'text-red-500'}`}>{r.profitPercent.toFixed(1)}%</td>
+                      </>
+                    )}
+                    {reportType === 'gst' && (
+                      <>
+                        <td className="p-2.5 text-right font-bold text-green-700">₹{r.salesGstAmount.toFixed(2)}</td>
+                        <td className="p-2.5 text-right text-gray-500">₹{r.purchaseCGST.toFixed(2)}</td>
+                        <td className="p-2.5 text-right text-gray-500">₹{r.purchaseSGST.toFixed(2)}</td>
+                        <td className="p-2.5 text-right text-gray-500">₹{r.purchaseIGST.toFixed(2)}</td>
+                        <td className="p-2.5 text-right font-black text-purple-750 font-mono text-sm">₹{r.netGstLiability.toFixed(2)}</td>
+                      </>
+                    )}
+                    {reportType === 'stock-ledger' && (
+                      <>
+                        <td className="p-2.5 text-gray-400">{new Date(r.timestamp).toLocaleDateString('en-GB')}</td>
+                        <td className="p-2.5 font-bold text-gray-800">{r.itemName}</td>
+                        <td className="p-2.5 font-mono text-gray-650 bg-gray-50 px-1 py-0.5 rounded">{r.batch}</td>
+                        <td className="p-2.5 text-center text-gray-500">{r.previousStock}</td>
+                        <td className={`p-2.5 text-center font-black ${r.quantity > 0 ? 'text-green-700' : 'text-red-650'}`}>
+                          {r.quantity > 0 ? `+${r.quantity}` : r.quantity}
+                        </td>
+                        <td className="p-2.5 text-center font-bold text-gray-850">{r.newStock}</td>
+                        <td className="p-2.5 text-center">
+                          <span className="bg-orange-50 text-orange-700 px-2 py-0.5 rounded text-[9px] font-bold uppercase">{r.type}</span>
+                        </td>
+                        <td className="p-2.5 text-gray-500 max-w-[200px] truncate" title={r.remarks}>{r.remarks}</td>
+                      </>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ==================== SETTINGS WORKSPACE ====================
+const SettingsWorkspace = () => {
+  const [tab, setTab] = useState('billing'); // 'billing', 'audit'
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <div className="flex flex-wrap gap-2.5 pb-2 border-b border-orange-50">
+        <button type="button" className={tabClass(tab === 'billing')} onClick={() => setTab('billing')}>
+          Pharmacy Settings
+        </button>
+        <button type="button" className={tabClass(tab === 'audit')} onClick={() => setTab('audit')}>
+          System Audit Logs
+        </button>
+      </div>
+
+      <div className="bg-white p-6 rounded-3xl border border-orange-100 shadow-sm">
+        {tab === 'billing' && <BillingSettingsView isAdmin={false} />}
+        {tab === 'audit' && <AuditLogsView />}
+      </div>
+    </div>
+  );
+};
+
+// ==================== LIVE SUPPLIER MANAGEMENT VIEW ====================
+const SupplierManagementView = () => {
+  const [suppliers, setSuppliers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState({
+    name: '', contactPerson: '', mobile: '', email: '', gstin: '', drugLicenseNumber: '',
+    address: '', city: '', state: '', pincode: '', paymentTerms: '', openingBalance: 0, notes: '', status: 'Active'
+  });
+  const [isEdit, setIsEdit] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const fetchSuppliers = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await client.get(`/pharmacy/suppliers?search=${encodeURIComponent(search)}`);
+      setSuppliers(data);
+    } catch (err) {
+      toast.error('Failed to load suppliers list.');
+    } finally {
+      setLoading(false);
+    }
+  }, [search]);
+
+  useEffect(() => {
+    fetchSuppliers();
+  }, [fetchSuppliers]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.name || !form.mobile) {
+      toast.error('Supplier Name and Mobile Number are required.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      if (isEdit) {
+        await client.put(`/pharmacy/suppliers/${form._id}`, form);
+        toast.success('Supplier updated successfully!');
+      } else {
+        await client.post('/pharmacy/suppliers', form);
+        toast.success('Supplier registered successfully!');
+      }
+      setShowModal(false);
+      fetchSuppliers();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Error saving supplier.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleEdit = (supp) => {
+    setForm({ ...supp });
+    setIsEdit(true);
+    setShowModal(true);
+  };
+
+  const handleToggleStatus = async (id) => {
+    if (window.confirm('Are you sure you want to change this supplier status?')) {
+      try {
+        await client.delete(`/pharmacy/suppliers/${id}`);
+        toast.success('Supplier status updated.');
+        fetchSuppliers();
+      } catch (err) {
+        toast.error('Error changing supplier status.');
+      }
+    }
+  };
+
+  const openAddModal = () => {
+    setForm({
+      name: '', contactPerson: '', mobile: '', email: '', gstin: '', drugLicenseNumber: '',
+      address: '', city: '', state: '', pincode: '', paymentTerms: '', openingBalance: 0, notes: '', status: 'Active'
+    });
+    setIsEdit(false);
+    setShowModal(true);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-3">
+        <div className="relative w-full sm:max-w-xs">
+          <input
+            type="text"
+            className="input pl-10 py-2.5 text-xs font-semibold"
+            placeholder="Search suppliers by name/code..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <Search className="absolute left-3.5 top-3 text-orange-400 h-4 w-4" />
+        </div>
+        <button type="button" onClick={openAddModal} className="btn py-2 px-5 text-xs font-bold flex items-center gap-1.5 cursor-pointer">
+          <Plus className="h-4 w-4" /> Register Supplier
+        </button>
+      </div>
+
       <div className="card overflow-hidden bg-white border border-orange-100 shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="bg-gradient-to-r from-orange-50 to-amber-50 text-xs font-bold uppercase text-gray-600 border-b border-orange-100">
-                <th className="p-3 pl-4">Supplier Name</th>
-                <th className="p-3">Contact Person</th>
-                <th className="p-3">Mobile</th>
-                <th className="p-3">Email</th>
-                <th className="p-3">GSTIN</th>
-                <th className="p-3">Address</th>
-                <th className="p-3 pr-4 text-center">Action</th>
+                <th className="p-3.5 pl-4">Code</th>
+                <th className="p-3.5">Supplier Name</th>
+                <th className="p-3.5">Contact Person</th>
+                <th className="p-3.5">Mobile</th>
+                <th className="p-3.5">GSTIN</th>
+                <th className="p-3.5">City / State</th>
+                <th className="p-3.5 text-center">Status</th>
+                <th className="p-3.5 pr-4 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-orange-50">
-              {suppliers.map(s => (
-                <tr key={s.id} className="hover:bg-orange-50/10">
-                  <td className="p-3 pl-4 font-bold text-gray-800">{s.name}</td>
-                  <td className="p-3 font-semibold text-gray-600">{s.contact}</td>
-                  <td className="p-3 font-mono font-bold text-gray-700">{s.mobile}</td>
-                  <td className="p-3 text-gray-500">{s.email || '-'}</td>
-                  <td className="p-3 font-mono text-gray-550 font-bold">{s.gstin || '-'}</td>
-                  <td className="p-3 text-xs text-gray-500">{s.address || '-'}</td>
-                  <td className="p-3 pr-4 text-center">
-                    <button 
-                      type="button"
-                      onClick={() => handleDeleteSupplier(s.id)}
-                      className="p-1 text-red-500 hover:bg-red-50 rounded transition cursor-pointer"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+              {loading ? (
+                <tr>
+                  <td colSpan="8" className="p-8 text-center text-gray-400">
+                    <Loader2 className="h-5 w-5 animate-spin text-orange-550 inline mr-2" /> Loading supplier records...
                   </td>
                 </tr>
-              ))}
+              ) : suppliers.length === 0 ? (
+                <tr>
+                  <td colSpan="8" className="p-8 text-center text-gray-400 font-bold">
+                    No suppliers registered.
+                  </td>
+                </tr>
+              ) : (
+                suppliers.map(s => (
+                  <tr key={s._id} className="hover:bg-orange-50/10">
+                    <td className="p-3.5 pl-4 font-mono font-bold text-orange-700">{s.code}</td>
+                    <td className="p-3.5 font-bold text-gray-800">{s.name}</td>
+                    <td className="p-3.5 font-semibold text-gray-600">{s.contactPerson || '-'}</td>
+                    <td className="p-3.5 font-mono font-bold text-gray-700">{s.mobile}</td>
+                    <td className="p-3.5 font-mono text-gray-550 font-semibold">{s.gstin || '-'}</td>
+                    <td className="p-3.5 font-semibold text-gray-550">{s.city ? `${s.city}, ${s.state || ''}` : '-'}</td>
+                    <td className="p-3.5 text-center">
+                      <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-black ${
+                        s.status === 'Active' ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-750'
+                      }`}>
+                        {s.status}
+                      </span>
+                    </td>
+                    <td className="p-3.5 pr-4 text-center flex items-center justify-center gap-1.5">
+                      <button type="button" onClick={() => handleEdit(s)} className="p-1.5 text-orange-600 hover:bg-orange-50 rounded-xl transition cursor-pointer" title="Edit supplier details">
+                        <Edit className="h-4 w-4" />
+                      </button>
+                      <button type="button" onClick={() => handleToggleStatus(s._id)} className={`p-1.5 rounded-xl transition cursor-pointer ${
+                        s.status === 'Active' ? 'text-red-500 hover:bg-red-50' : 'text-green-600 hover:bg-green-50'
+                      }`} title={s.status === 'Active' ? 'Mark Inactive' : 'Mark Active'}>
+                        <RefreshCw className="h-4 w-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Add Supplier Modal */}
-      {showAddModal && (
+      {showModal && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <form 
-            onSubmit={handleSaveSupplier}
-            className="bg-white rounded-3xl p-6 max-w-md w-full border border-orange-100 shadow-2xl space-y-4"
-          >
-            <div className="flex justify-between items-center border-b border-orange-50 pb-2">
-              <h3 className="font-extrabold text-gray-800 text-sm flex items-center gap-1.5">
+          <form onSubmit={handleSubmit} className="bg-white rounded-3xl p-6 max-w-lg w-full border border-orange-100 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b border-orange-50 pb-2.5">
+              <h3 className="font-black text-gray-800 text-sm flex items-center gap-1.5">
                 <Truck className="text-orange-500 h-4.5 w-4.5" />
-                Register New Supplier
+                {isEdit ? 'Update Supplier Details' : 'Register New Supplier'}
               </h3>
-              <button type="button" onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-gray-600">
+              <button type="button" onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600 cursor-pointer">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="space-y-3.5 text-xs">
-              <div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              <div className="sm:col-span-2">
                 <label className="mb-1 block font-bold text-gray-550">Supplier / Company Name *</label>
-                <input 
-                  type="text" 
-                  className="input py-2 text-xs" 
-                  required
-                  placeholder="e.g. Cipla Ltd."
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                />
+                <input type="text" className="input py-2 text-xs" required placeholder="e.g. Cipla Healthcare" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
               </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="mb-1 block font-bold text-gray-550">Contact Person</label>
-                  <input 
-                    type="text" 
-                    className="input py-2 text-xs" 
-                    placeholder="e.g. Anil Mehta"
-                    value={form.contact}
-                    onChange={(e) => setForm({ ...form, contact: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block font-bold text-gray-555">Mobile Number *</label>
-                  <input 
-                    type="text" 
-                    className="input py-2 text-xs" 
-                    required
-                    placeholder="e.g. 9811223344"
-                    value={form.mobile}
-                    onChange={(e) => setForm({ ...form, mobile: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="mb-1 block font-bold text-gray-550">Email Address</label>
-                  <input 
-                    type="email" 
-                    className="input py-2 text-xs" 
-                    placeholder="cipla@co.in"
-                    value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block font-bold text-gray-555">GSTIN / Tax ID</label>
-                  <input 
-                    type="text" 
-                    className="input py-2 text-xs font-mono uppercase" 
-                    placeholder="27AAAAA1111A1Z1"
-                    value={form.gstin}
-                    onChange={(e) => setForm({ ...form, gstin: e.target.value.toUpperCase() })}
-                  />
-                </div>
-              </div>
-
               <div>
-                <label className="mb-1 block font-bold text-gray-550">Office Address</label>
-                <textarea 
-                  className="input py-2 text-xs h-[50px]" 
-                  placeholder="Supplier physical office address details..."
-                  value={form.address}
-                  onChange={(e) => setForm({ ...form, address: e.target.value })}
-                />
+                <label className="mb-1 block font-bold text-gray-550">Contact Person Name</label>
+                <input type="text" className="input py-2 text-xs" placeholder="e.g. Anil Mehta" value={form.contactPerson} onChange={(e) => setForm({ ...form, contactPerson: e.target.value })} />
+              </div>
+              <div>
+                <label className="mb-1 block font-bold text-gray-555">Mobile Number *</label>
+                <input type="text" className="input py-2 text-xs" required placeholder="e.g. 9811223344" value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value })} />
+              </div>
+              <div>
+                <label className="mb-1 block font-bold text-gray-550">Email Address</label>
+                <input type="email" className="input py-2 text-xs" placeholder="e.g. supplier@domain.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+              </div>
+              <div>
+                <label className="mb-1 block font-bold text-gray-555">GSTIN / Tax ID</label>
+                <input type="text" className="input py-2 text-xs font-mono uppercase" placeholder="27AAAAA1111A1Z1" value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value.toUpperCase() })} />
+              </div>
+              <div>
+                <label className="mb-1 block font-bold text-gray-550">Drug License Number</label>
+                <input type="text" className="input py-2 text-xs uppercase" placeholder="DL-12345/20B" value={form.drugLicenseNumber} onChange={(e) => setForm({ ...form, drugLicenseNumber: e.target.value })} />
+              </div>
+              <div>
+                <label className="mb-1 block font-bold text-gray-550">Payment Terms</label>
+                <input type="text" className="input py-2 text-xs" placeholder="e.g. Net 30, Cash on Delivery" value={form.paymentTerms} onChange={(e) => setForm({ ...form, paymentTerms: e.target.value })} />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="mb-1 block font-bold text-gray-550">Street Address</label>
+                <input type="text" className="input py-2 text-xs" placeholder="Office/Warehouse street location" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+              </div>
+              <div>
+                <label className="mb-1 block font-bold text-gray-555">City</label>
+                <input type="text" className="input py-2 text-xs" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
+              </div>
+              <div>
+                <label className="mb-1 block font-bold text-gray-555">State</label>
+                <input type="text" className="input py-2 text-xs" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} />
+              </div>
+              <div>
+                <label className="mb-1 block font-bold text-gray-555">Pincode</label>
+                <input type="text" className="input py-2 text-xs" value={form.pincode} onChange={(e) => setForm({ ...form, pincode: e.target.value })} />
+              </div>
+              <div>
+                <label className="mb-1 block font-bold text-gray-555">Opening Balance (₹)</label>
+                <input type="number" step="0.01" className="input py-2 text-xs" value={form.openingBalance} onChange={(e) => setForm({ ...form, openingBalance: Number(e.target.value) })} />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="mb-1 block font-bold text-gray-550">Special Notes</label>
+                <textarea className="input py-2 text-xs h-[50px]" placeholder="Supplier specific instructions..." value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
               </div>
             </div>
 
             <div className="flex justify-end gap-2 border-t border-orange-50 pt-4">
-              <button 
-                type="button" 
-                onClick={() => setShowAddModal(false)}
-                className="btn-secondary text-xs py-2 px-4 font-bold"
-              >
+              <button type="button" onClick={() => setShowModal(false)} className="btn-secondary text-xs py-2.5 px-5 font-bold cursor-pointer">
                 Cancel
               </button>
-              <button 
-                type="submit" 
-                className="btn text-xs py-2 px-5 font-bold shadow-md shadow-orange-500/10 cursor-pointer"
-              >
-                Register
+              <button type="submit" disabled={submitting} className="btn text-xs py-2.5 px-6 font-bold shadow-md shadow-orange-500/10 cursor-pointer disabled:bg-orange-300">
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : (isEdit ? 'Save Changes' : 'Register')}
               </button>
             </div>
           </form>
@@ -3728,7 +4411,1129 @@ const SupplierManagementView = () => {
   );
 };
 
-// ==================== PHARMACY REPORTS VIEW ====================
+// ==================== MANUAL PURCHASE ENTRY (GRN) ====================
+const PurchaseEntryView = ({ editId = null, onSaveComplete }) => {
+  const [, setSearchParams] = useSearchParams();
+  const [suppliers, setSuppliers] = useState([]);
+  const [loadingSuppliers, setLoadingSuppliers] = useState(false);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [isDirectPurchase, setIsDirectPurchase] = useState(false);
+
+  // Form Headers
+  const [header, setHeader] = useState({
+    purchaseInvoiceNumber: '', supplierId: '', supplierName: '', invoiceDate: new Date().toISOString().split('T')[0],
+    receiveDate: new Date().toISOString().split('T')[0], paymentType: 'Cash', dueDate: '', notes: ''
+  });
+
+  // Medicine Rows
+  const [items, setItems] = useState([
+    { itemName: '', batch: '', expiry: '', pack: '0', quantity: 0, free: 0, rate: 0, mrp: 0, discountPercent: 0, discountAmount: 0, sgst: 0, cgst: 0, igst: 0, hsn: '0', totalAmount: 0 }
+  ]);
+
+  // Autocomplete details
+  const [medQuery, setMedQuery] = useState('');
+  const [medResults, setMedResults] = useState([]);
+  const [activeRowIdx, setActiveRowIdx] = useState(null);
+  const [searchingMeds, setSearchingMeds] = useState(false);
+
+  // Bill totals
+  const [paidAmount, setPaidAmount] = useState(0);
+
+  // Fetch active suppliers list
+  useEffect(() => {
+    const fetchActiveSuppliers = async () => {
+      setLoadingSuppliers(true);
+      try {
+        const { data } = await client.get('/pharmacy/suppliers');
+        setSuppliers(data.filter(s => s.status === 'Active'));
+      } catch (err) {
+        toast.error('Failed to load supplier dropdown.');
+      } finally {
+        setLoadingSuppliers(false);
+      }
+    };
+    fetchActiveSuppliers();
+  }, []);
+
+  // Fetch details if Edit Mode is triggered
+  useEffect(() => {
+    if (editId) {
+      const fetchPurchaseInfo = async () => {
+        setLoadingDetails(true);
+        try {
+          const { data } = await client.get(`/pharmacy/purchases/${editId}`);
+          setHeader({
+            purchaseInvoiceNumber: data.purchaseInvoiceNumber || '',
+            supplierId: data.supplierId?._id || data.supplierId || '',
+            supplierName: data.supplierName || '',
+            invoiceDate: data.invoiceDate ? data.invoiceDate.split('T')[0] : '',
+            receiveDate: data.receiveDate ? data.receiveDate.split('T')[0] : '',
+            paymentType: data.paymentType || 'Cash',
+            dueDate: data.dueDate ? data.dueDate.split('T')[0] : '',
+            notes: data.notes || ''
+          });
+          setIsDirectPurchase(!data.supplierId);
+          setItems(data.items.map(it => ({
+            itemName: it.itemName, batch: it.batch,
+            expiry: it.expiry ? it.expiry.split('T')[0] : '',
+            pack: it.pack, quantity: it.quantity, free: it.free,
+            rate: it.rate, mrp: it.mrp, discountPercent: it.discountPercent,
+            discountAmount: it.discountAmount, sgst: it.sgst, cgst: it.cgst, igst: it.igst,
+            hsn: it.hsn, totalAmount: it.totalAmount, returnedQty: it.returnedQty
+          })));
+          setPaidAmount(data.paidAmount || 0);
+        } catch (err) {
+          toast.error('Error fetching purchase details for edit.');
+        } finally {
+          setLoadingDetails(false);
+        }
+      };
+      fetchPurchaseInfo();
+    }
+  }, [editId]);
+
+  // Autocomplete query search
+  useEffect(() => {
+    if (!medQuery.trim()) {
+      setMedResults([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setSearchingMeds(true);
+      try {
+        const { data } = await client.get(`/pharmacy/inventory?limit=10&search=${encodeURIComponent(medQuery)}`);
+        setMedResults(data.items);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setSearchingMeds(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [medQuery]);
+
+  const handleRowChange = (idx, field, val) => {
+    const updated = [...items];
+    updated[idx][field] = val;
+
+    // Trigger row calculations on input change
+    const qty = Number(updated[idx].quantity) || 0;
+    const rate = Number(updated[idx].rate) || 0;
+    const discPct = Number(updated[idx].discountPercent) || 0;
+    const sgstPct = Number(updated[idx].sgst) || 0;
+    const cgstPct = Number(updated[idx].cgst) || 0;
+    const igstPct = Number(updated[idx].igst) || 0;
+
+    const gross = qty * rate;
+    const discAmt = gross * (discPct / 100);
+    const taxable = gross - discAmt;
+    const gstPct = sgstPct + cgstPct + igstPct;
+    const gstAmt = taxable * (gstPct / 100);
+
+    updated[idx].discountAmount = discAmt;
+    updated[idx].totalAmount = taxable + gstAmt;
+
+    setItems(updated);
+  };
+
+  const handleAddRow = () => {
+    setItems([
+      ...items,
+      { itemName: '', batch: '', expiry: '', pack: '0', quantity: 0, free: 0, rate: 0, mrp: 0, discountPercent: 0, discountAmount: 0, sgst: 0, cgst: 0, igst: 0, hsn: '0', totalAmount: 0 }
+    ]);
+  };
+
+  const handleRemoveRow = (idx) => {
+    if (items.length === 1) return;
+    setItems(items.filter((_, i) => i !== idx));
+  };
+
+  const selectAutocompleteMed = (idx, stock) => {
+    const updated = [...items];
+    updated[idx].itemName = stock.itemName;
+    updated[idx].pack = stock.pack || '0';
+    updated[idx].hsn = stock.hsn || '0';
+    updated[idx].sgst = stock.sgst || 0;
+    updated[idx].cgst = stock.cst || 0;
+    updated[idx].mrp = stock.mrp || 0;
+    updated[idx].rate = stock.rate || 0;
+
+    setItems(updated);
+    setActiveRowIdx(null);
+    setMedQuery('');
+    setMedResults([]);
+  };
+
+  // Perform overall total sum calculations
+  const subTotal = items.reduce((sum, it) => sum + (Number(it.quantity) * Number(it.rate)), 0);
+  const totalDiscount = items.reduce((sum, it) => sum + (Number(it.discountAmount) || 0), 0);
+  const totalGst = items.reduce((sum, it) => {
+    const taxable = (Number(it.quantity) * Number(it.rate)) - (Number(it.discountAmount) || 0);
+    const gstPct = (Number(it.sgst) || 0) + (Number(it.cgst) || 0) + (Number(it.igst) || 0);
+    return sum + (taxable * gstPct / 100);
+  }, 0);
+  const grandTotal = subTotal - totalDiscount + totalGst;
+  const pendingAmount = Math.max(0, grandTotal - paidAmount);
+
+  const handleSavePurchase = async (e) => {
+    e.preventDefault();
+
+    const hasSupplier = isDirectPurchase ? !!header.supplierName : !!header.supplierId;
+    if (!header.purchaseInvoiceNumber || !hasSupplier) {
+      toast.error('Please input the Invoice Number and Supplier details.');
+      return;
+    }
+
+    const invalidRow = items.find(it => !it.itemName || !it.batch || !it.expiry || it.quantity <= 0);
+    if (invalidRow) {
+      toast.error('All rows must contain medicine name, batch, expiry date and quantity > 0.');
+      return;
+    }
+
+    setSubmitting(true);
+    const payload = {
+      ...header,
+      supplierId: isDirectPurchase ? '' : header.supplierId,
+      supplierName: isDirectPurchase ? header.supplierName.trim() : '',
+      items,
+      totalAmount: grandTotal,
+      paidAmount,
+      pendingAmount
+    };
+
+    try {
+      if (editId) {
+        await client.put(`/pharmacy/purchases/${editId}`, payload);
+        toast.success('Purchase GRN updated and stock synchronized successfully.');
+      } else {
+        await client.post('/pharmacy/purchases', payload);
+        toast.success('Purchase GRN saved and stock added to inventory successfully.');
+      }
+      setSearchParams({ section: 'purchases' });
+      onSaveComplete();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Error processing purchase GRN.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (loadingDetails) {
+    return (
+      <div className="p-8 text-center text-gray-400">
+        <Loader2 className="h-6 w-6 animate-spin text-orange-500 inline mr-2" /> Loading invoice details...
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={handleSavePurchase} className="space-y-6">
+      
+      {/* Invoice Header details */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs bg-orange-50/20 p-5 rounded-2xl border border-orange-100/50">
+        <div>
+          <div className="flex justify-between items-center mb-1">
+            <label className="font-bold text-gray-550">Supplier *</label>
+            <label className="inline-flex items-center gap-1 text-[10px] text-orange-600 font-semibold cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={isDirectPurchase}
+                onChange={(e) => {
+                  setIsDirectPurchase(e.target.checked);
+                  setHeader({ ...header, supplierId: '', supplierName: '' });
+                }}
+                className="rounded border-orange-350 text-orange-600 focus:ring-orange-500 h-3.5 w-3.5"
+              />
+              Skip Selection
+            </label>
+          </div>
+          {isDirectPurchase ? (
+            <input
+              type="text"
+              required
+              className="input py-2 text-xs font-semibold border-orange-350"
+              placeholder="Enter Supplier Name..."
+              value={header.supplierName || ''}
+              onChange={(e) => setHeader({ ...header, supplierName: e.target.value })}
+            />
+          ) : (
+            <select
+              className="input py-2 text-xs font-semibold"
+              required
+              value={header.supplierId}
+              onChange={(e) => setHeader({ ...header, supplierId: e.target.value })}
+            >
+              <option value="">-- Choose Supplier --</option>
+              {loadingSuppliers ? (
+                <option disabled>Loading supplier entries...</option>
+              ) : (
+                suppliers.map(s => <option key={s._id} value={s._id}>{s.name} ({s.code})</option>)
+              )}
+            </select>
+          )}
+        </div>
+        <div>
+          <label className="mb-1 block font-bold text-gray-555">Purchase Invoice Number *</label>
+          <input
+            type="text"
+            className="input py-2 text-xs font-mono font-bold"
+            required
+            placeholder="e.g. INV-10029"
+            value={header.purchaseInvoiceNumber}
+            onChange={(e) => setHeader({ ...header, purchaseInvoiceNumber: e.target.value })}
+          />
+        </div>
+        <div>
+          <label className="mb-1 block font-bold text-gray-550">Invoice Date *</label>
+          <input
+            type="date"
+            className="input py-2 text-xs font-semibold"
+            required
+            value={header.invoiceDate}
+            onChange={(e) => setHeader({ ...header, invoiceDate: e.target.value })}
+          />
+        </div>
+        <div>
+          <label className="mb-1 block font-bold text-gray-550">Receive Date *</label>
+          <input
+            type="date"
+            className="input py-2 text-xs font-semibold"
+            required
+            value={header.receiveDate}
+            onChange={(e) => setHeader({ ...header, receiveDate: e.target.value })}
+          />
+        </div>
+        <div>
+          <label className="mb-1 block font-bold text-gray-555">Payment Mode</label>
+          <select
+            className="input py-2 text-xs font-semibold"
+            value={header.paymentType}
+            onChange={(e) => setHeader({ ...header, paymentType: e.target.value })}
+          >
+            <option value="Cash">Cash</option>
+            <option value="Credit">Credit</option>
+            <option value="UPI">UPI</option>
+            <option value="Bank Transfer">Bank Transfer</option>
+            <option value="Card">Card</option>
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block font-bold text-gray-550">Payment Due Date (if Credit)</label>
+          <input
+            type="date"
+            className="input py-2 text-xs font-semibold"
+            value={header.dueDate}
+            onChange={(e) => setHeader({ ...header, dueDate: e.target.value })}
+          />
+        </div>
+        <div className="sm:col-span-2">
+          <label className="mb-1 block font-bold text-gray-550">Invoice Notes</label>
+          <input
+            type="text"
+            className="input py-2 text-xs"
+            placeholder="e.g. Received intact, fridge items kept cold"
+            value={header.notes}
+            onChange={(e) => setHeader({ ...header, notes: e.target.value })}
+          />
+        </div>
+      </div>
+
+      {/* Invoice Items details */}
+      <div className="space-y-3.5">
+        <h4 className="font-extrabold text-gray-800 text-xs border-b border-orange-100 pb-1">
+          Purchase Medicine Line Items
+        </h4>
+
+        <div className="overflow-x-auto border border-orange-100 rounded-2xl bg-white shadow-sm">
+          <table className="w-full text-left text-[11px] min-w-[1200px]">
+            <thead>
+              <tr className="bg-gradient-to-r from-orange-50 to-amber-50 text-[10px] font-extrabold uppercase text-gray-600 border-b border-orange-100">
+                <th className="p-3 pl-4 w-[180px]">Medicine Name *</th>
+                <th className="p-3 w-[100px]">Batch No *</th>
+                <th className="p-3 w-[110px]">Expiry *</th>
+                <th className="p-3 w-[70px]">Pack</th>
+                <th className="p-3 w-[70px]">Qty *</th>
+                <th className="p-3 w-[70px]">Free</th>
+                <th className="p-3 w-[80px]">Rate *</th>
+                <th className="p-3 w-[80px]">MRP *</th>
+                <th className="p-3 w-[70px]">Dis %</th>
+                <th className="p-3 w-[80px]">HSN</th>
+                <th className="p-3 w-[70px]">CGST %</th>
+                <th className="p-3 w-[70px]">SGST %</th>
+                <th className="p-3 w-[70px]">IGST %</th>
+                <th className="p-3 text-right pr-4 w-[100px]">Total (₹)</th>
+                <th className="p-3 text-center w-[50px] print:hidden">Del</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-orange-50 font-semibold text-gray-700">
+              {items.map((it, idx) => (
+                <tr key={idx} className="hover:bg-orange-50/10 align-middle">
+                  <td className="p-2 pl-4 relative">
+                    <input
+                      type="text"
+                      className="input py-1.5 px-2 text-[11px] font-semibold border-orange-200"
+                      placeholder="Search or type name..."
+                      value={it.itemName}
+                      onChange={(e) => {
+                        handleRowChange(idx, 'itemName', e.target.value);
+                        setMedQuery(e.target.value);
+                        setActiveRowIdx(idx);
+                      }}
+                      onFocus={() => {
+                        setActiveRowIdx(idx);
+                        setMedQuery(it.itemName);
+                      }}
+                    />
+                    {activeRowIdx === idx && medQuery && (
+                      <div className="absolute left-4 right-4 z-40 bg-white border border-orange-150 rounded-2xl shadow-xl max-h-[150px] overflow-y-auto mt-1 p-1">
+                        {searchingMeds ? (
+                          <div className="p-2 text-center text-gray-400 text-[10px]">
+                            <Loader2 className="h-4.5 w-4.5 animate-spin text-orange-500 inline mr-2" /> Searching...
+                          </div>
+                        ) : medResults.length === 0 ? (
+                          <div className="p-2 text-center text-gray-400 text-[10px] font-bold">
+                            No match found. Free text allowed.
+                          </div>
+                        ) : (
+                          medResults.map(stock => (
+                            <button
+                              key={stock._id}
+                              type="button"
+                              onClick={() => selectAutocompleteMed(idx, stock)}
+                              className="w-full text-left px-3 py-1.5 hover:bg-orange-50 rounded-xl text-[10px] text-gray-700 flex justify-between font-medium cursor-pointer"
+                            >
+                              <span>{stock.itemName} (Pack: {stock.pack})</span>
+                              <span className="font-mono text-orange-700 font-bold bg-orange-50 px-1.5 py-0.5 rounded-md">Batch: {stock.batch} | Qty: {stock.quantity}</span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </td>
+                  <td className="p-2">
+                    <input
+                      type="text"
+                      className="input py-1.5 px-2 text-[11px] font-mono border-orange-200"
+                      required
+                      placeholder="B-39"
+                      value={it.batch}
+                      onChange={(e) => handleRowChange(idx, 'batch', e.target.value)}
+                    />
+                  </td>
+                  <td className="p-2">
+                    <input
+                      type="date"
+                      className="input py-1.5 px-2 text-[11px] font-semibold border-orange-200"
+                      required
+                      value={it.expiry}
+                      onChange={(e) => handleRowChange(idx, 'expiry', e.target.value)}
+                    />
+                  </td>
+                  <td className="p-2">
+                    <input
+                      type="text"
+                      className="input py-1.5 px-2 text-[11px] text-center border-orange-200"
+                      placeholder="10S"
+                      value={it.pack}
+                      onChange={(e) => handleRowChange(idx, 'pack', e.target.value)}
+                    />
+                  </td>
+                  <td className="p-2">
+                    <input
+                      type="number"
+                      min="1"
+                      className="input py-1.5 px-2 text-[11px] text-center font-bold border-orange-200"
+                      required
+                      value={it.quantity || ''}
+                      onChange={(e) => handleRowChange(idx, 'quantity', parseInt(e.target.value) || 0)}
+                    />
+                  </td>
+                  <td className="p-2">
+                    <input
+                      type="number"
+                      min="0"
+                      className="input py-1.5 px-2 text-[11px] text-center border-orange-200"
+                      value={it.free || ''}
+                      onChange={(e) => handleRowChange(idx, 'free', parseInt(e.target.value) || 0)}
+                    />
+                  </td>
+                  <td className="p-2">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="input py-1.5 px-2 text-[11px] text-right font-bold border-orange-200"
+                      required
+                      value={it.rate || ''}
+                      onChange={(e) => handleRowChange(idx, 'rate', parseFloat(e.target.value) || 0)}
+                    />
+                  </td>
+                  <td className="p-2">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="input py-1.5 px-2 text-[11px] text-right font-bold border-orange-200"
+                      required
+                      value={it.mrp || ''}
+                      onChange={(e) => handleRowChange(idx, 'mrp', parseFloat(e.target.value) || 0)}
+                    />
+                  </td>
+                  <td className="p-2">
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      className="input py-1.5 px-2 text-[11px] text-center border-orange-200"
+                      value={it.discountPercent || ''}
+                      onChange={(e) => handleRowChange(idx, 'discountPercent', parseFloat(e.target.value) || 0)}
+                    />
+                  </td>
+                  <td className="p-2">
+                    <input
+                      type="text"
+                      className="input py-1.5 px-2 text-[11px] text-center font-mono border-orange-200"
+                      value={it.hsn}
+                      onChange={(e) => handleRowChange(idx, 'hsn', e.target.value)}
+                    />
+                  </td>
+                  <td className="p-2">
+                    <input
+                      type="number"
+                      min="0"
+                      className="input py-1.5 px-2 text-[11px] text-center border-orange-200"
+                      value={it.cgst || ''}
+                      onChange={(e) => handleRowChange(idx, 'cgst', parseFloat(e.target.value) || 0)}
+                    />
+                  </td>
+                  <td className="p-2">
+                    <input
+                      type="number"
+                      min="0"
+                      className="input py-1.5 px-2 text-[11px] text-center border-orange-200"
+                      value={it.sgst || ''}
+                      onChange={(e) => handleRowChange(idx, 'sgst', parseFloat(e.target.value) || 0)}
+                    />
+                  </td>
+                  <td className="p-2">
+                    <input
+                      type="number"
+                      min="0"
+                      className="input py-1.5 px-2 text-[11px] text-center border-orange-200"
+                      value={it.igst || ''}
+                      onChange={(e) => handleRowChange(idx, 'igst', parseFloat(e.target.value) || 0)}
+                    />
+                  </td>
+                  <td className="p-2 text-right pr-4 font-mono font-black text-gray-800">
+                    ₹{it.totalAmount.toFixed(2)}
+                  </td>
+                  <td className="p-2 text-center print:hidden">
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveRow(idx)}
+                      disabled={items.length === 1}
+                      className="p-1 text-red-500 hover:bg-red-50 rounded-xl transition cursor-pointer disabled:text-gray-300 disabled:hover:bg-transparent"
+                    >
+                      <Trash2 className="h-4.5 w-4.5" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleAddRow}
+          className="btn-secondary py-2 px-5 text-xs font-bold flex items-center gap-1 cursor-pointer border-orange-200 hover:bg-orange-50/50"
+        >
+          <Plus className="h-4 w-4" /> Add Item Line
+        </button>
+      </div>
+
+      {/* Invoice Totals calculation and Saving */}
+      <div className="flex flex-col md:flex-row justify-between items-start gap-6 border-t border-orange-50 pt-5 text-xs">
+        <div className="w-full md:max-w-md bg-orange-50/20 p-5 rounded-2xl border border-orange-100/50 space-y-3.5">
+          <h4 className="font-extrabold text-gray-800 text-xs border-b border-orange-100 pb-1 flex items-center gap-1.5">
+            <DollarSign className="text-orange-500 h-4.5 w-4.5" /> Receipt & Settlement
+          </h4>
+          <div className="flex justify-between items-center">
+            <span className="font-bold text-gray-555">Amount Paid (₹)</span>
+            <input
+              type="number"
+              step="0.01"
+              className="input py-2 text-right font-black max-w-[150px]"
+              value={paidAmount || ''}
+              onChange={(e) => setPaidAmount(Math.min(grandTotal, Math.max(0, parseFloat(e.target.value) || 0)))}
+            />
+          </div>
+          <div className="flex justify-between items-center text-gray-650 font-bold border-t border-orange-50 pt-2.5">
+            <span>Pending Balance</span>
+            <span className="font-black font-mono text-red-650 text-sm">₹{pendingAmount.toFixed(2)}</span>
+          </div>
+        </div>
+
+        <div className="w-full md:max-w-sm bg-gradient-to-br from-white to-orange-50/5 p-6 rounded-3xl border border-orange-100 space-y-3 shadow-sm font-semibold text-gray-600">
+          <div className="flex justify-between">
+            <span>Gross Subtotal:</span>
+            <span className="font-mono font-bold text-gray-800">₹{subTotal.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between text-green-700">
+            <span>Item Discounts:</span>
+            <span>- ₹{totalDiscount.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Tax GST Total:</span>
+            <span className="font-mono font-bold text-gray-800">₹{totalGst.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between border-t border-orange-100 pt-3 text-gray-800 font-extrabold">
+            <span className="text-sm">Invoice Grand Total:</span>
+            <span className="text-base text-orange-700 font-black font-mono">₹{grandTotal.toFixed(2)}</span>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-3">
+            <button
+              type="button"
+              onClick={() => { setSearchParams({ section: 'purchases' }); if (onSaveComplete) onSaveComplete(); }}
+              className="btn-secondary py-2.5 px-6 text-xs font-bold cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="btn py-2.5 px-6 text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:bg-orange-300 shadow-md shadow-orange-500/10"
+            >
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+              {editId ? 'Apply Invoice Edit' : 'Verify & Save GRN'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </form>
+  );
+};
+
+// ==================== PURCHASE HISTORY & RETURNS ====================
+const PurchaseHistoryView = ({ onEditClick }) => {
+  const [purchases, setPurchases] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+
+  // Modals view states
+  const [selectedPurchase, setSelectedPurchase] = useState(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  
+  // Return forms
+  const [returnReason, setReturnReason] = useState('');
+  const [returnItems, setReturnItems] = useState([]);
+  const [submittingReturn, setSubmittingReturn] = useState(false);
+
+  const fetchPurchases = useCallback(async () => {
+    setLoading(true);
+    try {
+      const url = `/pharmacy/purchases?search=${encodeURIComponent(search)}&fromDate=${fromDate}&toDate=${toDate}`;
+      const { data } = await client.get(url);
+      setPurchases(data);
+    } catch (err) {
+      toast.error('Failed to load purchase history records.');
+    } finally {
+      setLoading(false);
+    }
+  }, [search, fromDate, toDate]);
+
+  useEffect(() => {
+    fetchPurchases();
+  }, [fetchPurchases]);
+
+  // Open detail preview modal
+  const handleViewDetails = (p) => {
+    setSelectedPurchase(p);
+    setShowDetailModal(true);
+  };
+
+  // Open return modal
+  const handleOpenReturnModal = (p) => {
+    setSelectedPurchase(p);
+    setReturnReason('');
+    setReturnItems(p.items.map(it => ({
+      itemName: it.itemName,
+      batch: it.batch,
+      expiry: it.expiry,
+      purchasedQty: it.quantity,
+      returnedQty: it.returnedQty || 0,
+      qtyToReturn: 0,
+      rate: it.rate,
+      mrp: it.mrp,
+      cgst: it.cgst || 0,
+      sgst: it.sgst || 0,
+      igst: it.igst || 0,
+      discountPercent: it.discountPercent || 0
+    })));
+    setShowReturnModal(true);
+  };
+
+  const handleReturnQtyChange = (idx, val) => {
+    const updated = [...returnItems];
+    const item = updated[idx];
+    const maxReturnable = item.purchasedQty - item.returnedQty;
+    const qty = Math.min(maxReturnable, Math.max(0, parseInt(val) || 0));
+    updated[idx].qtyToReturn = qty;
+    setReturnItems(updated);
+  };
+
+  const handleSubmitReturn = async (e) => {
+    e.preventDefault();
+
+    if (!returnReason.trim()) {
+      toast.error('Please input a reason for the purchase return.');
+      return;
+    }
+
+    const itemsToSend = returnItems.filter(it => it.qtyToReturn > 0).map(it => ({
+      itemName: it.itemName,
+      batch: it.batch,
+      quantityReturned: it.qtyToReturn
+    }));
+
+    if (itemsToSend.length === 0) {
+      toast.error('Please specify return quantities greater than 0 for at least one item.');
+      return;
+    }
+
+    setSubmittingReturn(true);
+    try {
+      await client.post(`/pharmacy/purchases/${selectedPurchase._id}/returns`, {
+        reason: returnReason.trim(),
+        itemsReturned: itemsToSend
+      });
+      toast.success('Purchase return processed successfully. Stock updated.');
+      setShowReturnModal(false);
+      fetchPurchases();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Error processing purchase return.');
+    } finally {
+      setSubmittingReturn(false);
+    }
+  };
+
+  const triggerA4Print = (p) => {
+    // We add clean print styling classes to body and call browser print
+    setSelectedPurchase(p);
+    setTimeout(() => {
+      window.print();
+    }, 300);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Search filters */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-orange-50/10 p-4 rounded-2xl border border-orange-100/50">
+        <div className="relative w-full md:max-w-xs">
+          <input
+            type="text"
+            className="input pl-10 py-2 text-xs font-semibold"
+            placeholder="Search by Invoice / Supplier / Receiver..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <Search className="absolute left-3.5 top-2.5 text-orange-400 h-4 w-4" />
+        </div>
+
+        <div className="flex flex-wrap gap-2.5 items-center text-xs">
+          <span className="font-bold text-gray-500">Date Filter:</span>
+          <input
+            type="date"
+            className="input py-1.5 text-xs font-semibold max-w-[130px]"
+            value={fromDate}
+            onChange={(e) => setFromDate(e.target.value)}
+          />
+          <span className="text-gray-400 font-bold">to</span>
+          <input
+            type="date"
+            className="input py-1.5 text-xs font-semibold max-w-[130px]"
+            value={toDate}
+            onChange={(e) => setToDate(e.target.value)}
+          />
+          {(fromDate || toDate) && (
+            <button
+              type="button"
+              onClick={() => { setFromDate(''); setToDate(''); }}
+              className="text-red-500 font-bold hover:underline cursor-pointer"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* History table */}
+      <div className="card overflow-hidden bg-white border border-orange-100 shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="bg-gradient-to-r from-orange-50 to-amber-50 text-xs font-bold uppercase text-gray-600 border-b border-orange-100">
+                <th className="p-3.5 pl-4">Invoice No</th>
+                <th className="p-3.5">Supplier Name</th>
+                <th className="p-3.5">Invoice Date</th>
+                <th className="p-3.5 text-right">Total (₹)</th>
+                <th className="p-3.5 text-right text-green-700">Paid (₹)</th>
+                <th className="p-3.5 text-right text-red-650">Pending (₹)</th>
+                <th className="p-3.5 text-center">Status</th>
+                <th className="p-3.5">Received By</th>
+                <th className="p-3.5 pr-4 text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-orange-50 font-semibold text-gray-700">
+              {loading ? (
+                <tr>
+                  <td colSpan="9" className="p-8 text-center text-gray-400">
+                    <Loader2 className="h-5 w-5 animate-spin text-orange-500 inline mr-2" /> Loading purchase records...
+                  </td>
+                </tr>
+              ) : purchases.length === 0 ? (
+                <tr>
+                  <td colSpan="9" className="p-8 text-center text-gray-400 font-bold">
+                    No purchase invoices logged in selected range.
+                  </td>
+                </tr>
+              ) : (
+                purchases.map(p => (
+                  <tr key={p._id} className="hover:bg-orange-50/10">
+                    <td className="p-3.5 pl-4 font-mono font-bold text-orange-700">{p.purchaseInvoiceNumber}</td>
+                    <td className="p-3.5 font-bold text-gray-800">{p.supplierId?.name || p.supplierName || 'Direct Purchase'}</td>
+                    <td className="p-3.5 text-gray-500">{new Date(p.invoiceDate).toLocaleDateString('en-GB')}</td>
+                    <td className="p-3.5 text-right font-black text-gray-800">₹{p.totalAmount.toFixed(2)}</td>
+                    <td className="p-3.5 text-right font-bold text-green-700">₹{p.paidAmount.toFixed(2)}</td>
+                    <td className="p-3.5 text-right font-bold text-red-650">₹{p.pendingAmount.toFixed(2)}</td>
+                    <td className="p-3.5 text-center">
+                      <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                        p.purchaseStatus === 'Completed' ? 'bg-green-50 text-green-700 border border-green-200' :
+                        p.purchaseStatus === 'Returned' ? 'bg-red-50 text-red-750 border border-red-200' :
+                        'bg-yellow-50 text-yellow-700 border border-yellow-200'
+                      }`}>
+                        {p.purchaseStatus}
+                      </span>
+                    </td>
+                    <td className="p-3.5 text-gray-550">{p.receivedBy}</td>
+                    <td className="p-3.5 pr-4 text-center flex items-center justify-center gap-1">
+                      <button type="button" onClick={() => handleViewDetails(p)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-xl transition cursor-pointer" title="View details">
+                        <Eye className="h-4 w-4" />
+                      </button>
+                      <button type="button" onClick={() => triggerA4Print(p)} className="p-1.5 text-gray-600 hover:bg-gray-50 rounded-xl transition cursor-pointer" title="Print GRN">
+                        <Printer className="h-4 w-4" />
+                      </button>
+                      {p.purchaseStatus !== 'Returned' && (
+                        <button type="button" onClick={() => onEditClick(p._id)} className="p-1.5 text-orange-600 hover:bg-orange-50 rounded-xl transition cursor-pointer" title="Edit invoice details">
+                          <Edit className="h-4 w-4" />
+                        </button>
+                      )}
+                      {p.purchaseStatus !== 'Returned' && (
+                        <button type="button" onClick={() => handleOpenReturnModal(p)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-xl transition cursor-pointer" title="Return items to supplier">
+                          <RotateCcw className="h-4 w-4" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Detail overlay Modal */}
+      {showDetailModal && selectedPurchase && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-4xl w-full border border-orange-100 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b border-orange-50 pb-2.5">
+              <h3 className="font-black text-gray-800 text-sm flex items-center gap-1.5">
+                <FileText className="text-orange-500 h-4.5 w-4.5" />
+                GRN Details - Invoice: {selectedPurchase.purchaseInvoiceNumber}
+              </h3>
+              <button type="button" onClick={() => { setShowDetailModal(false); setSelectedPurchase(null); }} className="text-gray-400 hover:text-gray-600 cursor-pointer">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-[11px] font-semibold text-gray-550 bg-orange-50/10 p-4 rounded-xl">
+              <div>
+                <span className="block font-bold text-gray-400">SUPPLIER:</span>
+                <span className="text-gray-800 text-xs font-extrabold">{selectedPurchase.supplierId?.name || selectedPurchase.supplierName || 'Direct Purchase'}</span>
+                {selectedPurchase.supplierId?.code && <span className="block font-mono text-[10px]">({selectedPurchase.supplierId.code})</span>}
+              </div>
+              <div>
+                <span className="block font-bold text-gray-400">INVOICE DATE:</span>
+                <span className="text-gray-800 font-bold">{new Date(selectedPurchase.invoiceDate).toLocaleDateString('en-GB')}</span>
+              </div>
+              <div>
+                <span className="block font-bold text-gray-400">RECEIVE DATE:</span>
+                <span className="text-gray-800 font-bold">{new Date(selectedPurchase.receiveDate).toLocaleDateString('en-GB')}</span>
+              </div>
+              <div>
+                <span className="block font-bold text-gray-400">PAYMENT TERMS:</span>
+                <span className="text-gray-800 font-black">{selectedPurchase.paymentType}</span>
+              </div>
+            </div>
+
+            <div className="border border-orange-50 rounded-xl overflow-hidden text-[11px]">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-orange-50/30 font-bold text-gray-500 border-b border-orange-50">
+                    <th className="p-2.5 pl-3">Medicine Name</th>
+                    <th className="p-2.5">Batch</th>
+                    <th className="p-2.5">Expiry</th>
+                    <th className="p-2.5 text-center">Pack</th>
+                    <th className="p-2.5 text-center">Qty</th>
+                    <th className="p-2.5 text-center">Free</th>
+                    <th className="p-2.5 text-right">Rate (₹)</th>
+                    <th className="p-2.5 text-right">MRP (₹)</th>
+                    <th className="p-2.5 text-center">GST %</th>
+                    <th className="p-2.5 text-center">Returned</th>
+                    <th className="p-2.5 text-right pr-3">Total (₹)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-orange-50 text-gray-700 font-medium">
+                  {selectedPurchase.items.map((it, idx) => (
+                    <tr key={idx} className="hover:bg-orange-50/5">
+                      <td className="p-2.5 pl-3 font-bold text-gray-800">{it.itemName}</td>
+                      <td className="p-2.5 font-mono text-gray-600">{it.batch}</td>
+                      <td className="p-2.5 text-gray-500">{new Date(it.expiry).toLocaleDateString('en-GB')}</td>
+                      <td className="p-2.5 text-center">{it.pack || '0'}</td>
+                      <td className="p-2.5 text-center font-bold">{it.quantity}</td>
+                      <td className="p-2.5 text-center text-gray-400">{it.free}</td>
+                      <td className="p-2.5 text-right font-mono">₹{it.rate.toFixed(2)}</td>
+                      <td className="p-2.5 text-right font-mono">₹{it.mrp.toFixed(2)}</td>
+                      <td className="p-2.5 text-center font-mono">{(it.cgst + it.sgst + it.igst).toFixed(0)}%</td>
+                      <td className="p-2.5 text-center text-red-500 font-bold">{it.returnedQty || 0}</td>
+                      <td className="p-2.5 text-right pr-3 font-mono font-bold text-gray-800">₹{it.totalAmount.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-end text-[11px] font-semibold text-gray-550 gap-6 border-t border-orange-50 pt-3.5">
+              <div className="space-y-1.5 text-right min-w-[200px]">
+                <div className="flex justify-between">
+                  <span>Grand Total:</span>
+                  <span className="font-black text-gray-800">₹{selectedPurchase.totalAmount.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-green-700">
+                  <span>Paid:</span>
+                  <span className="font-extrabold">₹{selectedPurchase.paidAmount.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-red-650 font-bold border-t border-orange-50 pt-1.5">
+                  <span>Pending:</span>
+                  <span className="font-black">₹{selectedPurchase.pendingAmount.toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+
+            <SupplierPaymentSection purchase={selectedPurchase} onPaymentLogged={() => {
+              fetchPurchases();
+              client.get(`/pharmacy/purchases/${selectedPurchase._id}`).then(res => {
+                setSelectedPurchase(res.data);
+              });
+            }} />
+
+            <div className="flex justify-end gap-2 border-t border-orange-50 pt-3">
+              <button type="button" onClick={() => triggerA4Print(selectedPurchase)} className="btn-secondary text-xs py-2 px-5 font-bold flex items-center gap-1.5 cursor-pointer">
+                <Printer className="h-4 w-4" /> Print GRN Document
+              </button>
+              <button type="button" onClick={() => { setShowDetailModal(false); setSelectedPurchase(null); }} className="btn text-xs py-2 px-5 font-bold cursor-pointer">
+                Close View
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Return Modal */}
+      {showReturnModal && selectedPurchase && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <form onSubmit={handleSubmitReturn} className="bg-white rounded-3xl p-6 max-w-3xl w-full border border-orange-100 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b border-orange-50 pb-2.5">
+              <h3 className="font-black text-red-650 text-sm flex items-center gap-1.5">
+                <RotateCcw className="h-4.5 w-4.5" />
+                Deduct & Return Items - Invoice: {selectedPurchase.purchaseInvoiceNumber}
+              </h3>
+              <button type="button" onClick={() => setShowReturnModal(false)} className="text-gray-400 hover:text-gray-600 cursor-pointer">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div>
+              <label className="mb-1 block font-bold text-gray-550 text-xs">Return Reason / Memo *</label>
+              <input
+                type="text"
+                className="input py-2 text-xs"
+                required
+                placeholder="e.g. Near expiry items, Damaged packaging, Rate difference"
+                value={returnReason}
+                onChange={(e) => setReturnReason(e.target.value)}
+              />
+            </div>
+
+            <div className="border border-orange-50 rounded-xl overflow-hidden text-[11px]">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-orange-50/30 font-bold text-gray-500 border-b border-orange-50">
+                    <th className="p-2.5 pl-3">Medicine</th>
+                    <th className="p-2.5">Batch</th>
+                    <th className="p-2.5 text-center">Purchased Qty</th>
+                    <th className="p-2.5 text-center">Already Returned</th>
+                    <th className="p-2.5 text-center w-[120px]">Qty to Return</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-orange-50 text-gray-700 font-medium">
+                  {returnItems.map((it, idx) => {
+                    const maxReturn = it.purchasedQty - it.returnedQty;
+                    return (
+                      <tr key={idx} className="hover:bg-orange-50/5 align-middle">
+                        <td className="p-2.5 pl-3 font-bold text-gray-800">{it.itemName}</td>
+                        <td className="p-2.5 font-mono text-gray-650">{it.batch}</td>
+                        <td className="p-2.5 text-center">{it.purchasedQty}</td>
+                        <td className="p-2.5 text-center text-red-500 font-bold">{it.returnedQty}</td>
+                        <td className="p-2 text-center">
+                          <input
+                            type="number"
+                            min="0"
+                            max={maxReturn}
+                            disabled={maxReturn <= 0}
+                            className="input py-1 text-center font-bold max-w-[80px]"
+                            placeholder="0"
+                            value={it.qtyToReturn || ''}
+                            onChange={(e) => handleReturnQtyChange(idx, e.target.value)}
+                          />
+                          <span className="block text-[9px] text-gray-400 font-semibold mt-0.5">Max: {maxReturn}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-orange-50 pt-4">
+              <button type="button" onClick={() => setShowReturnModal(false)} className="btn-secondary text-xs py-2 px-5 font-bold cursor-pointer">
+                Cancel
+              </button>
+              <button type="submit" disabled={submittingReturn} className="btn bg-red-600 hover:bg-red-750 text-white text-xs py-2.5 px-6 font-bold shadow-md cursor-pointer disabled:bg-orange-300">
+                {submittingReturn ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+                Confirm Return & Adjust Stock
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* A4 Print layout container hidden from screen, visible during browser printing */}
+      {selectedPurchase && (
+        <div className="hidden print:block print:absolute print:inset-0 print:bg-white print:p-8 text-[11px] font-semibold text-gray-700">
+          <div className="border-b border-orange-200 pb-4 mb-4 flex justify-between items-start">
+            <div>
+              <h2 className="text-xl font-black text-gray-900 uppercase">GOODS RECEIVED NOTE (GRN)</h2>
+              <span className="text-xs font-mono font-bold text-orange-700">Invoice: {selectedPurchase.purchaseInvoiceNumber}</span>
+            </div>
+            <div className="text-right">
+              <h3 className="font-extrabold text-sm">{user?.hospitalName || 'Hospital Management System'}</h3>
+              <p className="text-[10px] text-gray-400 mt-1">Date Printed: {new Date().toLocaleDateString('en-GB')}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="p-3 bg-gray-50 border border-gray-100 rounded-xl">
+              <span className="block font-black text-gray-400 text-[9px] uppercase">Supplier Details:</span>
+              <p className="font-black text-gray-800 mt-0.5">{selectedPurchase.supplierId?.name || selectedPurchase.supplierName || 'Direct Purchase'}</p>
+              {selectedPurchase.supplierId?.code && <p className="font-mono text-[10px] mt-0.5">Code: {selectedPurchase.supplierId.code}</p>}
+              {selectedPurchase.supplierId?.gstin && <p className="font-mono text-[10px] mt-0.5">GSTIN: {selectedPurchase.supplierId.gstin}</p>}
+            </div>
+            <div className="p-3 bg-gray-50 border border-gray-100 rounded-xl">
+              <span className="block font-black text-gray-400 text-[9px] uppercase">Settlement Details:</span>
+              <p className="mt-0.5">Invoice Date: <span className="font-black text-gray-800">{new Date(selectedPurchase.invoiceDate).toLocaleDateString('en-GB')}</span></p>
+              <p className="mt-0.5">Received Date: <span className="font-black text-gray-800">{new Date(selectedPurchase.receiveDate).toLocaleDateString('en-GB')}</span></p>
+              <p className="mt-0.5">Payment Type: <span className="font-black text-gray-800">{selectedPurchase.paymentType}</span></p>
+            </div>
+          </div>
+
+          <div className="border border-gray-200 rounded-xl overflow-hidden mb-6">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-gray-50 font-bold text-gray-500 border-b border-gray-200">
+                  <th className="p-2 pl-3">Item Name</th>
+                  <th className="p-2">Batch</th>
+                  <th className="p-2">Expiry</th>
+                  <th className="p-2 text-center">Pack</th>
+                  <th className="p-2 text-center">Qty</th>
+                  <th className="p-2 text-center">Free</th>
+                  <th className="p-2 text-right">Rate (₹)</th>
+                  <th className="p-2 text-right">MRP (₹)</th>
+                  <th className="p-2 text-center">GST %</th>
+                  <th className="p-2 text-right pr-3">Total (₹)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 font-medium text-gray-700">
+                {selectedPurchase.items.map((it, idx) => (
+                  <tr key={idx}>
+                    <td className="p-2 pl-3 font-bold text-gray-800">{it.itemName}</td>
+                    <td className="p-2 font-mono text-gray-650">{it.batch}</td>
+                    <td className="p-2 text-gray-500">{new Date(it.expiry).toLocaleDateString('en-GB')}</td>
+                    <td className="p-2 text-center">{it.pack || '0'}</td>
+                    <td className="p-2 text-center font-bold">{it.quantity}</td>
+                    <td className="p-2 text-center text-gray-400">{it.free}</td>
+                    <td className="p-2 text-right font-mono">₹{it.rate.toFixed(2)}</td>
+                    <td className="p-2 text-right font-mono">₹{it.mrp.toFixed(2)}</td>
+                    <td className="p-2 text-center font-mono">{(it.cgst + it.sgst + it.igst).toFixed(0)}%</td>
+                    <td className="p-2 text-right pr-3 font-mono font-bold text-gray-800">₹{it.totalAmount.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex justify-between items-start border-t border-gray-200 pt-4">
+            <div>
+              <span className="block font-bold text-gray-400 text-[9px] uppercase">Notes:</span>
+              <p className="text-[10px] text-gray-500 italic">{selectedPurchase.notes || 'No invoice notes recorded.'}</p>
+              <p className="text-[10px] text-gray-600 mt-2 font-bold">Received By: {selectedPurchase.receivedBy}</p>
+            </div>
+            <div className="space-y-1 text-right min-w-[200px]">
+              <div className="flex justify-between">
+                <span>Grand Total:</span>
+                <span className="font-black text-gray-850">₹{selectedPurchase.totalAmount.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-green-700 font-bold">
+                <span>Amount Paid:</span>
+                <span>₹{selectedPurchase.paidAmount.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-red-650 font-bold border-t border-gray-200 pt-1.5">
+                <span>Balance Pending:</span>
+                <span className="font-black">₹{selectedPurchase.pendingAmount.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-between items-center mt-20 text-[10px] font-bold text-gray-400">
+            <div className="text-center w-[150px] border-t border-gray-300 pt-2">
+              Pharmacist Signature
+            </div>
+            <div className="text-center w-[150px] border-t border-gray-300 pt-2">
+              Store Manager Verify
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const BillingReportsView = () => {
   const [reportType, setReportType] = useState('sales'); 
   const [data, setData] = useState(null);
@@ -4260,7 +6065,785 @@ const GstReportsView = () => {
   );
 };
 
+// ==================== MEDICINE HISTORY LEDGER MODAL ====================
+const MedicineHistoryModal = ({ itemName, onClose }) => {
+  const [loading, setLoading] = useState(true);
+  const [details, setDetails] = useState(null);
 
+  useEffect(() => {
+    if (!itemName) return;
+    const fetchHistory = async () => {
+      setLoading(true);
+      try {
+        const [batchesRes, ledgerRes] = await Promise.all([
+          client.get(`/pharmacy/inventory?limit=100&search=${encodeURIComponent(itemName)}`),
+          client.get(`/pharmacy/reports?reportType=stock-ledger&itemName=${encodeURIComponent(itemName)}`)
+        ]);
 
+        const batches = batchesRes.data.items || [];
+        const ledger = ledgerRes.data || [];
+        
+        const currentQty = batches.reduce((sum, b) => sum + b.quantity, 0);
+        
+        const totalPurchased = ledger.filter(l => l.type === 'Purchase' || l.type === 'Excel Upload')
+          .reduce((sum, l) => sum + Math.abs(l.quantity), 0);
+          
+        const totalSold = ledger.filter(l => l.type === 'Sale')
+          .reduce((sum, l) => sum + Math.abs(l.quantity), 0);
+          
+        const totalReturned = ledger.filter(l => l.type === 'Sales Return' || l.type === 'Purchase Return')
+          .reduce((sum, l) => sum + Math.abs(l.quantity), 0);
+
+        setDetails({
+          batches,
+          ledger,
+          currentQty,
+          totalPurchased,
+          totalSold,
+          totalReturned
+        });
+      } catch (err) {
+        toast.error('Failed to load medicine history ledger.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchHistory();
+  }, [itemName]);
+
+  if (!itemName) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl p-6 max-w-4xl w-full border border-orange-100 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto text-xs text-gray-700">
+        <div className="flex justify-between items-center border-b border-orange-50 pb-2.5">
+          <h3 className="font-black text-gray-800 text-sm flex items-center gap-1.5">
+            <Pill className="text-orange-500 h-4.5 w-4.5" />
+            Medicine History Log: {itemName}
+          </h3>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 cursor-pointer">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="p-8 text-center text-gray-400">
+            <Loader2 className="h-5 w-5 animate-spin text-orange-500 inline mr-2" /> Loading ledger history details...
+          </div>
+        ) : !details ? (
+          <div className="p-4 text-center text-gray-400 font-bold">Failed to load history data.</div>
+        ) : (
+          <div className="space-y-4">
+            
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs font-bold">
+              <div className="p-3 bg-orange-50/20 border border-orange-100 rounded-xl">
+                <span className="text-[10px] text-gray-400 block uppercase">Current Stock</span>
+                <span className="text-sm font-black text-orange-700 mt-1 block">{details.currentQty} Units</span>
+              </div>
+              <div className="p-3 bg-green-50/20 border border-green-100 rounded-xl">
+                <span className="text-[10px] text-gray-400 block uppercase">Total Purchased</span>
+                <span className="text-sm font-black text-green-700 mt-1 block">{details.totalPurchased} Units</span>
+              </div>
+              <div className="p-3 bg-blue-50/20 border border-blue-100 rounded-xl">
+                <span className="text-[10px] text-gray-400 block uppercase">Total Sold</span>
+                <span className="text-sm font-black text-blue-700 mt-1 block">{details.totalSold} Units</span>
+              </div>
+              <div className="p-3 bg-red-50/20 border border-red-100 rounded-xl">
+                <span className="text-[10px] text-gray-400 block uppercase">Total Returned</span>
+                <span className="text-sm font-black text-red-750 mt-1 block">{details.totalReturned} Units</span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h4 className="font-extrabold text-gray-800 text-xs border-b border-orange-100 pb-1">Available Batches & Expiry</h4>
+              <div className="overflow-x-auto border border-orange-50 rounded-xl bg-white">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-orange-50/20 font-bold text-gray-500 border-b border-orange-50">
+                      <th className="p-2 pl-3">Batch No</th>
+                      <th className="p-2">Expiry</th>
+                      <th className="p-2 text-center">Available Qty</th>
+                      <th className="p-2 text-right">MRP (₹)</th>
+                      <th className="p-2 text-right">Purchase Rate (₹)</th>
+                      <th className="p-2 pr-3">Supplier Reference</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-orange-50 text-gray-700 font-semibold">
+                    {details.batches.map((b, i) => (
+                      <tr key={i} className="hover:bg-orange-50/5">
+                        <td className="p-2 pl-3 font-mono font-bold text-orange-700">{b.batch}</td>
+                        <td className="p-2 text-gray-500">{new Date(b.expiry).toLocaleDateString('en-GB', { month: '2-digit', year: 'numeric' })}</td>
+                        <td className="p-2 text-center font-bold">{b.quantity}</td>
+                        <td className="p-2 text-right font-mono">₹{b.mrp.toFixed(2)}</td>
+                        <td className="p-2 text-right font-mono">₹{b.rate.toFixed(2)}</td>
+                        <td className="p-2 pr-3 text-gray-550">{b.supplierId?.name || b.supplierName || 'Excel Upload / System'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h4 className="font-extrabold text-gray-800 text-xs border-b border-orange-100 pb-1">Chronological Movement Ledger</h4>
+              <div className="overflow-x-auto border border-orange-50 rounded-xl bg-white max-h-[220px]">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-orange-50/20 font-bold text-gray-500 border-b border-orange-50 sticky top-0">
+                      <th className="p-2 pl-3">Date</th>
+                      <th className="p-2">Batch</th>
+                      <th className="p-2 text-center">Movement Qty</th>
+                      <th className="p-2">Movement Type</th>
+                      <th className="p-2">Remarks</th>
+                      <th className="p-2 pr-3">User</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-orange-50 text-gray-700 font-semibold">
+                    {details.ledger.map((l, i) => (
+                      <tr key={i} className="hover:bg-orange-50/5 align-middle">
+                        <td className="p-2 pl-3 text-gray-500">{new Date(l.timestamp).toLocaleDateString('en-GB')}</td>
+                        <td className="p-2 font-mono text-gray-600">{l.batch}</td>
+                        <td className={`p-2 text-center font-black ${l.quantity > 0 ? 'text-green-700' : 'text-red-650'}`}>
+                          {l.quantity > 0 ? `+${l.quantity}` : l.quantity}
+                        </td>
+                        <td className="p-2">
+                          <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-black uppercase ${
+                            l.type === 'Purchase' || l.type === 'Excel Upload' ? 'bg-green-50 text-green-700' :
+                            l.type === 'Sale' ? 'bg-blue-50 text-blue-700' :
+                            'bg-amber-50 text-amber-700'
+                          }`}>{l.type}</span>
+                        </td>
+                        <td className="p-2 text-gray-550 max-w-[200px] truncate" title={l.remarks}>{l.remarks || '-'}</td>
+                        <td className="p-2 pr-3 text-gray-500 font-bold">{l.performedBy?.username || 'Staff'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-end border-t border-orange-50 pt-3">
+          <button type="button" onClick={onClose} className="btn text-xs py-2 px-5 font-bold cursor-pointer">
+            Close View
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ==================== STOCK ADJUSTMENT VIEW ====================
+const StockAdjustmentView = () => {
+  const [form, setForm] = useState({ itemName: '', batch: '', quantity: 0, type: 'Decrease', reason: 'Damage', remarks: '', approvedBy: '' });
+  const [batches, setBatches] = useState([]);
+  const [loadingBatches, setLoadingBatches] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const [query, setQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+
+  useEffect(() => {
+    if (!query.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const { data } = await client.get(`/pharmacy/inventory?limit=10&search=${encodeURIComponent(query)}`);
+        setSearchResults(data.items);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  const handleSelectMed = async (name) => {
+    setForm(prev => ({ ...prev, itemName: name, batch: '' }));
+    setQuery(name);
+    setShowResults(false);
+    setLoadingBatches(true);
+    try {
+      const { data } = await client.get(`/pharmacy/inventory?limit=100&search=${encodeURIComponent(name)}`);
+      setBatches(data.items.filter(item => item.itemName.toLowerCase() === name.toLowerCase()));
+    } catch (err) {
+      toast.error('Failed to load batches.');
+    } finally {
+      setLoadingBatches(false);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.itemName || !form.batch || !form.quantity || form.quantity <= 0 || !form.reason) {
+      toast.error('Please fill all required stock adjustment fields.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await client.post('/pharmacy/adjustments', form);
+      toast.success('Physical stock adjustment recorded and ledger synchronized!');
+      setForm({ itemName: '', batch: '', quantity: 0, type: 'Decrease', reason: 'Damage', remarks: '', approvedBy: '' });
+      setQuery('');
+      setBatches([]);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Error processing adjustment.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4 max-w-xl text-xs text-gray-700">
+      <div className="bg-orange-50/10 p-5 border border-orange-100 rounded-3xl space-y-4">
+        <h4 className="font-extrabold text-gray-800 text-xs border-b border-orange-100 pb-2 flex items-center gap-1.5">
+          <AlertCircle className="text-orange-500 h-4.5 w-4.5" /> Adjust Physical Stock Inventory
+        </h4>
+
+        <div className="relative">
+          <label className="mb-1 block font-bold text-gray-550">Select Medicine *</label>
+          <input
+            type="text"
+            className="input py-2 text-xs font-semibold"
+            required
+            placeholder="Type medicine name to search..."
+            value={query}
+            onChange={(e) => { setQuery(e.target.value); setShowResults(true); }}
+            onFocus={() => setShowResults(true)}
+          />
+          {showResults && query && (
+            <div className="absolute left-0 right-0 z-40 bg-white border border-orange-150 rounded-2xl shadow-xl max-h-[150px] overflow-y-auto mt-1 p-1">
+              {searching ? (
+                <div className="p-2 text-center text-gray-400 text-[10px]">Searching...</div>
+              ) : searchResults.length === 0 ? (
+                <div className="p-2 text-center text-gray-400 text-[10px] font-bold">No match found.</div>
+              ) : (
+                searchResults.map(item => (
+                  <button
+                    key={item._id}
+                    type="button"
+                    onClick={() => handleSelectMed(item.itemName)}
+                    className="w-full text-left px-3 py-1.5 hover:bg-orange-50 rounded-xl text-[10px] text-gray-700 font-bold block cursor-pointer"
+                  >
+                    {item.itemName} (Pack: {item.pack})
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="mb-1 block font-bold text-gray-550">Target Batch *</label>
+            <select
+              className="input py-2 text-xs font-semibold"
+              required
+              disabled={loadingBatches || batches.length === 0}
+              value={form.batch}
+              onChange={(e) => setForm({ ...form, batch: e.target.value })}
+            >
+              <option value="">-- Choose Batch --</option>
+              {batches.map(b => (
+                <option key={b._id} value={b.batch}>
+                  {b.batch} (Avail Qty: {b.quantity})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block font-bold text-gray-550">Adjustment Type *</label>
+            <select
+              className="input py-2 text-xs font-semibold"
+              required
+              value={form.type}
+              onChange={(e) => setForm({ ...form, type: e.target.value })}
+            >
+              <option value="Decrease">Deduct Stock (Breakage/Loss/Expired)</option>
+              <option value="Increase">Add Stock (Manual Increase)</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="mb-1 block font-bold text-gray-555">Quantity to Adjust *</label>
+            <input
+              type="number"
+              min="1"
+              className="input py-2 text-xs font-bold"
+              required
+              value={form.quantity || ''}
+              onChange={(e) => setForm({ ...form, quantity: parseInt(e.target.value) || 0 })}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block font-bold text-gray-555">Primary Reason *</label>
+            <select
+              className="input py-2 text-xs font-semibold"
+              required
+              value={form.reason}
+              onChange={(e) => setForm({ ...form, reason: e.target.value })}
+            >
+              <option value="Damage">Damage / Packaging Broken</option>
+              <option value="Expiry">Expired Disposal</option>
+              <option value="Lost">Lost / Discrepancy</option>
+              <option value="Audit Adjustment">Physical Audit Correction</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="mb-1 block font-bold text-gray-550">Remarks</label>
+            <input
+              type="text"
+              className="input py-2 text-xs"
+              placeholder="e.g. Discarded under supervision"
+              value={form.remarks}
+              onChange={(e) => setForm({ ...form, remarks: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block font-bold text-gray-550">Approved By Staff *</label>
+            <input
+              type="text"
+              className="input py-2 text-xs font-bold"
+              required
+              placeholder="e.g. Dr. Roy or Store Head"
+              value={form.approvedBy}
+              onChange={(e) => setForm({ ...form, approvedBy: e.target.value })}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-2 pt-2">
+        <button
+          type="submit"
+          disabled={submitting}
+          className="btn py-2.5 px-6 text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:bg-orange-300 shadow-md shadow-orange-500/10"
+        >
+          {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+          Apply Stock Adjustment
+        </button>
+      </div>
+    </form>
+  );
+};
+
+// ==================== STOCK LEDGER VIEW ====================
+const StockLedgerView = () => {
+  const [ledger, setLedger] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+
+  const fetchLedger = useCallback(async () => {
+    setLoading(true);
+    try {
+      const url = `/pharmacy/reports?reportType=stock-ledger&itemName=${encodeURIComponent(search)}&fromDate=${fromDate}&toDate=${toDate}`;
+      const { data } = await client.get(url);
+      setLedger(data);
+    } catch (err) {
+      toast.error('Failed to load stock ledger logs.');
+    } finally {
+      setLoading(false);
+    }
+  }, [search, fromDate, toDate]);
+
+  useEffect(() => {
+    fetchLedger();
+  }, [fetchLedger]);
+
+  return (
+    <div className="space-y-4 text-xs text-gray-700">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-orange-50/10 p-4 border border-orange-100 rounded-2xl">
+        <div className="relative flex-1 max-w-xs">
+          <input
+            type="text"
+            className="input pl-9 py-2 text-xs font-semibold"
+            placeholder="Search by Medicine Name..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-orange-400" />
+        </div>
+        <div className="flex flex-wrap gap-2.5 items-center">
+          <span className="font-bold text-gray-550">Dates:</span>
+          <input
+            type="date"
+            className="input py-1.5 text-xs max-w-[130px]"
+            value={fromDate}
+            onChange={(e) => setFromDate(e.target.value)}
+          />
+          <span className="text-gray-400 font-bold">to</span>
+          <input
+            type="date"
+            className="input py-1.5 text-xs max-w-[130px]"
+            value={toDate}
+            onChange={(e) => setToDate(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="card overflow-hidden bg-white border border-orange-100 shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-gradient-to-r from-orange-50 to-amber-50 text-xs font-bold uppercase text-gray-600 border-b border-orange-100">
+                <th className="p-3 pl-4">Date</th>
+                <th className="p-3">Medicine</th>
+                <th className="p-3">Batch</th>
+                <th className="p-3 text-center">Opening Stock</th>
+                <th className="p-3 text-center">Stock In</th>
+                <th className="p-3 text-center">Stock Out</th>
+                <th className="p-3 text-center">Closing Stock</th>
+                <th className="p-3 text-center">Transaction Type</th>
+                <th className="p-3">Remarks</th>
+                <th className="p-3 pr-4">User</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-orange-50 font-semibold text-gray-700">
+              {loading ? (
+                <tr>
+                  <td colSpan="10" className="p-8 text-center text-gray-400">
+                    <Loader2 className="h-5 w-5 animate-spin text-orange-550 inline mr-2" /> Loading ledger records...
+                  </td>
+                </tr>
+              ) : ledger.length === 0 ? (
+                <tr>
+                  <td colSpan="10" className="p-8 text-center text-gray-400 font-bold">
+                    No stock movements recorded in selected range.
+                  </td>
+                </tr>
+              ) : (
+                ledger.map((l, i) => (
+                  <tr key={i} className="hover:bg-orange-50/10">
+                    <td className="p-3 pl-4 text-gray-500">{new Date(l.timestamp).toLocaleString('en-GB')}</td>
+                    <td className="p-3 font-bold text-gray-800">{l.itemName}</td>
+                    <td className="p-3"><span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-mono text-[10px]">{l.batch}</span></td>
+                    <td className="p-3 text-center font-bold text-gray-500">{l.previousStock}</td>
+                    <td className="p-3 text-center font-bold text-green-700">{l.quantity > 0 ? `+${l.quantity}` : '-'}</td>
+                    <td className="p-3 text-center font-bold text-red-650">{l.quantity < 0 ? Math.abs(l.quantity) : '-'}</td>
+                    <td className="p-3 text-center font-bold text-gray-850">{l.newStock}</td>
+                    <td className="p-3 text-center">
+                      <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                        l.type === 'Purchase' || l.type === 'Excel Upload' ? 'bg-green-50 text-green-700' :
+                        l.type === 'Sale' ? 'bg-blue-50 text-blue-700' :
+                        'bg-amber-50 text-amber-700'
+                      }`}>{l.type}</span>
+                    </td>
+                    <td className="p-3 text-gray-550 max-w-[200px] truncate" title={l.remarks}>{l.remarks || '-'}</td>
+                    <td className="p-3 pr-4 font-bold text-gray-600">{l.performedBy?.username || 'Staff'}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ==================== SYSTEM AUDIT LOGS VIEW ====================
+const AuditLogsView = () => {
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchLogs = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await client.get('/pharmacy/audit-logs');
+      setLogs(data);
+    } catch (err) {
+      toast.error('Failed to load audit logs.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchLogs();
+  }, [fetchLogs]);
+
+  return (
+    <div className="space-y-4 text-xs text-gray-700 animate-fade-in">
+      <div className="flex justify-between items-center border-b border-orange-100 pb-2">
+        <h3 className="font-extrabold text-gray-800 text-sm flex items-center gap-2">
+          <ShieldAlert className="text-orange-500 h-4.5 w-4.5" />
+          Pharmacy Inventory Audit Trail Logs
+        </h3>
+        <button type="button" onClick={fetchLogs} className="btn py-1.5 px-4 text-xs font-bold cursor-pointer">
+          Refresh Logs
+        </button>
+      </div>
+
+      <div className="card overflow-hidden bg-white border border-orange-100 shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-gradient-to-r from-orange-50 to-amber-50 text-xs font-bold uppercase text-gray-600 border-b border-orange-100">
+                <th className="p-3.5 pl-4">Timestamp</th>
+                <th className="p-3.5">User</th>
+                <th className="p-3.5">Role</th>
+                <th className="p-3.5">Action</th>
+                <th className="p-3.5">Module</th>
+                <th className="p-3.5">Old State</th>
+                <th className="p-3.5">New State</th>
+                <th className="p-3.5 pr-4">IP Address</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-orange-50 font-semibold text-gray-600">
+              {loading ? (
+                <tr>
+                  <td colSpan="8" className="p-8 text-center text-gray-400">
+                    <Loader2 className="h-5 w-5 animate-spin text-orange-550 inline mr-2" /> Loading audit trail...
+                  </td>
+                </tr>
+              ) : logs.length === 0 ? (
+                <tr>
+                  <td colSpan="8" className="p-8 text-center text-gray-400 font-bold">
+                    No audit records logged.
+                  </td>
+                </tr>
+              ) : (
+                logs.map(log => (
+                  <tr key={log._id} className="hover:bg-orange-50/10">
+                    <td className="p-3.5 pl-4 text-gray-400">{new Date(log.createdAt).toLocaleString('en-GB')}</td>
+                    <td className="p-3.5 font-bold text-gray-800">{log.username}</td>
+                    <td className="p-3.5 uppercase text-[10px] font-black text-gray-500">{log.role}</td>
+                    <td className="p-3.5 text-orange-700 font-black">{log.action}</td>
+                    <td className="p-3.5 font-bold text-gray-500">{log.module}</td>
+                    <td className="p-3.5 font-mono text-[10px] text-red-650">{log.oldValue || '-'}</td>
+                    <td className="p-3.5 font-mono text-[10px] text-green-700">{log.newValue || '-'}</td>
+                    <td className="p-3.5 pr-4 font-mono text-gray-400 text-[10px]">{log.ipAddress || '-'}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ==================== LIVE SUPPLIER PAYMENTS HISTORY LEDGER ====================
+const SupplierPaymentSection = ({ purchase, onPaymentLogged }) => {
+  const { user } = useAuth();
+  const [payments, setPayments] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState({ amountPaid: 0, paymentMode: 'Cash', referenceNumber: '', transactionId: '', notes: '', paymentDate: new Date().toISOString().split('T')[0] });
+  const [submitting, setSubmitting] = useState(false);
+
+  const fetchPayments = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await client.get(`/pharmacy/purchases/${purchase._id}/payments`);
+      setPayments(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, [purchase._id]);
+
+  useEffect(() => {
+    fetchPayments();
+  }, [fetchPayments]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (form.amountPaid <= 0) {
+      toast.error('Payment amount must be greater than 0.');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await client.post(`/pharmacy/purchases/${purchase._id}/payments`, form);
+      toast.success('Supplier payment logged successfully!');
+      setShowModal(false);
+      setForm({ amountPaid: 0, paymentMode: 'Cash', referenceNumber: '', transactionId: '', notes: '', paymentDate: new Date().toISOString().split('T')[0] });
+      fetchPayments();
+      if (onPaymentLogged) onPaymentLogged();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Error saving payment.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const isFinanceOrAdmin = user?.role === 'admin' || user?.role === 'finance/admin' || user?.role === 'store manager';
+
+  return (
+    <div className="space-y-3.5 border-t border-orange-50 pt-4 text-[11px]">
+      <div className="flex justify-between items-center">
+        <h4 className="font-extrabold text-gray-800 text-xs flex items-center gap-1.5">
+          <DollarSign className="text-orange-500 h-4.5 w-4.5" /> Supplier Payments History Ledger
+        </h4>
+        {purchase.pendingAmount > 0 && isFinanceOrAdmin && (
+          <button
+            type="button"
+            onClick={() => { setForm(prev => ({ ...prev, amountPaid: purchase.pendingAmount })); setShowModal(true); }}
+            className="btn py-1 px-3 text-[10px] font-bold cursor-pointer"
+          >
+            Record Bill Payment
+          </button>
+        )}
+      </div>
+
+      <div className="border border-orange-50 rounded-xl overflow-hidden bg-white max-h-[150px] overflow-y-auto">
+        <table className="w-full text-left">
+          <thead>
+            <tr className="bg-orange-50/20 font-bold text-gray-500 border-b border-orange-50">
+              <th className="p-2 pl-3">Date</th>
+              <th className="p-2 text-right">Amount Paid</th>
+              <th className="p-2 text-center">Payment Mode</th>
+              <th className="p-2">Transaction ID / Ref</th>
+              <th className="p-2">Notes</th>
+              <th className="p-2 pr-3">Logged By</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-orange-50 text-gray-700 font-semibold">
+            {loading ? (
+              <tr>
+                <td colSpan="6" className="p-4 text-center text-gray-400">Loading payments...</td>
+              </tr>
+            ) : payments.length === 0 ? (
+              <tr>
+                <td colSpan="6" className="p-4 text-center text-gray-400 italic">No payments logged against this purchase invoice yet.</td>
+              </tr>
+            ) : (
+              payments.map((pay, i) => (
+                <tr key={i} className="hover:bg-orange-50/5">
+                  <td className="p-2 text-gray-500 pl-3">{new Date(pay.paymentDate).toLocaleDateString('en-GB')}</td>
+                  <td className="p-2 text-right font-black font-mono text-gray-800">₹{pay.amountPaid.toFixed(2)}</td>
+                  <td className="p-2 text-center">
+                    <span className="bg-orange-50 text-orange-700 px-2 py-0.5 rounded text-[9px] font-bold uppercase">{pay.paymentMode}</span>
+                  </td>
+                  <td className="p-2 font-mono text-gray-555">{pay.transactionId || pay.referenceNumber || '-'}</td>
+                  <td className="p-2 text-gray-500">{pay.notes || '-'}</td>
+                  <td className="p-2 pr-3 text-gray-600 font-bold">{pay.createdBy?.username || 'Staff'}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {showModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <form onSubmit={handleSubmit} className="bg-white rounded-3xl p-5 max-w-sm w-full border border-orange-100 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b border-orange-50 pb-2.5">
+              <h3 className="font-black text-gray-800 text-xs flex items-center gap-1.5">
+                <DollarSign className="text-orange-500 h-4.5 w-4.5" />
+                Record Supplier Payment
+              </h3>
+              <button type="button" onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600 cursor-pointer">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3.5 text-xs">
+              <div>
+                <label className="mb-1 block font-bold text-gray-555">Amount Paid (₹) *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  max={purchase.pendingAmount}
+                  className="input py-2 text-xs font-black text-right"
+                  required
+                  value={form.amountPaid || ''}
+                  onChange={(e) => setForm({ ...form, amountPaid: Math.min(purchase.pendingAmount, parseFloat(e.target.value) || 0) })}
+                />
+                <span className="block text-[9px] text-gray-400 mt-0.5">Max outstanding: ₹{purchase.pendingAmount.toFixed(2)}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="mb-1 block font-bold text-gray-550">Payment Mode *</label>
+                  <select
+                    className="input py-2 text-xs font-semibold"
+                    required
+                    value={form.paymentMode}
+                    onChange={(e) => setForm({ ...form, paymentMode: e.target.value })}
+                  >
+                    <option value="Cash">Cash</option>
+                    <option value="UPI">UPI</option>
+                    <option value="Card">Card</option>
+                    <option value="Bank Transfer">Bank Transfer</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block font-bold text-gray-550">Payment Date *</label>
+                  <input
+                    type="date"
+                    className="input py-2 text-xs font-semibold"
+                    required
+                    value={form.paymentDate}
+                    onChange={(e) => setForm({ ...form, paymentDate: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block font-bold text-gray-550">Transaction ID</label>
+                <input
+                  type="text"
+                  className="input py-2 text-xs font-mono"
+                  placeholder="e.g. TXN-102930129"
+                  value={form.transactionId}
+                  onChange={(e) => setForm({ ...form, transactionId: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block font-bold text-gray-555">Reference / Cheque Number</label>
+                <input
+                  type="text"
+                  className="input py-2 text-xs font-mono"
+                  placeholder="e.g. CHQ-928123"
+                  value={form.referenceNumber}
+                  onChange={(e) => setForm({ ...form, referenceNumber: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block font-bold text-gray-550">Notes</label>
+                <input
+                  type="text"
+                  className="input py-2 text-xs"
+                  placeholder="Payment notes/memo..."
+                  value={form.notes}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-orange-50 pt-3">
+              <button type="button" onClick={() => setShowModal(false)} className="btn-secondary text-xs py-2 px-4 font-bold cursor-pointer">
+                Cancel
+              </button>
+              <button type="submit" disabled={submitting} className="btn text-xs py-2 px-5 font-bold cursor-pointer disabled:bg-orange-300">
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+                Confirm Payment
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default PharmacyWorkspace;

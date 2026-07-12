@@ -18,7 +18,7 @@ const pharmacyStockMovementSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['Excel Upload', 'Sale', 'Sales Return', 'Manual Adjustment', 'OT Issue', 'OT Return'],
+    enum: ['Excel Upload', 'Sale', 'Sales Return', 'Manual Adjustment', 'OT Issue', 'OT Return', 'Purchase', 'Purchase Return', 'Stock Adjustment', 'Expired Disposal'],
     required: true
   },
   quantity: {

@@ -11,6 +11,10 @@ dotenv.config({ path: path.join(__dirname, '.env') });
 // Connect to Database
 connectDB();
 
+// Start Medication grace period background checker
+const { startMedicationScheduler } = require('./utils/medicationScheduler');
+startMedicationScheduler();
+
 const app = express();
 
 // Middleware

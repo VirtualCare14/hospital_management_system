@@ -354,6 +354,49 @@ const processReturn = async (req, res) => {
       }
     }
 
+    // Recalculate bill amounts and totals based on effective quantities
+    let newSubTotal = 0;
+    let newDiscount = 0;
+    let newGstAmount = 0;
+    let newGrandTotal = 0;
+
+    for (const item of bill.items) {
+      const effectiveQty = item.quantity - item.returnedQty;
+      const itemSubtotal = item.unitPrice * effectiveQty;
+      const itemDiscount = itemSubtotal * (item.discount / 100);
+      const taxableAmount = itemSubtotal - itemDiscount;
+      const itemGst = taxableAmount * (item.gstPercentage / 100);
+      const itemTotal = taxableAmount + itemGst;
+
+      item.gstAmount = Number(itemGst.toFixed(2)) || 0;
+      item.amount = Number(itemTotal.toFixed(2)) || 0;
+
+      newSubTotal += itemSubtotal;
+      newDiscount += itemDiscount;
+      newGstAmount += itemGst;
+      newGrandTotal += itemTotal;
+    }
+
+    bill.subTotal = Number(newSubTotal.toFixed(2)) || 0;
+    bill.discount = Number(newDiscount.toFixed(2)) || 0;
+    bill.gstAmount = Number(newGstAmount.toFixed(2)) || 0;
+    bill.grandTotal = Number(newGrandTotal.toFixed(2)) || 0;
+
+    // Refund handling: adjust paidAmount and balanceAmount dynamically
+    if (bill.paidAmount > bill.grandTotal) {
+      bill.paidAmount = bill.grandTotal;
+    }
+    bill.balanceAmount = Math.max(0, bill.grandTotal - bill.paidAmount);
+
+    // Update payment status dynamically
+    if (bill.balanceAmount === 0) {
+      bill.paymentStatus = 'Paid';
+    } else if (bill.paidAmount > 0) {
+      bill.paymentStatus = 'Partially Paid';
+    } else {
+      bill.paymentStatus = 'Unpaid';
+    }
+
     // Determine status of invoice
     const allItemsReturned = bill.items.every(it => it.returnedQty === it.quantity);
     const someItemsReturned = bill.items.some(it => it.returnedQty > 0);

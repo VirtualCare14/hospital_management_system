@@ -31,7 +31,8 @@ import {
   Truck,
   Droplets,
   Clock,
-  DoorOpen
+  DoorOpen,
+  Trash2
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -52,6 +53,7 @@ const Sidebar = () => {
     { to: '/admin/ot-settings', label: 'OT Settings', icon: Scissors },
     { to: '/admin/same-day-care', label: 'Same Day Care Settings', icon: Bandage },
     { to: '/admin/pharmacy-settings', label: 'Pharmacy Settings', icon: Settings },
+    { to: '/admin/delete-data', label: 'Delete Data', icon: Trash2 },
   ];
 
   const receptionLinks = [
@@ -86,8 +88,10 @@ const Sidebar = () => {
     { to: '/pharmacy?section=sales-return', section: 'sales-return', label: 'Sales Return', icon: RotateCcw },
     { to: '/pharmacy?section=requests', section: 'requests', label: 'IPD Patient Requests', icon: Activity },
     { to: '/pharmacy?section=inventory', section: 'inventory', label: 'Inventory', icon: Package },
-    { to: '/pharmacy?section=excel-upload', section: 'excel-upload', label: 'Excel Upload / Purchase', icon: Upload },
+    { to: '/pharmacy?section=excel-upload', section: 'excel-upload', label: 'Excel Upload', icon: Upload },
     { to: '/pharmacy?section=supplier-management', section: 'supplier-management', label: 'Suppliers', icon: Truck },
+    { to: '/pharmacy?section=purchase-entry', section: 'purchase-entry', label: 'Purchase Entry (GRN)', icon: Plus },
+    { to: '/pharmacy?section=purchase-history', section: 'purchase-history', label: 'Purchase History', icon: History },
     { to: '/pharmacy?section=billing-reports', section: 'billing-reports', label: 'Reports', icon: BarChart3 },
     { to: '/pharmacy?section=gst-reports', section: 'gst-reports', label: 'GST Reports', icon: Percent },
     { to: '/pharmacy?section=expiry', section: 'expiry', label: 'Expiry Medicines', icon: CalendarDays },
@@ -222,6 +226,10 @@ const Sidebar = () => {
               <NavLink to="/ipd/same-day" className={({ isActive }) => isActive ? activeStyle : inactiveStyle}>
                 <Activity className="h-5 w-5" />
                 IPD Same Day
+              </NavLink>
+              <NavLink to="/ipd/discharged-patients" className={({ isActive }) => isActive ? activeStyle : inactiveStyle}>
+                <DoorOpen className="h-5 w-5" />
+                Discharged Patients
               </NavLink>
             </div>
           </div>

@@ -82,3 +82,17 @@ select, option {
   color: #374151 !important;
 }
 
+/* Global utility overrides to prevent absolute icons from overlapping with input text */
+input.input[class*="pl-9"], .pl-9 {
+  padding-left: 2.25rem !important;
+}
+input.input[class*="pl-10"], .pl-10 {
+  padding-left: 2.5rem !important;
+}
+input.input[class*="pl-11"], .pl-11 {
+  padding-left: 2.75rem !important;
+}
+input.input[class*="pl-12"], .pl-12 {
+  padding-left: 3rem !important;
+}
+

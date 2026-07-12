@@ -19,13 +19,25 @@ const pharmacyUploadHistorySchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
-  insertedCount: {
+  successfulRows: {
     type: Number,
     default: 0
   },
-  updatedCount: {
+  failedRows: {
     type: Number,
     default: 0
+  },
+  purchaseInvoiceCreated: {
+    type: String
+  },
+  status: {
+    type: String,
+    enum: ['Completed', 'Partial', 'Failed'],
+    default: 'Completed'
+  },
+  importLog: {
+    type: [String],
+    default: []
   }
 }, { timestamps: true });
 

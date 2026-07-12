@@ -619,9 +619,14 @@ const SameDayCareWorkspace = () => {
                       }).map(item => (
                         <tr key={item._id} className="hover:bg-orange-50/20">
                           <td className="p-3 pl-4">
-                            <span className="font-bold text-gray-800 block">{item.patientName}</span>
+                            <span className="font-bold text-gray-950 block">{item.patientName}</span>
+                            <span className="text-[10px] text-gray-500 font-bold block mt-0.5">
+                              {item.source === 'Doctor Referral' 
+                                ? `Referred by: Dr. ${item.referredByDoctorName || 'Doctor'}` 
+                                : `Registered by: ${item.createdBy?.doctorName || item.createdBy?.username || 'Receptionist'}`}
+                            </span>
                             {item.referredByDoctorRemarks && (
-                              <p className="text-[10px] text-gray-500 italic mt-0.5 max-w-xs bg-orange-50/40 p-1 rounded border border-orange-100/50">
+                              <p className="text-[10px] text-gray-500 italic mt-1 max-w-xs bg-orange-50/40 p-1 rounded border border-orange-100/50">
                                 Remarks: {item.referredByDoctorRemarks}
                               </p>
                             )}
@@ -804,7 +809,14 @@ const SameDayCareWorkspace = () => {
                         return true;
                       }).map(item => (
                         <tr key={item._id} className="hover:bg-orange-50/20">
-                          <td className="p-3 pl-4 font-bold text-gray-800">{item.patientName}</td>
+                          <td className="p-3 pl-4">
+                            <span className="font-bold text-gray-955 block">{item.patientName}</span>
+                            <span className="text-[10px] text-gray-500 font-bold block mt-0.5">
+                              {item.source === 'Doctor Referral' 
+                                ? `Referred by: Dr. ${item.referredByDoctorName || 'Doctor'}` 
+                                : `Registered by: ${item.createdBy?.doctorName || item.createdBy?.username || 'Receptionist'}`}
+                            </span>
+                          </td>
                           <td className="p-3 font-mono text-xs font-bold text-orange-700">{formatUhid(item.uhid)}</td>
                           <td className="p-3 text-xs">{item.mobile}</td>
                           <td className="p-3 text-xs">{item.gender}</td>
@@ -895,7 +907,14 @@ const SameDayCareWorkspace = () => {
                       ) : (
                         followups.map(item => (
                           <tr key={item._id} className="hover:bg-orange-50/20">
-                            <td className="p-3 pl-4 font-bold text-gray-800">{item.patientName}</td>
+                            <td className="p-3 pl-4">
+                              <span className="font-bold text-gray-955 block">{item.patientName}</span>
+                              <span className="text-[10px] text-gray-500 font-bold block mt-0.5">
+                                {item.source === 'Doctor Referral' 
+                                  ? `Referred by: Dr. ${item.referredByDoctorName || 'Doctor'}` 
+                                  : `Registered by: ${item.createdBy?.doctorName || item.createdBy?.username || 'Receptionist'}`}
+                              </span>
+                            </td>
                             <td className="p-3 font-mono text-xs font-bold text-orange-700">{formatUhid(item.uhid)}</td>
                             <td className="p-3 text-xs">{item.mobile}</td>
                             <td className="p-3 text-xs">{item.gender}</td>
@@ -1001,7 +1020,14 @@ const SameDayCareWorkspace = () => {
                       ) : (
                         datewiseRecords.map(item => (
                           <tr key={item._id} className="hover:bg-orange-50/10 transition-colors">
-                            <td className="p-3.5 pl-4 font-bold text-gray-900 text-xs">{item.patientName}</td>
+                            <td className="p-3.5 pl-4">
+                              <span className="font-bold text-gray-955 text-xs block">{item.patientName}</span>
+                              <span className="text-[10px] text-gray-500 font-bold block mt-0.5">
+                                {item.source === 'Doctor Referral' 
+                                  ? `Referred by: Dr. ${item.referredByDoctorName || 'Doctor'}` 
+                                  : `Registered by: ${item.createdBy?.doctorName || item.createdBy?.username || 'Receptionist'}`}
+                              </span>
+                            </td>
                             <td className="p-3.5 font-mono text-[10px] font-bold text-orange-700">{formatUhid(item.uhid)}</td>
                             <td className="p-3.5 text-xs">{item.mobile}</td>
                             <td className="p-3.5 text-xs">{item.gender} / {item.age ? `${item.age} yrs` : '-'}</td>
@@ -1106,7 +1132,14 @@ const SameDayCareWorkspace = () => {
                       ) : (
                         patients.map(p => (
                           <tr key={p._id} className="hover:bg-orange-50/20">
-                            <td className="p-3 pl-4 font-bold text-gray-800">{p.patientName}</td>
+                            <td className="p-3 pl-4">
+                              <span className="font-bold text-gray-955 block">{p.patientName}</span>
+                              {p.registeredBy && p.registeredBy !== 'N/A' && (
+                                <span className="text-[10px] text-gray-500 font-bold block mt-0.5">
+                                  Registered by: <span className="capitalize text-orange-600">{p.registeredBy}</span>
+                                </span>
+                              )}
+                            </td>
                             <td className="p-3 font-mono text-xs font-bold text-orange-700">{formatUhid(p.uhid)}</td>
                             <td className="p-3 text-xs">{p.mobile}</td>
                             <td className="p-3 text-xs">{p.gender}</td>
@@ -1353,6 +1386,7 @@ const SameDayCareWorkspace = () => {
               <div><strong>{TRANSLATIONS[printLanguage]?.mobile || 'Mobile'}:</strong> {selectedRecord.mobile}</div>
               <div><strong>{TRANSLATIONS[printLanguage]?.date || 'Date'}:</strong> {new Date(selectedRecord.treatmentDate).toLocaleDateString('en-IN')}</div>
               <div><strong>{TRANSLATIONS[printLanguage]?.procedure || 'Procedure'}:</strong> {selectedRecord.treatmentType}</div>
+              <div className="col-span-2"><strong>Registered / Referred By:</strong> {selectedRecord.source === 'Doctor Referral' ? `Dr. Referral (${selectedRecord.referredByDoctorName || 'Doctor'})` : `Registration (${selectedRecord.createdBy?.doctorName || selectedRecord.createdBy?.username || 'Receptionist'})`}</div>
             </div>
           </div>
 

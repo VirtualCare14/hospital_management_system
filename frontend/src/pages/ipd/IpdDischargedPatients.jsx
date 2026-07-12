@@ -6,46 +6,25 @@ import {
   User,
   RefreshCw,
   Eye,
-  FileText,
-  CreditCard,
   Stethoscope,
-  Clock,
   Filter,
   X,
   ChevronDown,
   ChevronUp,
-  Building2,
   Bed,
   Phone,
   CalendarDays,
-  Loader2,
   Users,
   Syringe,
-  Pill,
-  Scissors,
-  DoorOpen,
-  CheckCircle
+  CheckCircle,
+  DoorOpen
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import client from '../../api/client';
 import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 import { formatUhid } from '../../utils/uhid';
 
-const statusColors = {
-  'Admitted': 'bg-red-100 text-red-800',
-  'Under Observation': 'bg-yellow-100 text-yellow-800',
-  'Shifted': 'bg-blue-100 text-blue-800',
-  'Discharged': 'bg-gray-200 text-gray-800'
-};
-
-const StatusBadge = ({ status }) => (
-  <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold leading-tight ${statusColors[status] || 'bg-gray-100 text-gray-700'}`}>
-    {status !== 'Discharged' && <Clock className="h-3 w-3" />}
-    {status}
-  </span>
-);
-
-const IpdPatientList = () => {
+const IpdDischargedPatients = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [admissions, setAdmissions] = useState([]);
@@ -58,7 +37,6 @@ const IpdPatientList = () => {
 
   // Filter states
   const [filters, setFilters] = useState({
-    status: '',
     roomType: '',
     bedType: '',
     fromDate: '',
@@ -78,7 +56,7 @@ const IpdPatientList = () => {
     try {
       const params = new URLSearchParams();
       if (searchQuery) params.append('search', searchQuery);
-      if (filters.status) params.append('status', filters.status);
+      params.append('status', 'Discharged'); // Exclusively fetch discharged patients
       if (filters.roomType) params.append('roomType', filters.roomType);
       if (filters.bedType) params.append('bedType', filters.bedType);
       if (filters.fromDate) params.append('fromDate', filters.fromDate);
@@ -88,7 +66,7 @@ const IpdPatientList = () => {
       setAdmissions(data);
       setFilteredAdmissions(data);
     } catch (err) {
-      toast.error('Failed to load IPD patient list');
+      toast.error('Failed to load discharged patient list');
     } finally {
       setLoading(false);
     }
@@ -118,8 +96,7 @@ const IpdPatientList = () => {
 
   // Re-filter when search or filters change
   useEffect(() => {
-    // Filter out discharged patients by default from the patient list
-    let results = admissions.filter(a => a.status !== 'Discharged');
+    let results = [...admissions];
 
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -135,9 +112,6 @@ const IpdPatientList = () => {
       });
     }
 
-    if (filters.status) {
-      results = results.filter(a => a.status === filters.status);
-    }
     if (filters.roomType) {
       results = results.filter(a => a.roomId?.roomType === filters.roomType);
     }
@@ -165,7 +139,7 @@ const IpdPatientList = () => {
 
   const handleClearSearch = () => {
     setSearchQuery('');
-    setFilters({ status: '', roomType: '', bedType: '', fromDate: '', toDate: '' });
+    setFilters({ roomType: '', bedType: '', fromDate: '', toDate: '' });
   };
 
   const handleFilterChange = (key, value) => {
@@ -187,17 +161,8 @@ const IpdPatientList = () => {
     navigate(`/ipd/patient/${admission._id}?tab=services`);
   };
 
-  const handleOpenOt = (admission) => {
-    // Open OT Workflow page - starts with consultation form first, not operative report
-    navigate(`/ipd/ot-flow/${admission._id}`);
-  };
-
   const handleDischarge = (admission) => {
-    if (admission.status === 'Discharged') {
-      navigate(`/ipd/discharge/${admission._id}?view=true`);
-    } else {
-      navigate(`/ipd/discharge/${admission._id}`);
-    }
+    navigate(`/ipd/discharge/${admission._id}?view=true`);
   };
 
   return (
@@ -205,8 +170,8 @@ const IpdPatientList = () => {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">IPD Patient List</h1>
-          <p className="text-sm text-gray-500">View and manage all admitted IPD patients</p>
+          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Discharged Patients</h1>
+          <p className="text-sm text-gray-500">View history and discharge summaries of all released IPD patients</p>
         </div>
         <button onClick={loadAdmissions} className="btn-secondary" disabled={loading}>
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
@@ -250,19 +215,6 @@ const IpdPatientList = () => {
         {/* Filter Panel */}
         {showFilters && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-orange-100">
-            <div>
-              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-500">Status</label>
-              <select
-                className="input py-2 text-xs"
-                value={filters.status}
-                onChange={(e) => handleFilterChange('status', e.target.value)}
-              >
-                <option value="">All Statuses</option>
-                <option value="Admitted">Admitted</option>
-                <option value="Under Observation">Under Observation</option>
-                <option value="Shifted">Shifted</option>
-              </select>
-            </div>
             <div>
               <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-500">Room Type</label>
               <select
@@ -350,9 +302,9 @@ const IpdPatientList = () => {
                 <th className="p-3">Gender</th>
                 <th className="p-3">Mobile</th>
                 <th className="p-3">Consultant</th>
-                <th className="p-3">Room / Bed</th>
+                <th className="p-3">Last Assigned Room / Bed</th>
                 <th className="p-3">Admission Date</th>
-                <th className="p-3">Status / Discharge Date</th>
+                <th className="p-3">Discharge Date</th>
                 <th className="p-3 pr-4 text-center">Actions</th>
               </tr>
             </thead>
@@ -368,8 +320,7 @@ const IpdPatientList = () => {
                   <td colSpan="10" className="p-12 text-center">
                     <div className="flex flex-col items-center gap-2 text-gray-400">
                       <User className="h-10 w-10" />
-                      <p className="font-bold text-gray-500">No patients found</p>
-                      <p className="text-xs">Try adjusting your search or filters</p>
+                      <p className="font-bold text-gray-500">No discharged patients found</p>
                     </div>
                   </td>
                 </tr>
@@ -379,16 +330,14 @@ const IpdPatientList = () => {
                   return (
                     <tr
                       key={admission._id}
-                      className={`hover:bg-orange-50/30 transition-all ${
-                        admission.status === 'Discharged' ? 'bg-gray-50/40 text-gray-500' : 'bg-white'
-                      }`}
+                      className="hover:bg-orange-50/30 transition-all bg-gray-50/40 text-gray-500"
                     >
                       <td className="p-3 pl-4">
                         <div className="flex items-center gap-2">
-                          <div className={`p-1.5 rounded-lg ${admission.status === 'Discharged' ? 'bg-gray-100' : 'bg-orange-100'}`}>
-                            <User className={`h-4 w-4 ${admission.status === 'Discharged' ? 'text-gray-400' : 'text-orange-600'}`} />
+                          <div className="p-1.5 rounded-lg bg-gray-100">
+                            <User className="h-4 w-4 text-gray-400" />
                           </div>
-                          <span className={`font-bold ${admission.status === 'Discharged' ? 'text-gray-600' : 'text-gray-900'}`}>
+                          <span className="font-bold text-gray-600">
                             {patient.patientName || 'N/A'}
                           </span>
                         </div>
@@ -421,13 +370,11 @@ const IpdPatientList = () => {
                             <span className="text-xs font-bold text-gray-700">{admission.roomId.roomType}</span>
                             <span className="text-[10px] text-gray-500 font-mono">
                               <Bed className="h-3 w-3 inline mr-0.5 text-gray-400" />
-                              {admission.bedId?.bedNumber || 'N/A'} (₹{admission.bedId?.pricePerDay || 0}/day)
+                              {admission.bedId?.bedNumber || 'N/A'} ({admission.bedId?.bedType})
                             </span>
                           </div>
                         ) : (
-                          <span className="inline-flex px-2 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                            <Clock className="h-2.5 w-2.5 mr-1" /> Pending Bed Allocation
-                          </span>
+                          <span className="text-xs text-gray-400">N/A</span>
                         )}
                       </td>
                       <td className="p-3 text-xs">
@@ -438,27 +385,14 @@ const IpdPatientList = () => {
                           year: 'numeric'
                         })}
                       </td>
-                      <td className="p-3">
-                        <div className="flex flex-col gap-1 items-start">
-                          {admission.status === 'Discharged' ? (
-                            <span className="text-xs text-gray-500">
-                              {admission.dischargeDate
-                                ? new Date(admission.dischargeDate).toLocaleDateString('en-IN', {
-                                    day: '2-digit', month: 'short', year: 'numeric'
-                                  })
-                                : '-'
-                              }
-                            </span>
-                          ) : (
-                            <StatusBadge status={admission.status} />
-                          )}
-                          {admission.otStatus === 'In Progress' && (
-                            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black tracking-wider uppercase bg-red-100 text-red-700 animate-pulse border border-red-200">
-                              <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-ping" />
-                              OT is going on
-                            </span>
-                          )}
-                        </div>
+                      <td className="p-3 text-xs">
+                        <CalendarDays className="h-3 w-3 inline mr-1 text-gray-400" />
+                        {admission.dischargeDate
+                          ? new Date(admission.dischargeDate).toLocaleDateString('en-IN', {
+                              day: '2-digit', month: 'short', year: 'numeric'
+                            })
+                          : '-'
+                        }
                       </td>
                       <td className="p-3 pr-4">
                         <div className="flex items-center justify-center gap-1">
@@ -477,26 +411,11 @@ const IpdPatientList = () => {
                             <Syringe className="h-4 w-4" />
                           </button>
                           <button
-                            onClick={() => handleOpenOt(admission)}
-                            className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                            title="Open OT Form"
-                          >
-                            <Scissors className="h-4 w-4" />
-                          </button>
-                          <button
                             onClick={() => handleDischarge(admission)}
-                            className={`p-1.5 rounded-lg transition-colors ${
-                              admission.status === 'Discharged'
-                                ? 'text-green-600 hover:bg-green-50'
-                                : 'text-red-600 hover:bg-red-50'
-                            }`}
-                            title={admission.status === 'Discharged' ? 'View Discharge Summary' : 'Discharge Patient'}
+                            className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                            title="View Discharge Summary"
                           >
-                            {admission.status === 'Discharged' ? (
-                              <CheckCircle className="h-4 w-4" />
-                            ) : (
-                              <DoorOpen className="h-4 w-4" />
-                            )}
+                            <CheckCircle className="h-4 w-4" />
                           </button>
                         </div>
                       </td>
@@ -562,4 +481,4 @@ const IpdPatientList = () => {
   );
 };
 
-export default IpdPatientList;
+export default IpdDischargedPatients;

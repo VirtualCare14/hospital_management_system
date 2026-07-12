@@ -57,9 +57,38 @@ const ipdMedicationOrderSchema = new mongoose.Schema({
     default: '',
     trim: true
   },
+  scheduleType: {
+    type: String,
+    enum: ['Fixed Shift', 'Every X Hours', 'Custom Time', 'One-Time'],
+    default: 'Fixed Shift'
+  },
+  hourlyInterval: {
+    type: Number,
+    default: 4
+  },
+  startDate: {
+    type: String,
+    required: true
+  },
+  startTime: {
+    type: String,
+    default: ''
+  },
+  duration: {
+    type: String,
+    default: ''
+  },
+  endDate: {
+    type: String,
+    default: ''
+  },
+  customTimes: {
+    type: [String],
+    default: []
+  },
   status: {
     type: String,
-    enum: ['Active', 'Stopped'],
+    enum: ['Active', 'Stopped', 'Completed'],
     default: 'Active'
   },
   doctorId: {

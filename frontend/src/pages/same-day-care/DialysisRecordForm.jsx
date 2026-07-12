@@ -450,6 +450,9 @@ const DialysisRecordForm = () => {
               <div className="text-gray-500">UHID: {formatUhid(patient?.uhid)}</div>
               <div className="text-gray-500">{patient?.gender} • {patient?.dob ? `${Math.floor((new Date() - new Date(patient.dob)) / (365.25 * 24 * 60 * 60 * 1000))} yrs` : '-'}</div>
               <div className="text-gray-500">Address: {patient?.address}</div>
+              {patient?.registeredBy && patient.registeredBy !== 'N/A' && (
+                <div className="text-gray-500 font-bold">Registered by: <span className="capitalize text-orange-655">{patient.registeredBy}</span></div>
+              )}
             </div>
 
             {/* Visit Details */}

@@ -229,7 +229,9 @@ const BillingPage = () => {
       const mappedItems = (data.items || []).map(i => ({
         ...i,
         discountAmount: i.discountAmount || 0,
-        total: i.total || ((i.price - (i.discountAmount || 0)) * i.quantity) || 0
+        gstPercentage: i.gstPercentage || 0,
+        gstAmount: i.gstAmount || 0,
+        total: i.total || (((i.price - (i.discountAmount || 0)) * i.quantity) * (1 + (i.gstPercentage || 0) / 100)) || 0
       }));
       setItems(mappedItems);
       
@@ -278,7 +280,9 @@ const BillingPage = () => {
       const mappedItems = (data.items || []).map(i => ({
         ...i,
         discountAmount: i.discountAmount || 0,
-        total: i.total || ((i.price - (i.discountAmount || 0)) * i.quantity) || 0
+        gstPercentage: i.gstPercentage || 0,
+        gstAmount: i.gstAmount || 0,
+        total: i.total || (((i.price - (i.discountAmount || 0)) * i.quantity) * (1 + (i.gstPercentage || 0) / 100)) || 0
       }));
       setItems(mappedItems);
       setSelectedItemIndexes(mappedItems.map((_, i) => i));
@@ -306,21 +310,22 @@ const BillingPage = () => {
 
   // Totals calculations based ONLY on selected checkboxes
   const selectedItems = items.filter((_, idx) => selectedItemIndexes.includes(idx));
-  const subtotal = selectedItems.reduce((sum, i) => sum + i.total, 0);
-
-  // Calculate sum of item-wise discounts
+  const baseSubtotal = selectedItems.reduce((sum, i) => sum + ((i.price - (i.discountAmount || 0)) * i.quantity), 0);
+  const rowGstAmountTotal = selectedItems.reduce((sum, i) => sum + (((i.price - (i.discountAmount || 0)) * i.quantity) * ((i.gstPercentage || 0) / 100)), 0);
   const itemDiscountTotal = selectedItems.reduce((sum, i) => sum + ((i.discountAmount || 0) * i.quantity), 0);
 
   // Automated/Dynamic Discount Calculation (computed during render to avoid useEffect state cycles and TDZ)
   let discountPercentage = accessDiscount ? parseFloat(directDiscountPercent || 0) : 0;
   let discountReason = requestAdminDiscount ? 'Admin Discount Requested' : (accessDiscount && directDiscountPercent > 0 ? 'Direct Percentage Discount' : '');
 
-  const percentDiscountAmount = subtotal * (discountPercentage / 100);
-  const discountedSubtotal = Math.max(0, subtotal - percentDiscountAmount);
+  const percentDiscountAmount = baseSubtotal * (discountPercentage / 100);
+  const discountedSubtotal = Math.max(0, baseSubtotal - percentDiscountAmount);
 
-  const gstAmount = gstEnabled ? discountedSubtotal * (gstPercentage / 100) : 0;
+  const invoiceGstAmount = gstEnabled ? discountedSubtotal * (gstPercentage / 100) : 0;
+  const gstAmount = rowGstAmountTotal + invoiceGstAmount;
   const discountAmount = itemDiscountTotal + percentDiscountAmount;
   const grandTotal = discountedSubtotal + gstAmount;
+  const subtotal = baseSubtotal;
 
   // Net payable amount after adjusting patient advance
   const maxAllowedAdjustment = Math.min(totalAdvanceAvailable, grandTotal);
@@ -937,6 +942,7 @@ const BillingPage = () => {
                               <th className="p-3">Description</th>
                               <th className="p-3 text-right">Price</th>
                               {accessDiscount && <th className="p-3 text-right w-24">Discount (₹)</th>}
+                              <th className="p-3 text-right w-24">GST (%)</th>
                               <th className="p-3 text-right">Qty</th>
                               <th className="p-3 text-right pr-4">Total</th>
                             </tr>
@@ -944,7 +950,7 @@ const BillingPage = () => {
                           <tbody className="divide-y divide-orange-50/60">
                             {items.length === 0 ? (
                               <tr>
-                                <td colSpan="6" className="p-12 text-center text-gray-400 font-bold">
+                                <td colSpan={accessDiscount ? 8 : 7} className="p-12 text-center text-gray-400 font-bold">
                                   No pending unbilled charges in this module.
                                 </td>
                               </tr>
@@ -988,10 +994,13 @@ const BillingPage = () => {
                                               const discountVal = Math.min(item.price, parseFloat(e.target.value) || 0);
                                               setItems(prev => prev.map((itemVal, valIdx) => {
                                                 if (valIdx === idx) {
+                                                  const baseAmt = (itemVal.price - discountVal) * itemVal.quantity;
+                                                  const gstAmt = baseAmt * ((itemVal.gstPercentage || 0) / 100);
                                                   return {
                                                     ...itemVal,
                                                     discountAmount: discountVal,
-                                                    total: (itemVal.price - discountVal) * itemVal.quantity
+                                                    gstAmount: gstAmt,
+                                                    total: baseAmt + gstAmt
                                                   };
                                                 }
                                                 return itemVal;
@@ -1001,6 +1010,36 @@ const BillingPage = () => {
                                         </div>
                                       </td>
                                     )}
+                                    <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
+                                      <div className="relative inline-block w-20">
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          max="100"
+                                          placeholder="0"
+                                          className="input text-xs py-0.5 pr-4 font-mono font-bold w-full text-right bg-white border border-orange-200 rounded-lg focus:ring-1 focus:ring-orange-500"
+                                          value={item.gstPercentage || ''}
+                                          onChange={(e) => {
+                                            const gstVal = Math.min(100, Math.max(0, parseFloat(e.target.value) || 0));
+                                            setItems(prev => prev.map((itemVal, valIdx) => {
+                                              if (valIdx === idx) {
+                                                const discAmt = itemVal.discountAmount || 0;
+                                                const baseAmt = (itemVal.price - discAmt) * itemVal.quantity;
+                                                const gstAmt = baseAmt * (gstVal / 100);
+                                                return {
+                                                  ...itemVal,
+                                                  gstPercentage: gstVal,
+                                                  gstAmount: gstAmt,
+                                                  total: baseAmt + gstAmt
+                                                };
+                                              }
+                                              return itemVal;
+                                            }));
+                                          }}
+                                        />
+                                        <span className="absolute right-1.5 top-1.5 text-gray-400 font-bold text-[10px] pointer-events-none">%</span>
+                                      </div>
+                                    </td>
                                     <td className="p-3 text-right font-semibold text-gray-600">{item.quantity}</td>
                                     <td className="p-3 text-right font-black text-gray-900 pr-4">₹{(item.total || 0).toFixed(2)}</td>
                                   </tr>
@@ -1634,7 +1673,7 @@ const BillingPage = () => {
         const totalItemDiscounts = (printBillObj.items || []).reduce((sum, item) => sum + ((item.discountAmount || 0) * item.quantity), 0);
         const actualGrossSubtotal = (printBillObj.items || []).reduce((sum, item) => sum + ((item.price || 0) * item.quantity), 0);
         const generalDiscountAmount = (printBillObj.discountAmount || 0) - totalItemDiscounts;
-        const footerColSpan = hasItemDiscounts ? 7 : 5;
+        const footerColSpan = hasItemDiscounts ? 8 : 6;
         return (
           <div className="fixed inset-0 bg-black/75 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto animate-fadeIn">
             <div className="bg-gray-100 rounded-2xl shadow-2xl max-w-4xl w-full flex flex-col h-[90vh]">
@@ -1770,6 +1809,7 @@ const BillingPage = () => {
                     <div className="text-right text-[10px] text-gray-700 space-y-0.5 font-semibold">
                       {hospitalInfo?.phoneNumbers?.length > 0 && <p>Phone: {hospitalInfo.phoneNumbers.join(', ')}</p>}
                       {hospitalInfo?.emailAddress && <p>Email: {hospitalInfo.emailAddress}</p>}
+                      {hospitalInfo?.dlNumber && <p>DL No: {hospitalInfo.dlNumber}</p>}
                       {hospitalInfo?.website && <p>Website: {hospitalInfo.website}</p>}
                       {hospitalInfo?.gstNumber && <p>GSTIN: {hospitalInfo.gstNumber}</p>}
                     </div>
@@ -1820,6 +1860,7 @@ const BillingPage = () => {
                           <th className="text-right w-20">Actual Price</th>
                           <th className="text-right w-20">Discount Price</th>
                           <th className="text-right w-20">Total Discount</th>
+                          <th className="text-right w-16">GST (%)</th>
                           <th className="text-right w-20">Amount</th>
                         </tr>
                       ) : (
@@ -1829,6 +1870,7 @@ const BillingPage = () => {
                           <th>Category</th>
                           <th className="text-right w-16">Quantity</th>
                           <th className="text-right w-20">Rate</th>
+                          <th className="text-right w-20">GST (%)</th>
                           <th className="text-right w-24">Amount</th>
                         </tr>
                       )}
@@ -1846,6 +1888,7 @@ const BillingPage = () => {
                             <td className="text-right font-mono">₹{(item.price || 0).toFixed(2)}</td>
                             <td className="text-right font-mono text-green-700">₹{itemDisc.toFixed(2)}</td>
                             <td className="text-right font-mono text-green-700">₹{itemTotalDisc.toFixed(2)}</td>
+                            <td className="text-right font-mono">{item.gstPercentage || 0}%</td>
                             <td className="text-right font-mono font-bold">₹{(item.total || 0).toFixed(2)}</td>
                           </tr>
                         ) : (
@@ -1855,6 +1898,7 @@ const BillingPage = () => {
                             <td>{item.category}</td>
                             <td className="text-right">{item.quantity}</td>
                             <td className="text-right font-mono">₹{(item.price || 0).toFixed(2)}</td>
+                            <td className="text-right font-mono">{item.gstPercentage || 0}%</td>
                             <td className="text-right font-mono font-bold">₹{(item.total || 0).toFixed(2)}</td>
                           </tr>
                         );

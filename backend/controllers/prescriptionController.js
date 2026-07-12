@@ -25,6 +25,14 @@ const createPrescription = async (req, res) => {
       return res.status(404).json({ message: 'Patient not found' });
     }
 
+    const IpdAdmission = require('../models/IpdAdmission');
+    const latestIpdAdmission = await IpdAdmission.findOne(
+      tenantQuery(req, { patientId: patient._id })
+    ).sort({ createdAt: -1 });
+    if (latestIpdAdmission?.status === 'Discharged') {
+      return res.status(400).json({ message: 'Patient is discharged. No further actions can be performed.' });
+    }
+
     if (!medicines || !Array.isArray(medicines)) {
       return res.status(400).json({ message: 'Medicines list is required' });
     }

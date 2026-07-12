@@ -32,6 +32,7 @@ import IpdAdminWorkspace from './pages/admin/IpdAdminWorkspace.jsx';
 import ConsumableServiceSettings from './pages/admin/ConsumableServiceSettings.jsx';
 import IpdAdmission from './pages/ipd/IpdAdmission.jsx';
 import IpdPatientList from './pages/ipd/IpdPatientList.jsx';
+import IpdDischargedPatients from './pages/ipd/IpdDischargedPatients.jsx';
 import IpdPatientDetails from './pages/ipd/IpdPatientDetails.jsx';
 import IpdServices from './pages/ipd/IpdServices.jsx';
 import PharmacyWorkspace from './pages/pharmacy/PharmacyWorkspace.jsx';
@@ -43,6 +44,7 @@ import IpdOtDashboard from './pages/ipd/IpdOtDashboard.jsx';
 import IpdSameDayDashboard from './pages/ipd/IpdSameDayDashboard.jsx';
 import SameDayCareSettings from './pages/admin/SameDayCareSettings.jsx';
 import PharmacySettings from './pages/admin/PharmacySettings.jsx';
+import DeleteDataPage from './pages/admin/DeleteDataPage.jsx';
 import SameDayCareWorkspace from './pages/same-day-care/SameDayCareWorkspace.jsx';
 import SameDayCareForm from './pages/same-day-care/SameDayCareForm.jsx';
 import SameDayCareIpdPatients from './pages/same-day-care/SameDayCareIpdPatients.jsx';
@@ -85,6 +87,7 @@ function App() {
             <Route path="/admin/ot-settings" element={<OperationTheatreSettings />} />
             <Route path="/admin/same-day-care" element={<SameDayCareSettings />} />
             <Route path="/admin/pharmacy-settings" element={<PharmacySettings />} />
+            <Route path="/admin/delete-data" element={<DeleteDataPage />} />
           </Route>
           <Route element={<ProtectedRoute allowedRoles={['admin', 'reception']} requiredModule={1} />}>
             <Route path="/reception/register" element={<PatientRegistration />} />
@@ -114,14 +117,16 @@ function App() {
           </Route>
           <Route element={<ProtectedRoute allowedRoles={['admin', 'reception', 'ipd', 'doctor', 'nursing']} />}>
             <Route path="/ipd/patient/:id" element={<IpdPatientDetails />} />
+            <Route path="/ipd/discharge/:id" element={<IpdDischargeForm />} />
+            <Route path="/ipd/chart/:id" element={<IpdMedicationChart />} />
           </Route>
           <Route element={<ProtectedRoute allowedRoles={['admin', 'reception', 'ipd']} requiredModule={5} />}>
             <Route path="/ipd/admission" element={<IpdAdmission />} />
             <Route path="/ipd/patients" element={<IpdPatientList />} />
+            <Route path="/ipd/discharged-patients" element={<IpdDischargedPatients />} />
             <Route path="/ipd/services" element={<IpdServices />} />
             <Route path="/ipd/ot-flow/:id" element={<IpdOtFlow />} />
             <Route path="/ipd/ot/:id" element={<IpdOtForm />} />
-            <Route path="/ipd/discharge/:id" element={<IpdDischargeForm />} />
             <Route path="/ipd/ot-management" element={<IpdOtDashboard />} />
             <Route path="/ipd/same-day" element={<IpdSameDayDashboard />} />
           </Route>
