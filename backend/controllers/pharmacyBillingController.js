@@ -251,8 +251,8 @@ const getBills = async (req, res) => {
     if (search) {
       const regex = new RegExp(search, 'i');
       filtered = bills.filter(b => 
-        b.billNumber.match(regex) ||
-        b.patientId?.patientName.match(regex) ||
+        b.billNumber?.match(regex) ||
+        b.patientId?.patientName?.match(regex) ||
         b.customerDetails?.name?.match(regex) ||
         b.customerDetails?.mobile?.match(regex) ||
         b.doctorName?.match(regex)

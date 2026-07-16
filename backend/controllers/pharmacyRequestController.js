@@ -61,9 +61,9 @@ const getRequests = async (req, res) => {
     if (search) {
       const regex = new RegExp(search, 'i');
       filtered = requests.filter(r => 
-        r.requestNumber.match(regex) ||
-        r.procedureName.match(regex) ||
-        r.patientId?.patientName.match(regex) ||
+        r.requestNumber?.match(regex) ||
+        r.procedureName?.match(regex) ||
+        r.patientId?.patientName?.match(regex) ||
         r.doctorId?.doctorName?.match(regex) ||
         r.doctorId?.username?.match(regex)
       );
