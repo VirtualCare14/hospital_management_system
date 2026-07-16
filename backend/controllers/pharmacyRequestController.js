@@ -123,9 +123,38 @@ const createRequest = async (req, res) => {
     const hospitalId = req.user.hospitalId;
     const doctorId = req.user._id;
 
-    // Generate Request Number
-    const count = await PharmacyRequest.countDocuments({ hospitalId });
-    const requestNumber = `PR-${10001 + count}`;
+    // Generate unique Request Number (finding the highest number + collision safeguard)
+    let nextNum = 10001;
+    const latestRequest = await PharmacyRequest.findOne({ hospitalId })
+      .sort({ requestNumber: -1 })
+      .select('requestNumber');
+
+    if (latestRequest && latestRequest.requestNumber) {
+      const match = latestRequest.requestNumber.match(/PR-(\d+)/);
+      if (match) {
+        nextNum = parseInt(match[1]) + 1;
+      }
+    } else {
+      const count = await PharmacyRequest.countDocuments({ hospitalId });
+      nextNum = 10001 + count;
+    }
+
+    let requestNumber;
+    let isUnique = false;
+    let attempts = 0;
+    while (!isUnique && attempts < 50) {
+      requestNumber = `PR-${nextNum + attempts}`;
+      const existing = await PharmacyRequest.findOne({ hospitalId, requestNumber });
+      if (!existing) {
+        isUnique = true;
+      } else {
+        attempts++;
+      }
+    }
+
+    if (!isUnique) {
+      requestNumber = `PR-${nextNum}-${Date.now()}`;
+    }
 
     // Fetch all active/valid inventory items for the hospital to verify custom items
     const inventoryItems = await PharmacyInventory.find({ hospitalId });

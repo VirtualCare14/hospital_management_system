@@ -199,9 +199,38 @@ const createBill = async (req, res) => {
       });
     }
 
-    // Generate Bill Number
-    const count = await PharmacyBill.countDocuments({ hospitalId });
-    const billNumber = `PB-${10001 + count}`;
+    // Generate unique Bill Number (finding the highest number + collision safeguard)
+    let nextNum = 10001;
+    const latestBill = await PharmacyBill.findOne({ hospitalId })
+      .sort({ billNumber: -1 })
+      .select('billNumber');
+
+    if (latestBill && latestBill.billNumber) {
+      const match = latestBill.billNumber.match(/PB-(\d+)/);
+      if (match) {
+        nextNum = parseInt(match[1]) + 1;
+      }
+    } else {
+      const count = await PharmacyBill.countDocuments({ hospitalId });
+      nextNum = 10001 + count;
+    }
+
+    let billNumber;
+    let isUnique = false;
+    let attempts = 0;
+    while (!isUnique && attempts < 50) {
+      billNumber = `PB-${nextNum + attempts}`;
+      const existing = await PharmacyBill.findOne({ hospitalId, billNumber });
+      if (!existing) {
+        isUnique = true;
+      } else {
+        attempts++;
+      }
+    }
+
+    if (!isUnique) {
+      billNumber = `PB-${nextNum}-${Date.now()}`;
+    }
 
     let admissionId = null;
     if (patientId) {
