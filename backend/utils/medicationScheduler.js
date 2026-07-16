@@ -32,10 +32,10 @@ const parseTimeStr = (timeStr) => {
 const getSchedulesForOrder = (order) => {
   const list = [];
   if (!order.startDate) return list;
-  
+
   const startD = new Date(order.startDate);
   const endD = new Date(order.endDate || order.startDate);
-  
+
   if (order.scheduleType === 'One-Time') {
     list.push({
       date: order.startDate,
@@ -43,42 +43,42 @@ const getSchedulesForOrder = (order) => {
     });
     return list;
   }
-  
+
   if (order.scheduleType === 'Every X Hours') {
     const interval = order.hourlyInterval || 4;
     const startT = order.startTime || '08:00 AM';
     const { hours, minutes } = parseTimeStr(startT);
-    
+
     const current = new Date(startD);
     current.setHours(hours, minutes, 0, 0);
-    
+
     const endLimit = new Date(endD);
     endLimit.setHours(hours, minutes, 0, 0);
-    
+
     while (current <= endLimit) {
       const year = current.getFullYear();
       const month = String(current.getMonth() + 1).padStart(2, '0');
       const day = String(current.getDate()).padStart(2, '0');
       const dateStr = `${year}-${month}-${day}`;
-      
+
       const hr = current.getHours();
       const min = String(current.getMinutes()).padStart(2, '0');
       const ampm = hr >= 12 ? 'PM' : 'AM';
       const displayH = hr % 12 === 0 ? 12 : hr % 12;
       const displayHStr = String(displayH).padStart(2, '0');
       const timeStr = `${displayHStr}:${min} ${ampm}`;
-      
+
       list.push({ date: dateStr, time: timeStr });
       current.setHours(current.getHours() + interval);
     }
     return list;
   }
-  
+
   const temp = new Date(startD);
   temp.setHours(0, 0, 0, 0);
   const limit = new Date(endD);
   limit.setHours(0, 0, 0, 0);
-  
+
   const dailyTimes = [];
   if (order.scheduleType === 'Custom Time') {
     const times = order.customTimes || [];
@@ -93,20 +93,20 @@ const getSchedulesForOrder = (order) => {
     if (order.evening) dailyTimes.push('06:00 PM');
     if (order.night) dailyTimes.push('10:00 PM');
   }
-  
+
   while (temp <= limit) {
     const year = temp.getFullYear();
     const month = String(temp.getMonth() + 1).padStart(2, '0');
     const day = String(temp.getDate()).padStart(2, '0');
     const dateStr = `${year}-${month}-${day}`;
-    
+
     dailyTimes.forEach(time => {
       list.push({ date: dateStr, time });
     });
-    
+
     temp.setDate(temp.getDate() + 1);
   }
-  
+
   return list;
 };
 
@@ -177,20 +177,20 @@ const checkMissedDoses = async () => {
     const todayStr = now.toISOString().split('T')[0];
     const currentHourStr = String(now.getHours()).padStart(2, '0');
     const currentMinStr = String(now.getMinutes()).padStart(2, '0');
-    
+
     const activeAdmissions = await IpdAdmission.find({ status: 'Admitted' });
-    
+
     for (const admission of activeAdmissions) {
       const settings = await HospitalSettings.findOne({ hospitalId: admission.hospitalId }) || { medicationGracePeriod: 30, medicationMissedThreshold: 60 };
       const thresholdMins = settings.medicationMissedThreshold || 60;
-      
+
       const orders = await IpdMedicationOrder.find({ admissionId: admission._id, status: 'Active' });
-      
+
       for (const order of orders) {
         if (isOrderCompleted(order, now)) {
           order.status = 'Completed';
           await order.save();
-          
+
           await IpdActivityTimeline.create({
             hospitalId: order.hospitalId,
             admissionId: order.admissionId,
@@ -208,17 +208,17 @@ const checkMissedDoses = async () => {
         const schedules = getSchedulesForOrder(order);
         const todaySchedules = schedules.filter(s => s.date === todayStr);
         const administrations = await IpdMedicationAdministration.find({ orderId: order._id, date: todayStr });
-        
+
         for (const slot of todaySchedules) {
           const timeStr = slot.time;
           const { hours, minutes } = parseTimeStr(timeStr);
           const scheduledD = new Date(now);
           scheduledD.setHours(hours, minutes, 0, 0);
-          
+
           const limitTime = new Date(scheduledD.getTime() + thresholdMins * 60 * 1000);
           if (now > limitTime) {
-            const hasAdmin = administrations.some(a => 
-              a.scheduledTime === timeStr || 
+            const hasAdmin = administrations.some(a =>
+              a.scheduledTime === timeStr ||
               (a.shift && mapShiftToTime(a.shift) === timeStr)
             );
             if (!hasAdmin) {
@@ -243,7 +243,7 @@ const checkMissedDoses = async () => {
                 time: `${currentHourStr}:${currentMinStr}`,
                 doctorNotifiedOfMissed: false
               });
-              
+
               await IpdActivityTimeline.create({
                 hospitalId: order.hospitalId,
                 admissionId: order.admissionId,
@@ -280,7 +280,7 @@ const startMedicationScheduler = () => {
   checkMissedDoses();
 };
 
-module.exports = { 
+module.exports = {
   startMedicationScheduler,
   parseTimeStr,
   getScheduledTimesForOrder,

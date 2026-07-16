@@ -63,6 +63,23 @@ const IpdServicesTracker = ({ admissionId }) => {
   const getChronologicalActivities = () => {
     const activities = [];
 
+    const parseDateTime = (dateStr, timeStr) => {
+      if (!dateStr) return new Date();
+      if (dateStr.includes('/')) {
+        const parts = dateStr.split('/');
+        if (parts.length === 3) {
+          const day = parseInt(parts[0], 10);
+          const month = parseInt(parts[1], 10) - 1;
+          const year = parseInt(parts[2], 10);
+          const timeParts = (timeStr || '00:00').split(':');
+          const hours = parseInt(timeParts[0] || '0', 10);
+          const minutes = parseInt(timeParts[1] || '0', 10);
+          return new Date(year, month, day, hours, minutes);
+        }
+      }
+      return new Date(`${dateStr}T${timeStr || '00:00'}`);
+    };
+
     consumables.forEach(c => {
       activities.push({
         type: 'consumable',
@@ -71,7 +88,7 @@ const IpdServicesTracker = ({ admissionId }) => {
         performedBy: c.addedBy?.doctorName || c.addedBy?.username || 'Staff',
         date: c.date,
         time: c.time,
-        timestamp: new Date(`${c.date}T${c.time || '00:00'}`)
+        timestamp: parseDateTime(c.date, c.time)
       });
     });
 
@@ -83,7 +100,7 @@ const IpdServicesTracker = ({ admissionId }) => {
         performedBy: m.addedBy?.doctorName || m.addedBy?.username || 'Staff',
         date: m.date,
         time: m.time,
-        timestamp: new Date(`${m.date}T${m.time || '00:00'}`)
+        timestamp: parseDateTime(m.date, m.time)
       });
     });
 
@@ -95,7 +112,7 @@ const IpdServicesTracker = ({ admissionId }) => {
         performedBy: l.addedBy?.doctorName || l.addedBy?.username || 'Staff',
         date: l.date,
         time: l.time || '00:00',
-        timestamp: new Date(`${l.date}T${l.time || '00:00'}`)
+        timestamp: parseDateTime(l.date, l.time)
       });
     });
 
@@ -108,7 +125,7 @@ const IpdServicesTracker = ({ admissionId }) => {
         performedBy: performedName,
         date: a.date,
         time: a.time,
-        timestamp: new Date(`${a.date}T${a.time || '00:00'}`)
+        timestamp: parseDateTime(a.date, a.time)
       });
     });
 

@@ -206,7 +206,24 @@ const IpdServices = () => {
     const { serviceName, price, gst, quantity } = consumableForm;
     if (!serviceName || !price || !quantity) { toast.error('Service name, price, and quantity are required'); return; }
     try {
-      const payload = { admissionId: selectedAdmission._id, serviceName, price: parseFloat(price), gst: parseFloat(gst || '0'), quantity: parseInt(quantity) };
+      const now = new Date();
+      const day = String(now.getDate()).padStart(2, '0');
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const year = now.getFullYear();
+      const dateStr = `${day}/${month}/${year}`;
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const timeStr = `${hours}:${minutes}`;
+
+      const payload = { 
+        admissionId: selectedAdmission._id, 
+        serviceName, 
+        price: parseFloat(price), 
+        gst: parseFloat(gst || '0'), 
+        quantity: parseInt(quantity),
+        date: dateStr,
+        time: timeStr
+      };
       const { data } = await client.post('/ipd/services/consumables', payload);
       toast.success(data.message);
       setShowAddConsumable(false);
@@ -516,7 +533,16 @@ const IpdServices = () => {
                                 };
                               });
                             }} />
-                          <datalist id="consumable-services-ipd">{consumableServicesList.map((s, i) => <option key={i} value={s.name} />)}</datalist>
+                          <datalist id="consumable-services-ipd">
+                            {consumableServicesList
+                              .filter(s => {
+                                const query = (consumableForm.serviceName || '').trim().toLowerCase();
+                                if (!query) return false;
+                                return s.name.toLowerCase().includes(query);
+                              })
+                              .map((s, i) => <option key={i} value={s.name} />)
+                            }
+                          </datalist>
                         </div>
                         <div><label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">Qty</label><input type="number" min="1" className="input py-2 text-xs" value={consumableForm.quantity} onChange={(e) => setConsumableForm(p => ({ ...p, quantity: e.target.value }))} /></div>
                         <div className="col-span-full flex justify-end gap-2"><button type="button" onClick={() => { setShowAddConsumable(false); setConsumableForm({ serviceName: '', price: '', gst: '', quantity: '1' }); }} className="btn-secondary text-xs py-2 px-4">Cancel</button><button type="submit" className="btn text-xs py-2 px-4"><Plus className="h-3.5 w-3.5" /> Add</button></div>
@@ -561,19 +587,27 @@ const IpdServices = () => {
                     <div className="p-4 border-b border-orange-100 bg-orange-50/20">
                       <form onSubmit={handleAddMedicine} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div className="sm:col-span-2">
-                          <label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">Select Received Medicine</label>
-                          <select 
+                          <label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">Medicine Name</label>
+                          <input 
+                            type="text"
+                            list="ipd-services-medicines-datalist"
                             className="input py-2 text-xs" 
+                            placeholder="Type or search medicine"
                             value={medicineForm.medicineName}
                             onChange={(e) => handleReceivedMedicineSelect(e.target.value)}
-                          >
-                            <option value="">-- Choose Received Medicine (Available Qty) --</option>
-                            {receivedMedicines.map((m, i) => (
-                              <option key={i} value={m.itemName}>
-                                {m.itemName} (Available: {m.availableQty})
-                              </option>
-                            ))}
-                          </select>
+                          />
+                          <datalist id="ipd-services-medicines-datalist">
+                            {receivedMedicines
+                              .filter(m => {
+                                const query = (medicineForm.medicineName || '').trim().toLowerCase();
+                                if (!query) return false;
+                                return m.itemName.toLowerCase().includes(query);
+                              })
+                              .map((m, i) => (
+                                <option key={i} value={m.itemName} />
+                              ))
+                            }
+                          </datalist>
                         </div>
                         <div>
                           <label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">

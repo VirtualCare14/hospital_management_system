@@ -108,6 +108,10 @@ const createBill = async (req, res) => {
 
     // Verify stock and deduct
     for (const item of items) {
+      if (typeof item.quantity !== 'number' || isNaN(item.quantity) || item.quantity <= 0) {
+        return res.status(400).json({ message: `Invalid quantity for ${item.itemName}. Must be a positive decimal/integer.` });
+      }
+
       const invItem = await PharmacyInventory.findOne({
         hospitalId,
         itemName: { $regex: new RegExp('^' + item.itemName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '$', 'i') },
@@ -118,29 +122,48 @@ const createBill = async (req, res) => {
         return res.status(400).json({ message: `Inventory batch not found for ${item.itemName} (Batch: ${item.batch})` });
       }
 
-      if (invItem.quantity < item.quantity) {
+      // Expired check
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (new Date(invItem.expiry) <= today) {
+        return res.status(400).json({ message: `Cannot bill expired medicine ${item.itemName} (Batch: ${item.batch})` });
+      }
+
+      const unitsPerPack = invItem.unitsPerPack || 1;
+      const unitsSold = Math.round((item.quantity * unitsPerPack) * 10000) / 10000;
+
+      if (typeof item.gstPercentage === 'number' && (item.gstPercentage < 0 || item.gstPercentage > 100)) {
+        return res.status(400).json({ message: `Invalid GST percentage for ${item.itemName}. Must be between 0 and 100.` });
+      }
+
+      if (unitsSold <= 0) {
+        return res.status(400).json({ message: `Calculated units to sell for ${item.itemName} is invalid (0 or negative)` });
+      }
+
+      const availableUnits = invItem.quantityUnits || invItem.quantity || 0;
+      if (availableUnits < unitsSold) {
         return res.status(400).json({
-          message: `Insufficient stock for ${item.itemName} (Batch: ${item.batch}). Available: ${invItem.quantity}, Requested: ${item.quantity}`
+          message: `Insufficient stock for ${item.itemName} (Batch: ${item.batch}). Available: ${availableUnits} units, Requested: ${unitsSold} units (${item.quantity} packs)`
         });
       }
 
       // Deduct quantity
-      const previousStock = invItem.quantity;
-      invItem.quantity -= item.quantity;
-      invItem.amount = invItem.rate * invItem.quantity;
+      const previousStock = availableUnits;
+      invItem.quantityUnits = availableUnits - unitsSold;
+      invItem.quantity = invItem.quantityUnits; // keep in sync
       await invItem.save();
 
-      // Create Stock Movement log
+      // Create Stock Movement log (movement quantity is in units)
       await PharmacyStockMovement.create({
         hospitalId,
         itemName: item.itemName,
         batch: item.batch,
         type: 'Sale',
-        quantity: -item.quantity,
+        quantity: -unitsSold,
         previousStock,
-        newStock: invItem.quantity,
+        newStock: invItem.quantityUnits,
         performedBy: userId,
-        remarks: `Sold via Bill generation`
+        remarks: `Sold via Bill generation (Qty: ${item.quantity} packs)`
       });
     }
 
@@ -297,12 +320,12 @@ const processReturn = async (req, res) => {
         return res.status(400).json({ message: `Item ${ret.itemName} (Batch: ${ret.batch}) not found in the original invoice` });
       }
 
-      const returnQty = parseInt(ret.quantity) || 0;
+      const returnQty = parseFloat(ret.quantity) || 0;
       if (returnQty <= 0) continue;
 
-      if (billItem.returnedQty + returnQty > billItem.quantity) {
+      if (billItem.returnedQty + returnQty > billItem.quantity + 1e-9) {
         return res.status(400).json({
-          message: `Cannot return ${returnQty} of ${ret.itemName}. Max returnable quantity: ${billItem.quantity - billItem.returnedQty}`
+          message: `Cannot return ${returnQty} of ${ret.itemName}. Max returnable quantity: ${(billItem.quantity - billItem.returnedQty).toFixed(3)}`
         });
       }
 
@@ -318,27 +341,31 @@ const processReturn = async (req, res) => {
         });
 
         if (invItem) {
-          const previousStock = invItem.quantity;
-          invItem.quantity += returnQty;
-          invItem.amount = invItem.rate * invItem.quantity;
+          const unitsPerPack = billItem.unitsPerPack || 1;
+          const unitsReturned = Math.round(returnQty * unitsPerPack);
+          const previousStock = invItem.quantityUnits || invItem.quantity || 0;
+          invItem.quantityUnits = previousStock + unitsReturned;
+          invItem.quantity = invItem.quantityUnits;
           await invItem.save();
 
-          // Log Stock Movement
+          // Log Stock Movement (quantity and stock levels logged in units)
           await PharmacyStockMovement.create({
             hospitalId,
             itemName: ret.itemName,
             batch: ret.batch,
             type: 'Sales Return',
-            quantity: returnQty,
+            quantity: unitsReturned,
             previousStock,
-            newStock: invItem.quantity,
+            newStock: invItem.quantityUnits,
             referenceId: bill._id,
             performedBy: userId,
-            remarks: `Sales Return accepted (Refunded)`
+            remarks: `Sales Return accepted (Refunded): Qty ${returnQty} packs (${unitsReturned} units)`
           });
         }
       } else {
         // Rejected returns log
+        const unitsPerPack = billItem.unitsPerPack || 1;
+        const unitsReturned = Math.round(returnQty * unitsPerPack);
         await PharmacyStockMovement.create({
           hospitalId,
           itemName: ret.itemName,
@@ -349,7 +376,7 @@ const processReturn = async (req, res) => {
           newStock: 0,
           referenceId: bill._id,
           performedBy: userId,
-          remarks: `Sales Return rejected (Wasted/Damaged): Qty ${returnQty}`
+          remarks: `Sales Return rejected (Wasted/Damaged): Qty ${returnQty} packs (${unitsReturned} units)`
         });
       }
     }
@@ -361,17 +388,28 @@ const processReturn = async (req, res) => {
     let newGrandTotal = 0;
 
     for (const item of bill.items) {
+      const unitsPerPack = item.unitsPerPack || 1;
       const effectiveQty = item.quantity - item.returnedQty;
-      const itemSubtotal = item.unitPrice * effectiveQty;
-      const itemDiscount = itemSubtotal * (item.discount / 100);
+      const effectiveQtyUnits = effectiveQty * unitsPerPack;
+      
+      const gstPercentage = item.gstPercentage || 0;
+      const unitPriceExGst = item.unitPrice / (1 + gstPercentage / 100);
+      
+      const itemSubtotal = unitPriceExGst * effectiveQtyUnits;
+      const itemDiscount = itemSubtotal * ((item.discount || 0) / 100);
       const taxableAmount = itemSubtotal - itemDiscount;
-      const itemGst = taxableAmount * (item.gstPercentage / 100);
+      const itemGst = taxableAmount * (gstPercentage / 100);
       const itemTotal = taxableAmount + itemGst;
 
       item.gstAmount = Number(itemGst.toFixed(2)) || 0;
       item.amount = Number(itemTotal.toFixed(2)) || 0;
 
-      newSubTotal += itemSubtotal;
+      if (gstPercentage === 0) {
+        newSubTotal += itemSubtotal;
+      } else {
+        const itemRowMrp = item.unitPrice * effectiveQtyUnits;
+        newSubTotal += itemRowMrp;
+      }
       newDiscount += itemDiscount;
       newGstAmount += itemGst;
       newGrandTotal += itemTotal;

@@ -1579,9 +1579,15 @@ const IpdMedicationChartContent = ({ admissionId }) => {
                   onChange={(e) => setOrderForm(prev => ({ ...prev, medicineName: e.target.value }))}
                 />
                 <datalist id="medication-order-medicines">
-                  {pharmacyMedicines.map((med, idx) => (
-                    <option key={idx} value={med} />
-                  ))}
+                  {pharmacyMedicines
+                    .filter(med => {
+                      const query = (orderForm.medicineName || '').trim().toLowerCase();
+                      if (!query) return false;
+                      return med.toLowerCase().includes(query);
+                    })
+                    .map((med, idx) => (
+                      <option key={idx} value={med} />
+                    ))}
                 </datalist>
               </div>
 

@@ -676,7 +676,10 @@ const completeRequest = async (req, res) => {
 // Helper to auto-post medicine consumption to IPD Patient billing
 const autoPostToBilling = async (req, request) => {
   const now = new Date();
-  const dateStr = now.toISOString().split('T')[0];
+  const day = String(now.getDate()).padStart(2, '0');
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const year = now.getFullYear();
+  const dateStr = `${day}/${month}/${year}`;
   const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
 
   const adminSettings = await IpdAdminSettings.findOne({ hospitalId: request.hospitalId });

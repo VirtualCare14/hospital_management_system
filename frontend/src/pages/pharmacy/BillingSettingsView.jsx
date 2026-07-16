@@ -33,16 +33,19 @@ const BillingSettingsView = ({ isAdmin = false }) => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newMed, setNewMed] = useState({
     itemName: '',
+    description: '',
+    dosageForm: '',
+    packType: '',
+    unitsPerPack: 1,
+    quantityPacks: 0,
     batch: '',
-    pack: '0',
-    mrp: 0,
-    quantity: 0,
-    rate: 0,
-    dis: 0,
     expiry: '',
-    hsn: '0',
+    rateExGst: 0,
     sgst: 0,
-    cst: 0
+    cgst: 0,
+    mrp: 0,
+    hsn: '0',
+    thresholdMedicineNumber: 10
   });
 
   // Fetch Parameters Configuration
@@ -145,14 +148,7 @@ const BillingSettingsView = ({ isAdmin = false }) => {
     }
     setSavingItemId(item._id);
     try {
-      const qty = itemEdits.quantity !== undefined ? Number(itemEdits.quantity) : item.quantity;
-      const rate = itemEdits.rate !== undefined ? Number(itemEdits.rate) : item.rate;
-      const finalAmount = qty * rate;
-
-      await client.put(`/pharmacy/inventory/${item._id}`, {
-        ...itemEdits,
-        amount: finalAmount
-      });
+      const { data } = await client.put(`/pharmacy/inventory/${item._id}`, itemEdits);
       toast.success('Medicine updated successfully!');
       
       // Update item locally
@@ -160,8 +156,7 @@ const BillingSettingsView = ({ isAdmin = false }) => {
         if (it._id === item._id) {
           return {
             ...it,
-            ...itemEdits,
-            amount: finalAmount
+            ...data.item
           };
         }
         return it;
@@ -218,16 +213,19 @@ const BillingSettingsView = ({ isAdmin = false }) => {
       // Reset form
       setNewMed({
         itemName: '',
+        description: '',
+        dosageForm: '',
+        packType: '',
+        unitsPerPack: 1,
+        quantityPacks: 0,
         batch: '',
-        pack: '0',
-        mrp: 0,
-        quantity: 0,
-        rate: 0,
-        dis: 0,
         expiry: '',
-        hsn: '0',
+        rateExGst: 0,
         sgst: 0,
-        cst: 0
+        cgst: 0,
+        mrp: 0,
+        hsn: '0',
+        thresholdMedicineNumber: 10
       });
       setShowAddForm(false);
       // Refresh list
@@ -425,7 +423,7 @@ const BillingSettingsView = ({ isAdmin = false }) => {
               </div>
               <form onSubmit={handleCreateMedicine} className="grid gap-3.5 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6 text-xs">
                 <div className="sm:col-span-2">
-                  <label className="mb-1 block font-bold text-gray-550">Item Name *</label>
+                  <label className="mb-1 block font-bold text-gray-550">Medicine Name *</label>
                   <input 
                     type="text" 
                     required 
@@ -435,8 +433,60 @@ const BillingSettingsView = ({ isAdmin = false }) => {
                     onChange={(e) => handleAddMedChange('itemName', e.target.value)}
                   />
                 </div>
+                <div className="sm:col-span-2">
+                  <label className="mb-1 block font-bold text-gray-550">Description</label>
+                  <input 
+                    type="text" 
+                    className="input py-2 text-xs" 
+                    placeholder="e.g. For pain relief and fever control"
+                    value={newMed.description}
+                    onChange={(e) => handleAddMedChange('description', e.target.value)}
+                  />
+                </div>
                 <div>
-                  <label className="mb-1 block font-bold text-gray-550">Batch *</label>
+                  <label className="mb-1 block font-bold text-gray-550">Dosage Form</label>
+                  <input 
+                    type="text" 
+                    className="input py-2 text-xs" 
+                    placeholder="e.g. Tablet, Syrup"
+                    value={newMed.dosageForm}
+                    onChange={(e) => handleAddMedChange('dosageForm', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block font-bold text-gray-550">Pack Type</label>
+                  <input 
+                    type="text" 
+                    className="input py-2 text-xs" 
+                    placeholder="e.g. Strip, Bottle"
+                    value={newMed.packType}
+                    onChange={(e) => handleAddMedChange('packType', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block font-bold text-gray-555">Units / Pack *</label>
+                  <input 
+                    type="number" 
+                    required
+                    min="1"
+                    className="input py-2 text-xs text-center" 
+                    value={newMed.unitsPerPack || ''}
+                    onChange={(e) => handleAddMedChange('unitsPerPack', parseInt(e.target.value) || 1)}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block font-bold text-gray-555">Quantity (Packs) *</label>
+                  <input 
+                    type="number" 
+                    required
+                    min="0"
+                    className="input py-2 text-xs text-center font-bold" 
+                    value={newMed.quantityPacks || ''}
+                    onChange={(e) => handleAddMedChange('quantityPacks', parseInt(e.target.value) || 0)}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block font-bold text-gray-550">Batch No *</label>
                   <input 
                     type="text" 
                     required 
@@ -444,55 +494,6 @@ const BillingSettingsView = ({ isAdmin = false }) => {
                     placeholder="e.g. B123"
                     value={newMed.batch}
                     onChange={(e) => handleAddMedChange('batch', e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block font-bold text-gray-555">Pack</label>
-                  <input 
-                    type="text" 
-                    className="input py-2 text-xs" 
-                    placeholder="e.g. 10 Tab"
-                    value={newMed.pack}
-                    onChange={(e) => handleAddMedChange('pack', e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block font-bold text-gray-555">MRP (₹)</label>
-                  <input 
-                    type="number" 
-                    step="0.01" 
-                    className="input py-2 text-xs" 
-                    value={newMed.mrp || ''}
-                    onChange={(e) => handleAddMedChange('mrp', parseFloat(e.target.value) || 0)}
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block font-bold text-gray-555">Qty</label>
-                  <input 
-                    type="number" 
-                    className="input py-2 text-xs" 
-                    value={newMed.quantity || ''}
-                    onChange={(e) => handleAddMedChange('quantity', parseInt(e.target.value) || 0)}
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block font-bold text-gray-555">Rate (₹)</label>
-                  <input 
-                    type="number" 
-                    step="0.01" 
-                    className="input py-2 text-xs" 
-                    value={newMed.rate || ''}
-                    onChange={(e) => handleAddMedChange('rate', parseFloat(e.target.value) || 0)}
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block font-bold text-gray-555">Disc%</label>
-                  <input 
-                    type="number" 
-                    step="0.1" 
-                    className="input py-2 text-xs" 
-                    value={newMed.dis || ''}
-                    onChange={(e) => handleAddMedChange('dis', parseFloat(e.target.value) || 0)}
                   />
                 </div>
                 <div>
@@ -506,32 +507,61 @@ const BillingSettingsView = ({ isAdmin = false }) => {
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block font-bold text-gray-555">HSN</label>
+                  <label className="mb-1 block font-bold text-gray-555">Rate Ex GST (Pack) (₹)</label>
                   <input 
-                    type="text" 
-                    className="input py-2 text-xs" 
-                    value={newMed.hsn}
-                    onChange={(e) => handleAddMedChange('hsn', e.target.value)}
+                    type="number" 
+                    step="0.01" 
+                    className="input py-2 text-xs text-right font-bold" 
+                    value={newMed.rateExGst || ''}
+                    onChange={(e) => handleAddMedChange('rateExGst', parseFloat(e.target.value) || 0)}
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block font-bold text-gray-555">SGST%</label>
+                  <label className="mb-1 block font-bold text-gray-555">SGST %</label>
                   <input 
                     type="number" 
                     step="0.1" 
-                    className="input py-2 text-xs" 
+                    className="input py-2 text-xs text-center" 
                     value={newMed.sgst || ''}
                     onChange={(e) => handleAddMedChange('sgst', parseFloat(e.target.value) || 0)}
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block font-bold text-gray-555">CST%</label>
+                  <label className="mb-1 block font-bold text-gray-555">CGST %</label>
                   <input 
                     type="number" 
                     step="0.1" 
-                    className="input py-2 text-xs" 
-                    value={newMed.cst || ''}
-                    onChange={(e) => handleAddMedChange('cst', parseFloat(e.target.value) || 0)}
+                    className="input py-2 text-xs text-center" 
+                    value={newMed.cgst || ''}
+                    onChange={(e) => handleAddMedChange('cgst', parseFloat(e.target.value) || 0)}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block font-bold text-gray-555">MRP Inc GST (Pack) (₹)</label>
+                  <input 
+                    type="number" 
+                    step="0.01" 
+                    className="input py-2 text-xs text-right font-bold" 
+                    value={newMed.mrp || ''}
+                    onChange={(e) => handleAddMedChange('mrp', parseFloat(e.target.value) || 0)}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block font-bold text-gray-555">HSN Code</label>
+                  <input 
+                    type="text" 
+                    className="input py-2 text-xs text-center" 
+                    value={newMed.hsn}
+                    onChange={(e) => handleAddMedChange('hsn', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block font-bold text-gray-555">Threshold Number</label>
+                  <input 
+                    type="number" 
+                    className="input py-2 text-xs text-center" 
+                    value={newMed.thresholdMedicineNumber || ''}
+                    onChange={(e) => handleAddMedChange('thresholdMedicineNumber', parseInt(e.target.value) || 0)}
                   />
                 </div>
                 <div className="col-span-full flex justify-end gap-2 border-t border-orange-50 pt-3">
@@ -558,34 +588,39 @@ const BillingSettingsView = ({ isAdmin = false }) => {
           {/* Medicines Management Table */}
           <div className="card bg-white border border-orange-100 shadow-lg overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="min-w-[1850px] text-left text-xs border-collapse">
+              <table className="min-w-[2150px] text-left text-xs border-collapse">
                 <thead>
-                  <tr className="bg-gradient-to-r from-orange-50 to-amber-50 text-[10px] font-extrabold uppercase text-gray-600 border-b border-orange-100 select-none">
-                    <th className="p-3 pl-4 w-[240px]">Item Name</th>
-                    <th className="p-3 w-[150px]">Batch</th>
-                    <th className="p-3 w-[110px]">Pack</th>
-                    <th className="p-3 w-[110px]">MRP (₹)</th>
-                    <th className="p-3 w-[100px]">Qty</th>
-                    <th className="p-3 w-[130px]">Rate (₹)</th>
-                    <th className="p-3 w-[90px]">Disc%</th>
-                    <th className="p-3 w-[160px]">Expiry</th>
-                    <th className="p-3 w-[110px]">HSN</th>
-                    <th className="p-3 w-[90px]">SGST%</th>
-                    <th className="p-3 w-[90px]">CST%</th>
+                  <tr className="bg-gradient-to-r from-orange-50 to-amber-50 text-[10px] font-extrabold uppercase text-gray-650 border-b border-orange-100 select-none">
+                    <th className="p-3 pl-4 w-[200px]">Medicine Name *</th>
+                    <th className="p-3 w-[150px]">Description</th>
+                    <th className="p-3 w-[100px]">Dosage Form</th>
+                    <th className="p-3 w-[100px]">Pack Type</th>
+                    <th className="p-3 w-[80px]">Units/Pack *</th>
+                    <th className="p-3 w-[80px]">Qty (Packs) *</th>
+                    <th className="p-3 w-[110px]">Batch *</th>
+                    <th className="p-3 w-[120px]">Expiry *</th>
+                    <th className="p-3 w-[100px]">Rate (Ex GST)</th>
+                    <th className="p-3 w-[90px]">Per Unit Rate</th>
+                    <th className="p-3 w-[70px]">SGST %</th>
+                    <th className="p-3 w-[70px]">CGST %</th>
+                    <th className="p-3 w-[100px]">MRP (Inc GST)</th>
+                    <th className="p-3 w-[105px]">Per Unit Rate With GST</th>
+                    <th className="p-3 w-[90px]">HSN</th>
+                    <th className="p-3 w-[80px]">Threshold</th>
                     <th className="p-3 pr-4 text-center w-[120px]">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-orange-50 font-medium text-gray-700">
                   {loadingInventory ? (
                     <tr>
-                      <td colSpan="12" className="p-10 text-center text-gray-400">
+                      <td colSpan="17" className="p-10 text-center text-gray-400">
                         <Loader2 className="h-8 w-8 animate-spin mx-auto text-orange-500 mb-2" />
                         <p className="font-bold">Fetching inventory details...</p>
                       </td>
                     </tr>
                   ) : inventoryItems.length === 0 ? (
                     <tr>
-                      <td colSpan="12" className="p-10 text-center text-gray-400 font-bold">
+                      <td colSpan="17" className="p-10 text-center text-gray-400 font-bold">
                         <Package className="h-8 w-8 mx-auto mb-2 opacity-50 text-orange-500" />
                         No inventory medicines found matching your search.
                       </td>
@@ -598,31 +633,115 @@ const BillingSettingsView = ({ isAdmin = false }) => {
 
                       return (
                         <tr key={item._id} className="hover:bg-orange-55/20 transition align-middle">
-                          {/* Item Name */}
+                          {/* Medicine Name */}
                           <td className="p-2 pl-4">
                             <input 
                               type="text" 
-                              className="input py-1 px-1.5 text-xs bg-gray-50 border-orange-50 focus:bg-white w-[220px]" 
+                              required
+                              className="input py-1 px-1.5 text-xs bg-gray-50 border-orange-50 focus:bg-white w-[180px]" 
                               value={getFieldValue(item, 'itemName')}
                               onChange={(e) => handleFieldChange(item._id, 'itemName', e.target.value)}
+                            />
+                          </td>
+                          {/* Description */}
+                          <td className="p-2">
+                            <input 
+                              type="text" 
+                              className="input py-1 px-1.5 text-xs bg-gray-50 border-orange-50 focus:bg-white w-[130px]" 
+                              value={getFieldValue(item, 'description')}
+                              onChange={(e) => handleFieldChange(item._id, 'description', e.target.value)}
+                            />
+                          </td>
+                          {/* Dosage Form */}
+                          <td className="p-2">
+                            <input 
+                              type="text" 
+                              className="input py-1 px-1.5 text-xs bg-gray-50 border-orange-50 focus:bg-white w-[90px] text-center" 
+                              value={getFieldValue(item, 'dosageForm')}
+                              onChange={(e) => handleFieldChange(item._id, 'dosageForm', e.target.value)}
+                            />
+                          </td>
+                          {/* Pack Type */}
+                          <td className="p-2">
+                            <input 
+                              type="text" 
+                              className="input py-1 px-1.5 text-xs bg-gray-50 border-orange-50 focus:bg-white w-[90px] text-center" 
+                              value={getFieldValue(item, 'packType')}
+                              onChange={(e) => handleFieldChange(item._id, 'packType', e.target.value)}
+                            />
+                          </td>
+                          {/* Units/Pack */}
+                          <td className="p-2">
+                            <input 
+                              type="number" 
+                              required
+                              className="input py-1 px-1.5 text-xs bg-gray-50 border-orange-50 focus:bg-white w-[70px] text-center" 
+                              value={getFieldValue(item, 'unitsPerPack')}
+                              onChange={(e) => handleFieldChange(item._id, 'unitsPerPack', parseInt(e.target.value) || 1)}
+                            />
+                          </td>
+                          {/* Qty Packs */}
+                          <td className="p-2">
+                            <input 
+                              type="number" 
+                              required
+                              className="input py-1 px-1.5 text-xs bg-gray-50 border-orange-50 focus:bg-white w-[70px] text-center" 
+                              value={getFieldValue(item, 'quantityPacks')}
+                              onChange={(e) => handleFieldChange(item._id, 'quantityPacks', parseInt(e.target.value) || 0)}
                             />
                           </td>
                           {/* Batch */}
                           <td className="p-2">
                             <input 
                               type="text" 
-                              className="input py-1 px-1.5 text-xs bg-gray-50 border-orange-50 font-mono focus:bg-white w-[130px]" 
+                              required
+                              className="input py-1 px-1.5 text-xs bg-gray-50 border-orange-50 font-mono focus:bg-white w-[100px]" 
                               value={getFieldValue(item, 'batch')}
                               onChange={(e) => handleFieldChange(item._id, 'batch', e.target.value)}
                             />
                           </td>
-                          {/* Pack */}
+                          {/* Expiry */}
                           <td className="p-2">
                             <input 
-                              type="text" 
-                              className="input py-1 px-1 text-xs text-center bg-gray-50 border-orange-50 focus:bg-white w-[90px]" 
-                              value={getFieldValue(item, 'pack')}
-                              onChange={(e) => handleFieldChange(item._id, 'pack', e.target.value)}
+                              type="date" 
+                              required
+                              className="input py-1 px-1.5 text-xs bg-gray-50 border-orange-50 focus:bg-white w-[110px]" 
+                              value={getFieldValue(item, 'expiry')}
+                              onChange={(e) => handleFieldChange(item._id, 'expiry', e.target.value)}
+                            />
+                          </td>
+                          {/* Rate Ex GST */}
+                          <td className="p-2">
+                            <input 
+                              type="number" 
+                              step="0.01"
+                              className="input py-1 px-1.5 text-xs text-right bg-gray-50 border-orange-50 focus:bg-white w-[90px]" 
+                              value={getFieldValue(item, 'rateExGst')}
+                              onChange={(e) => handleFieldChange(item._id, 'rateExGst', parseFloat(e.target.value) || 0)}
+                            />
+                          </td>
+                          {/* Per Unit Rate */}
+                          <td className="p-2 text-right font-mono text-gray-500 pr-1.5">
+                            ₹{((getFieldValue(item, 'rateExGst') || 0) / (getFieldValue(item, 'unitsPerPack') || 1)).toFixed(4)}
+                          </td>
+                          {/* SGST */}
+                          <td className="p-2">
+                            <input 
+                              type="number" 
+                              step="0.1"
+                              className="input py-1 px-1.5 text-xs text-center bg-gray-50 border-orange-50 focus:bg-white w-[60px]" 
+                              value={getFieldValue(item, 'sgst')}
+                              onChange={(e) => handleFieldChange(item._id, 'sgst', parseFloat(e.target.value) || 0)}
+                            />
+                          </td>
+                          {/* CGST */}
+                          <td className="p-2">
+                            <input 
+                              type="number" 
+                              step="0.1"
+                              className="input py-1.5 px-1.5 text-xs text-center bg-gray-50 border-orange-50 focus:bg-white w-[60px]" 
+                              value={getFieldValue(item, 'cgst')}
+                              onChange={(e) => handleFieldChange(item._id, 'cgst', parseFloat(e.target.value) || 0)}
                             />
                           </td>
                           {/* MRP */}
@@ -630,73 +749,31 @@ const BillingSettingsView = ({ isAdmin = false }) => {
                             <input 
                               type="number" 
                               step="0.01"
-                              className="input py-1 px-1 text-xs text-center bg-gray-50 border-orange-50 focus:bg-white w-[90px]" 
+                              className="input py-1 px-1.5 text-xs text-right bg-gray-50 border-orange-50 focus:bg-white w-[90px]" 
                               value={getFieldValue(item, 'mrp')}
                               onChange={(e) => handleFieldChange(item._id, 'mrp', parseFloat(e.target.value) || 0)}
                             />
                           </td>
-                          {/* Qty */}
-                          <td className="p-2">
-                            <input 
-                              type="number" 
-                              className="input py-1 px-1 text-xs text-center bg-gray-50 border-orange-50 focus:bg-white w-[80px]" 
-                              value={getFieldValue(item, 'quantity')}
-                              onChange={(e) => handleFieldChange(item._id, 'quantity', parseInt(e.target.value) || 0)}
-                            />
-                          </td>
-                          {/* Rate */}
-                          <td className="p-2">
-                            <input 
-                              type="number" 
-                              step="0.01"
-                              className="input py-1 px-1 text-xs text-center bg-gray-50 border-orange-50 focus:bg-white w-[110px]" 
-                              value={getFieldValue(item, 'rate')}
-                              onChange={(e) => handleFieldChange(item._id, 'rate', parseFloat(e.target.value) || 0)}
-                            />
-                          </td>
-                          {/* Discount */}
-                          <td className="p-2">
-                            <input 
-                              type="number" 
-                              className="input py-1 px-1 text-xs text-center bg-gray-50 border-orange-50 focus:bg-white w-[70px]" 
-                              value={getFieldValue(item, 'dis')}
-                              onChange={(e) => handleFieldChange(item._id, 'dis', parseFloat(e.target.value) || 0)}
-                            />
-                          </td>
-                          {/* Expiry */}
-                          <td className="p-2">
-                            <input 
-                              type="date" 
-                              className="input py-1 px-1.5 text-xs bg-gray-50 border-orange-50 focus:bg-white w-[140px]" 
-                              value={getFieldValue(item, 'expiry')}
-                              onChange={(e) => handleFieldChange(item._id, 'expiry', e.target.value)}
-                            />
+                          {/* Per Unit Rate With GST */}
+                          <td className="p-2 text-right font-mono text-green-700 pr-1.5">
+                            ₹{((getFieldValue(item, 'mrp') || 0) / (getFieldValue(item, 'unitsPerPack') || 1)).toFixed(4)}
                           </td>
                           {/* HSN */}
                           <td className="p-2">
                             <input 
                               type="text" 
-                              className="input py-1 px-1 text-xs text-center bg-gray-50 border-orange-50 focus:bg-white w-[90px]" 
+                              className="input py-1 px-1.5 text-xs text-center bg-gray-50 border-orange-50 focus:bg-white w-[80px]" 
                               value={getFieldValue(item, 'hsn')}
                               onChange={(e) => handleFieldChange(item._id, 'hsn', e.target.value)}
                             />
                           </td>
-                          {/* SGST */}
+                          {/* Threshold */}
                           <td className="p-2">
                             <input 
                               type="number" 
-                              className="input py-1 px-1 text-xs text-center bg-gray-50 border-orange-50 focus:bg-white w-[70px]" 
-                              value={getFieldValue(item, 'sgst')}
-                              onChange={(e) => handleFieldChange(item._id, 'sgst', parseFloat(e.target.value) || 0)}
-                            />
-                          </td>
-                          {/* CST */}
-                          <td className="p-2">
-                            <input 
-                              type="number" 
-                              className="input py-1 px-1 text-xs text-center bg-gray-50 border-orange-50 focus:bg-white w-[70px]" 
-                              value={getFieldValue(item, 'cst')}
-                              onChange={(e) => handleFieldChange(item._id, 'cst', parseFloat(e.target.value) || 0)}
+                              className="input py-1 px-1.5 text-xs text-center bg-gray-50 border-orange-50 focus:bg-white w-[70px]" 
+                              value={getFieldValue(item, 'thresholdMedicineNumber')}
+                              onChange={(e) => handleFieldChange(item._id, 'thresholdMedicineNumber', parseInt(e.target.value) || 0)}
                             />
                           </td>
                           {/* Actions */}

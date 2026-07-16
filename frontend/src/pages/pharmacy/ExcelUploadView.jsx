@@ -79,22 +79,25 @@ const ExcelUploadView = () => {
           }
         }
         return {
-          'Sno.': item.sNo || (index + 1),
-          'Item Name': item.itemName,
-          'Old MRP': item.oldMrp || 0,
-          'Pack': item.pack || '0',
-          'MRP': item.mrp || 0,
-          'Quantity': item.quantity || 0,
-          'Free': item.free || 0,
-          'Rate': item.rate || 0,
-          'Dis': item.dis || 0,
-          'Batch': item.batch,
-          'Expiry': expiryStr,
-          'NRate': item.nRate || 0,
-          'HSN': item.hsn || '0',
-          'SGST': item.sgst || 0,
-          'CST': item.cst || 0,
-          'Amount': item.amount || 0
+          'S.No': item.sNo || (index + 1),
+          'Medicine Name': item.itemName,
+          'Description': item.description || '',
+          'Dosage Form': item.dosageForm || '',
+          'Pack Type': item.packType || '',
+          'Units / Pack': item.unitsPerPack || 1,
+          'Quantity (Packs)': item.quantityPacks || 0,
+          'Batch No': item.batch,
+          'Expiry Date': expiryStr,
+          'Rate (Ex GST)': item.rateExGst || 0,
+          'Per Unit Rate': item.perUnitRate || 0,
+          'SGST %': item.sgst || 0,
+          'CGST %': item.cgst || 0,
+          'MRP (Inc GST)': item.mrp || 0,
+          'Per Unit MRP (Inc GST)': item.perUnitRateWithGst || 0,
+          'HSN Code': item.hsn || '0',
+          'Amount (Ex GST)': (item.rateExGst || 0) * (item.quantityPacks || 0),
+          'Amount (Inc GST)': (item.mrp || 0) * (item.quantityPacks || 0),
+          'Threshold Medicine Number': item.thresholdMedicineNumber || 10
         };
       });
 
@@ -186,7 +189,7 @@ const ExcelUploadView = () => {
         // Validate Column Structure
         const headers = XLSX.utils.sheet_to_json(worksheet, { header: 1 })[0] || [];
         const requiredColumns = [
-          'Item Name', 'MRP', 'Quantity', 'Rate', 'Batch', 'Expiry'
+          'Medicine Name', 'Pack Type', 'Units / Pack', 'Quantity (Packs)', 'Batch No', 'Expiry Date', 'Rate (Ex GST)', 'SGST %', 'CGST %', 'MRP (Inc GST)', 'Threshold Medicine Number'
         ];
 
         const normalizedHeaders = headers.map(h => String(h).trim().toLowerCase());
@@ -198,7 +201,7 @@ const ExcelUploadView = () => {
         });
 
         if (missing.length > 0) {
-          toast.error(`Required columns missing: ${missing.join(', ')}`);
+          toast.error(`Required columns missing in Excel: ${missing.join(', ')}`);
           setFile(null);
           return;
         }
@@ -214,48 +217,115 @@ const ExcelUploadView = () => {
             return val === undefined || val === null || val === "" ? defaultVal : val;
           };
 
-          const itemName = String(getVal('Item Name', '')).trim();
-          const batch = String(getVal('Batch', '')).trim();
-          const rawExpiry = getVal('Expiry', null);
+          const sNoVal = getVal('S.No', idx + 1);
+          const itemName = String(getVal('Medicine Name', '')).trim();
+          const description = String(getVal('Description', '')).trim();
+          const dosageForm = String(getVal('Dosage Form', '')).trim();
+          const packType = String(getVal('Pack Type', '')).trim();
+          const unitsPerPack = Number(getVal('Units / Pack', 1));
+          const quantityPacks = Number(getVal('Quantity (Packs)', 0));
+          const batch = String(getVal('Batch No', '')).trim();
+          const rawExpiry = getVal('Expiry Date', null);
+          const rateExGst = Number(getVal('Rate (Ex GST)', 0));
+          const sgst = Number(getVal('SGST %', 0));
+          const cgst = Number(getVal('CGST %', 0));
+          const mrpInput = Number(getVal('MRP (Inc GST)', 0));
+          const hsn = String(getVal('HSN Code', '0')).trim();
+          const thresholdMedicineNumber = Number(getVal('Threshold Medicine Number', 10));
 
           // Check required row inputs
           if (!itemName && !batch) {
             logs.push(`Row ${idx + 1}: Ignored empty row.`);
             return;
           }
+
+          let hasError = false;
+
           if (!itemName) {
-            logs.push(`Row ${idx + 1}: Skipped because 'Item Name' is missing.`);
-            return;
+            logs.push(`Row ${idx + 1}: Skipped because 'Medicine Name' is required.`);
+            hasError = true;
+          }
+          if (!packType) {
+            logs.push(`Row ${idx + 1}: Skipped because 'Pack Type' is required.`);
+            hasError = true;
+          }
+          if (isNaN(unitsPerPack) || unitsPerPack <= 0) {
+            logs.push(`Row ${idx + 1}: Skipped because 'Units / Pack' must be greater than zero.`);
+            hasError = true;
+          }
+          if (isNaN(quantityPacks) || quantityPacks <= 0) {
+            logs.push(`Row ${idx + 1}: Skipped because 'Quantity (Packs)' must be greater than zero.`);
+            hasError = true;
           }
           if (!batch) {
-            logs.push(`Row ${idx + 1}: Skipped because 'Batch' number is missing.`);
-            return;
+            logs.push(`Row ${idx + 1}: Skipped because 'Batch No' is required.`);
+            hasError = true;
+          }
+          if (!rawExpiry) {
+            logs.push(`Row ${idx + 1}: Skipped because 'Expiry Date' is required.`);
+            hasError = true;
+          }
+          if (isNaN(rateExGst) || rateExGst < 0) {
+            logs.push(`Row ${idx + 1}: Skipped because 'Rate (Ex GST)' cannot be negative.`);
+            hasError = true;
+          }
+          if (isNaN(sgst) || isNaN(cgst)) {
+            logs.push(`Row ${idx + 1}: Skipped because 'SGST %' and 'CGST %' must be valid numeric values.`);
+            hasError = true;
+          }
+          
+          let mrp = mrpInput;
+          if (!mrp) {
+            mrp = rateExGst * (1 + ((sgst + cgst) / 100));
           }
 
-          const expiryDate = rawExpiry ? parseExcelDate(rawExpiry) : new Date();
-          let expiryStr = expiryDate.toISOString().split('T')[0];
-          if (isNaN(expiryDate.getTime())) {
-            logs.push(`Row ${idx + 1} (${itemName}): Invalid expiry format. Defaulted to today.`);
-            expiryStr = new Date().toISOString().split('T')[0];
+          if (isNaN(mrp) || mrp < rateExGst) {
+            logs.push(`Row ${idx + 1} (${itemName}): Skipped because 'MRP (Inc GST)' cannot be less than 'Rate (Ex GST)'.`);
+            hasError = true;
           }
+          if (isNaN(thresholdMedicineNumber) || thresholdMedicineNumber < 0) {
+            logs.push(`Row ${idx + 1} (${itemName}): Skipped because 'Threshold Medicine Number' cannot be negative.`);
+            hasError = true;
+          }
+
+          const expiryDate = rawExpiry ? parseExcelDate(rawExpiry) : null;
+          if (rawExpiry && isNaN(expiryDate.getTime())) {
+            logs.push(`Row ${idx + 1} (${itemName}): Skipped because 'Expiry Date' format is invalid.`);
+            hasError = true;
+          }
+
+          if (hasError) return;
+
+          const expiryStr = expiryDate.toISOString().split('T')[0];
+
+          // Auto-calculate values for preview
+          const computedPerUnitRate = rateExGst / unitsPerPack;
+          const computedPerUnitRateWithGst = mrp / unitsPerPack;
+          const amountExGst = rateExGst * quantityPacks;
+          const amountIncGst = mrp * quantityPacks;
+          const amount = amountIncGst;
 
           parsed.push({
-            sNo: Number(getVal('Sno.', idx + 1)),
+            sNo: Number(sNoVal) || (idx + 1),
             itemName,
-            oldMrp: Number(getVal('Old MRP', 0)),
-            pack: String(getVal('Pack', '0')).trim(),
-            mrp: Number(getVal('MRP', 0)),
-            quantity: Number(getVal('Quantity', 0)),
-            free: Number(getVal('Free', 0)),
-            rate: Number(getVal('Rate', 0)),
-            dis: Number(getVal('Dis', 0)),
+            description,
+            dosageForm,
+            packType,
+            unitsPerPack,
+            quantityPacks,
             batch,
             expiry: expiryStr,
-            nRate: Number(getVal('NRate', 0)),
-            hsn: String(getVal('HSN', '0')).trim(),
-            sgst: Number(getVal('SGST', 0)),
-            cst: Number(getVal('CST', 0)),
-            amount: Number(getVal('Amount', Number(getVal('Quantity', 0)) * Number(getVal('Rate', 0))))
+            rateExGst,
+            perUnitRate: computedPerUnitRate,
+            sgst,
+            cgst,
+            mrp,
+            perUnitRateWithGst: computedPerUnitRateWithGst,
+            hsn,
+            amountExGst,
+            amountIncGst,
+            thresholdMedicineNumber,
+            amount
           });
         });
 
@@ -281,18 +351,24 @@ const ExcelUploadView = () => {
     const updated = [...previewItems];
     updated[idx][field] = val;
 
-    // Auto-calculate row total
-    if (field === 'quantity' || field === 'rate' || field === 'dis' || field === 'sgst' || field === 'cst') {
-      const qty = Number(updated[idx].quantity) || 0;
-      const rate = Number(updated[idx].rate) || 0;
-      const dis = Number(updated[idx].dis) || 0;
-      const sgst = Number(updated[idx].sgst) || 0;
-      const cst = Number(updated[idx].cst) || 0;
+    const qtyPacks = Number(updated[idx].quantityPacks) || 0;
+    const unitsPerPack = Number(updated[idx].unitsPerPack) || 1;
+    const rateExGst = Number(updated[idx].rateExGst) || 0;
+    const sgst = Number(updated[idx].sgst) || 0;
+    const cgst = Number(updated[idx].cgst) || 0;
 
-      const taxable = (qty * rate) * (1 - dis / 100);
-      const tax = taxable * (sgst + cst) / 100;
-      updated[idx].amount = taxable + tax;
+    if (field === 'rateExGst' || field === 'sgst' || field === 'cgst') {
+      updated[idx].mrp = rateExGst * (1 + ((sgst + cgst) / 100));
     }
+
+    const mrp = Number(updated[idx].mrp) || 0;
+
+    updated[idx].perUnitRate = rateExGst / unitsPerPack;
+    updated[idx].perUnitRateWithGst = mrp / unitsPerPack;
+    updated[idx].amountExGst = rateExGst * qtyPacks;
+    updated[idx].amountIncGst = mrp * qtyPacks;
+    updated[idx].amount = updated[idx].amountIncGst;
+
     setPreviewItems(updated);
   };
 
@@ -387,22 +463,7 @@ const ExcelUploadView = () => {
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3 bg-orange-50/20 p-4 rounded-2xl border border-orange-100/50 text-xs">
                   <div className="flex flex-wrap items-center gap-3">
-                    <div>
-                      <label className="block font-bold text-gray-500 mb-1">Target Supplier</label>
-                      <select
-                        className="input py-1.5 text-xs font-semibold max-w-[200px]"
-                        value={selectedSupplierId}
-                        onChange={(e) => setSelectedSupplierId(e.target.value)}
-                      >
-                        <option value="">-- System Default Supplier --</option>
-                        {loadingSuppliers ? (
-                          <option disabled>Loading suppliers...</option>
-                        ) : (
-                          suppliers.map(s => <option key={s._id} value={s._id}>{s.name}</option>)
-                        )}
-                      </select>
-                    </div>
-                    <div className="flex gap-4 border-l border-orange-100 pl-4 py-1">
+                    <div className="flex gap-4 py-1">
                       <div>
                         <span className="block text-[10px] text-gray-400 font-bold uppercase">Valid Rows</span>
                         <span className="text-sm font-black text-green-700">{previewItems.length}</span>
@@ -436,22 +497,27 @@ const ExcelUploadView = () => {
 
                 {/* Preview Table */}
                 <div className="overflow-x-auto border border-orange-100 rounded-2xl bg-white shadow-sm max-h-[500px]">
-                  <table className="w-full text-left text-[11px] min-w-[1200px]">
+                  <table className="w-full text-left text-[11px] min-w-[2100px]">
                     <thead>
                       <tr className="bg-gradient-to-r from-orange-50 to-amber-50 text-[10px] font-bold uppercase text-gray-600 border-b border-orange-100 sticky top-0 z-10">
-                        <th className="p-3 pl-4 w-[180px]">Item Name *</th>
-                        <th className="p-3 w-[100px]">Batch No *</th>
+                        <th className="p-3 pl-4 w-[160px]">Medicine Name *</th>
+                        <th className="p-3 w-[150px]">Description</th>
+                        <th className="p-3 w-[100px]">Dosage Form</th>
+                        <th className="p-3 w-[100px]">Pack Type</th>
+                        <th className="p-3 w-[80px]">Units/Pack *</th>
+                        <th className="p-3 w-[85px]">Qty (Packs) *</th>
+                        <th className="p-3 w-[110px]">Batch No *</th>
                         <th className="p-3 w-[110px]">Expiry *</th>
-                        <th className="p-3 w-[70px]">Pack</th>
-                        <th className="p-3 w-[80px]">MRP</th>
-                        <th className="p-3 w-[75px]">Qty</th>
-                        <th className="p-3 w-[75px]">Free</th>
-                        <th className="p-3 w-[85px]">Rate</th>
-                        <th className="p-3 w-[70px]">Dis %</th>
-                        <th className="p-3 w-[80px]">HSN</th>
-                        <th className="p-3 w-[70px]">SGST %</th>
-                        <th className="p-3 w-[70px]">CST %</th>
-                        <th className="p-3 text-right pr-4 w-[100px]">Total (₹)</th>
+                        <th className="p-3 w-[95px]">Rate (Ex GST)</th>
+                        <th className="p-3 w-[90px]">Per Unit Rate</th>
+                        <th className="p-3 w-[80px]">SGST %</th>
+                        <th className="p-3 w-[80px]">CGST %</th>
+                        <th className="p-3 w-[100px]">MRP (Inc GST)</th>
+                        <th className="p-3 w-[105px]">Per Unit MRP (Inc GST)</th>
+                        <th className="p-3 w-[95px]">HSN Code</th>
+                        <th className="p-3 w-[95px] text-right">Amount (Ex GST)</th>
+                        <th className="p-3 w-[95px] text-right">Amount (Inc GST)</th>
+                        <th className="p-3 w-[80px] text-center">Threshold</th>
                         <th className="p-3 text-center w-[50px]">Del</th>
                       </tr>
                     </thead>
@@ -465,6 +531,48 @@ const ExcelUploadView = () => {
                               required
                               value={it.itemName}
                               onChange={(e) => handlePreviewChange(idx, 'itemName', e.target.value)}
+                            />
+                          </td>
+                          <td className="p-1.5">
+                            <input
+                              type="text"
+                              className="input py-1.5 px-2 text-[11px] border-orange-150"
+                              value={it.description}
+                              onChange={(e) => handlePreviewChange(idx, 'description', e.target.value)}
+                            />
+                          </td>
+                          <td className="p-1.5">
+                            <input
+                              type="text"
+                              className="input py-1.5 px-2 text-[11px] border-orange-150 text-center"
+                              value={it.dosageForm}
+                              onChange={(e) => handlePreviewChange(idx, 'dosageForm', e.target.value)}
+                            />
+                          </td>
+                          <td className="p-1.5">
+                            <input
+                              type="text"
+                              className="input py-1.5 px-2 text-[11px] border-orange-150 text-center"
+                              value={it.packType}
+                              onChange={(e) => handlePreviewChange(idx, 'packType', e.target.value)}
+                            />
+                          </td>
+                          <td className="p-1.5">
+                            <input
+                              type="number"
+                              className="input py-1.5 px-2 text-[11px] border-orange-150 text-center"
+                              required
+                              value={it.unitsPerPack}
+                              onChange={(e) => handlePreviewChange(idx, 'unitsPerPack', parseInt(e.target.value) || 1)}
+                            />
+                          </td>
+                          <td className="p-1.5">
+                            <input
+                              type="number"
+                              className="input py-1.5 px-2 text-[11px] text-center border-orange-150 font-bold"
+                              required
+                              value={it.quantityPacks}
+                              onChange={(e) => handlePreviewChange(idx, 'quantityPacks', parseInt(e.target.value) || 0)}
                             />
                           </td>
                           <td className="p-1.5">
@@ -487,10 +595,32 @@ const ExcelUploadView = () => {
                           </td>
                           <td className="p-1.5">
                             <input
-                              type="text"
+                              type="number"
+                              step="0.01"
+                              className="input py-1.5 px-2 text-[11px] text-right border-orange-150 font-bold"
+                              value={it.rateExGst}
+                              onChange={(e) => handlePreviewChange(idx, 'rateExGst', parseFloat(e.target.value) || 0)}
+                            />
+                          </td>
+                          <td className="p-1.5 text-right font-mono text-gray-500 pr-2">
+                            ₹{it.perUnitRate.toFixed(4)}
+                          </td>
+                          <td className="p-1.5">
+                            <input
+                              type="number"
+                              step="0.1"
                               className="input py-1.5 px-2 text-[11px] text-center border-orange-150"
-                              value={it.pack}
-                              onChange={(e) => handlePreviewChange(idx, 'pack', e.target.value)}
+                              value={it.sgst}
+                              onChange={(e) => handlePreviewChange(idx, 'sgst', parseFloat(e.target.value) || 0)}
+                            />
+                          </td>
+                          <td className="p-1.5">
+                            <input
+                              type="number"
+                              step="0.1"
+                              className="input py-1.5 px-2 text-[11px] text-center border-orange-150"
+                              value={it.cgst}
+                              onChange={(e) => handlePreviewChange(idx, 'cgst', parseFloat(e.target.value) || 0)}
                             />
                           </td>
                           <td className="p-1.5">
@@ -502,38 +632,8 @@ const ExcelUploadView = () => {
                               onChange={(e) => handlePreviewChange(idx, 'mrp', parseFloat(e.target.value) || 0)}
                             />
                           </td>
-                          <td className="p-1.5">
-                            <input
-                              type="number"
-                              className="input py-1.5 px-2 text-[11px] text-center border-orange-150 font-bold"
-                              value={it.quantity}
-                              onChange={(e) => handlePreviewChange(idx, 'quantity', parseInt(e.target.value) || 0)}
-                            />
-                          </td>
-                          <td className="p-1.5">
-                            <input
-                              type="number"
-                              className="input py-1.5 px-2 text-[11px] text-center border-orange-150"
-                              value={it.free}
-                              onChange={(e) => handlePreviewChange(idx, 'free', parseInt(e.target.value) || 0)}
-                            />
-                          </td>
-                          <td className="p-1.5">
-                            <input
-                              type="number"
-                              step="0.01"
-                              className="input py-1.5 px-2 text-[11px] text-right border-orange-150 font-bold"
-                              value={it.rate}
-                              onChange={(e) => handlePreviewChange(idx, 'rate', parseFloat(e.target.value) || 0)}
-                            />
-                          </td>
-                          <td className="p-1.5">
-                            <input
-                              type="number"
-                              className="input py-1.5 px-2 text-[11px] text-center border-orange-150"
-                              value={it.dis}
-                              onChange={(e) => handlePreviewChange(idx, 'dis', parseFloat(e.target.value) || 0)}
-                            />
+                          <td className="p-1.5 text-right font-mono text-green-700 pr-2">
+                            ₹{it.perUnitRateWithGst.toFixed(4)}
                           </td>
                           <td className="p-1.5">
                             <input
@@ -543,24 +643,19 @@ const ExcelUploadView = () => {
                               onChange={(e) => handlePreviewChange(idx, 'hsn', e.target.value)}
                             />
                           </td>
-                          <td className="p-1.5">
-                            <input
-                              type="number"
-                              className="input py-1.5 px-2 text-[11px] text-center border-orange-150"
-                              value={it.sgst}
-                              onChange={(e) => handlePreviewChange(idx, 'sgst', parseFloat(e.target.value) || 0)}
-                            />
+                          <td className="p-1.5 text-right font-mono font-bold text-gray-700 pr-2">
+                            ₹{(it.amountExGst || 0).toFixed(2)}
+                          </td>
+                          <td className="p-1.5 text-right font-mono font-bold text-green-800 pr-2">
+                            ₹{(it.amountIncGst || 0).toFixed(2)}
                           </td>
                           <td className="p-1.5">
                             <input
                               type="number"
                               className="input py-1.5 px-2 text-[11px] text-center border-orange-150"
-                              value={it.cst}
-                              onChange={(e) => handlePreviewChange(idx, 'cst', parseFloat(e.target.value) || 0)}
+                              value={it.thresholdMedicineNumber}
+                              onChange={(e) => handlePreviewChange(idx, 'thresholdMedicineNumber', parseInt(e.target.value) || 0)}
                             />
-                          </td>
-                          <td className="p-1.5 text-right pr-4 font-mono font-black text-gray-800">
-                            ₹{it.amount.toFixed(2)}
                           </td>
                           <td className="p-1.5 text-center">
                             <button
@@ -623,7 +718,7 @@ const ExcelUploadView = () => {
               </button>
               <div className="bg-orange-50/30 border border-orange-100 rounded-2xl p-4 text-[10px] text-gray-500 font-semibold leading-normal space-y-2">
                 <p className="font-black text-orange-850 uppercase">Mapped headers:</p>
-                <p className="font-mono">Sno., Item Name, Old MRP, Pack, MRP, Quantity, Free, Rate, Dis, Batch, Expiry, NRate, HSN, SGST, CST, Amount</p>
+                <p className="font-mono">S.No, Medicine Name, Description, Dosage Form, Pack Type, Units / Pack, Quantity (Packs), Batch No, Expiry Date, Rate (Ex GST), Per Unit Rate, SGST %, CGST %, MRP (Inc GST), Per Unit MRP (Inc GST), HSN Code, Amount (Ex GST), Amount (Inc GST), Threshold Medicine Number</p>
               </div>
             </div>
           </div>

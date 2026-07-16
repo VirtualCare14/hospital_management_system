@@ -320,9 +320,15 @@ const DischargeRequestsView = () => {
                           onChange={(e) => setNewDrug({ ...newDrug, medicineName: e.target.value })}
                         />
                         <datalist id="discharge-prescription-medicines">
-                          {pharmacyMedicines.map((med, idx) => (
-                            <option key={idx} value={med} />
-                          ))}
+                          {pharmacyMedicines
+                            .filter(med => {
+                              const query = (newDrug.medicineName || '').trim().toLowerCase();
+                              if (!query) return false;
+                              return med.toLowerCase().includes(query);
+                            })
+                            .map((med, idx) => (
+                              <option key={idx} value={med} />
+                            ))}
                         </datalist>
                       </div>
                       <div className="space-y-1">

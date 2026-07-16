@@ -243,21 +243,21 @@ const Sidebar = () => {
           <div className="mt-6">
             <span className="px-4 text-xs font-bold text-orange-400 uppercase tracking-widest block mb-2">Day Care</span>
             <div className="space-y-1">
-              <NavLink to="/same-day-care" end className={({ isActive }) => isActive && !window.location.search.includes('tab=') ? activeStyle : inactiveStyle}>
-                <Bandage className="h-5 w-5" />
-                Same Day Care
+              <NavLink to="/same-day-care?tab=all" className={() => window.location.search.includes('tab=all') || (location.pathname === '/same-day-care' && !window.location.search.includes('tab=')) ? activeStyle : inactiveStyle}>
+                <Users className="h-5 w-5" />
+                All Patients (Lookup)
               </NavLink>
-              <NavLink to="/same-day-care/dialysis" className={({ isActive }) => isActive ? activeStyle : inactiveStyle}>
-                <Droplets className="h-5 w-5 text-sky-500" />
-                Dialysis Management
+              <NavLink to="/same-day-care?tab=pending" className={() => window.location.search.includes('tab=pending') ? activeStyle : inactiveStyle}>
+                <Clock className="h-5 w-5" />
+                Treatment Pending
               </NavLink>
               <NavLink to="/same-day-care?tab=completed" className={() => window.location.search.includes('tab=completed') ? activeStyle : inactiveStyle}>
                 <CheckCircle className="h-5 w-5" />
                 Treatment Completed
               </NavLink>
-              <NavLink to="/same-day-care?tab=pending" className={() => window.location.search.includes('tab=pending') ? activeStyle : inactiveStyle}>
-                <Clock className="h-5 w-5" />
-                Treatment Pending
+              <NavLink to="/same-day-care/dialysis" className={({ isActive }) => isActive ? activeStyle : inactiveStyle}>
+                <Droplets className="h-5 w-5 text-sky-500" />
+                Dialysis Management
               </NavLink>
               <NavLink to="/same-day-care/discharge-requests" className={({ isActive }) => isActive ? activeStyle : inactiveStyle}>
                 <DoorOpen className="h-5 w-5" />

@@ -130,7 +130,7 @@ function App() {
             <Route path="/ipd/ot-management" element={<IpdOtDashboard />} />
             <Route path="/ipd/same-day" element={<IpdSameDayDashboard />} />
           </Route>
-          <Route element={<ProtectedRoute allowedRoles={['admin', 'nursing', 'reception']} requiredModule={6} />}>
+          <Route element={<ProtectedRoute allowedRoles={['admin', 'nursing', 'reception', 'doctor']} requiredModule={6} />}>
             <Route path="/same-day-care" element={<SameDayCareWorkspace />} />
             <Route path="/same-day-care/treatment/:patientId" element={<SameDayCareForm />} />
             <Route path="/same-day-care/ipd-patients" element={<SameDayCareIpdPatients />} />

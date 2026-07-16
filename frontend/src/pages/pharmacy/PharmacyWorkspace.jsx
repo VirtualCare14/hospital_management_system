@@ -52,7 +52,7 @@ import { createPortal } from 'react-dom';
 import './PharmacyInvoicePrint.css';
 
 // Color Helper for stock status
-const getStatusDetails = (qty, expiryDateStr) => {
+const getStatusDetails = (qty, expiryDateStr, threshold = 10) => {
   const expiryDate = new Date(expiryDateStr);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -60,9 +60,10 @@ const getStatusDetails = (qty, expiryDateStr) => {
 
   const isExpired = expiryDate <= today;
   const isNearExpiry = expiryDate > today && expiryDate <= thirtyDaysLater;
+  const isLow = qty <= threshold;
 
   if (isExpired) {
-    if (qty < 50) {
+    if (isLow) {
       return {
         label: 'Expired & Low Stock',
         colorClass: 'bg-blue-100 text-blue-800 border-blue-200',
@@ -81,7 +82,7 @@ const getStatusDetails = (qty, expiryDateStr) => {
   }
 
   if (isNearExpiry) {
-    if (qty < 50) {
+    if (isLow) {
       return {
         label: 'Near Expiry & Low Stock',
         colorClass: 'bg-blue-100 text-blue-800 border-blue-200',
@@ -99,7 +100,7 @@ const getStatusDetails = (qty, expiryDateStr) => {
     };
   }
 
-  if (qty < 50) {
+  if (isLow) {
     return {
       label: 'Low Stock Warning',
       colorClass: 'bg-yellow-100 text-yellow-800 border-yellow-200',
@@ -311,30 +312,36 @@ const DashboardView = ({ changeSection }) => {
       )}
 
       {/* Main KPI Summary Widgets */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 text-xs">
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-5 text-xs">
         {/* Today's Sales */}
         <div className="card p-5 bg-gradient-to-br from-white to-green-50/10 border-green-100 shadow-sm cursor-pointer hover:-translate-y-0.5 transition duration-300" onClick={() => changeSection('sales')}>
           <span className="text-[10px] uppercase font-bold text-gray-400">Today's Sales</span>
-          <h3 className="text-2xl font-black text-green-700 mt-1">₹{summary.todaySales.toFixed(2)}</h3>
-          <p className="text-[10px] text-gray-400 mt-2">Monthly: <span className="font-bold text-gray-700">₹{summary.monthlySales.toFixed(0)}</span></p>
+          <h3 className="text-2xl font-black text-green-700 mt-1">₹{(summary.todaySales || 0).toFixed(2)}</h3>
+          <p className="text-[10px] text-gray-400 mt-2">Monthly: <span className="font-bold text-gray-700">₹{(summary.monthlySales || 0).toFixed(0)}</span></p>
         </div>
         {/* Today's Purchases */}
         <div className="card p-5 bg-gradient-to-br from-white to-blue-50/10 border-blue-100 shadow-sm cursor-pointer hover:-translate-y-0.5 transition duration-300" onClick={() => changeSection('purchases')}>
           <span className="text-[10px] uppercase font-bold text-gray-400">Today's Purchases</span>
-          <h3 className="text-2xl font-black text-blue-700 mt-1">₹{summary.todayPurchase.toFixed(2)}</h3>
-          <p className="text-[10px] text-gray-400 mt-2">Monthly: <span className="font-bold text-gray-700">₹{summary.monthlyPurchase.toFixed(0)}</span></p>
+          <h3 className="text-2xl font-black text-blue-700 mt-1">₹{(summary.todayPurchase || 0).toFixed(2)}</h3>
+          <p className="text-[10px] text-gray-400 mt-2">Monthly: <span className="font-bold text-gray-700">₹{(summary.monthlyPurchase || 0).toFixed(0)}</span></p>
         </div>
-        {/* Current Stock Valuation */}
+        {/* Stock Value Ex GST */}
+        <div className="card p-5 bg-gradient-to-br from-white to-amber-50/10 border-amber-100 shadow-sm cursor-pointer hover:-translate-y-0.5 transition duration-300" onClick={() => changeSection('inventory')}>
+          <span className="text-[10px] uppercase font-bold text-gray-400">Stock Value (Ex GST)</span>
+          <h3 className="text-2xl font-black text-amber-700 mt-1">₹{(summary.totalExGst || 0).toFixed(2)}</h3>
+          <p className="text-[10px] text-gray-400 mt-2">Medicines: <span className="font-bold text-gray-700">{summary.totalMedicines || 0}</span></p>
+        </div>
+        {/* Stock Value Inc GST */}
         <div className="card p-5 bg-gradient-to-br from-white to-orange-50/10 border-orange-100 shadow-sm cursor-pointer hover:-translate-y-0.5 transition duration-300" onClick={() => changeSection('inventory')}>
-          <span className="text-[10px] uppercase font-bold text-gray-400">Inventory Valuation</span>
-          <h3 className="text-2xl font-black text-orange-700 mt-1">₹{summary.inventoryValue.toFixed(2)}</h3>
-          <p className="text-[10px] text-gray-400 mt-2">Medicines: <span className="font-bold text-gray-700">{summary.totalMedicines}</span></p>
+          <span className="text-[10px] uppercase font-bold text-gray-400">Stock Value (Inc GST)</span>
+          <h3 className="text-2xl font-black text-orange-700 mt-1">₹{(summary.totalIncGst || 0).toFixed(2)}</h3>
+          <p className="text-[10px] text-gray-400 mt-2">Medicines: <span className="font-bold text-gray-700">{summary.totalMedicines || 0}</span></p>
         </div>
         {/* Outstanding supplier balances */}
         <div className="card p-5 bg-gradient-to-br from-white to-red-50/10 border-red-100 shadow-sm cursor-pointer hover:-translate-y-0.5 transition duration-300" onClick={() => changeSection('purchases')}>
           <span className="text-[10px] uppercase font-bold text-gray-400">Supplier Outstanding</span>
-          <h3 className="text-2xl font-black text-red-750 mt-1">₹{summary.pendingSupplierPayments.toFixed(2)}</h3>
-          <p className="text-[10px] text-gray-400 mt-2">Active Suppliers: <span className="font-bold text-gray-700">{summary.totalSuppliers}</span></p>
+          <h3 className="text-2xl font-black text-red-750 mt-1">₹{(summary.pendingSupplierPayments || 0).toFixed(2)}</h3>
+          <p className="text-[10px] text-gray-400 mt-2">Active Suppliers: <span className="font-bold text-gray-700">{summary.totalSuppliers || 0}</span></p>
         </div>
       </div>
 
@@ -562,39 +569,43 @@ const InventoryView = () => {
       {/* Items Table */}
       <div className="card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
+          <table className="w-full text-left text-xs">
             <thead>
-              <tr className="bg-gradient-to-r from-orange-50 to-amber-50 text-xs font-bold uppercase text-gray-600 border-b border-orange-100 select-none">
+              <tr className="bg-gradient-to-r from-orange-50 to-amber-50 text-[10px] font-bold uppercase text-gray-600 border-b border-orange-100 select-none">
                 <th className="p-3 pl-4">Sno.</th>
                 <th onClick={() => toggleSort('itemName')} className="p-3 cursor-pointer hover:text-orange-600 transition">
                   Medicine {sortBy === 'itemName' ? (sortOrder === 'asc' ? '▲' : '▼') : ''}
                 </th>
-                <th className="p-3">Batch</th>
+                <th className="p-3">Description</th>
+                <th className="p-3">Dosage Form</th>
+                <th className="p-3">Pack Type</th>
+                <th className="p-3 text-center">Units/Pack</th>
                 <th onClick={() => toggleSort('quantity')} className="p-3 cursor-pointer hover:text-orange-600 transition">
-                  Qty {sortBy === 'quantity' ? (sortOrder === 'asc' ? '▲' : '▼') : ''}
+                  Qty (Units / Packs) {sortBy === 'quantity' ? (sortOrder === 'asc' ? '▲' : '▼') : ''}
                 </th>
+                <th className="p-3">Batch</th>
                 <th onClick={() => toggleSort('expiry')} className="p-3 cursor-pointer hover:text-orange-600 transition">
                   Expiry {sortBy === 'expiry' ? (sortOrder === 'asc' ? '▲' : '▼') : ''}
                 </th>
-                <th className="p-3">Pack</th>
-                <th className="p-3">MRP / Rate</th>
-                <th className="p-3">Supplier</th>
-                <th className="p-3">GST Details</th>
-                <th className="p-3">Amount</th>
-                <th className="p-3">Last Purchase Date</th>
+                <th className="p-3 text-right">Rates (Pack / Unit)</th>
+                <th className="p-3 text-center">GST (SGST/CGST)</th>
+                <th className="p-3 text-right">MRP (Pack / Unit)</th>
+                <th className="p-3">HSN Code</th>
+                <th className="p-3 text-center">Threshold</th>
+                <th className="p-3 text-right">Total Valuation</th>
                 <th className="p-3 pr-4 text-center">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-orange-50">
               {loading ? (
                 <tr>
-                  <td colSpan="10" className="p-8">
-                    <SkeletonTable rows={5} columns={10} className="w-full" />
+                  <td colSpan="16" className="p-8">
+                    <SkeletonTable rows={5} columns={16} className="w-full" />
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan="10" className="p-8 text-center text-gray-400">
+                  <td colSpan="16" className="p-8 text-center text-gray-400">
                     <Pill className="h-8 w-8 mx-auto mb-2 opacity-50 text-orange-500" />
                     <p className="font-bold">No medicines found</p>
                     <p className="text-xs">Upload an Excel sheet or refine search filters.</p>
@@ -602,28 +613,36 @@ const InventoryView = () => {
                 </tr>
               ) : (
                 items.map((item, idx) => {
-                  const stat = getStatusDetails(item.quantity, item.expiry);
+                  const stat = getStatusDetails(item.quantityUnits, item.expiry, item.thresholdMedicineNumber);
                   return (
-                    <tr key={item._id} className="hover:bg-orange-50/10 transition">
+                    <tr key={item._id} className="hover:bg-orange-50/10 transition align-middle">
                       <td className="p-3 pl-4 font-bold text-gray-400">{item.sNo || idx + 1}</td>
-                      <td className="p-3 font-bold text-orange-650 hover:underline cursor-pointer" onClick={() => setSelectedMedForHistory(item.itemName)}>{item.itemName}</td>
+                      <td className="p-3 font-bold text-orange-655 hover:underline cursor-pointer" onClick={() => setSelectedMedForHistory(item.itemName)}>{item.itemName}</td>
+                      <td className="p-3 text-gray-500 max-w-[150px] truncate" title={item.description}>{item.description || '-'}</td>
+                      <td className="p-3 text-gray-650 font-semibold">{item.dosageForm || '-'}</td>
+                      <td className="p-3 text-gray-650 font-semibold">{item.packType || '-'}</td>
+                      <td className="p-3 text-center font-bold text-gray-600">{item.unitsPerPack}</td>
+                      <td className={`p-3 font-bold ${stat.textClass}`}>
+                        <div>{item.quantityUnits} Units</div>
+                        <div className="text-[10px] text-gray-400 font-normal">{item.quantityPacks} Packs</div>
+                      </td>
                       <td className="p-3"><span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-mono text-xs border border-gray-200">{item.batch}</span></td>
-                      <td className={`p-3 font-bold ${stat.textClass}`}>{item.quantity} {item.free > 0 && <span className="text-[10px] text-orange-500">(+{item.free} Free)</span>}</td>
                       <td className="p-3 font-semibold text-gray-600">{new Date(item.expiry).toLocaleDateString('en-GB', { month: '2-digit', year: 'numeric' })}</td>
-                      <td className="p-3 text-xs text-gray-500">{item.pack}</td>
-                      <td className="p-3">
-                        <div className="text-xs font-bold text-green-700">₹{item.mrp.toFixed(2)} <span className="text-[10px] text-gray-400 font-normal">MRP</span></div>
-                        <div className="text-[10px] text-gray-500">Rate: ₹{item.rate.toFixed(2)}</div>
+                      <td className="p-3 text-right font-semibold">
+                        <div className="text-gray-800">₹{item.rateExGst.toFixed(2)}</div>
+                        <div className="text-[10px] text-gray-450">Unit: ₹{item.perUnitRate.toFixed(2)}</div>
                       </td>
-                      <td className="p-3 text-xs text-gray-650">{item.supplierId?.name || item.supplierName || 'System / Import'}</td>
-                      <td className="p-3 text-xs">
-                        <span className="block text-[10px] text-gray-400">HSN: {item.hsn}</span>
-                        <span>S:{item.sgst}% | C:{item.cst}%</span>
+                      <td className="p-3 text-center text-[10px] text-gray-500 font-semibold">
+                        SGST: {item.sgst}%
+                        <div className="text-gray-400">CGST: {item.cgst}%</div>
                       </td>
-                      <td className="p-3 font-bold text-gray-800">₹{item.amount.toFixed(2)}</td>
-                      <td className="p-3 text-xs text-gray-500 font-mono">
-                        {item.lastPurchaseDate ? new Date(item.lastPurchaseDate).toLocaleDateString('en-GB') : new Date(item.updatedAt).toLocaleDateString('en-GB')}
+                      <td className="p-3 text-right">
+                        <div className="text-xs font-bold text-green-700">₹{item.mrp.toFixed(2)}</div>
+                        <div className="text-[10px] text-green-600">Unit: ₹{item.perUnitRateWithGst.toFixed(2)}</div>
                       </td>
+                      <td className="p-3 font-mono text-[10px] text-gray-500">{item.hsn || '-'}</td>
+                      <td className="p-3 text-center font-bold text-orange-700 bg-orange-50/50 rounded-xl">{item.thresholdMedicineNumber}</td>
+                      <td className="p-3 font-bold text-gray-900 text-right">₹{item.amount.toFixed(2)}</td>
                       <td className="p-3 pr-4 text-center">
                         <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold border ${stat.colorClass}`}>
                           <span className={`h-1.5 w-1.5 rounded-full ${stat.badgeColor}`}></span>
@@ -799,7 +818,7 @@ const ExpiryMedicinesView = () => {
                     <td className="p-3 pl-4 font-bold text-gray-800">{item.itemName}</td>
                     <td className="p-3"><span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-mono text-xs border border-gray-200">{item.batch}</span></td>
                     <td className="p-3 font-bold text-gray-800">{item.quantity}</td>
-                    <td className="p-3 font-semibold text-gray-600">{new Date(item.expiry).toLocaleDateString('en-GB')}</td>
+                    <td className="p-3 font-semibold text-gray-600">{new Date(item.expiry).toLocaleDateString('en-GB', { month: '2-digit', year: 'numeric' })}</td>
                     <td className="p-3 pr-4">{getDaysRemainingStr(item.expiry)}</td>
                   </tr>
                 ))
@@ -839,8 +858,8 @@ const OutOfStockView = () => {
       <div className="card p-4 bg-yellow-50 border-yellow-100 flex items-center gap-3">
         <AlertTriangle className="text-yellow-600 h-6 w-6" />
         <div className="text-xs">
-          <p className="font-bold text-yellow-800">Out of Stock Alert Limit: 50 units</p>
-          <p className="text-yellow-600 font-semibold mt-0.5">Medicines in this list should be reordered immediately to avoid stock shortages.</p>
+          <p className="font-bold text-yellow-800">Dynamic Out of Stock & Low Stock Alert</p>
+          <p className="text-yellow-600 font-semibold mt-0.5">Medicines in this list have fallen below their configured safety threshold and should be reordered immediately.</p>
         </div>
       </div>
 
@@ -851,7 +870,8 @@ const OutOfStockView = () => {
               <tr className="bg-gradient-to-r from-orange-50 to-amber-50 text-xs font-bold uppercase text-gray-600 border-b border-orange-100">
                 <th className="p-3 pl-4">Item Name</th>
                 <th className="p-3">Batch Number</th>
-                <th className="p-3 text-yellow-700">Current Quantity</th>
+                <th className="p-3 text-red-600">Current Qty (Units)</th>
+                <th className="p-3 text-yellow-700">Safety Threshold</th>
                 <th className="p-3">MRP</th>
                 <th className="p-3 pr-4">Expiry Date</th>
               </tr>
@@ -859,16 +879,16 @@ const OutOfStockView = () => {
             <tbody className="divide-y divide-orange-50">
               {loading ? (
                 <tr>
-                  <td colSpan="5" className="p-8">
-                    <SkeletonTable rows={4} columns={5} className="w-full" />
+                  <td colSpan="6" className="p-8">
+                    <SkeletonTable rows={4} columns={6} className="w-full" />
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="p-8 text-center text-gray-400">
+                  <td colSpan="6" className="p-8 text-center text-gray-400">
                     <Check className="h-8 w-8 mx-auto mb-2 text-green-500 bg-green-50 border border-green-200 rounded-full p-1.5" />
                     <p className="font-bold">No out of stock medicines</p>
-                    <p className="text-xs">All medicines are currently above the safety stock limit of 50.</p>
+                    <p className="text-xs">All medicines are currently above their configured safety stock thresholds.</p>
                   </td>
                 </tr>
               ) : (
@@ -876,9 +896,10 @@ const OutOfStockView = () => {
                   <tr key={item._id} className="hover:bg-orange-50/10">
                     <td className="p-3 pl-4 font-bold text-gray-800">{item.itemName}</td>
                     <td className="p-3"><span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-mono text-xs border border-gray-200">{item.batch}</span></td>
-                    <td className="p-3 font-extrabold text-yellow-600">{item.quantity}</td>
+                    <td className="p-3 font-extrabold text-red-655">{item.quantityUnits}</td>
+                    <td className="p-3 font-extrabold text-yellow-600">{item.thresholdMedicineNumber}</td>
                     <td className="p-3 font-bold text-gray-700">₹{item.mrp.toFixed(2)}</td>
-                    <td className="p-3 pr-4 font-semibold text-gray-600">{new Date(item.expiry).toLocaleDateString('en-GB')}</td>
+                    <td className="p-3 pr-4 font-semibold text-gray-600">{new Date(item.expiry).toLocaleDateString('en-GB', { month: '2-digit', year: 'numeric' })}</td>
                   </tr>
                 ))
               )}
@@ -2102,39 +2123,62 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
 
   const preLoadPrescriptionMeds = async (medList) => {
     const loadedItems = [];
+    const isExpired = (expiryStr) => {
+      if (!expiryStr) return false;
+      const expiryDate = new Date(expiryStr);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      return expiryDate <= today;
+    };
+
     for (const med of medList) {
       try {
         const { data } = await client.get(`/pharmacy/inventory?limit=5&search=${encodeURIComponent(med.medicineName)}`);
-        // Find exact or closest match batch in stock
-        const stockItems = data.items.filter(it => it.itemName.toLowerCase() === med.medicineName.toLowerCase() && it.quantity > 0);
+        const stockItems = data.items.filter(it => 
+          it.itemName.toLowerCase() === med.medicineName.toLowerCase() && 
+          (it.quantityUnits || it.quantity) > 0 &&
+          !isExpired(it.expiry)
+        );
         if (stockItems.length > 0) {
-          // Select first batch with available quantity
           const stock = stockItems[0];
+          const unitsPerPack = stock.unitsPerPack || 1;
+          const availableQtyUnits = stock.quantityUnits || stock.quantity || 0;
           loadedItems.push({
             itemName: stock.itemName,
             batch: stock.batch,
+            expiry: stock.expiry,
+            packType: stock.packType || '',
+            unitsPerPack: unitsPerPack,
             quantity: 1,
-            mrp: stock.mrp,
+            mrp: stock.mrp || 0,
             discount: 0,
             sgst: stock.sgst || 0,
-            cst: stock.cst || 0,
-            availableQty: stock.quantity,
-            pack: stock.pack
+            cgst: stock.cgst || 0,
+            rateExGst: stock.rateExGst || 0,
+            perUnitRate: stock.perUnitRate || 0,
+            perUnitRateWithGst: stock.perUnitRateWithGst || 0,
+            availableQtyUnits: availableQtyUnits,
+            pack: stock.pack || stock.packType || '0'
           });
         } else {
-          // Stock empty fallback
           loadedItems.push({
             itemName: med.medicineName,
             batch: 'NO_STOCK',
+            expiry: '',
+            packType: '',
+            unitsPerPack: 1,
             quantity: 1,
             mrp: 0,
             discount: 0,
             sgst: 0,
-            cst: 0,
-            availableQty: 0,
+            cgst: 0,
+            rateExGst: 0,
+            perUnitRate: 0,
+            perUnitRateWithGst: 0,
+            availableQtyUnits: 0,
             pack: 'N/A'
           });
-          toast.error(`No available stock for prescribed medicine: ${med.medicineName}`);
+          toast.error(`No available unexpired stock for prescribed medicine: ${med.medicineName}`);
         }
       } catch (err) {
         console.error(err);
@@ -2165,18 +2209,35 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
   }, [medQuery]);
 
   const addMedicineToBill = (stockItem) => {
-    // Check if item-batch already added
+    const isExpired = (expiryStr) => {
+      if (!expiryStr) return false;
+      const expiryDate = new Date(expiryStr);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      return expiryDate <= today;
+    };
+    if (isExpired(stockItem.expiry)) {
+      toast.error("Cannot bill expired medicine.");
+      return;
+    }
+
+    const unitsPerPack = stockItem.unitsPerPack || 1;
+    const availableQtyUnits = stockItem.quantityUnits || stockItem.quantity || 0;
+
     const existingIdx = billItems.findIndex(it => it.itemName.toLowerCase() === stockItem.itemName.toLowerCase() && it.batch === stockItem.batch);
     if (existingIdx > -1) {
       const updated = [...billItems];
-      if (updated[existingIdx].quantity + 1 > stockItem.quantity) {
+      const newQty = updated[existingIdx].quantity + 1;
+      const unitsSold = Math.round(newQty * unitsPerPack);
+      if (unitsSold > availableQtyUnits) {
         toast.error('Cannot add more than available stock.');
         return;
       }
-      updated[existingIdx].quantity += 1;
+      updated[existingIdx].quantity = newQty;
+      updated[existingIdx].customRateExGst = undefined;
       setBillItems(updated);
     } else {
-      if (stockItem.quantity <= 0) {
+      if (availableQtyUnits <= 0) {
         toast.error('Selected batch is out of stock.');
         return;
       }
@@ -2185,13 +2246,20 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
         {
           itemName: stockItem.itemName,
           batch: stockItem.batch,
+          expiry: stockItem.expiry,
+          packType: stockItem.packType || '',
+          unitsPerPack: unitsPerPack,
           quantity: 1,
-          mrp: stockItem.mrp,
+          mrp: stockItem.mrp || 0,
           discount: 0,
+          discountType: 'percentage',
           sgst: stockItem.sgst || 0,
-          cst: stockItem.cst || 0,
-          availableQty: stockItem.quantity,
-          pack: stockItem.pack
+          cgst: stockItem.cgst || 0,
+          rateExGst: stockItem.rateExGst || 0,
+          perUnitRate: stockItem.perUnitRate || 0,
+          perUnitRateWithGst: stockItem.perUnitRateWithGst || 0,
+          availableQtyUnits: availableQtyUnits,
+          pack: stockItem.pack || stockItem.packType || '0'
         }
       ]);
     }
@@ -2204,21 +2272,51 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
   };
 
   const handleQtyChange = (idx, val) => {
-    const qty = Math.max(0, parseInt(val) || 0);
+    const qty = Math.max(0, parseFloat(val) || 0);
     const item = billItems[idx];
-    if (qty > item.availableQty) {
-      toast.error(`Cannot exceed available stock of ${item.availableQty} units`);
+    const unitsSold = Math.round(qty * (item.unitsPerPack || 1));
+    if (unitsSold > item.availableQtyUnits) {
+      toast.error(`Cannot exceed available stock of ${item.availableQtyUnits} units (${(item.availableQtyUnits / item.unitsPerPack).toFixed(1)} packs)`);
       return;
     }
     const updated = [...billItems];
     updated[idx].quantity = qty;
+    updated[idx].customRateExGst = undefined;
     setBillItems(updated);
   };
 
   const handleDiscountChange = (idx, val) => {
-    const disc = Math.min(100, Math.max(0, parseFloat(val) || 0));
+    const disc = Math.max(0, parseFloat(val) || 0);
     const updated = [...billItems];
     updated[idx].discount = disc;
+    setBillItems(updated);
+  };
+
+  const handleDiscountTypeChange = (idx, type) => {
+    const updated = [...billItems];
+    updated[idx].discountType = type;
+    updated[idx].discount = 0;
+    setBillItems(updated);
+  };
+
+  const handleCustomRateExGstChange = (idx, val) => {
+    const rate = Math.max(0, parseFloat(val) || 0);
+    const updated = [...billItems];
+    updated[idx].customRateExGst = rate;
+    setBillItems(updated);
+  };
+
+  const handleCustomSgstChange = (idx, val) => {
+    const rate = Math.min(100, Math.max(0, parseFloat(val) || 0));
+    const updated = [...billItems];
+    updated[idx].sgst = rate;
+    setBillItems(updated);
+  };
+
+  const handleCustomCgstChange = (idx, val) => {
+    const rate = Math.min(100, Math.max(0, parseFloat(val) || 0));
+    const updated = [...billItems];
+    updated[idx].cgst = rate;
     setBillItems(updated);
   };
 
@@ -2230,39 +2328,89 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
     let grandTotal = 0;
 
     const itemsCalculated = billItems.map(item => {
-      const qty = item.quantity;
-      const unitMrp = item.mrp;
+      const qty = parseFloat(item.quantity) || 0;
+      const unitsPerPack = parseInt(item.unitsPerPack) || 1;
+      const totalUnits = Math.round(qty * unitsPerPack);
       
-      const itemSubtotal = unitMrp * qty;
-      const itemDiscount = itemSubtotal * (item.discount / 100);
-      const itemNetAfterDiscount = itemSubtotal - itemDiscount;
+      const perUnitRate = parseFloat(item.perUnitRate) || 0;
+      const perUnitRateWithGst = parseFloat(item.perUnitRateWithGst) || 0;
 
-      // GST calculation: unit price is exclusive of GST (GST is added on top of MRP after discount).
-      let gstAmt = 0;
-      let gstRate = 0;
+      // Base Rate Ex GST calculation
+      let baseRateExGst = totalUnits * perUnitRate;
+      if (gstMode === 'custom' && item.customRateExGst !== undefined) {
+        baseRateExGst = item.customRateExGst;
+      }
+
+      // GST Rates
+      let sgstRate = 0;
+      let cgstRate = 0;
       if (gstMode === 'default') {
-        gstRate = (item.sgst || 0) + (item.cst || 0);
+        sgstRate = parseFloat(item.sgst) || 0;
+        cgstRate = parseFloat(item.cgst) || 0;
       } else if (gstMode === 'custom') {
-        gstRate = parseFloat(customGstRate) || 0;
+        sgstRate = parseFloat(item.sgst) || 0;
+        cgstRate = parseFloat(item.cgst) || 0;
       }
 
+      const gstRate = sgstRate + cgstRate;
+
+      // Row MRP (Inc GST) - calculated forward from base rate ex gst using SGST% + CGST%
+      let rowMrp = baseRateExGst * (1 + gstRate / 100);
+      if (gstMode === 'none') {
+        rowMrp = baseRateExGst;
+      }
+
+      // Discount (percentage or amount) applied to rowMrp
+      const discVal = parseFloat(item.discount) || 0;
+      let discountAmount = 0;
+      let discPercent = 0;
+      if (item.discountType === 'amount') {
+        discountAmount = Math.min(rowMrp, discVal);
+        discPercent = rowMrp > 0 ? (discountAmount / rowMrp) * 100 : 0;
+      } else {
+        discPercent = Math.min(100, discVal);
+        discountAmount = rowMrp * (discPercent / 100);
+      }
+
+      // Row Total (Net payable inclusive of GST)
+      const rowTotal = rowMrp - discountAmount;
+
+      // Back-calculate taxable base and GST amount from net total
+      let taxableAmount = rowTotal;
+      let gstAmt = 0;
       if (gstMode !== 'none') {
-        gstAmt = itemNetAfterDiscount * (gstRate / 100);
+        taxableAmount = rowTotal / (1 + gstRate / 100);
+        gstAmt = rowTotal - taxableAmount;
       }
 
-      const itemTotalWithGst = itemNetAfterDiscount + gstAmt;
-
-      subTotal += itemSubtotal;
-      totalDiscount += itemDiscount;
+      // Accumulators
+      if (gstMode === 'none') {
+        subTotal += baseRateExGst;
+      } else {
+        subTotal += rowMrp;
+      }
+      totalDiscount += discountAmount;
       totalGst += gstAmt;
-      grandTotal += itemTotalWithGst;
+      grandTotal += rowTotal;
+
+      const savedUnitPrice = gstMode === 'none' ? perUnitRate : (totalUnits > 0 ? (rowMrp / totalUnits) : perUnitRateWithGst);
+      const unitRateExGst = totalUnits > 0 ? (baseRateExGst / totalUnits) : perUnitRate;
 
       return {
         ...item,
-        unitPrice: item.mrp,
+        unitPrice: savedUnitPrice,
         gstPercentage: gstRate,
         gstAmount: gstAmt,
-        amount: itemTotalWithGst
+        amount: rowTotal,
+        discountPercentageCalculated: discPercent,
+        discountAmount,
+        unitRateExGst,
+        
+        totalUnits,
+        baseRateExGst,
+        rowMrp,
+        sgstRate,
+        cgstRate
       };
     });
 
@@ -2305,9 +2453,45 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
       toast.error('Please add at least one medicine.');
       return;
     }
-    if (billItems.some(it => it.batch === 'NO_STOCK' || it.quantity <= 0)) {
-      toast.error('Please resolve missing stock and enter valid quantities.');
-      return;
+
+    const isExpired = (expiryStr) => {
+      if (!expiryStr) return false;
+      const expiryDate = new Date(expiryStr);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      return expiryDate <= today;
+    };
+
+    for (const item of billItems) {
+      if (item.batch === 'NO_STOCK') {
+        toast.error(`Please resolve missing stock for ${item.itemName}`);
+        return;
+      }
+      if (isNaN(item.quantity) || item.quantity <= 0) {
+        toast.error(`Please enter a valid positive quantity for ${item.itemName}`);
+        return;
+      }
+      if (isExpired(item.expiry)) {
+        toast.error(`Cannot bill expired medicine: ${item.itemName} (Batch: ${item.batch})`);
+        return;
+      }
+      const unitsPerPack = item.unitsPerPack || 1;
+      const unitsSoldExact = item.quantity * unitsPerPack;
+      if (Math.abs(unitsSoldExact - Math.round(unitsSoldExact)) > 1e-5) {
+        toast.error(`Invalid quantity for ${item.itemName}. Quantity must correspond to whole units (e.g. multiples of ${(1 / unitsPerPack).toFixed(3)}).`);
+        return;
+      }
+      const unitsSold = Math.round(unitsSoldExact);
+      if (unitsSold > item.availableQtyUnits) {
+        toast.error(`Insufficient stock for ${item.itemName}. Available: ${item.availableQtyUnits} units, Requested: ${unitsSold} units`);
+        return;
+      }
+      if (gstMode === 'custom') {
+        if (item.sgst < 0 || item.sgst > 100 || item.cgst < 0 || item.cgst > 100) {
+          toast.error(`Please enter valid GST percentages (0-100) for ${item.itemName}`);
+          return;
+        }
+      }
     }
 
     if (!isWalkIn && !selectedPrescription) {
@@ -2333,7 +2517,16 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
         } : null,
         doctorId: selectedPrescription?.patientId ? selectedPrescription.doctorId?._id : null,
         doctorName: selectedPrescription ? selectedPrescription.doctorName : 'Walk-in Consultation',
-        items: totals.itemsCalculated,
+        items: totals.itemsCalculated.map(it => ({
+          ...it,
+          discount: it.discountPercentageCalculated,
+          discountType: it.discountType,
+          discountValue: it.discount,
+          unitRateExGst: it.unitRateExGst,
+          baseRateExGst: it.customRateExGst !== undefined ? it.customRateExGst : it.baseRateExGst,
+          sgst: it.sgstRate,
+          cgst: it.cgstRate
+        })),
         subTotal: totals.subTotal,
         discount: totals.discount,
         gstAmount: totals.gstAmount,
@@ -2351,7 +2544,7 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
       setBillItems([]);
       setPatientDetails({ name: '', mobile: '', age: '', gender: '' });
       clearPrescription();
-      
+
       // Open Print Modal
       setPrintedBillId(data.bill._id);
       setShowPrintModal(true);
@@ -2363,14 +2556,14 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
   };
 
   return (
-    <div className="grid gap-6 lg:grid-cols-3 animate-fade-in text-gray-700">
-      {/* Items & details */}
-      <div className="lg:col-span-2 space-y-6">
-        
+    <div className="space-y-6 animate-fade-in text-gray-700">
+      
+      {/* Top Row: Patient Info (2/3 width) and GST Settings (1/3 width) */}
+      <div className="grid gap-6 md:grid-cols-3">
         {/* Patient header info */}
-        <div className="card p-6 bg-gradient-to-br from-white to-orange-50/10 border-orange-100 space-y-4">
+        <div className="md:col-span-2 card p-6 bg-gradient-to-br from-white to-orange-50/10 border-orange-100 space-y-4">
           <div className="flex justify-between items-center border-b border-orange-50 pb-2">
-            <h3 className="font-extrabold text-gray-800 text-sm flex items-center gap-2">
+            <h3 className="font-extrabold text-gray-805 text-sm flex items-center gap-2">
               <User className="text-orange-500 h-4.5 w-4.5" />
               {isWalkIn ? 'Walk-in Customer Details' : 'OPD Patient Information'}
             </h3>
@@ -2433,7 +2626,7 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
             <div className="grid gap-4 sm:grid-cols-4 text-xs">
               <div>
                 <span className="block text-[10px] font-bold uppercase text-gray-400">Patient Name</span>
-                <span className="font-extrabold text-gray-900 text-sm">{selectedPrescription.patientDetails?.patientName}</span>
+                <span className="font-extrabold text-gray-905 text-sm">{selectedPrescription.patientDetails?.patientName}</span>
               </div>
               <div>
                 <span className="block text-[10px] font-bold uppercase text-gray-400">UHID / OPD Reg #</span>
@@ -2460,235 +2653,320 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
         </div>
 
         {/* GST Options Panel */}
-        <div className="card p-5 bg-white border border-orange-100/70 space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-            <div>
-              <p className="font-extrabold text-gray-800">GST Invoice Settings</p>
-              <p className="text-[10px] text-gray-450 font-semibold mt-0.5">Toggle tax calculations for this specific bill.</p>
-            </div>
-            
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setGstMode('none')}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition ${
-                  gstMode === 'none'
-                    ? 'bg-red-500 text-white border-red-500 shadow-sm shadow-red-500/10'
-                    : 'bg-red-50/10 text-red-650 border-red-100 hover:bg-red-50/30'
-                }`}
-              >
-                Without GST (No Tax)
-              </button>
-              <button
-                type="button"
-                onClick={() => setGstMode('default')}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition ${
-                  gstMode === 'default'
-                    ? 'bg-orange-500 text-white border-orange-500 shadow-sm shadow-orange-500/10'
-                    : 'bg-orange-50/10 text-orange-655 border-orange-100 hover:bg-orange-50/30'
-                }`}
-              >
-                With Default GST (Inventory Rates)
-              </button>
-              <button
-                type="button"
-                onClick={() => setGstMode('custom')}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition ${
-                  gstMode === 'custom'
-                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-600/10'
-                    : 'bg-indigo-50/10 text-indigo-655 border-indigo-100 hover:bg-indigo-50/30'
-                }`}
-              >
-                With Custom GST %
-              </button>
-            </div>
+        <div className="card p-5 bg-white border border-orange-100/70 flex flex-col justify-between space-y-3">
+          <div className="text-xs">
+            <p className="font-extrabold text-gray-805">GST Invoice Settings</p>
+            <p className="text-[10px] text-gray-450 font-semibold mt-0.5">Toggle tax calculations for this specific bill.</p>
+          </div>
+          
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => setGstMode('none')}
+              className={`w-full px-3 py-1.5 rounded-xl text-xs font-bold border transition text-left ${
+                gstMode === 'none'
+                  ? 'bg-red-500 text-white border-red-500 shadow-sm shadow-red-500/10'
+                  : 'bg-red-50/10 text-red-650 border-red-100 hover:bg-red-50/30'
+              }`}
+            >
+              Without GST (No Tax)
+            </button>
+            <button
+              type="button"
+              onClick={() => setGstMode('default')}
+              className={`w-full px-3 py-1.5 rounded-xl text-xs font-bold border transition text-left ${
+                gstMode === 'default'
+                  ? 'bg-orange-500 text-white border-orange-500 shadow-sm shadow-orange-500/10'
+                  : 'bg-orange-50/10 text-orange-655 border-orange-100 hover:bg-orange-50/30'
+              }`}
+            >
+              With Default GST (Inventory Rates)
+            </button>
+            <button
+              type="button"
+              onClick={() => setGstMode('custom')}
+              className={`w-full px-3 py-1.5 rounded-xl text-xs font-bold border transition text-left ${
+                gstMode === 'custom'
+                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-600/10'
+                  : 'bg-indigo-50/10 text-indigo-655 border-indigo-100 hover:bg-indigo-50/30'
+              }`}
+            >
+              With Custom GST %
+            </button>
           </div>
 
           {/* Custom GST Input Field */}
           {gstMode === 'custom' && (
-            <div className="p-3 bg-indigo-50/30 border border-indigo-100 rounded-2xl flex items-center justify-between text-xs animate-fade-in">
-              <div>
-                <span className="font-extrabold text-indigo-950">Specify Custom GST Percentage</span>
-                <span className="block text-[10px] text-indigo-505 font-semibold mt-0.5">This rate will be applied uniformly to all medicines on this bill.</span>
-              </div>
-              <div className="flex items-center gap-1.5">
+            <div className="p-2.5 bg-indigo-50/30 border border-indigo-100 rounded-2xl flex items-center justify-between text-xs animate-fade-in mt-2">
+              <span className="font-extrabold text-indigo-950 text-[10px]">Custom GST:</span>
+              <div className="flex items-center gap-1">
                 <input
                   type="number"
                   min="0"
                   max="100"
-                  className="input py-1.5 px-2.5 text-center text-xs w-[80px] border-indigo-200 focus:border-indigo-500"
+                  className="input py-1 px-2 text-center text-xs w-[60px] border-indigo-200 focus:border-indigo-500"
                   value={customGstRate}
                   onChange={(e) => setCustomGstRate(Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))}
                 />
-                <span className="font-bold text-indigo-950 text-sm">%</span>
+                <span className="font-bold text-indigo-955">%</span>
               </div>
             </div>
           )}
         </div>
+      </div>
 
-        {/* Medicine Autocomplete Search Box */}
-        <div className="card p-5 space-y-4">
+      {/* Middle Row: Medicine Search Box (Full Width) */}
+      <div className="card p-5 space-y-4 bg-white border border-orange-100/70">
+        <div className="relative">
+          <label className="text-xs font-bold text-gray-500 mb-1.5 block">Search & Add Medicines from Inventory</label>
           <div className="relative">
-            <label className="text-xs font-bold text-gray-500 mb-1.5 block">Search & Add Medicines from Inventory</label>
-            <div className="relative">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-              <input 
-                type="text" 
-                placeholder="Type medicine name or batch code..." 
-                className="input pl-9 text-sm py-2.5" 
-                value={medQuery}
-                onChange={(e) => setMedQuery(e.target.value)}
-              />
-            </div>
-            
-            {/* Search results dropdown */}
-            {medQuery.trim() && (
-              <div className="absolute z-10 left-0 right-0 mt-1 bg-white border border-orange-100 shadow-2xl rounded-2xl overflow-hidden divide-y divide-orange-50 max-h-[300px] overflow-y-auto">
-                {searchingMeds ? (
-                  <div className="p-4 text-xs text-center text-gray-400 flex justify-center items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin text-orange-500" /> Searching database...
-                  </div>
-                ) : medResults.length === 0 ? (
-                  <div className="p-4 text-xs text-center text-gray-400 font-bold">
-                    No matching medicines in stock.
-                  </div>
-                ) : (
-                  medResults.map(item => (
-                    <div 
-                      key={item._id}
-                      onClick={() => addMedicineToBill(item)}
-                      className="p-3 text-xs flex justify-between items-center hover:bg-orange-50/50 cursor-pointer transition"
-                    >
-                      <div>
-                        <span className="font-extrabold text-gray-805">{item.itemName}</span>
-                        <span className="ml-2 font-mono text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
-                          Batch: {item.batch}
-                        </span>
-                        <span className="ml-2 text-[10px] text-gray-500">Pack: {item.pack}</span>
-                      </div>
-                      <div className="text-right">
-                        <span className="block font-bold text-green-700">₹{item.mrp.toFixed(2)}</span>
-                        <span className={`text-[10px] font-bold ${item.quantity < 50 ? 'text-red-500' : 'text-gray-400'}`}>
-                          Stock: {item.quantity} units
-                        </span>
-                      </div>
+            <Search className="absolute left-3 top-3.5 h-4 w-4 text-gray-400" />
+            <input 
+              type="text" 
+              placeholder="Type medicine name or batch code..." 
+              className="input pl-10 text-sm py-3" 
+              value={medQuery}
+              onChange={(e) => setMedQuery(e.target.value)}
+            />
+          </div>
+          
+          {/* Search results dropdown */}
+          {medQuery.trim() && (
+            <div className="absolute z-10 left-0 right-0 mt-1 bg-white border border-orange-100 shadow-2xl rounded-2xl overflow-hidden divide-y divide-orange-50 max-h-[300px] overflow-y-auto">
+              {searchingMeds ? (
+                <div className="p-4 text-xs text-center text-gray-400 flex justify-center items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-orange-500" /> Searching database...
+                </div>
+              ) : medResults.length === 0 ? (
+                <div className="p-4 text-xs text-center text-gray-400 font-bold">
+                  No matching medicines in stock.
+                </div>
+              ) : (
+                medResults.map(item => (
+                  <div 
+                    key={item._id}
+                    onClick={() => addMedicineToBill(item)}
+                    className="p-3 text-xs flex justify-between items-center hover:bg-orange-50/50 cursor-pointer transition"
+                  >
+                    <div>
+                      <span className="font-extrabold text-gray-805">{item.itemName}</span>
+                      <span className="ml-2 font-mono text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
+                        Batch: {item.batch}
+                      </span>
+                      <span className="ml-2 text-[10px] text-gray-500">Pack: {item.pack}</span>
                     </div>
-                  ))
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Medicines Added Table */}
-        <div className="card overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="bg-gradient-to-r from-orange-50 to-amber-50 text-xs font-bold uppercase text-gray-600 border-b border-orange-100 select-none">
-                  <th className="p-3 pl-4">Sno.</th>
-                  <th className="p-3">Medicine Name</th>
-                  <th className="p-3">Batch</th>
-                  <th className="p-3">Stock</th>
-                  <th className="p-3 w-[95px]">Qty</th>
-                  <th className="p-3">MRP</th>
-                  <th className="p-3 w-[85px]">Disc%</th>
-                  {gstMode !== 'none' && <th className="p-3">GST%</th>}
-                  <th className="p-3">Net Amt</th>
-                  <th className="p-3 pr-4 text-center">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-orange-50">
-                {billItems.length === 0 ? (
-                  <tr>
-                    <td colSpan={gstMode !== 'none' ? 10 : 9} className="p-8 text-center text-gray-400">
-                      <Pill className="h-8 w-8 mx-auto mb-2 opacity-50 text-orange-500" />
-                      <p className="font-bold text-gray-600">No items added to invoice yet</p>
-                      <p className="text-[10px]">Search medicines above to build invoice.</p>
-                    </td>
-                  </tr>
-                ) : (
-                  totals.itemsCalculated.map((item, idx) => {
-                    const rowGst = item.gstPercentage;
-
-                    return (
-                      <tr key={idx} className="hover:bg-orange-50/10">
-                        <td className="p-3 pl-4 font-bold text-gray-400">{idx + 1}</td>
-                        <td className="p-3 font-bold text-gray-800">
-                          {item.itemName}
-                          <span className="block text-[9px] text-gray-400 font-semibold">{item.pack}</span>
-                        </td>
-                        <td className="p-3">
-                          <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded border ${
-                            item.batch === 'NO_STOCK' 
-                              ? 'bg-red-50 text-red-650 border-red-100 font-bold' 
-                              : 'bg-gray-50 text-gray-700 border-gray-100'
-                          }`}>
-                            {item.batch}
-                          </span>
-                        </td>
-                        <td className={`p-3 font-semibold ${item.availableQty < 50 ? 'text-red-655 font-bold' : 'text-gray-500'}`}>
-                          {item.availableQty}
-                        </td>
-                        <td className="p-3">
-                          <input 
-                            type="number" 
-                            min="1"
-                            max={item.availableQty}
-                            className="input py-1 px-1.5 text-center text-xs w-[65px]"
-                            value={item.quantity}
-                            onChange={(e) => handleQtyChange(idx, e.target.value)}
-                          />
-                        </td>
-                        <td className="p-3 font-bold text-gray-800">₹{item.mrp.toFixed(2)}</td>
-                        <td className="p-3">
-                          <input 
-                            type="number" 
-                            min="0"
-                            max="100"
-                            className="input py-1 px-1 text-center text-xs w-[55px]"
-                            value={item.discount}
-                            onChange={(e) => handleDiscountChange(idx, e.target.value)}
-                          />
-                        </td>
-                        {gstMode !== 'none' && (
-                          <td className="p-3 text-[10px] text-gray-500 font-semibold">
-                            {rowGst}%
-                            <span className="block text-[9px] text-gray-450">
-                              (₹{item.gstAmount.toFixed(2)})
-                            </span>
-                          </td>
-                        )}
-                        <td className="p-3 font-bold text-gray-950">₹{item.amount.toFixed(2)}</td>
-                        <td className="p-3 pr-4 text-center">
-                          <button 
-                            type="button"
-                            onClick={() => handleRemoveItem(idx)}
-                            className="p-1 text-red-500 hover:bg-red-50 rounded transition cursor-pointer"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                    <div className="text-right">
+                      <span className="block font-bold text-green-700">₹{item.mrp.toFixed(2)}</span>
+                      <span className={`text-[10px] font-bold ${item.quantity < 50 ? 'text-red-500' : 'text-gray-400'}`}>
+                        Stock: {item.quantity} units
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Bill summary & checkout */}
-      <div className="space-y-6">
+      {/* Main Grid: Medicines Added Table (Full Width) */}
+      <div className="card overflow-hidden bg-white border border-orange-100">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="bg-gradient-to-r from-orange-50 to-amber-50 text-xs font-bold uppercase text-gray-600 border-b border-orange-100 select-none">
+                <th className="p-3 pl-4 w-[50px]">Sno.</th>
+                <th className="p-3">Medicine Name</th>
+                <th className="p-3">Batch</th>
+                <th className="p-3">Expiry</th>
+                <th className="p-3 text-center">Stock</th>
+                <th className="p-3 w-[100px] text-center">Quantity</th>
+                <th className="p-3 text-right">Rate (Ex GST)</th>
+                {gstMode !== 'none' && (
+                  <>
+                    <th className="p-3 text-center">SGST %</th>
+                    <th className="p-3 text-center">CGST %</th>
+                    <th className="p-3 text-right">MRP (Inc GST)</th>
+                  </>
+                )}
+                <th className="p-3 w-[170px] text-center">Discount</th>
+                <th className="p-3 text-right">Total</th>
+                <th className="p-3 pr-4 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-orange-50">
+              {billItems.length === 0 ? (
+                <tr>
+                  <td colSpan={gstMode !== 'none' ? 14 : 11} className="p-8 text-center text-gray-400">
+                    <Pill className="h-8 w-8 mx-auto mb-2 opacity-50 text-orange-500" />
+                    <p className="font-bold text-gray-600">No items added to invoice yet</p>
+                    <p className="text-[10px]">Search medicines above to build invoice.</p>
+                  </td>
+                </tr>
+              ) : (
+                totals.itemsCalculated.map((item, idx) => {
+                  const rowGst = item.gstPercentage;
+                  const formattedExpiry = item.expiry ? new Date(item.expiry).toLocaleDateString('en-GB', { month: '2-digit', year: 'numeric' }) : '-';
+
+                  return (
+                    <tr key={idx} className="hover:bg-orange-50/10">
+                      <td className="p-3 pl-4 font-bold text-gray-400">{idx + 1}</td>
+                      <td className="p-3 font-bold text-gray-805">
+                        {item.itemName}
+                      </td>
+                      <td className="p-3">
+                        <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded border ${
+                          item.batch === 'NO_STOCK' 
+                            ? 'bg-red-50 text-red-650 border-red-100 font-bold' 
+                            : 'bg-gray-50 text-gray-700 border-gray-100'
+                        }`}>
+                          {item.batch}
+                        </span>
+                      </td>
+                      <td className="p-3 font-semibold text-gray-600">{formattedExpiry}</td>
+                      <td className={`p-3 text-center font-semibold ${item.availableQtyUnits < 50 ? 'text-red-655 font-bold' : 'text-gray-500'}`}>
+                        {item.availableQtyUnits} Units
+                        <div className="text-[9px] text-gray-400 font-normal">({(item.availableQtyUnits / item.unitsPerPack).toFixed(1)} Packs)</div>
+                      </td>
+                      <td className="p-3 text-center">
+                        <input 
+                          type="number" 
+                          step="any"
+                          min="0.001"
+                          max={item.availableQtyUnits / item.unitsPerPack}
+                          className="input py-1 px-1 text-center text-xs w-[80px]"
+                          value={item.quantity}
+                          onChange={(e) => handleQtyChange(idx, e.target.value)}
+                        />
+                      </td>
+                      <td className="p-3 text-right font-semibold text-gray-805">
+                        {gstMode === 'custom' ? (
+                          <input 
+                            type="number" 
+                            step="0.01"
+                            min="0"
+                            className="input py-1 px-1 text-right text-xs w-[80px] border-indigo-200 focus:border-indigo-500"
+                            value={item.customRateExGst !== undefined ? item.customRateExGst : item.baseRateExGst}
+                            onChange={(e) => handleCustomRateExGstChange(idx, e.target.value)}
+                          />
+                        ) : (
+                          <span>₹{item.baseRateExGst.toFixed(2)}</span>
+                        )}
+                      </td>
+                      {gstMode !== 'none' && (
+                        <>
+                          <td className="p-3 text-center font-semibold">
+                            {gstMode === 'custom' ? (
+                              <input 
+                                type="number" 
+                                step="0.1"
+                                min="0"
+                                max="100"
+                                className="input py-1 px-1 text-center text-xs w-[50px] border-indigo-200 focus:border-indigo-500"
+                                value={item.sgst}
+                                onChange={(e) => handleCustomSgstChange(idx, e.target.value)}
+                              />
+                            ) : (
+                              <span>{item.sgst}%</span>
+                            )}
+                          </td>
+                          <td className="p-3 text-center font-semibold">
+                            {gstMode === 'custom' ? (
+                              <input 
+                                type="number" 
+                                step="0.1"
+                                min="0"
+                                max="100"
+                                className="input py-1 px-1 text-center text-xs w-[50px] border-indigo-200 focus:border-indigo-500"
+                                value={item.cgst}
+                                onChange={(e) => handleCustomCgstChange(idx, e.target.value)}
+                              />
+                            ) : (
+                              <span>{item.cgst}%</span>
+                            )}
+                          </td>
+                          <td className="p-3 text-right font-bold text-gray-800">
+                            ₹{item.rowMrp.toFixed(2)}
+                            {gstMode !== 'none' && (
+                              <div className="text-[9px] text-gray-400 font-normal">(Tax: ₹{item.gstAmount.toFixed(2)})</div>
+                            )}
+                          </td>
+                        </>
+                      )}
+                      <td className="p-3 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <input 
+                            type="number" 
+                            min="0"
+                            className="input py-1 px-1 text-center text-xs w-[80px]"
+                            value={item.discount}
+                            onChange={(e) => handleDiscountChange(idx, e.target.value)}
+                          />
+                          <select
+                            className="input py-1 px-1 text-center text-xs w-[50px] bg-gray-50 border-gray-200"
+                            value={item.discountType || 'percentage'}
+                            onChange={(e) => handleDiscountTypeChange(idx, e.target.value)}
+                          >
+                            <option value="percentage">%</option>
+                            <option value="amount">₹</option>
+                          </select>
+                        </div>
+                        {item.discountType === 'amount' ? (
+                          item.discount > 0 && (
+                            <div className="text-[10px] text-red-500 font-semibold mt-0.5">
+                              ({item.discountPercentageCalculated?.toFixed(1) || '0'}%)
+                            </div>
+                          )
+                        ) : (
+                          item.discountAmount > 0 && (
+                            <div className="text-[10px] text-red-500 font-semibold mt-0.5">
+                              -₹{item.discountAmount.toFixed(2)}
+                            </div>
+                          )
+                        )}
+                      </td>
+                      <td className="p-3 text-right font-bold text-gray-950">₹{item.amount.toFixed(2)}</td>
+                      <td className="p-3 pr-4 text-center">
+                        <button 
+                          type="button"
+                          onClick={() => handleRemoveItem(idx)}
+                          className="p-1 text-red-500 hover:bg-red-50 rounded transition cursor-pointer"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Bottom Summary & Checkout Row: responsive 3 columns */}
+      <div className="grid gap-6 md:grid-cols-3 items-stretch">
         
+        {/* Billing Guide Details */}
+        <div className="card p-6 bg-gray-50 border border-orange-100 flex flex-col justify-center text-xs space-y-3.5">
+          <h4 className="font-extrabold text-gray-900 text-sm border-b border-orange-100 pb-2 uppercase tracking-wider">
+            Billing Guide
+          </h4>
+          <ul className="list-disc list-inside space-y-2 text-gray-655 font-semibold leading-relaxed">
+            <li>Deduction uses unit stock quantities.</li>
+            <li>Select <span className="text-orange-600">%</span> or <span className="text-orange-600">₹</span> for item discounts.</li>
+            <li>Default GST mode pulls rates from inventory.</li>
+            <li>Custom GST allows custom rates and custom Ex-GST base rates.</li>
+          </ul>
+        </div>
+
         {/* Calculations summary card */}
-        <div className="card p-6 bg-gradient-to-br from-white to-orange-50/10 border-orange-100 space-y-4">
-          <h4 className="font-extrabold text-gray-950 text-sm border-b border-orange-50 pb-2">
+        <div className="card p-6 bg-gradient-to-br from-white to-orange-50/10 border-orange-100 flex flex-col justify-between space-y-4">
+          <h4 className="font-extrabold text-gray-950 text-sm border-b border-orange-55 pb-2">
             Invoice Summary
           </h4>
           
-          <div className="space-y-2.5 text-xs">
+          <div className="space-y-3 text-xs flex-1 flex flex-col justify-center">
             <div className="flex justify-between items-center text-gray-500 font-semibold">
               <span>Sub-Total (MRP Total)</span>
               <span className="font-bold">₹{totals.subTotal.toFixed(2)}</span>
@@ -2703,7 +2981,7 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
                 <span className="font-mono">₹{totals.gstAmount.toFixed(2)}</span>
               </div>
             )}
-            <div className="flex justify-between items-center border-t border-orange-50 pt-2 text-sm text-gray-900 font-black">
+            <div className="flex justify-between items-center border-t border-orange-100 pt-3 text-sm text-gray-900 font-black mt-2">
               <span>Grand Total</span>
               <span className="text-lg text-green-700">₹{totals.grandTotal.toFixed(2)}</span>
             </div>
@@ -2711,13 +2989,13 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
         </div>
 
         {/* Payments details */}
-        <div className="card p-6 space-y-4 bg-white">
-          <h4 className="font-extrabold text-gray-950 text-sm border-b border-orange-50 pb-2 flex items-center gap-1.5">
+        <div className="card p-6 space-y-4 bg-white border border-orange-100 flex flex-col justify-between">
+          <h4 className="font-extrabold text-gray-955 text-sm border-b border-orange-100 pb-2 flex items-center gap-1.5">
             <BadgeIndianRupee className="text-orange-500 h-4.5 w-4.5" />
             Payment Settlement
           </h4>
 
-          <div className="space-y-3.5 text-xs">
+          <div className="space-y-3.5 text-xs flex-1 flex flex-col justify-center">
             <div>
               <label className="mb-1 block font-bold text-gray-500">Payment Method</label>
               <select 
@@ -2735,7 +3013,7 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
 
             {paymentMethod === 'Mixed Payment' ? (
               <div className="space-y-2 p-3 bg-gray-50 rounded-2xl border border-gray-100">
-                <p className="font-bold text-gray-500 text-[10px] uppercase">Split Details</p>
+                <p className="font-bold text-gray-555 text-[10px] uppercase">Split Details</p>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="text-[10px] text-gray-500">Cash (₹)</label>
@@ -2777,7 +3055,7 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
               </div>
             ) : (
               <div className="flex justify-between items-center bg-green-50/50 p-2.5 rounded-xl border border-green-100">
-                <span className="font-bold text-green-800 uppercase text-[10px]">Auto Amount Paid</span>
+                <span className="font-bold text-green-850 uppercase text-[10px]">Auto Amount Paid</span>
                 <span className="font-bold text-green-700 text-sm">₹{totals.grandTotal.toFixed(2)}</span>
               </div>
             )}
@@ -2785,11 +3063,11 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
             <div className="grid grid-cols-2 gap-2 text-xs border-t border-orange-50 pt-3">
               <div>
                 <span className="block text-[10px] font-bold text-gray-400 uppercase">Paid Amount</span>
-                <span className="text-sm font-black text-gray-800">₹{paidAmount.toFixed(2)}</span>
+                <span className="text-sm font-black text-gray-805">₹{paidAmount.toFixed(2)}</span>
               </div>
               <div className="text-right">
                 <span className="block text-[10px] font-bold text-gray-400 uppercase">Due Balance</span>
-                <span className={`text-sm font-black ${totals.grandTotal - paidAmount > 0.01 ? 'text-red-650 font-mono' : 'text-green-755'}`}>
+                <span className={`text-sm font-black ${totals.grandTotal - paidAmount > 0.01 ? 'text-red-655 font-mono' : 'text-green-755'}`}>
                   ₹{Math.max(0, totals.grandTotal - paidAmount).toFixed(2)}
                 </span>
               </div>
@@ -2821,7 +3099,6 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
   );
 };
 
-// ==================== INVOICE PRINT MODAL ====================
 const InvoicePrintModal = ({ billId, onClose }) => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -2902,8 +3179,12 @@ const InvoicePrintModal = ({ billId, onClose }) => {
                 </p>
                 <p className="text-xs text-gray-550 mt-1 font-semibold">
                   Phone: {data.hospitalSettings?.mobileNumbers?.join(', ') || data.hospitalSettings?.phoneNumber || 'N/A'} | Email: {data.pharmacySetting?.emailAddress || data.hospitalSettings?.emailAddress || 'N/A'}
-                  {data.hospitalSettings?.dlNumber && ` | DL No: ${data.hospitalSettings.dlNumber}`}
                 </p>
+                {data.hospitalSettings?.dlNumber && (
+                  <p className="text-xs text-gray-550 mt-1 font-semibold">
+                    DL No: {data.hospitalSettings.dlNumber}
+                  </p>
+                )}
                 {data.pharmacySetting?.gstNumber && (
                   <p className="text-[10px] font-mono font-bold text-gray-700 bg-gray-50 border border-gray-150 inline-block px-2 py-0.5 mt-2 rounded">
                     Pharmacy GSTIN: {data.pharmacySetting.gstNumber}
@@ -2975,50 +3256,69 @@ const InvoicePrintModal = ({ billId, onClose }) => {
                   <th className="p-2.5">Medicine Details</th>
                   <th className="p-2.5">Batch</th>
                   <th className="p-2.5 text-center">Qty</th>
-                  <th className="p-2.5 text-right">MRP (Unit)</th>
-                  <th className="p-2.5 text-center">Disc %</th>
-                  {data.pharmacySetting?.gstEnabled && (
-                    <>
-                      <th className="p-2.5 text-center">GST %</th>
-                      <th className="p-2.5 text-right">GST Amt</th>
-                    </>
-                  )}
-                  <th className="p-2.5 text-right">Net Total</th>
+                  <th className="p-2.5 text-right">Rate (Ex GST)</th>
+                  <th className="p-2.5 text-center">SGST</th>
+                  <th className="p-2.5 text-center">CGST</th>
+                  <th className="p-2.5 text-right">Mrp (Inc GST)</th>
+                  <th className="p-2.5 text-right">Discount</th>
+                  <th className="p-2.5 text-right">Total</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {data.bill.items.map((item, idx) => (
-                  <tr key={idx} className="align-middle">
-                    <td className="p-2.5 font-bold text-gray-400">{idx + 1}</td>
-                    <td className="p-2.5">
-                      <span className={`font-extrabold text-gray-900 ${item.returnedQty === item.quantity ? 'line-through text-red-500' : ''}`}>
-                        {item.itemName}
-                      </span>
-                      {item.pack && <span className="text-[10px] text-gray-400 ml-1.5 font-semibold">({item.pack})</span>}
-                      {item.returnedQty === item.quantity && (
-                        <span className="text-[9px] font-black uppercase text-red-600 bg-red-50 border border-red-200 px-1 py-0.5 rounded ml-2">
-                          Fully Returned
+                {data.bill.items.map((item, idx) => {
+                  const itemGst = item.gstPercentage || 0;
+                  const sgstPercent = item.sgst !== undefined ? item.sgst : (data.pharmacySetting?.gstEnabled ? itemGst / 2 : 0);
+                  const cgstPercent = item.cgst !== undefined ? item.cgst : (data.pharmacySetting?.gstEnabled ? itemGst / 2 : 0);
+                  const unitPrice = item.unitPrice || 0;
+                  const unitRateExGst = item.unitRateExGst !== undefined 
+                    ? item.unitRateExGst 
+                    : (unitPrice / (1 + itemGst / 100));
+                  const baseRateExGst = item.baseRateExGst !== undefined 
+                    ? item.baseRateExGst 
+                    : (unitRateExGst * (item.quantity - item.returnedQty) * (item.unitsPerPack || 1));
+
+                  const discVal = item.discountValue !== undefined ? item.discountValue : item.discount;
+                  const discType = item.discountType || 'percentage';
+                  let discountStr = '';
+                  
+                  if (discVal > 0) {
+                    if (discType === 'amount') {
+                      discountStr = `₹${discVal.toFixed(2)}`;
+                    } else {
+                      discountStr = `${discVal}%`;
+                    }
+                  }
+
+                  return (
+                    <tr key={idx} className="align-middle">
+                      <td className="p-2.5 font-bold text-gray-400">{idx + 1}</td>
+                      <td className="p-2.5">
+                        <span className={`font-extrabold text-gray-900 ${item.returnedQty === item.quantity ? 'line-through text-red-500' : ''}`}>
+                          {item.itemName}
                         </span>
-                      )}
-                    </td>
-                    <td className="p-2.5 font-mono text-gray-655 font-bold">{item.batch}</td>
-                    <td className="p-2.5 text-center font-bold">
-                      <div>{item.quantity - item.returnedQty}</div>
-                      {item.returnedQty > 0 && (
-                        <div className="text-[9px] font-black text-red-650 uppercase">Ret: {item.returnedQty}</div>
-                      )}
-                    </td>
-                    <td className="p-2.5 text-right font-semibold">₹{item.unitPrice.toFixed(2)}</td>
-                    <td className="p-2.5 text-center font-semibold">{item.discount || 0}%</td>
-                    {data.pharmacySetting?.gstEnabled && (
-                      <>
-                        <td className="p-2.5 text-center font-semibold">{item.gstPercentage || 0}%</td>
-                        <td className="p-2.5 text-right font-semibold">₹{(item.gstAmount || 0).toFixed(2)}</td>
-                      </>
-                    )}
-                    <td className="p-2.5 text-right font-bold text-gray-950">₹{item.amount.toFixed(2)}</td>
-                  </tr>
-                ))}
+                        {item.pack && <span className="text-[10px] text-gray-400 ml-1.5 font-semibold">({item.pack})</span>}
+                        {item.returnedQty === item.quantity && (
+                          <span className="text-[9px] font-black uppercase text-red-600 bg-red-50 border border-red-200 px-1 py-0.5 rounded ml-2">
+                            Fully Returned
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-2.5 font-mono text-gray-655 font-bold">{item.batch}</td>
+                      <td className="p-2.5 text-center font-bold">
+                        <div>{item.quantity - item.returnedQty}</div>
+                        {item.returnedQty > 0 && (
+                          <div className="text-[9px] font-black text-red-655 uppercase">Ret: {item.returnedQty}</div>
+                        )}
+                      </td>
+                      <td className="p-2.5 text-right font-semibold">₹{baseRateExGst.toFixed(2)}</td>
+                      <td className="p-2.5 text-center font-semibold">{sgstPercent}%</td>
+                      <td className="p-2.5 text-center font-semibold">{cgstPercent}%</td>
+                      <td className="p-2.5 text-right font-semibold">₹{unitPrice.toFixed(2)}</td>
+                      <td className="p-2.5 text-right font-semibold">{discountStr || '-'}</td>
+                      <td className="p-2.5 text-right font-bold text-gray-950">₹{item.amount.toFixed(2)}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
 
@@ -3337,10 +3637,10 @@ const SalesReturnView = () => {
   };
 
   const handleQtyChange = (idx, val) => {
-    const qty = Math.max(0, parseInt(val) || 0);
+    const qty = Math.max(0, parseFloat(val) || 0);
     const item = returnItems[idx];
-    if (qty > item.maxReturnable) {
-      toast.error(`Cannot return more than purchased or already-returned quantity: ${item.maxReturnable} units`);
+    if (qty > item.maxReturnable + 1e-9) {
+      toast.error(`Cannot return more than purchased or already-returned quantity: ${item.maxReturnable} packs`);
       return;
     }
     const updated = [...returnItems];
@@ -3504,11 +3804,12 @@ const SalesReturnView = () => {
                       returnItems.map((item, idx) => (
                         <tr key={idx} className="hover:bg-orange-50/10 align-middle">
                           <td className="p-3 pl-4 font-bold text-gray-805">{item.itemName}</td>
-                          <td className="p-3 font-mono font-bold text-gray-500">{item.batch}</td>
-                          <td className="p-3 text-center font-bold text-gray-600">{item.maxReturnable} units</td>
+                          <td className="p-3 font-mono font-bold text-gray-550">{item.batch}</td>
+                          <td className="p-3 text-center font-bold text-gray-600">{item.maxReturnable} packs</td>
                           <td className="p-3">
                             <input 
                               type="number" 
+                              step="any"
                               min="0"
                               max={item.maxReturnable}
                               className="input py-1 px-1.5 text-center text-xs w-[70px]"
@@ -4418,27 +4719,47 @@ const PurchaseEntryView = ({ editId = null, onSaveComplete }) => {
   const [loadingSuppliers, setLoadingSuppliers] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [isDirectPurchase, setIsDirectPurchase] = useState(false);
 
-  // Form Headers
+  const formatDateToMMYYYY = (dateStr) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return '';
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const year = date.getUTCFullYear();
+    return `${month}/${year}`;
+  };
+
+  const formatMMYYYYToDate = (mmYYYYStr) => {
+    if (!mmYYYYStr) return '';
+    const parts = mmYYYYStr.split('/');
+    if (parts.length !== 2) return '';
+    const month = parseInt(parts[0], 10);
+    const year = parseInt(parts[1], 10);
+    if (isNaN(month) || isNaN(year) || month < 1 || month > 12) return '';
+    const monthStr = String(month).padStart(2, '0');
+    return `${year}-${monthStr}-02`;
+  };
+
+  // States
+  const [isDirectPurchase, setIsDirectPurchase] = useState(false);
   const [header, setHeader] = useState({
     purchaseInvoiceNumber: '', supplierId: '', supplierName: '', invoiceDate: new Date().toISOString().split('T')[0],
     receiveDate: new Date().toISOString().split('T')[0], paymentType: 'Cash', dueDate: '', notes: ''
   });
-
-  // Medicine Rows
-  const [items, setItems] = useState([
-    { itemName: '', batch: '', expiry: '', pack: '0', quantity: 0, free: 0, rate: 0, mrp: 0, discountPercent: 0, discountAmount: 0, sgst: 0, cgst: 0, igst: 0, hsn: '0', totalAmount: 0 }
-  ]);
-
-  // Autocomplete details
+  const [items, setItems] = useState([]);
   const [medQuery, setMedQuery] = useState('');
   const [medResults, setMedResults] = useState([]);
-  const [activeRowIdx, setActiveRowIdx] = useState(null);
   const [searchingMeds, setSearchingMeds] = useState(false);
-
-  // Bill totals
   const [paidAmount, setPaidAmount] = useState(0);
+
+  // Modal State
+  const [showItemModal, setShowItemModal] = useState(false);
+  const [editingItemIdx, setEditingItemIdx] = useState(null);
+  const [activeItem, setActiveItem] = useState({
+    itemName: '', description: '', dosageForm: '', packType: '', unitsPerPack: 1, quantity: 0,
+    batch: '', expiry: '', purchaseRateExGst: 0, sellingRateExGst: 0, discountPercent: 0,
+    cgst: 0, sgst: 0, hsn: '0'
+  });
 
   // Fetch active suppliers list
   useEffect(() => {
@@ -4475,12 +4796,26 @@ const PurchaseEntryView = ({ editId = null, onSaveComplete }) => {
           });
           setIsDirectPurchase(!data.supplierId);
           setItems(data.items.map(it => ({
-            itemName: it.itemName, batch: it.batch,
+            itemName: it.itemName,
+            description: it.description || '',
+            dosageForm: it.dosageForm || '',
+            packType: it.packType || it.pack || '',
+            unitsPerPack: it.unitsPerPack || 1,
+            quantity: it.quantity,
+            batch: it.batch,
             expiry: it.expiry ? it.expiry.split('T')[0] : '',
-            pack: it.pack, quantity: it.quantity, free: it.free,
-            rate: it.rate, mrp: it.mrp, discountPercent: it.discountPercent,
-            discountAmount: it.discountAmount, sgst: it.sgst, cgst: it.cgst, igst: it.igst,
-            hsn: it.hsn, totalAmount: it.totalAmount, returnedQty: it.returnedQty
+            purchaseRateExGst: it.purchaseRateExGst || it.rate || 0,
+            sellingRateExGst: it.sellingRateExGst || 0,
+            discountPercent: it.discountPercent || 0,
+            discountAmount: it.discountAmount || 0,
+            sgst: it.sgst || 0,
+            cgst: it.cgst || 0,
+            hsn: it.hsn || '0',
+            totalAmount: it.totalAmount || 0,
+            returnedQty: it.returnedQty || 0,
+            sellingCgst: it.sellingCgst !== undefined ? it.sellingCgst : it.cgst || 0,
+            sellingSgst: it.sellingSgst !== undefined ? it.sellingSgst : it.sgst || 0,
+            thresholdMedicineNumber: it.thresholdMedicineNumber !== undefined ? it.thresholdMedicineNumber : 10
           })));
           setPaidAmount(data.paidAmount || 0);
         } catch (err) {
@@ -4514,68 +4849,245 @@ const PurchaseEntryView = ({ editId = null, onSaveComplete }) => {
     return () => clearTimeout(timer);
   }, [medQuery]);
 
-  const handleRowChange = (idx, field, val) => {
-    const updated = [...items];
-    updated[idx][field] = val;
-
-    // Trigger row calculations on input change
-    const qty = Number(updated[idx].quantity) || 0;
-    const rate = Number(updated[idx].rate) || 0;
-    const discPct = Number(updated[idx].discountPercent) || 0;
-    const sgstPct = Number(updated[idx].sgst) || 0;
-    const cgstPct = Number(updated[idx].cgst) || 0;
-    const igstPct = Number(updated[idx].igst) || 0;
-
-    const gross = qty * rate;
-    const discAmt = gross * (discPct / 100);
-    const taxable = gross - discAmt;
-    const gstPct = sgstPct + cgstPct + igstPct;
-    const gstAmt = taxable * (gstPct / 100);
-
-    updated[idx].discountAmount = discAmt;
-    updated[idx].totalAmount = taxable + gstAmt;
-
-    setItems(updated);
+  // Excel template downloader
+  const downloadPurchaseTemplate = () => {
+    const headers = [
+      [
+        'Medicine Name', 'Description', 'Dosage Form', 'Pack Type', 'Unit/Pack', 'Qty (Packs)', 'Batch No', 'Expiry Date',
+        'Purchase Rate Ex GST', 'Selling Rate Ex GST', 'Discount %', 'HSN', 'CGST %', 'SGST %',
+        'Selling CGST %', 'Selling SGST %', 'purchase rate (Inc gst)', 'MRP (Inc gst)', 'Low Stock Threshold'
+      ]
+    ];
+    const sampleRows = [
+      [
+        'Paracetamol 650mg', 'Pain reliever and fever reducer', 'Tablet', 'strip', 10, 50, 'BATCH-1234', '2027-12-31',
+        12.50, 18.00, 2, '30049011', 6, 6,
+        6, 6, 14.00, 20.16, 10
+      ]
+    ];
+    const worksheet = XLSX.utils.aoa_to_sheet([...headers, ...sampleRows]);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Purchase Line Items');
+    XLSX.writeFile(workbook, `pharmacy_purchase_template.xlsx`);
   };
 
-  const handleAddRow = () => {
-    setItems([
-      ...items,
-      { itemName: '', batch: '', expiry: '', pack: '0', quantity: 0, free: 0, rate: 0, mrp: 0, discountPercent: 0, discountAmount: 0, sgst: 0, cgst: 0, igst: 0, hsn: '0', totalAmount: 0 }
-    ]);
+  // Excel loader
+  const handlePurchaseExcelUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const extension = file.name.split('.').pop().toLowerCase();
+    if (extension !== 'xlsx' && extension !== 'xls') {
+      toast.error('Invalid format. Please upload a valid .xlsx or .xls file.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = evt.target.result;
+        const workbook = XLSX.read(data, { type: 'binary' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(sheet);
+
+        if (rows.length === 0) {
+          toast.error('The uploaded sheet is empty.');
+          return;
+        }
+
+        const mappedItems = rows.map((row) => {
+          const getValue = (aliases) => {
+            const keys = Object.keys(row);
+            for (const alias of aliases) {
+              const matchedKey = keys.find(k => k.trim().toLowerCase() === alias.toLowerCase());
+              if (matchedKey !== undefined) return row[matchedKey];
+            }
+            return null;
+          };
+
+          const itemName = String(getValue(['Medicine Name', 'itemName', 'name']) || '').trim();
+          const description = String(getValue(['Description', 'description']) || '').trim();
+          const dosageForm = String(getValue(['Dosage Form', 'dosageForm']) || '').trim();
+          const packType = String(getValue(['Pack Type', 'packType', 'pack']) || '').trim();
+          const unitsPerPack = parseInt(getValue(['Unit/Pack', 'unitsPerPack'])) || 1;
+          const quantity = parseFloat(getValue(['Qty (Packs)', 'quantity', 'qty'])) || 0;
+          const batch = String(getValue(['Batch No', 'batch']) || '').trim();
+          
+          let expiryRaw = getValue(['Expiry Date', 'expiry']);
+          let expiry = '';
+          if (expiryRaw) {
+            if (typeof expiryRaw === 'number') {
+              const utc_days = Math.floor(expiryRaw - 25569);
+              const date = new Date(utc_days * 86400 * 1000);
+              expiry = date.toISOString().split('T')[0];
+            } else {
+              const parsedDate = new Date(expiryRaw);
+              if (!isNaN(parsedDate.getTime())) {
+                expiry = parsedDate.toISOString().split('T')[0];
+              } else {
+                expiry = String(expiryRaw).trim();
+              }
+            }
+          }
+
+          const cgst = parseFloat(getValue(['CGST %', 'cgst'])) || 0;
+          const sgst = parseFloat(getValue(['SGST %', 'sgst'])) || 0;
+
+          const sellingCgstVal = getValue(['Selling CGST %', 'sellingCgst']);
+          const sellingSgstVal = getValue(['Selling SGST %', 'sellingSgst']);
+          const sellingCgst = sellingCgstVal !== null && sellingCgstVal !== undefined && !isNaN(parseFloat(sellingCgstVal)) ? parseFloat(sellingCgstVal) : cgst;
+          const sellingSgst = sellingSgstVal !== null && sellingSgstVal !== undefined && !isNaN(parseFloat(sellingSgstVal)) ? parseFloat(sellingSgstVal) : sgst;
+
+          let purchaseRateExGst = parseFloat(getValue(['Purchase Rate Ex GST', 'purchaseRateExGst', 'rate'])) || 0;
+          const purchaseRateIncGstVal = getValue(['purchase rate (Inc gst)', 'purchaseRateIncGst']);
+          if (!purchaseRateExGst && purchaseRateIncGstVal !== null && purchaseRateIncGstVal !== undefined && !isNaN(parseFloat(purchaseRateIncGstVal))) {
+            const incGst = parseFloat(purchaseRateIncGstVal) || 0;
+            purchaseRateExGst = incGst / (1 + (cgst + sgst) / 100);
+          }
+
+          let sellingRateExGst = parseFloat(getValue(['Selling Rate Ex GST', 'sellingRateExGst'])) || 0;
+          const mrpIncGstVal = getValue(['MRP (Inc gst)', 'mrp']);
+          if (!sellingRateExGst && mrpIncGstVal !== null && mrpIncGstVal !== undefined && !isNaN(parseFloat(mrpIncGstVal))) {
+            const mrpVal = parseFloat(mrpIncGstVal) || 0;
+            sellingRateExGst = mrpVal / (1 + (sellingCgst + sellingSgst) / 100);
+          }
+
+          const discountPercent = parseFloat(getValue(['Discount %', 'discountPercent'])) || 0;
+          const hsn = String(getValue(['HSN', 'hsn']) || '0').trim();
+
+          const thresholdVal = getValue(['Low Stock Threshold', 'thresholdMedicineNumber', 'threshold']);
+          const thresholdMedicineNumber = thresholdVal !== null && thresholdVal !== undefined && !isNaN(parseInt(thresholdVal)) ? parseInt(thresholdVal) : 10;
+
+          const isSameGstAsPurchase = Number(sellingCgst) === Number(cgst) && Number(sellingSgst) === Number(sgst);
+
+          const gross = quantity * purchaseRateExGst;
+          const discountAmount = gross * (discountPercent / 100);
+          const taxable = gross - discountAmount;
+          const gstPct = cgst + sgst;
+          const totalAmount = taxable * (1 + gstPct / 100);
+
+          return {
+            itemName,
+            description,
+            dosageForm,
+            packType,
+            unitsPerPack,
+            quantity,
+            batch,
+            expiry,
+            purchaseRateExGst,
+            sellingRateExGst,
+            discountPercent,
+            discountAmount,
+            cgst,
+            sgst,
+            hsn,
+            totalAmount,
+            sellingCgst,
+            sellingSgst,
+            thresholdMedicineNumber,
+            isSameGstAsPurchase
+          };
+        });
+
+        const validItems = mappedItems.filter(it => it.itemName);
+        if (validItems.length === 0) {
+          toast.error('No valid rows found containing a medicine name.');
+          return;
+        }
+
+        setItems(prev => [...prev, ...validItems]);
+        toast.success(`Successfully loaded ${validItems.length} line items from Excel.`);
+      } catch (err) {
+        console.error(err);
+        toast.error('Failed to parse the Excel file.');
+      }
+    };
+    reader.readAsBinaryString(file);
+    e.target.value = ''; // clear input
   };
 
-  const handleRemoveRow = (idx) => {
-    if (items.length === 1) return;
+  const handleOpenAddModal = () => {
+    setEditingItemIdx(null);
+    setActiveItem({
+      itemName: '', description: '', dosageForm: '', packType: '', unitsPerPack: 1, quantity: 0,
+      batch: '', expiry: '', purchaseRateExGst: 0, sellingRateExGst: 0, discountPercent: 0,
+      cgst: 0, sgst: 0, hsn: '0', sellingCgst: 0, sellingSgst: 0, isSameGstAsPurchase: true,
+      thresholdMedicineNumber: 10
+    });
+    setMedQuery('');
+    setMedResults([]);
+    setShowItemModal(true);
+  };
+
+  const handleOpenEditModal = (idx) => {
+    setEditingItemIdx(idx);
+    const it = items[idx];
+    const isSameGst = (it.sellingCgst === undefined || Number(it.sellingCgst) === Number(it.cgst)) && 
+                      (it.sellingSgst === undefined || Number(it.sellingSgst) === Number(it.sgst));
+    setActiveItem({
+      ...it,
+      sellingCgst: it.sellingCgst !== undefined ? it.sellingCgst : it.cgst,
+      sellingSgst: it.sellingSgst !== undefined ? it.sellingSgst : it.sgst,
+      isSameGstAsPurchase: isSameGst,
+      thresholdMedicineNumber: it.thresholdMedicineNumber !== undefined ? it.thresholdMedicineNumber : 10
+    });
+    setMedQuery('');
+    setMedResults([]);
+    setShowItemModal(true);
+  };
+
+  const handleRemoveItem = (idx) => {
     setItems(items.filter((_, i) => i !== idx));
   };
 
-  const selectAutocompleteMed = (idx, stock) => {
-    const updated = [...items];
-    updated[idx].itemName = stock.itemName;
-    updated[idx].pack = stock.pack || '0';
-    updated[idx].hsn = stock.hsn || '0';
-    updated[idx].sgst = stock.sgst || 0;
-    updated[idx].cgst = stock.cst || 0;
-    updated[idx].mrp = stock.mrp || 0;
-    updated[idx].rate = stock.rate || 0;
-
-    setItems(updated);
-    setActiveRowIdx(null);
-    setMedQuery('');
-    setMedResults([]);
-  };
-
   // Perform overall total sum calculations
-  const subTotal = items.reduce((sum, it) => sum + (Number(it.quantity) * Number(it.rate)), 0);
+  const subTotal = items.reduce((sum, it) => sum + (Number(it.quantity) * Number(it.purchaseRateExGst || 0)), 0);
   const totalDiscount = items.reduce((sum, it) => sum + (Number(it.discountAmount) || 0), 0);
   const totalGst = items.reduce((sum, it) => {
-    const taxable = (Number(it.quantity) * Number(it.rate)) - (Number(it.discountAmount) || 0);
-    const gstPct = (Number(it.sgst) || 0) + (Number(it.cgst) || 0) + (Number(it.igst) || 0);
+    const taxable = (Number(it.quantity) * Number(it.purchaseRateExGst || 0)) - (Number(it.discountAmount) || 0);
+    const gstPct = (Number(it.sgst) || 0) + (Number(it.cgst) || 0);
     return sum + (taxable * gstPct / 100);
   }, 0);
   const grandTotal = subTotal - totalDiscount + totalGst;
   const pendingAmount = Math.max(0, grandTotal - paidAmount);
+
+  const saveModalItem = (e) => {
+    e.preventDefault();
+    if (!activeItem.itemName || !activeItem.batch || !activeItem.expiry || Number(activeItem.quantity) <= 0) {
+      toast.error('Please fill in Medicine Name, Batch No, Expiry Date and a valid Quantity.');
+      return;
+    }
+
+    const qty = Number(activeItem.quantity) || 0;
+    const purchaseRateExGst = Number(activeItem.purchaseRateExGst) || 0;
+    const discPct = Number(activeItem.discountPercent) || 0;
+    const sgstPct = Number(activeItem.sgst) || 0;
+    const cgstPct = Number(activeItem.cgst) || 0;
+
+    const gross = qty * purchaseRateExGst;
+    const discAmt = gross * (discPct / 100);
+    const taxable = gross - discAmt;
+    const gstPct = sgstPct + cgstPct;
+    const gstAmt = taxable * (gstPct / 100);
+
+    const updatedItem = {
+      ...activeItem,
+      discountAmount: discAmt,
+      totalAmount: taxable + gstAmt
+    };
+
+    if (editingItemIdx !== null) {
+      const updated = [...items];
+      updated[editingItemIdx] = updatedItem;
+      setItems(updated);
+    } else {
+      setItems([...items, updatedItem]);
+    }
+
+    setShowItemModal(false);
+    setEditingItemIdx(null);
+  };
 
   const handleSavePurchase = async (e) => {
     e.preventDefault();
@@ -4586,9 +5098,14 @@ const PurchaseEntryView = ({ editId = null, onSaveComplete }) => {
       return;
     }
 
+    if (items.length === 0) {
+      toast.error('Please add at least one medicine line item.');
+      return;
+    }
+
     const invalidRow = items.find(it => !it.itemName || !it.batch || !it.expiry || it.quantity <= 0);
     if (invalidRow) {
-      toast.error('All rows must contain medicine name, batch, expiry date and quantity > 0.');
+      toast.error('All rows must contain medicine name, batch, a valid expiry date, and quantity > 0.');
       return;
     }
 
@@ -4597,7 +5114,10 @@ const PurchaseEntryView = ({ editId = null, onSaveComplete }) => {
       ...header,
       supplierId: isDirectPurchase ? '' : header.supplierId,
       supplierName: isDirectPurchase ? header.supplierName.trim() : '',
-      items,
+      items: items.map(it => ({
+        ...it,
+        expiry: it.expiry
+      })),
       totalAmount: grandTotal,
       paidAmount,
       pendingAmount
@@ -4620,6 +5140,14 @@ const PurchaseEntryView = ({ editId = null, onSaveComplete }) => {
     }
   };
 
+  // Live modal item calculations preview
+  const modalGross = (Number(activeItem.quantity) || 0) * (Number(activeItem.purchaseRateExGst) || 0);
+  const modalDiscAmt = modalGross * ((Number(activeItem.discountPercent) || 0) / 100);
+  const modalTaxable = modalGross - modalDiscAmt;
+  const modalGstAmt = modalTaxable * (((Number(activeItem.cgst) || 0) + (Number(activeItem.sgst) || 0)) / 100);
+  const modalTotal = modalTaxable + modalGstAmt;
+  const modalMrpIncGst = (Number(activeItem.sellingRateExGst) || 0) * (1 + ((Number(activeItem.cgst) || 0) + (Number(activeItem.sgst) || 0)) / 100);
+
   if (loadingDetails) {
     return (
       <div className="p-8 text-center text-gray-400">
@@ -4635,7 +5163,7 @@ const PurchaseEntryView = ({ editId = null, onSaveComplete }) => {
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs bg-orange-50/20 p-5 rounded-2xl border border-orange-100/50">
         <div>
           <div className="flex justify-between items-center mb-1">
-            <label className="font-bold text-gray-550">Supplier *</label>
+            <label className="font-bold text-gray-555">Supplier *</label>
             <label className="inline-flex items-center gap-1 text-[10px] text-orange-600 font-semibold cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -4644,7 +5172,7 @@ const PurchaseEntryView = ({ editId = null, onSaveComplete }) => {
                   setIsDirectPurchase(e.target.checked);
                   setHeader({ ...header, supplierId: '', supplierName: '' });
                 }}
-                className="rounded border-orange-350 text-orange-600 focus:ring-orange-500 h-3.5 w-3.5"
+                className="rounded border-orange-355 text-orange-600 focus:ring-orange-500 h-3.5 w-3.5"
               />
               Skip Selection
             </label>
@@ -4653,7 +5181,7 @@ const PurchaseEntryView = ({ editId = null, onSaveComplete }) => {
             <input
               type="text"
               required
-              className="input py-2 text-xs font-semibold border-orange-350"
+              className="input py-2 text-xs font-semibold border-orange-355"
               placeholder="Enter Supplier Name..."
               value={header.supplierName || ''}
               onChange={(e) => setHeader({ ...header, supplierName: e.target.value })}
@@ -4662,7 +5190,7 @@ const PurchaseEntryView = ({ editId = null, onSaveComplete }) => {
             <select
               className="input py-2 text-xs font-semibold"
               required
-              value={header.supplierId}
+              value={header.supplierId || ''}
               onChange={(e) => setHeader({ ...header, supplierId: e.target.value })}
             >
               <option value="">-- Choose Supplier --</option>
@@ -4681,7 +5209,7 @@ const PurchaseEntryView = ({ editId = null, onSaveComplete }) => {
             className="input py-2 text-xs font-mono font-bold"
             required
             placeholder="e.g. INV-10029"
-            value={header.purchaseInvoiceNumber}
+            value={header.purchaseInvoiceNumber || ''}
             onChange={(e) => setHeader({ ...header, purchaseInvoiceNumber: e.target.value })}
           />
         </div>
@@ -4691,7 +5219,7 @@ const PurchaseEntryView = ({ editId = null, onSaveComplete }) => {
             type="date"
             className="input py-2 text-xs font-semibold"
             required
-            value={header.invoiceDate}
+            value={header.invoiceDate || ''}
             onChange={(e) => setHeader({ ...header, invoiceDate: e.target.value })}
           />
         </div>
@@ -4701,7 +5229,7 @@ const PurchaseEntryView = ({ editId = null, onSaveComplete }) => {
             type="date"
             className="input py-2 text-xs font-semibold"
             required
-            value={header.receiveDate}
+            value={header.receiveDate || ''}
             onChange={(e) => setHeader({ ...header, receiveDate: e.target.value })}
           />
         </div>
@@ -4709,7 +5237,7 @@ const PurchaseEntryView = ({ editId = null, onSaveComplete }) => {
           <label className="mb-1 block font-bold text-gray-555">Payment Mode</label>
           <select
             className="input py-2 text-xs font-semibold"
-            value={header.paymentType}
+            value={header.paymentType || 'Cash'}
             onChange={(e) => setHeader({ ...header, paymentType: e.target.value })}
           >
             <option value="Cash">Cash</option>
@@ -4720,238 +5248,142 @@ const PurchaseEntryView = ({ editId = null, onSaveComplete }) => {
           </select>
         </div>
         <div>
-          <label className="mb-1 block font-bold text-gray-550">Payment Due Date (if Credit)</label>
+          <label className="mb-1 block font-bold text-gray-555">Payment Due Date (if Credit)</label>
           <input
             type="date"
             className="input py-2 text-xs font-semibold"
-            value={header.dueDate}
+            value={header.dueDate || ''}
             onChange={(e) => setHeader({ ...header, dueDate: e.target.value })}
           />
         </div>
         <div className="sm:col-span-2">
-          <label className="mb-1 block font-bold text-gray-550">Invoice Notes</label>
+          <label className="mb-1 block font-bold text-gray-555">Invoice Notes</label>
           <input
             type="text"
             className="input py-2 text-xs"
             placeholder="e.g. Received intact, fridge items kept cold"
-            value={header.notes}
+            value={header.notes || ''}
             onChange={(e) => setHeader({ ...header, notes: e.target.value })}
           />
         </div>
       </div>
 
-      {/* Invoice Items details */}
-      <div className="space-y-3.5">
-        <h4 className="font-extrabold text-gray-800 text-xs border-b border-orange-100 pb-1">
-          Purchase Medicine Line Items
-        </h4>
+      {/* Excel Upload and Bulk Mappings before item entries */}
+      <div className="bg-orange-50/10 p-5 rounded-2xl border border-orange-100 flex flex-col md:flex-row justify-between items-center gap-4 text-xs">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-orange-100/50 rounded-xl text-orange-600">
+            <FileSpreadsheet className="h-5 w-5" />
+          </div>
+          <div>
+            <h5 className="font-extrabold text-gray-800">Bulk Upload Purchase Line Items</h5>
+            <p className="text-[10px] text-gray-400 font-bold mt-0.5">Quickly import a large number of medicine lines via spreadsheet</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={downloadPurchaseTemplate}
+            className="btn-secondary py-2 px-4 text-[10px] font-extrabold flex items-center gap-1.5 cursor-pointer border-orange-200 hover:bg-orange-50/50"
+          >
+            <Download className="h-3.5 w-3.5" /> Download Standard Excel
+          </button>
+          <label className="btn py-2 px-4 text-[10px] font-extrabold flex items-center gap-1.5 cursor-pointer shadow-md shadow-orange-500/10">
+            <Upload className="h-3.5 w-3.5" /> Upload Purchase Excel
+            <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handlePurchaseExcelUpload} />
+          </label>
+        </div>
+      </div>
 
-        <div className="overflow-x-auto border border-orange-100 rounded-2xl bg-white shadow-sm">
-          <table className="w-full text-left text-[11px] min-w-[1200px]">
-            <thead>
-              <tr className="bg-gradient-to-r from-orange-50 to-amber-50 text-[10px] font-extrabold uppercase text-gray-600 border-b border-orange-100">
-                <th className="p-3 pl-4 w-[180px]">Medicine Name *</th>
-                <th className="p-3 w-[100px]">Batch No *</th>
-                <th className="p-3 w-[110px]">Expiry *</th>
-                <th className="p-3 w-[70px]">Pack</th>
-                <th className="p-3 w-[70px]">Qty *</th>
-                <th className="p-3 w-[70px]">Free</th>
-                <th className="p-3 w-[80px]">Rate *</th>
-                <th className="p-3 w-[80px]">MRP *</th>
-                <th className="p-3 w-[70px]">Dis %</th>
-                <th className="p-3 w-[80px]">HSN</th>
-                <th className="p-3 w-[70px]">CGST %</th>
-                <th className="p-3 w-[70px]">SGST %</th>
-                <th className="p-3 w-[70px]">IGST %</th>
-                <th className="p-3 text-right pr-4 w-[100px]">Total (₹)</th>
-                <th className="p-3 text-center w-[50px] print:hidden">Del</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-orange-50 font-semibold text-gray-700">
-              {items.map((it, idx) => (
-                <tr key={idx} className="hover:bg-orange-50/10 align-middle">
-                  <td className="p-2 pl-4 relative">
-                    <input
-                      type="text"
-                      className="input py-1.5 px-2 text-[11px] font-semibold border-orange-200"
-                      placeholder="Search or type name..."
-                      value={it.itemName}
-                      onChange={(e) => {
-                        handleRowChange(idx, 'itemName', e.target.value);
-                        setMedQuery(e.target.value);
-                        setActiveRowIdx(idx);
-                      }}
-                      onFocus={() => {
-                        setActiveRowIdx(idx);
-                        setMedQuery(it.itemName);
-                      }}
-                    />
-                    {activeRowIdx === idx && medQuery && (
-                      <div className="absolute left-4 right-4 z-40 bg-white border border-orange-150 rounded-2xl shadow-xl max-h-[150px] overflow-y-auto mt-1 p-1">
-                        {searchingMeds ? (
-                          <div className="p-2 text-center text-gray-400 text-[10px]">
-                            <Loader2 className="h-4.5 w-4.5 animate-spin text-orange-500 inline mr-2" /> Searching...
-                          </div>
-                        ) : medResults.length === 0 ? (
-                          <div className="p-2 text-center text-gray-400 text-[10px] font-bold">
-                            No match found. Free text allowed.
-                          </div>
-                        ) : (
-                          medResults.map(stock => (
-                            <button
-                              key={stock._id}
-                              type="button"
-                              onClick={() => selectAutocompleteMed(idx, stock)}
-                              className="w-full text-left px-3 py-1.5 hover:bg-orange-50 rounded-xl text-[10px] text-gray-700 flex justify-between font-medium cursor-pointer"
-                            >
-                              <span>{stock.itemName} (Pack: {stock.pack})</span>
-                              <span className="font-mono text-orange-700 font-bold bg-orange-50 px-1.5 py-0.5 rounded-md">Batch: {stock.batch} | Qty: {stock.quantity}</span>
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    )}
-                  </td>
-                  <td className="p-2">
-                    <input
-                      type="text"
-                      className="input py-1.5 px-2 text-[11px] font-mono border-orange-200"
-                      required
-                      placeholder="B-39"
-                      value={it.batch}
-                      onChange={(e) => handleRowChange(idx, 'batch', e.target.value)}
-                    />
-                  </td>
-                  <td className="p-2">
-                    <input
-                      type="date"
-                      className="input py-1.5 px-2 text-[11px] font-semibold border-orange-200"
-                      required
-                      value={it.expiry}
-                      onChange={(e) => handleRowChange(idx, 'expiry', e.target.value)}
-                    />
-                  </td>
-                  <td className="p-2">
-                    <input
-                      type="text"
-                      className="input py-1.5 px-2 text-[11px] text-center border-orange-200"
-                      placeholder="10S"
-                      value={it.pack}
-                      onChange={(e) => handleRowChange(idx, 'pack', e.target.value)}
-                    />
-                  </td>
-                  <td className="p-2">
-                    <input
-                      type="number"
-                      min="1"
-                      className="input py-1.5 px-2 text-[11px] text-center font-bold border-orange-200"
-                      required
-                      value={it.quantity || ''}
-                      onChange={(e) => handleRowChange(idx, 'quantity', parseInt(e.target.value) || 0)}
-                    />
-                  </td>
-                  <td className="p-2">
-                    <input
-                      type="number"
-                      min="0"
-                      className="input py-1.5 px-2 text-[11px] text-center border-orange-200"
-                      value={it.free || ''}
-                      onChange={(e) => handleRowChange(idx, 'free', parseInt(e.target.value) || 0)}
-                    />
-                  </td>
-                  <td className="p-2">
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      className="input py-1.5 px-2 text-[11px] text-right font-bold border-orange-200"
-                      required
-                      value={it.rate || ''}
-                      onChange={(e) => handleRowChange(idx, 'rate', parseFloat(e.target.value) || 0)}
-                    />
-                  </td>
-                  <td className="p-2">
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      className="input py-1.5 px-2 text-[11px] text-right font-bold border-orange-200"
-                      required
-                      value={it.mrp || ''}
-                      onChange={(e) => handleRowChange(idx, 'mrp', parseFloat(e.target.value) || 0)}
-                    />
-                  </td>
-                  <td className="p-2">
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      className="input py-1.5 px-2 text-[11px] text-center border-orange-200"
-                      value={it.discountPercent || ''}
-                      onChange={(e) => handleRowChange(idx, 'discountPercent', parseFloat(e.target.value) || 0)}
-                    />
-                  </td>
-                  <td className="p-2">
-                    <input
-                      type="text"
-                      className="input py-1.5 px-2 text-[11px] text-center font-mono border-orange-200"
-                      value={it.hsn}
-                      onChange={(e) => handleRowChange(idx, 'hsn', e.target.value)}
-                    />
-                  </td>
-                  <td className="p-2">
-                    <input
-                      type="number"
-                      min="0"
-                      className="input py-1.5 px-2 text-[11px] text-center border-orange-200"
-                      value={it.cgst || ''}
-                      onChange={(e) => handleRowChange(idx, 'cgst', parseFloat(e.target.value) || 0)}
-                    />
-                  </td>
-                  <td className="p-2">
-                    <input
-                      type="number"
-                      min="0"
-                      className="input py-1.5 px-2 text-[11px] text-center border-orange-200"
-                      value={it.sgst || ''}
-                      onChange={(e) => handleRowChange(idx, 'sgst', parseFloat(e.target.value) || 0)}
-                    />
-                  </td>
-                  <td className="p-2">
-                    <input
-                      type="number"
-                      min="0"
-                      className="input py-1.5 px-2 text-[11px] text-center border-orange-200"
-                      value={it.igst || ''}
-                      onChange={(e) => handleRowChange(idx, 'igst', parseFloat(e.target.value) || 0)}
-                    />
-                  </td>
-                  <td className="p-2 text-right pr-4 font-mono font-black text-gray-800">
-                    ₹{it.totalAmount.toFixed(2)}
-                  </td>
-                  <td className="p-2 text-center print:hidden">
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveRow(idx)}
-                      disabled={items.length === 1}
-                      className="p-1 text-red-500 hover:bg-red-50 rounded-xl transition cursor-pointer disabled:text-gray-300 disabled:hover:bg-transparent"
-                    >
-                      <Trash2 className="h-4.5 w-4.5" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* Invoice Items list */}
+      <div className="space-y-3.5">
+        <div className="flex justify-between items-center border-b border-orange-100 pb-2">
+          <h4 className="font-extrabold text-gray-800 text-xs flex items-center gap-1.5">
+            <Package className="text-orange-500 h-4.5 w-4.5" /> Purchase Medicine Line Items
+          </h4>
+          <button
+            type="button"
+            onClick={handleOpenAddModal}
+            className="btn py-2 px-4 text-[10px] font-bold flex items-center gap-1 cursor-pointer animate-pulse"
+          >
+            <Plus className="h-3.5 w-3.5" /> Add Medicine Line
+          </button>
         </div>
 
-        <button
-          type="button"
-          onClick={handleAddRow}
-          className="btn-secondary py-2 px-5 text-xs font-bold flex items-center gap-1 cursor-pointer border-orange-200 hover:bg-orange-50/50"
-        >
-          <Plus className="h-4 w-4" /> Add Item Line
-        </button>
+        {items.length === 0 ? (
+          <div className="border border-dashed border-orange-200/50 rounded-2xl p-8 text-center text-gray-400 bg-white">
+            <Package className="h-10 w-10 mx-auto text-orange-300 mb-2" />
+            <p className="text-[11px] font-extrabold">No medicine line items added yet.</p>
+            <p className="text-[10px] text-gray-400 mt-1">Upload an Excel sheet or click the "Add Medicine Line" button above to get started.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto border border-orange-100 rounded-2xl bg-white shadow-sm">
+            <table className="w-full text-left text-[11px]">
+              <thead>
+                <tr className="bg-gradient-to-r from-orange-50 to-amber-50 text-[10px] font-extrabold uppercase text-gray-600 border-b border-orange-100">
+                  <th className="p-3 pl-4 w-[50px]">S.No</th>
+                  <th className="p-3">Medicine Name & Details</th>
+                  <th className="p-3 w-[100px]">Batch No</th>
+                  <th className="p-3 w-[100px]">Expiry Date</th>
+                  <th className="p-3 w-[100px] text-center">Pack Info</th>
+                  <th className="p-3 w-[80px] text-center">Qty (Packs)</th>
+                  <th className="p-3 w-[110px] text-right">Purchase Ex GST</th>
+                  <th className="p-3 w-[110px] text-right">Selling Ex GST</th>
+                  <th className="p-3 w-[90px] text-center">Taxes %</th>
+                  <th className="p-3 text-right pr-4 w-[110px]">Total (₹)</th>
+                  <th className="p-3 text-center w-[80px] print:hidden">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-orange-50 font-semibold text-gray-700">
+                {items.map((it, idx) => (
+                  <tr key={idx} className="hover:bg-orange-50/10 align-middle">
+                    <td className="p-3 pl-4 font-mono">{idx + 1}</td>
+                    <td className="p-3">
+                      <div className="font-extrabold text-gray-800">{it.itemName}</div>
+                      {it.description && <div className="text-[10px] text-gray-400 font-normal">{it.description}</div>}
+                      {it.dosageForm && <span className="inline-block text-[9px] bg-orange-50 text-orange-700 px-1.5 py-0.5 rounded-md font-bold mt-1">{it.dosageForm}</span>}
+                    </td>
+                    <td className="p-3 font-mono text-gray-650">{it.batch}</td>
+                    <td className="p-3 text-gray-500 font-bold">{it.expiry}</td>
+                    <td className="p-3 text-center text-gray-650">
+                      <div>{it.packType || '0'}</div>
+                      <div className="text-[9px] text-gray-400 font-bold">({it.unitsPerPack} units/pack)</div>
+                    </td>
+                    <td className="p-3 text-center font-black text-gray-800">{it.quantity}</td>
+                    <td className="p-3 text-right font-mono font-bold">₹{Number(it.purchaseRateExGst).toFixed(2)}</td>
+                    <td className="p-3 text-right font-mono text-gray-650">₹{Number(it.sellingRateExGst).toFixed(2)}</td>
+                    <td className="p-3 text-center font-mono text-gray-500">
+                      <div>CGST: {it.cgst}%</div>
+                      <div>SGST: {it.sgst}%</div>
+                    </td>
+                    <td className="p-3 text-right pr-4 font-mono font-black text-gray-800">
+                      ₹{Number(it.totalAmount).toFixed(2)}
+                    </td>
+                    <td className="p-3 text-center print:hidden">
+                      <div className="flex justify-center items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditModal(idx)}
+                          className="p-1.5 text-orange-600 hover:bg-orange-50 rounded-xl transition cursor-pointer"
+                          title="Edit row details"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveItem(idx)}
+                          className="p-1.5 text-red-500 hover:bg-red-50 rounded-xl transition cursor-pointer"
+                          title="Remove item"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Invoice Totals calculation and Saving */}
@@ -5013,12 +5445,357 @@ const PurchaseEntryView = ({ editId = null, onSaveComplete }) => {
           </div>
         </div>
       </div>
+
+      {/* Dialog Form Modal */}
+      {showItemModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-2xl w-full border border-orange-100 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto relative text-xs">
+            <div className="flex justify-between items-center border-b border-orange-50 pb-2.5">
+              <h3 className="font-black text-gray-800 text-sm flex items-center gap-1.5">
+                <Plus className="text-orange-500 h-5 w-5" />
+                {editingItemIdx !== null ? 'Edit Medicine Line Item' : 'Add Medicine Line Item'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowItemModal(false)}
+                className="text-gray-400 hover:text-gray-600 cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              
+              {/* Left Column: General Medicine Info */}
+              <div className="space-y-3.5">
+                <div className="relative">
+                  <label className="block font-bold text-gray-550 mb-1">Medicine Name *</label>
+                  <input
+                    type="text"
+                    className="input py-2 text-xs font-semibold border-orange-200"
+                    required
+                    placeholder="Type or search name..."
+                    value={activeItem.itemName || ''}
+                    onChange={(e) => {
+                      setActiveItem({ ...activeItem, itemName: e.target.value });
+                      setMedQuery(e.target.value);
+                    }}
+                  />
+                  {medQuery && (
+                    <div className="absolute left-0 right-0 z-50 bg-white border border-orange-150 rounded-2xl shadow-xl max-h-[150px] overflow-y-auto mt-1 p-1">
+                      {searchingMeds ? (
+                        <div className="p-2 text-center text-gray-400 text-[10px]">
+                          <Loader2 className="h-4.5 w-4.5 animate-spin text-orange-500 inline mr-2" /> Searching...
+                        </div>
+                      ) : medResults.length === 0 ? (
+                        <div className="p-2 text-center text-gray-400 text-[10px] font-bold">
+                          No match found. Free text allowed.
+                        </div>
+                      ) : (
+                        medResults.map(stock => (
+                          <button
+                            key={stock._id}
+                            type="button"
+                            onClick={() => {
+                              setActiveItem({
+                                ...activeItem,
+                                itemName: stock.itemName,
+                                description: stock.description || '',
+                                dosageForm: stock.dosageForm || '',
+                                packType: stock.packType || stock.pack || '',
+                                unitsPerPack: stock.unitsPerPack || 1,
+                                hsn: stock.hsn || '0',
+                                sgst: stock.sgst || 0,
+                                cgst: stock.cgst || stock.cst || 0,
+                                sellingCgst: stock.cgst || stock.cst || 0,
+                                sellingSgst: stock.sgst || 0,
+                                isSameGstAsPurchase: true,
+                                sellingRateExGst: stock.rateExGst || stock.rate || 0,
+                                thresholdMedicineNumber: stock.thresholdMedicineNumber !== undefined ? stock.thresholdMedicineNumber : 10
+                              });
+                              setMedQuery('');
+                              setMedResults([]);
+                            }}
+                            className="w-full text-left px-3 py-1.5 hover:bg-orange-50 rounded-xl text-[10px] text-gray-700 flex justify-between font-medium cursor-pointer"
+                          >
+                            <span>{stock.itemName} (Pack: {stock.packType || stock.pack})</span>
+                            <span className="font-mono text-orange-700 font-bold bg-orange-50 px-1.5 py-0.5 rounded-md">Batch: {stock.batch} | Qty: {stock.quantity}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-555 mb-1">Description</label>
+                  <input
+                    type="text"
+                    className="input py-2 text-xs border-orange-200"
+                    placeholder="e.g. Pain reliever and fever reducer"
+                    value={activeItem.description || ''}
+                    onChange={(e) => setActiveItem({ ...activeItem, description: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-550 mb-1">Dosage Form</label>
+                  <input
+                    type="text"
+                    className="input py-2 text-xs border-orange-200"
+                    placeholder="e.g. Tablet"
+                    value={activeItem.dosageForm || ''}
+                    onChange={(e) => setActiveItem({ ...activeItem, dosageForm: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-555 mb-1">Pack Type</label>
+                  <input
+                    type="text"
+                    className="input py-2 text-xs border-orange-200"
+                    placeholder="e.g. strip, bottle"
+                    value={activeItem.packType || ''}
+                    onChange={(e) => setActiveItem({ ...activeItem, packType: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-550 mb-1">Unit/Pack *</label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    className="input py-2 text-xs border-orange-200 font-bold"
+                    value={activeItem.unitsPerPack || 1}
+                    onChange={(e) => setActiveItem({ ...activeItem, unitsPerPack: parseInt(e.target.value) || 1 })}
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-550 mb-1">Low Stock Threshold (Units) *</label>
+                  <input
+                    type="number"
+                    min="0"
+                    required
+                    className="input py-2 text-xs border-orange-200 font-bold"
+                    value={activeItem.thresholdMedicineNumber !== undefined ? activeItem.thresholdMedicineNumber : 10}
+                    onChange={(e) => setActiveItem({ ...activeItem, thresholdMedicineNumber: parseInt(e.target.value) || 0 })}
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-550 mb-1">HSN Code</label>
+                  <input
+                    type="text"
+                    className="input py-2 text-xs font-mono border-orange-200"
+                    value={activeItem.hsn || ''}
+                    onChange={(e) => setActiveItem({ ...activeItem, hsn: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              {/* Right Column: Pricing, Quantities and Taxes */}
+              <div className="space-y-3.5">
+                <div>
+                  <label className="block font-bold text-gray-555 mb-1">Batch No *</label>
+                  <input
+                    type="text"
+                    required
+                    className="input py-2 text-xs font-mono border-orange-200"
+                    placeholder="e.g. B-39"
+                    value={activeItem.batch || ''}
+                    onChange={(e) => setActiveItem({ ...activeItem, batch: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-550 mb-1">Expiry Date *</label>
+                  <input
+                    type="date"
+                    required
+                    className="input py-2 text-xs border-orange-200 font-semibold"
+                    value={activeItem.expiry || ''}
+                    onChange={(e) => setActiveItem({ ...activeItem, expiry: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-550 mb-1">Qty (Packs) *</label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    className="input py-2 text-xs border-orange-200 font-bold"
+                    value={activeItem.quantity || ''}
+                    onChange={(e) => setActiveItem({ ...activeItem, quantity: parseInt(e.target.value) || 0 })}
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-555 mb-1">Purchase Rate Ex GST (₹) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    className="input py-2 text-xs border-orange-200 font-bold"
+                    value={activeItem.purchaseRateExGst || ''}
+                    onChange={(e) => setActiveItem({ ...activeItem, purchaseRateExGst: parseFloat(e.target.value) || 0 })}
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-550 mb-1">Selling Rate Ex GST (₹) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    className="input py-2 text-xs border-orange-200 font-bold"
+                    value={activeItem.sellingRateExGst || ''}
+                    onChange={(e) => setActiveItem({ ...activeItem, sellingRateExGst: parseFloat(e.target.value) || 0 })}
+                  />
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block font-bold text-[10px] text-gray-555 mb-1">Dis %</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      className="input py-2 text-xs border-orange-200 text-center"
+                      value={activeItem.discountPercent || ''}
+                      onChange={(e) => setActiveItem({ ...activeItem, discountPercent: parseFloat(e.target.value) || 0 })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-[10px] text-gray-550 mb-1">CGST %</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="input py-2 text-xs border-orange-200 text-center"
+                      value={activeItem.cgst || ''}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value) || 0;
+                        setActiveItem(prev => ({
+                          ...prev,
+                          cgst: val,
+                          sellingCgst: prev.isSameGstAsPurchase ? val : prev.sellingCgst
+                        }));
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-[10px] text-gray-555 mb-1">SGST %</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="input py-2 text-xs border-orange-200 text-center"
+                      value={activeItem.sgst || ''}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value) || 0;
+                        setActiveItem(prev => ({
+                          ...prev,
+                          sgst: val,
+                          sellingSgst: prev.isSameGstAsPurchase ? val : prev.sellingSgst
+                        }));
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="border-t border-orange-100 pt-3 space-y-3">
+                  <label className="flex items-center gap-2 font-bold text-gray-555 select-none cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="rounded border-orange-355 text-orange-600 focus:ring-orange-500 h-4 w-4"
+                      checked={activeItem.isSameGstAsPurchase || false}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setActiveItem(prev => ({
+                          ...prev,
+                          isSameGstAsPurchase: checked,
+                          sellingCgst: checked ? prev.cgst : prev.sellingCgst,
+                          sellingSgst: checked ? prev.sgst : prev.sellingSgst
+                        }));
+                      }}
+                    />
+                    Selling GST Same as Purchase GST
+                  </label>
+
+                  {!activeItem.isSameGstAsPurchase && (
+                    <div className="grid grid-cols-2 gap-2 bg-orange-50/10 p-3 rounded-xl border border-orange-100">
+                      <div>
+                        <label className="block font-bold text-[10px] text-gray-550 mb-1">Selling CGST %</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          className="input py-2 text-xs border-orange-200 text-center font-bold"
+                          value={activeItem.sellingCgst || ''}
+                          onChange={(e) => setActiveItem({ ...activeItem, sellingCgst: parseFloat(e.target.value) || 0 })}
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-bold text-[10px] text-gray-550 mb-1">Selling SGST %</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          className="input py-2 text-xs border-orange-200 text-center font-bold"
+                          value={activeItem.sellingSgst || ''}
+                          onChange={(e) => setActiveItem({ ...activeItem, sellingSgst: parseFloat(e.target.value) || 0 })}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+            </div>
+
+            {/* Real-time calculated values summary preview */}
+            <div className="bg-orange-50/20 p-4 rounded-2xl border border-orange-100 flex flex-wrap justify-between gap-4 font-bold text-gray-555 text-[10px] mt-4">
+              <div>
+                <span className="block text-gray-400">GROSS AMOUNT</span>
+                <span className="text-xs font-black text-gray-800">₹{modalGross.toFixed(2)}</span>
+              </div>
+              <div>
+                <span className="block text-gray-400">DISCOUNT ({activeItem.discountPercent}%)</span>
+                <span className="text-xs font-black text-red-500">- ₹{modalDiscAmt.toFixed(2)}</span>
+              </div>
+              <div>
+                <span className="block text-gray-400">TAX (CGST+SGST)</span>
+                <span className="text-xs font-black text-gray-800">₹{modalGstAmt.toFixed(2)}</span>
+              </div>
+              <div>
+                <span className="block text-gray-400">SELLING MRP (INC GST)</span>
+                <span className="text-xs font-black text-orange-700 bg-orange-50 px-2 py-0.5 rounded-md">₹{modalMrpIncGst.toFixed(2)}</span>
+              </div>
+              <div className="border-l border-orange-100 pl-4">
+                <span className="block text-gray-400 uppercase text-orange-600">LINE ITEM TOTAL</span>
+                <span className="text-sm font-black text-orange-700">₹{modalTotal.toFixed(2)}</span>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-orange-50 pt-3">
+              <button
+                type="button"
+                onClick={() => setShowItemModal(false)}
+                className="btn-secondary py-2.5 px-6 text-xs font-bold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={saveModalItem}
+                className="btn py-2.5 px-6 text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-md shadow-orange-500/10"
+              >
+                <CheckCircle className="h-4 w-4" /> Save Line Item
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </form>
   );
 };
-
-// ==================== PURCHASE HISTORY & RETURNS ====================
 const PurchaseHistoryView = ({ onEditClick }) => {
+  const { user } = useAuth();
   const [purchases, setPurchases] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
@@ -5273,10 +6050,6 @@ const PurchaseHistoryView = ({ onEditClick }) => {
                 <span className="text-gray-800 font-bold">{new Date(selectedPurchase.invoiceDate).toLocaleDateString('en-GB')}</span>
               </div>
               <div>
-                <span className="block font-bold text-gray-400">RECEIVE DATE:</span>
-                <span className="text-gray-800 font-bold">{new Date(selectedPurchase.receiveDate).toLocaleDateString('en-GB')}</span>
-              </div>
-              <div>
                 <span className="block font-bold text-gray-400">PAYMENT TERMS:</span>
                 <span className="text-gray-800 font-black">{selectedPurchase.paymentType}</span>
               </div>
@@ -5289,29 +6062,32 @@ const PurchaseHistoryView = ({ onEditClick }) => {
                     <th className="p-2.5 pl-3">Medicine Name</th>
                     <th className="p-2.5">Batch</th>
                     <th className="p-2.5">Expiry</th>
-                    <th className="p-2.5 text-center">Pack</th>
-                    <th className="p-2.5 text-center">Qty</th>
-                    <th className="p-2.5 text-center">Free</th>
-                    <th className="p-2.5 text-right">Rate (₹)</th>
-                    <th className="p-2.5 text-right">MRP (₹)</th>
-                    <th className="p-2.5 text-center">GST %</th>
-                    <th className="p-2.5 text-center">Returned</th>
+                    <th className="p-2.5 text-center">Pack Type</th>
+                    <th className="p-2.5 text-center">Units/Pack</th>
+                    <th className="p-2.5 text-center">Qty (Packs)</th>
+                    <th className="p-2.5 text-right">Purchase Rate Ex GST (₹)</th>
+                    <th className="p-2.5 text-right">Selling Rate Ex GST (₹)</th>
+                    <th className="p-2.5 text-center">CGST %</th>
+                    <th className="p-2.5 text-center">SGST %</th>
                     <th className="p-2.5 text-right pr-3">Total (₹)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-orange-50 text-gray-700 font-medium">
                   {selectedPurchase.items.map((it, idx) => (
                     <tr key={idx} className="hover:bg-orange-50/5">
-                      <td className="p-2.5 pl-3 font-bold text-gray-800">{it.itemName}</td>
-                      <td className="p-2.5 font-mono text-gray-600">{it.batch}</td>
-                      <td className="p-2.5 text-gray-500">{new Date(it.expiry).toLocaleDateString('en-GB')}</td>
-                      <td className="p-2.5 text-center">{it.pack || '0'}</td>
+                      <td className="p-2.5 pl-3 font-bold text-gray-800">
+                        <div>{it.itemName}</div>
+                        {it.description && <div className="text-[9px] text-gray-400 font-normal">{it.description}</div>}
+                      </td>
+                      <td className="p-2.5 font-mono text-gray-650">{it.batch}</td>
+                      <td className="p-2.5 text-gray-500">{new Date(it.expiry).toLocaleDateString('en-GB', { month: '2-digit', year: 'numeric' })}</td>
+                      <td className="p-2.5 text-center">{it.packType || it.pack || '0'}</td>
+                      <td className="p-2.5 text-center">{it.unitsPerPack || 1}</td>
                       <td className="p-2.5 text-center font-bold">{it.quantity}</td>
-                      <td className="p-2.5 text-center text-gray-400">{it.free}</td>
-                      <td className="p-2.5 text-right font-mono">₹{it.rate.toFixed(2)}</td>
-                      <td className="p-2.5 text-right font-mono">₹{it.mrp.toFixed(2)}</td>
-                      <td className="p-2.5 text-center font-mono">{(it.cgst + it.sgst + it.igst).toFixed(0)}%</td>
-                      <td className="p-2.5 text-center text-red-500 font-bold">{it.returnedQty || 0}</td>
+                      <td className="p-2.5 text-right font-mono">₹{(it.purchaseRateExGst || it.rate || 0).toFixed(2)}</td>
+                      <td className="p-2.5 text-right font-mono">₹{(it.sellingRateExGst || 0).toFixed(2)}</td>
+                      <td className="p-2.5 text-center font-mono">{(it.cgst || 0).toFixed(0)}%</td>
+                      <td className="p-2.5 text-center font-mono">{(it.sgst || 0).toFixed(0)}%</td>
                       <td className="p-2.5 text-right pr-3 font-mono font-bold text-gray-800">₹{it.totalAmount.toFixed(2)}</td>
                     </tr>
                   ))}
@@ -5466,31 +6242,36 @@ const PurchaseHistoryView = ({ onEditClick }) => {
           <div className="border border-gray-200 rounded-xl overflow-hidden mb-6">
             <table className="w-full text-left">
               <thead>
-                <tr className="bg-gray-50 font-bold text-gray-500 border-b border-gray-200">
+                <tr className="bg-gray-50 font-bold text-gray-500 border-b border-gray-200 text-[10px]">
                   <th className="p-2 pl-3">Item Name</th>
                   <th className="p-2">Batch</th>
                   <th className="p-2">Expiry</th>
-                  <th className="p-2 text-center">Pack</th>
-                  <th className="p-2 text-center">Qty</th>
-                  <th className="p-2 text-center">Free</th>
-                  <th className="p-2 text-right">Rate (₹)</th>
-                  <th className="p-2 text-right">MRP (₹)</th>
-                  <th className="p-2 text-center">GST %</th>
+                  <th className="p-2 text-center">Pack Type</th>
+                  <th className="p-2 text-center">Units/Pack</th>
+                  <th className="p-2 text-center">Qty (Packs)</th>
+                  <th className="p-2 text-right">Purchase Rate Ex GST (₹)</th>
+                  <th className="p-2 text-right">Selling Rate Ex GST (₹)</th>
+                  <th className="p-2 text-center">CGST %</th>
+                  <th className="p-2 text-center">SGST %</th>
                   <th className="p-2 text-right pr-3">Total (₹)</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 font-medium text-gray-700">
+              <tbody className="divide-y divide-gray-100 font-medium text-gray-700 text-[10px]">
                 {selectedPurchase.items.map((it, idx) => (
                   <tr key={idx}>
-                    <td className="p-2 pl-3 font-bold text-gray-800">{it.itemName}</td>
-                    <td className="p-2 font-mono text-gray-650">{it.batch}</td>
-                    <td className="p-2 text-gray-500">{new Date(it.expiry).toLocaleDateString('en-GB')}</td>
-                    <td className="p-2 text-center">{it.pack || '0'}</td>
+                    <td className="p-2 pl-3 font-bold text-gray-800">
+                      <div>{it.itemName}</div>
+                      {it.description && <div className="text-[8px] text-gray-400 font-normal">{it.description}</div>}
+                    </td>
+                    <td className="p-2 font-mono text-gray-655">{it.batch}</td>
+                    <td className="p-2 text-gray-500">{new Date(it.expiry).toLocaleDateString('en-GB', { month: '2-digit', year: 'numeric' })}</td>
+                    <td className="p-2 text-center">{it.packType || it.pack || '0'}</td>
+                    <td className="p-2 text-center">{it.unitsPerPack || 1}</td>
                     <td className="p-2 text-center font-bold">{it.quantity}</td>
-                    <td className="p-2 text-center text-gray-400">{it.free}</td>
-                    <td className="p-2 text-right font-mono">₹{it.rate.toFixed(2)}</td>
-                    <td className="p-2 text-right font-mono">₹{it.mrp.toFixed(2)}</td>
-                    <td className="p-2 text-center font-mono">{(it.cgst + it.sgst + it.igst).toFixed(0)}%</td>
+                    <td className="p-2 text-right font-mono">₹{(it.purchaseRateExGst || it.rate || 0).toFixed(2)}</td>
+                    <td className="p-2 text-right font-mono">₹{(it.sellingRateExGst || 0).toFixed(2)}</td>
+                    <td className="p-2 text-center font-mono">{(it.cgst || 0).toFixed(0)}%</td>
+                    <td className="p-2 text-center font-mono">{(it.sgst || 0).toFixed(0)}%</td>
                     <td className="p-2 text-right pr-3 font-mono font-bold text-gray-800">₹{it.totalAmount.toFixed(2)}</td>
                   </tr>
                 ))}

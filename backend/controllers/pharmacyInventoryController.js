@@ -8,6 +8,154 @@ const tenantFilter = (req, query = {}) => (
   req.user.hospitalId ? { ...query, hospitalId: req.user.hospitalId } : query
 );
 
+const saveOrUpdateInventoryItem = async ({
+  hospitalId,
+  uploadedBy,
+  supplier,
+  invoiceNumber,
+  itemData,
+  isExcelImport = false
+}) => {
+  const sNo = parseInt(itemData.sNo) || 0;
+  const itemName = String(itemData.itemName || '').trim();
+  const description = String(itemData.description || '').trim();
+  const dosageForm = String(itemData.dosageForm || '').trim();
+  const packType = String(itemData.packType || '').trim();
+  const unitsPerPack = parseInt(itemData.unitsPerPack) || 1;
+  const quantityPacks = parseInt(itemData.quantityPacks) || 0;
+  const batch = String(itemData.batch || '').trim();
+  const sgst = parseFloat(itemData.sgst) || 0;
+  const cgst = parseFloat(itemData.cgst) || 0;
+  const rateExGst = parseFloat(itemData.rateExGst) || 0;
+  const mrpInput = parseFloat(itemData.mrp) || 0;
+  const hsn = String(itemData.hsn || '0').trim();
+  const thresholdMedicineNumber = parseInt(itemData.thresholdMedicineNumber) || 10;
+
+  let expiryDate = new Date();
+  if (itemData.expiry) {
+    expiryDate = new Date(itemData.expiry);
+    if (isNaN(expiryDate.getTime())) {
+      expiryDate = new Date();
+    }
+  }
+
+  let mrp = mrpInput;
+  if (!mrp) {
+    mrp = rateExGst * (1 + ((sgst + cgst) / 100));
+  }
+
+  const existingMedicine = await PharmacyInventory.findOne({
+    hospitalId,
+    itemName: { $regex: new RegExp('^' + itemName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '$', 'i') }
+  });
+
+  const existing = await PharmacyInventory.findOne({
+    hospitalId,
+    itemName: { $regex: new RegExp('^' + itemName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '$', 'i') },
+    batch: { $regex: new RegExp('^' + batch.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '$', 'i') }
+  });
+
+  const additionalUnits = quantityPacks * unitsPerPack;
+
+  if (existing) {
+    const previousStock = existing.quantityUnits;
+    
+    if (isExcelImport) {
+      existing.quantityUnits = additionalUnits;
+    } else {
+      existing.quantityUnits += additionalUnits;
+    }
+    
+    existing.sNo = sNo || existing.sNo;
+    existing.description = description || existing.description;
+    existing.dosageForm = dosageForm || existing.dosageForm;
+    existing.packType = packType || existing.packType;
+    existing.unitsPerPack = unitsPerPack || existing.unitsPerPack;
+    existing.rateExGst = rateExGst;
+    existing.sgst = sgst;
+    existing.cgst = cgst;
+    existing.mrp = mrp;
+    existing.hsn = hsn;
+    existing.expiry = expiryDate;
+    existing.thresholdMedicineNumber = thresholdMedicineNumber;
+
+    // Track supplier through batch/system: only assign if not already set, checking other batches or fallback
+    existing.supplierId = existing.supplierId || (existingMedicine ? existingMedicine.supplierId : null) || (supplier ? supplier._id : null);
+    existing.supplierName = existing.supplierName || (existingMedicine ? existingMedicine.supplierName : '') || (supplier ? supplier.name : '');
+
+    existing.lastPurchaseDate = new Date();
+
+    await existing.save();
+
+    const netChange = isExcelImport ? (existing.quantityUnits - previousStock) : additionalUnits;
+
+    await PharmacyStockMovement.create({
+      hospitalId,
+      itemName: existing.itemName,
+      batch: existing.batch,
+      type: isExcelImport ? 'Excel Upload' : 'Manual Adjustment',
+      quantity: netChange,
+      previousStock,
+      newStock: existing.quantityUnits,
+      performedBy: uploadedBy,
+      remarks: isExcelImport 
+        ? `Excel import update. Inv: ${invoiceNumber} (Net change: ${netChange})` 
+        : `Manual stock add (Qty: ${quantityPacks} packs)`
+    });
+
+    return { type: 'update', item: existing };
+  } else {
+    const finalDescription = description || (existingMedicine ? existingMedicine.description : '');
+    const finalDosageForm = dosageForm || (existingMedicine ? existingMedicine.dosageForm : '');
+    const finalPackType = packType || (existingMedicine ? existingMedicine.packType : '');
+    const finalUnitsPerPack = unitsPerPack || (existingMedicine ? existingMedicine.unitsPerPack : 1);
+    const finalHsn = hsn || (existingMedicine ? existingMedicine.hsn : '0');
+    const finalThreshold = thresholdMedicineNumber !== undefined ? thresholdMedicineNumber : (existingMedicine ? existingMedicine.thresholdMedicineNumber : 10);
+
+    const finalSupplierId = (existingMedicine ? existingMedicine.supplierId : null) || (supplier ? supplier._id : null);
+    const finalSupplierName = (existingMedicine ? existingMedicine.supplierName : '') || (supplier ? supplier.name : '');
+
+    const newStock = await PharmacyInventory.create({
+      hospitalId,
+      sNo,
+      itemName,
+      description: finalDescription,
+      dosageForm: finalDosageForm,
+      packType: finalPackType,
+      unitsPerPack: finalUnitsPerPack,
+      quantityPacks,
+      quantityUnits: additionalUnits,
+      batch,
+      expiry: expiryDate,
+      rateExGst,
+      sgst,
+      cgst,
+      mrp,
+      hsn: finalHsn,
+      thresholdMedicineNumber: finalThreshold,
+      supplierId: finalSupplierId,
+      supplierName: finalSupplierName,
+      lastPurchaseDate: new Date()
+    });
+
+    await PharmacyStockMovement.create({
+      hospitalId,
+      itemName: newStock.itemName,
+      batch: newStock.batch,
+      type: isExcelImport ? 'Excel Upload' : 'Manual Adjustment',
+      quantity: additionalUnits,
+      previousStock: 0,
+      newStock: newStock.quantityUnits,
+      performedBy: uploadedBy,
+      remarks: isExcelImport 
+        ? `Excel import insert. Inv: ${invoiceNumber}` 
+        : `Manual stock create (Qty: ${quantityPacks} packs)`
+    });
+
+    return { type: 'insert', item: newStock };
+  }
+};
+
 // @desc    Get dashboard stats
 // @route   GET /api/pharmacy/inventory/stats
 // @access  Private
@@ -20,9 +168,11 @@ const getDashboardStats = async (req, res) => {
     // Total Items: total unique medicine-batches in stock
     const totalItems = await PharmacyInventory.countDocuments(tenantFilter(req));
 
-    // Out of Stock: Quantity < 50
+    // Out of Stock: quantityUnits <= thresholdMedicineNumber
     const outOfStockCount = await PharmacyInventory.countDocuments(
-      tenantFilter(req, { quantity: { $lt: 50 } })
+      tenantFilter(req, {
+        $expr: { $lte: ["$quantityUnits", "$thresholdMedicineNumber"] }
+      })
     );
 
     // Expiry Warning: Expiring within next 30 days (future expiry)
@@ -75,23 +225,23 @@ const getInventory = async (req, res) => {
     // Apply Status Filter
     if (status) {
       if (status === 'Green') {
-        // Valid: quantity >= 50, not expired, not near expiry
-        query.quantity = { $gte: 50 };
+        // Valid: quantityUnits > threshold, not expired, not near expiry
+        query.$expr = { $gt: ["$quantityUnits", "$thresholdMedicineNumber"] };
         query.expiry = { $gt: thirtyDaysLater };
       } else if (status === 'Yellow') {
-        // Quantity < 50, not expired, not near expiry
-        query.quantity = { $lt: 50 };
+        // quantityUnits <= threshold, not expired, not near expiry
+        query.$expr = { $lte: ["$quantityUnits", "$thresholdMedicineNumber"] };
         query.expiry = { $gt: thirtyDaysLater };
       } else if (status === 'Red') {
         // Expired
         query.expiry = { $lte: today };
       } else if (status === 'Blue') {
-        // Expired/Near Expiry AND Quantity < 50
-        query.quantity = { $lt: 50 };
+        // Expired/Near Expiry AND quantityUnits <= threshold
+        query.$expr = { $lte: ["$quantityUnits", "$thresholdMedicineNumber"] };
         query.expiry = { $lte: thirtyDaysLater };
       } else if (status === 'Orange') {
-        // Near Expiry AND Quantity >= 50
-        query.quantity = { $gte: 50 };
+        // Near Expiry AND quantityUnits > threshold
+        query.$expr = { $gt: ["$quantityUnits", "$thresholdMedicineNumber"] };
         query.expiry = { $gt: today, $lte: thirtyDaysLater };
       }
     }
@@ -166,136 +316,56 @@ const uploadInventory = async (req, res) => {
     let updatedCount = 0;
 
     for (const item of items) {
-      // Clean and normalize fields, default empty fields to 0
       const itemName = String(item.itemName || '').trim();
       const batch = String(item.batch || '').trim();
 
       if (!itemName || !batch) continue; // skip invalid rows
 
-      const quantity = parseInt(item.quantity) || 0;
-      const free = parseInt(item.free) || 0;
-      const rate = parseFloat(item.rate) || 0;
-      const mrp = parseFloat(item.mrp) || 0;
-      const oldMrp = parseFloat(item.oldMrp) || 0;
-      const dis = parseFloat(item.dis) || 0;
-      const amount = parseFloat(item.amount) || 0;
-      const nRate = parseFloat(item.nRate) || 0;
-      const sgst = parseFloat(item.sgst) || 0;
-      const cst = parseFloat(item.cst) || 0;
-      const sNo = parseInt(item.sNo) || 0;
-      const hsn = String(item.hsn || '0').trim();
-      const pack = String(item.pack || '0').trim();
-
-      // Normalize expiry date
-      let expiryDate = new Date();
-      if (item.expiry) {
-        expiryDate = new Date(item.expiry);
-        if (isNaN(expiryDate.getTime())) {
-          expiryDate = new Date(); // fallback
-        }
-      }
-
-      // Check if item already exists for this hospital, medicine name, and batch
-      const existing = await PharmacyInventory.findOne({
+      const result = await saveOrUpdateInventoryItem({
         hospitalId,
-        itemName: { $regex: new RegExp('^' + itemName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '$', 'i') },
-        batch: { $regex: new RegExp('^' + batch.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '$', 'i') }
+        uploadedBy,
+        supplier,
+        invoiceNumber,
+        itemData: item,
+        isExcelImport: true
       });
 
-      const previousStock = existing ? existing.quantity : 0;
-
-      if (existing) {
-        // Increase quantity (exactly like manual purchase save logic)
-        existing.quantity += quantity;
-        existing.free += free;
-        existing.sNo = sNo || existing.sNo;
-        existing.oldMrp = oldMrp || existing.oldMrp;
-        existing.pack = pack;
-        existing.mrp = mrp;
-        existing.rate = rate;
-        existing.dis = dis;
-        existing.expiry = expiryDate;
-        existing.nRate = nRate;
-        existing.hsn = hsn;
-        existing.sgst = sgst;
-        existing.cst = cst;
-        existing.amount = existing.rate * existing.quantity;
-        existing.supplierId = supplier._id;
-        existing.supplierName = supplier.name;
-        existing.lastPurchaseDate = new Date();
-
-        await existing.save();
-
-        await PharmacyStockMovement.create({
-          hospitalId,
-          itemName: existing.itemName,
-          batch: existing.batch,
-          type: 'Excel Upload',
-          quantity,
-          previousStock,
-          newStock: existing.quantity,
-          performedBy: uploadedBy,
-          remarks: `Excel import update. Inv: ${invoiceNumber}`
-        });
-
+      if (result.type === 'update') {
         updatedCount++;
       } else {
-        // Create new item
-        const newStock = await PharmacyInventory.create({
-          hospitalId,
-          sNo,
-          itemName,
-          oldMrp,
-          pack,
-          mrp,
-          quantity,
-          free,
-          rate,
-          dis,
-          batch,
-          expiry: expiryDate,
-          nRate,
-          hsn,
-          sgst,
-          cst,
-          amount,
-          supplierId: supplier._id,
-          supplierName: supplier.name,
-          lastPurchaseDate: new Date()
-        });
-
-        await PharmacyStockMovement.create({
-          hospitalId,
-          itemName: newStock.itemName,
-          batch: newStock.batch,
-          type: 'Excel Upload',
-          quantity,
-          previousStock: 0,
-          newStock: newStock.quantity,
-          performedBy: uploadedBy,
-          remarks: `Excel import insert. Inv: ${invoiceNumber}`
-        });
-
         insertedCount++;
       }
 
-      // Add to purchase item list
+      // Add to purchase item list (taxable + tax)
+      const quantityPacks = parseInt(item.quantityPacks) || 0;
+      const rateExGst = parseFloat(item.rateExGst) || 0;
+      const sgst = parseFloat(item.sgst) || 0;
+      const cgst = parseFloat(item.cgst) || 0;
+      const mrp = result.item.mrp;
+      const packType = result.item.packType;
+      const expiryDate = result.item.expiry;
+      const hsn = result.item.hsn;
+
+      const taxable = quantityPacks * rateExGst;
+      const tax = taxable * (sgst + cgst) / 100;
+      const rowTotal = taxable + tax;
+
       purchaseItems.push({
-        itemName,
-        batch,
+        itemName: result.item.itemName,
+        batch: result.item.batch,
         expiry: expiryDate,
-        pack,
-        quantity,
-        free,
-        rate,
+        pack: packType,
+        quantity: quantityPacks,
+        free: 0,
+        rate: rateExGst,
         mrp,
-        discountPercent: dis,
-        discountAmount: (rate * quantity) * (dis / 100),
+        discountPercent: 0,
+        discountAmount: 0,
         sgst,
-        cgst: cst, // CST mapped to CGST
+        cgst,
         igst: 0,
         hsn,
-        totalAmount: amount,
+        totalAmount: rowTotal,
         returnedQty: 0
       });
     }
@@ -384,8 +454,10 @@ const getExpiryMedicines = async (req, res) => {
 const getOutOfStockMedicines = async (req, res) => {
   try {
     const items = await PharmacyInventory.find(
-      tenantFilter(req, { quantity: { $lt: 50 } })
-    ).sort({ quantity: 1 });
+      tenantFilter(req, {
+        $expr: { $lte: ["$quantityUnits", "$thresholdMedicineNumber"] }
+      })
+    ).sort({ quantityUnits: 1 });
 
     res.status(200).json(items);
   } catch (error) {
@@ -405,15 +477,15 @@ const updateInventoryItem = async (req, res) => {
     // Do not allow updating hospitalId
     delete updateData.hospitalId;
 
-    const item = await PharmacyInventory.findOneAndUpdate(
-      tenantFilter(req, { _id: id }),
-      { $set: updateData },
-      { new: true, runValidators: true }
-    );
+    const item = await PharmacyInventory.findOne(tenantFilter(req, { _id: id }));
 
     if (!item) {
       return res.status(404).json({ message: 'Inventory item not found' });
     }
+
+    // Set new updates and save to trigger Mongoose pre-save middleware
+    Object.assign(item, updateData);
+    await item.save();
 
     res.status(200).json({ message: 'Inventory item updated successfully', item });
   } catch (error) {
@@ -450,32 +522,28 @@ const deleteInventoryItem = async (req, res) => {
 const createInventoryItem = async (req, res) => {
   try {
     const itemData = req.body;
-    
-    // Add hospitalId
-    itemData.hospitalId = req.user.hospitalId;
+    const hospitalId = req.user.hospitalId;
+    const uploadedBy = req.user._id;
 
-    // Check unique index: hospitalId, itemName, batch
-    const existing = await PharmacyInventory.findOne({
-      hospitalId: req.user.hospitalId,
-      itemName: itemData.itemName.trim(),
-      batch: itemData.batch.trim()
-    });
-
-    if (existing) {
-      return res.status(400).json({ message: 'A medicine with this item name and batch already exists in stock' });
+    if (!itemData.itemName || !itemData.itemName.trim() || !itemData.batch || !itemData.batch.trim()) {
+      return res.status(400).json({ message: 'Medicine Name and Batch are required.' });
     }
 
-    // Resolve default fields
-    if (itemData.quantity === undefined) itemData.quantity = 0;
-    if (itemData.rate === undefined) itemData.rate = 0;
-    
-    // Auto-calculate amount
-    itemData.amount = (itemData.quantity || 0) * (itemData.rate || 0);
+    const result = await saveOrUpdateInventoryItem({
+      hospitalId,
+      uploadedBy,
+      supplier: null,
+      invoiceNumber: '',
+      itemData,
+      isExcelImport: false
+    });
 
-    const newItem = new PharmacyInventory(itemData);
-    await newItem.save();
-
-    res.status(201).json({ message: 'Medicine added to inventory successfully', item: newItem });
+    res.status(201).json({
+      message: result.type === 'update' 
+        ? 'Medicine quantity updated successfully in stock!' 
+        : 'Medicine added to inventory successfully',
+      item: result.item
+    });
   } catch (error) {
     console.error('Create Inventory Item Error:', error);
     res.status(500).json({ message: 'Server error' });

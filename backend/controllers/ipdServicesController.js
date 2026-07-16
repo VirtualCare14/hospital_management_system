@@ -189,7 +189,7 @@ const getIpdPatientDetails = async (req, res) => {
 // @access  Private
 const addConsumable = async (req, res) => {
   try {
-    const { admissionId, serviceName, price, gst, quantity } = req.body;
+    const { admissionId, serviceName, price, gst, quantity, date, time } = req.body;
 
     if (!admissionId || !serviceName || !price || !quantity) {
       return res.status(400).json({ message: 'Admission ID, service name, price, and quantity are required' });
@@ -203,8 +203,14 @@ const addConsumable = async (req, res) => {
     const totalAmount = subtotal + (subtotal * gstAmount / 100);
 
     const now = new Date();
-    const dateStr = now.toISOString().split('T')[0];
-    const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+    let dateStr = date;
+    if (!dateStr) {
+      const day = String(now.getDate()).padStart(2, '0');
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const year = now.getFullYear();
+      dateStr = `${day}/${month}/${year}`;
+    }
+    const timeStr = time || now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
 
     const consumable = await IpdConsumable.create({
       hospitalId: req.user.hospitalId,
@@ -562,6 +568,8 @@ const getPatientDashboard = async (req, res) => {
     // Calculate billing
     let roomCharges = 0;
     let daysAdmitted = 0;
+    const bedPricePerDay = admission.bedId?.pricePerDay || 0;
+
     if (admission.bedHistory && admission.bedHistory.length > 0) {
       admission.bedHistory.forEach(hist => {
         const startDate = new Date(hist.startDate);
@@ -571,7 +579,6 @@ const getPatientDashboard = async (req, res) => {
         roomCharges += (hist.pricePerDay || 0) * days;
       });
     } else {
-      const bedPricePerDay = admission.bedId?.pricePerDay || 0;
       const admissionDate = new Date(admission.admissionDate);
       const currentDate = admission.status === 'Discharged' && admission.dischargeDate
         ? new Date(admission.dischargeDate) : new Date();

@@ -409,11 +409,19 @@ const PrescriptionPage = () => {
         ))}
         <button className="btn-secondary" type="button" onClick={() => setMedicines([...medicines, { medicine: '', duration: '', morning: false, afternoon: false, night: false, remarks: '' }])}><Plus className="h-4 w-4" /> Add Medicine</button>
         <datalist id="pharmacy-medicines">
-          {pharmacyMedicines.map((med) => (
-            <option key={med.name} value={med.name}>
-              {med.stock <= 0 ? 'Out of Stock' : `Stock: ${med.stock} available`}
-            </option>
-          ))}
+          {pharmacyMedicines
+            .filter(med => {
+              const matches = medicines.some(m => {
+                const q = (m.medicine || '').trim().toLowerCase();
+                return q && med.name.toLowerCase().includes(q);
+              });
+              return matches;
+            })
+            .map((med) => (
+              <option key={med.name} value={med.name}>
+                {med.stock <= 0 ? 'Out of Stock' : `Stock: ${med.stock} available`}
+              </option>
+            ))}
         </datalist>
       </div>
 

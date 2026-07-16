@@ -134,7 +134,7 @@ const SameDayCareWorkspace = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState('pending');
+  const [activeTab, setActiveTab] = useState('all');
   const [patients, setPatients] = useState([]);
   const [queue, setQueue] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -154,7 +154,7 @@ const SameDayCareWorkspace = () => {
   const [followups, setFollowups] = useState([]);
   const [followUpFilterDate, setFollowUpFilterDate] = useState(new Date().toISOString().split('T')[0]);
   const [loadingFollowups, setLoadingFollowups] = useState(false);
-  const [showFlowGuide, setShowFlowGuide] = useState(true);
+  const [patientDateFilter, setPatientDateFilter] = useState('today'); // 'previous' | 'today' | 'upcoming' | 'all'
 
   // New States for completed treatments, pending treatments, hospital settings
   const [completedList, setCompletedList] = useState([]);
@@ -310,6 +310,8 @@ const SameDayCareWorkspace = () => {
       setActiveTab('all');
     } else if (tabParam === 'datewise') {
       setActiveTab('datewise');
+    } else {
+      setActiveTab('all');
     }
   }, [tabParam]);
 
@@ -409,8 +411,83 @@ const SameDayCareWorkspace = () => {
     }
   };
 
+  const getFilteredQueue = () => {
+    return queue.filter(item => {
+      // 1. Filter by search
+      if (queueSearch.trim()) {
+        const term = queueSearch.toLowerCase();
+        const matchesSearch = (
+          (item.patientName && item.patientName.toLowerCase().includes(term)) ||
+          (item.uhid && item.uhid.toLowerCase().includes(term)) ||
+          (item.mobile && item.mobile.includes(term))
+        );
+        if (!matchesSearch) return false;
+      }
+
+      // 2. Filter by source
+      if (pendingSourceFilter === 'Doctor' && item.source !== 'Doctor Referral') return false;
+      if (pendingSourceFilter === 'Reception' && item.source !== 'Registration') return false;
+
+      return true;
+    });
+  };
+
+  const filteredQueue = getFilteredQueue();
+
+  const getPatientDateCounts = () => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    let previous = 0;
+    let todays = 0;
+    let upcoming = 0;
+
+    patients.forEach(p => {
+      if (!p.appointmentDate) return;
+      const appDateStr = p.appointmentDate;
+      if (appDateStr === todayStr) {
+        todays++;
+      } else if (appDateStr < todayStr) {
+        previous++;
+      } else if (appDateStr > todayStr) {
+        upcoming++;
+      }
+    });
+
+    return { previous, todays, upcoming, all: patients.length };
+  };
+
+  const getFilteredPatients = () => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    
+    return patients.filter(p => {
+      // Apply search term filter first if exists
+      if (search.trim()) {
+        const term = search.toLowerCase();
+        const matchesSearch = (
+          (p.patientName && p.patientName.toLowerCase().includes(term)) ||
+          (p.uhid && p.uhid.toLowerCase().includes(term)) ||
+          (p.mobile && p.mobile.includes(term))
+        );
+        if (!matchesSearch) return false;
+      }
+
+      if (!p.appointmentDate) return patientDateFilter === 'all';
+      const appDateStr = p.appointmentDate;
+      
+      if (patientDateFilter === 'today') {
+        return appDateStr === todayStr;
+      } else if (patientDateFilter === 'previous') {
+        return appDateStr < todayStr;
+      } else if (patientDateFilter === 'upcoming') {
+        return appDateStr > todayStr;
+      }
+      return true; // 'all'
+    });
+  };
+
+  const filteredPatients = getFilteredPatients();
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 text-sm sm:text-base">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -420,69 +497,6 @@ const SameDayCareWorkspace = () => {
         <button onClick={loadAllData} className="btn-secondary text-sm py-2 px-4 font-bold">
           <RefreshCw className="h-4 w-4" /> Refresh
         </button>
-      </div>
-
-      {/* Same Day Care Flow Guide */}
-      <div className="card border border-orange-100 bg-gradient-to-r from-orange-50/50 to-amber-50/20 p-5 rounded-2xl">
-        <div className="flex items-center justify-between cursor-pointer" onClick={() => setShowFlowGuide(!showFlowGuide)}>
-          <div className="flex items-center gap-2">
-            <Activity className="h-5 w-5 text-orange-500" />
-            <h2 className="font-extrabold text-xs text-gray-800 uppercase tracking-wider">Same Day Care Workflow Guide</h2>
-          </div>
-          <span className="text-xs text-orange-600 font-bold hover:underline select-none">
-            {showFlowGuide ? 'Hide Guide' : 'Show Guide'}
-          </span>
-        </div>
-        
-        {showFlowGuide && (
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mt-5 border-t border-orange-100/50 pt-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-orange-500 text-[10px] font-bold text-white">1</span>
-                <span className="font-bold text-[10px] text-gray-700 uppercase tracking-wide">Referral</span>
-              </div>
-              <p className="text-[11px] text-gray-500 leading-relaxed">
-                Patient is registered for Same Day Care at Reception or referred by a Doctor during EMR consultation.
-              </p>
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-orange-500 text-[10px] font-bold text-white">2</span>
-                <span className="font-bold text-[10px] text-gray-700 uppercase tracking-wide">Active Queue</span>
-              </div>
-              <p className="text-[11px] text-gray-500 leading-relaxed">
-                Referred patients appear instantly in the **Same Day Care Queue** below. Click **"Start Care"** to begin.
-              </p>
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-orange-500 text-[10px] font-bold text-white">3</span>
-                <span className="font-bold text-[10px] text-gray-700 uppercase tracking-wide">Clinical Record</span>
-              </div>
-              <p className="text-[11px] text-gray-500 leading-relaxed">
-                Input patient vitals, chief complaints, nursing assessment, and the care procedures administered.
-              </p>
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-orange-500 text-[10px] font-bold text-white">4</span>
-                <span className="font-bold text-[10px] text-gray-700 uppercase tracking-wide">Consumables</span>
-              </div>
-              <p className="text-[11px] text-gray-500 leading-relaxed">
-                Add any materials, syringes, or medicines used to deduct pharmacy stock and add to billing.
-              </p>
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-orange-500 text-[10px] font-bold text-white">5</span>
-                <span className="font-bold text-[10px] text-gray-700 uppercase tracking-wide">Complete & Bill</span>
-              </div>
-              <p className="text-[11px] text-gray-500 leading-relaxed">
-                Submit the report as **"Complete"** to lock the record and auto-push charges to the **Billing module**.
-              </p>
-            </div>
-          </div>
-        )}
       </div>
 
       {!showTreatmentList ? (
@@ -1105,19 +1119,59 @@ const SameDayCareWorkspace = () => {
 
               {/* Patient List */}
               <div className="card overflow-hidden">
-                <div className="p-4 border-b border-orange-100 bg-orange-50/30">
+                <div className="p-4 border-b border-orange-100 bg-orange-50/30 flex flex-wrap items-center justify-between gap-3">
                   <h3 className="font-extrabold text-gray-900 flex items-center gap-2"><User className="h-5 w-5 text-orange-500" /> All Registered Patients</h3>
+                  
+                  {/* Date Filters for Patients Lookup */}
+                  <div className="flex bg-orange-100/50 p-0.5 rounded-lg border border-orange-100 w-fit select-none">
+                    <button
+                      type="button"
+                      onClick={() => setPatientDateFilter('previous')}
+                      className={`px-3 py-1 text-[10px] sm:text-xs font-bold rounded transition-all ${
+                        patientDateFilter === 'previous' ? 'bg-slate-600 text-white shadow-sm' : 'text-slate-800 hover:bg-slate-100/30'
+                      }`}
+                    >
+                      Previous ({getPatientDateCounts().previous})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPatientDateFilter('today')}
+                      className={`px-3 py-1 text-[10px] sm:text-xs font-bold rounded transition-all ${
+                        patientDateFilter === 'today' ? 'bg-orange-500 text-white shadow-sm' : 'text-orange-955 hover:bg-orange-100/30'
+                      }`}
+                    >
+                      Today ({getPatientDateCounts().todays})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPatientDateFilter('upcoming')}
+                      className={`px-3 py-1 text-[10px] sm:text-xs font-bold rounded transition-all ${
+                        patientDateFilter === 'upcoming' ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-955 hover:bg-blue-50/30'
+                      }`}
+                    >
+                      Upcoming ({getPatientDateCounts().upcoming})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPatientDateFilter('all')}
+                      className={`px-3 py-1 text-[10px] sm:text-xs font-bold rounded transition-all ${
+                        patientDateFilter === 'all' ? 'bg-green-600 text-white shadow-sm' : 'text-green-950 hover:bg-green-100/30'
+                      }`}
+                    >
+                      All ({getPatientDateCounts().all})
+                    </button>
+                  </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
+                  <table className="w-full text-left text-sm sm:text-base">
                     <thead>
-                      <tr className="bg-gray-50 text-xs font-bold uppercase text-gray-500 border-b border-orange-100">
-                        <th className="p-3 pl-4">Patient Name</th>
-                        <th className="p-3">UHID</th>
-                        <th className="p-3">Mobile</th>
-                        <th className="p-3">Gender</th>
-                        <th className="p-3">Department</th>
-                        <th className="p-3 pr-4 text-center">Actions</th>
+                      <tr className="bg-gray-50 text-xs sm:text-sm font-bold uppercase text-gray-500 border-b border-orange-100">
+                        <th className="p-3.5 pl-4">Patient Name</th>
+                        <th className="p-3.5">UHID</th>
+                        <th className="p-3.5">Mobile</th>
+                        <th className="p-3.5">Gender</th>
+                        <th className="p-3.5">Department</th>
+                        <th className="p-3.5 pr-4 text-center">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-orange-50">
@@ -1127,25 +1181,25 @@ const SameDayCareWorkspace = () => {
                             <SkeletonTable rows={4} columns={6} className="w-full" />
                           </td>
                         </tr>
-                      ) : patients.length === 0 ? (
+                      ) : filteredPatients.length === 0 ? (
                         <tr><td colSpan="6" className="p-8 text-center text-gray-400"><User className="h-8 w-8 mx-auto mb-2 opacity-50" /><p className="font-bold">No patients found</p></td></tr>
                       ) : (
-                        patients.map(p => (
+                        filteredPatients.map(p => (
                           <tr key={p._id} className="hover:bg-orange-50/20">
-                            <td className="p-3 pl-4">
-                              <span className="font-bold text-gray-955 block">{p.patientName}</span>
+                            <td className="p-3.5 pl-4">
+                              <span className="font-bold text-gray-955 text-sm sm:text-base block">{p.patientName}</span>
                               {p.registeredBy && p.registeredBy !== 'N/A' && (
-                                <span className="text-[10px] text-gray-500 font-bold block mt-0.5">
+                                <span className="text-xs text-gray-500 font-bold block mt-0.5">
                                   Registered by: <span className="capitalize text-orange-600">{p.registeredBy}</span>
                                 </span>
                               )}
                             </td>
-                            <td className="p-3 font-mono text-xs font-bold text-orange-700">{formatUhid(p.uhid)}</td>
-                            <td className="p-3 text-xs">{p.mobile}</td>
-                            <td className="p-3 text-xs">{p.gender}</td>
-                            <td className="p-3 text-xs">{p.department || '-'}</td>
-                            <td className="p-3 pr-4 text-center">
-                              <button onClick={() => loadPatientTreatments(p)} className="btn text-xs py-1.5 px-3">
+                            <td className="p-3.5 font-mono text-sm font-bold text-orange-700">{formatUhid(p.uhid)}</td>
+                            <td className="p-3.5 text-sm">{p.mobile}</td>
+                            <td className="p-3.5 text-sm">{p.gender}</td>
+                            <td className="p-3.5 text-sm">{p.department || '-'}</td>
+                            <td className="p-3.5 pr-4 text-center">
+                              <button onClick={() => loadPatientTreatments(p)} className="btn text-sm py-1.5 px-3">
                                 <Activity className="h-3.5 w-3.5" /> Start Care
                               </button>
                             </td>

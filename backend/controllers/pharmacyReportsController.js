@@ -55,14 +55,31 @@ const getAnalyticsDashboard = async (req, res) => {
       { $group: { _id: null, total: { $sum: '$totalAmount' } } }
     ]);
 
-    // Current Inventory Valuation
-    const inventoryValuation = await PharmacyInventory.aggregate([
+    // Current Inventory Valuation (Amount Ex GST and Amount Inc GST)
+    const inventoryTotals = await PharmacyInventory.aggregate([
       { $match: { hospitalId } },
-      { $group: { _id: null, totalValue: { $sum: { $multiply: ['$quantity', '$rate'] } } } }
+      {
+        $group: {
+          _id: null,
+          totalExGst: {
+            $sum: {
+              $ifNull: ['$amountExGst', { $multiply: [{ $ifNull: ['$rateExGst', 0] }, { $ifNull: ['$quantityPacks', 0] }] }]
+            }
+          },
+          totalIncGst: {
+            $sum: {
+              $ifNull: ['$amountIncGst', { $multiply: [{ $ifNull: ['$mrp', 0] }, { $ifNull: ['$quantityPacks', 0] }] }]
+            }
+          }
+        }
+      }
     ]);
 
     // Low stock, Expiring, Expired counts
-    const lowStockCount = await PharmacyInventory.countDocuments({ hospitalId, quantity: { $lte: 10 } });
+    const lowStockCount = await PharmacyInventory.countDocuments({
+      hospitalId,
+      $expr: { $lte: ["$quantityUnits", "$thresholdMedicineNumber"] }
+    });
     const expiringSoonCount = await PharmacyInventory.countDocuments({ hospitalId, expiry: { $gt: new Date(), $lte: ninetyDaysLater } });
     const expiredCount = await PharmacyInventory.countDocuments({ hospitalId, expiry: { $lte: new Date() } });
 
@@ -161,7 +178,8 @@ const getAnalyticsDashboard = async (req, res) => {
         monthlySales: monthlySales[0]?.total || 0,
         todayPurchase: todayPurchase[0]?.total || 0,
         monthlyPurchase: monthlyPurchase[0]?.total || 0,
-        inventoryValue: inventoryValuation[0]?.totalValue || 0,
+        totalExGst: inventoryTotals[0]?.totalExGst || 0,
+        totalIncGst: inventoryTotals[0]?.totalIncGst || 0,
         lowStock: lowStockCount,
         expiringSoon: expiringSoonCount,
         expired: expiredCount,
@@ -242,7 +260,10 @@ const getComprehensiveReports = async (req, res) => {
         break;
       }
       case 'out-of-stock': {
-        records = await PharmacyInventory.find({ hospitalId, quantity: { $lte: 10 } }).populate('supplierId', 'name code').sort({ quantity: 1 });
+        records = await PharmacyInventory.find({
+          hospitalId,
+          $expr: { $lte: ["$quantityUnits", "$thresholdMedicineNumber"] }
+        }).populate('supplierId', 'name code').sort({ quantityUnits: 1 });
         break;
       }
       case 'stock-adjustment': {

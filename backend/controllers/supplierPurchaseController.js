@@ -241,7 +241,22 @@ const increaseInventory = async (hospitalId, item, invoiceNumber, userId, suppli
   const quantity = Number(item.quantity) || 0;
   const free = Number(item.free) || 0;
 
-  // Search case-insensitively
+  const unitsPerPack = Number(item.unitsPerPack) || 1;
+  const description = String(item.description || '').trim();
+  const dosageForm = String(item.dosageForm || '').trim();
+  const packType = String(item.packType || item.pack || '').trim();
+  const purchaseRateExGst = Number(item.purchaseRateExGst) || Number(item.rate) || 0;
+  const sellingRateExGst = Number(item.sellingRateExGst) || Number(item.rateExGst) || 0;
+  const sgst = Number(item.sgst) || 0;
+  const cgst = Number(item.cgst) || 0;
+  const hsn = String(item.hsn || '0').trim();
+
+  const sellingCgst = item.sellingCgst !== undefined ? Number(item.sellingCgst) : cgst;
+  const sellingSgst = item.sellingSgst !== undefined ? Number(item.sellingSgst) : sgst;
+  const thresholdMedicineNumber = item.thresholdMedicineNumber !== undefined ? Number(item.thresholdMedicineNumber) : 10;
+
+  const mrp = sellingRateExGst * (1 + (sellingSgst + sellingCgst) / 100);
+
   const existingStock = await PharmacyInventory.findOne({
     hospitalId,
     itemName: { $regex: new RegExp('^' + itemName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '$', 'i') },
@@ -249,17 +264,24 @@ const increaseInventory = async (hospitalId, item, invoiceNumber, userId, suppli
   });
 
   if (existingStock) {
-    const previousStock = existingStock.quantity;
-    existingStock.quantity += quantity;
+    const prevUnits = existingStock.quantityUnits || 0;
+    const additionalUnits = (quantity + free) * unitsPerPack;
+    
+    existingStock.unitsPerPack = unitsPerPack;
+    existingStock.quantityUnits = prevUnits + additionalUnits;
+    existingStock.quantity = existingStock.quantityUnits;
+    
     existingStock.free += free;
-    existingStock.rate = Number(item.rate) || Number(item.purchaseRate) || 0;
-    existingStock.mrp = Number(item.mrp) || 0;
-    existingStock.pack = String(item.pack || '0').trim();
+    existingStock.rateExGst = sellingRateExGst;
+    existingStock.mrp = mrp;
+    existingStock.description = description || existingStock.description;
+    existingStock.dosageForm = dosageForm || existingStock.dosageForm;
+    existingStock.packType = packType || existingStock.packType;
     existingStock.expiry = new Date(item.expiry);
-    existingStock.hsn = String(item.hsn || '0').trim();
-    existingStock.sgst = Number(item.sgst) || 0;
-    existingStock.cst = Number(item.cgst) || Number(item.cst) || 0; // CGST mapped to 'cst' in schema
-    existingStock.amount = existingStock.rate * existingStock.quantity;
+    existingStock.hsn = hsn;
+    existingStock.sgst = sellingSgst;
+    existingStock.cgst = sellingCgst;
+    existingStock.thresholdMedicineNumber = thresholdMedicineNumber;
     existingStock.supplierId = supplierId || null;
     existingStock.supplierName = supplierName || '';
     existingStock.lastPurchaseDate = new Date();
@@ -271,45 +293,63 @@ const increaseInventory = async (hospitalId, item, invoiceNumber, userId, suppli
       itemName: existingStock.itemName,
       batch: existingStock.batch,
       type: 'Purchase',
-      quantity,
-      previousStock,
-      newStock: existingStock.quantity,
+      quantity: additionalUnits,
+      previousStock: prevUnits,
+      newStock: existingStock.quantityUnits,
       performedBy: userId,
       remarks: `Purchase GRN Invoice: ${invoiceNumber}`
     });
   } else {
-    // Determine sequential Sno
+    const existingMedicine = await PharmacyInventory.findOne({
+      hospitalId,
+      itemName: { $regex: new RegExp('^' + itemName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '$', 'i') }
+    });
+
+    const finalDescription = description || (existingMedicine ? existingMedicine.description : '');
+    const finalDosageForm = dosageForm || (existingMedicine ? existingMedicine.dosageForm : '');
+    const finalPackType = packType || (existingMedicine ? existingMedicine.packType : '');
+    const finalThreshold = item.thresholdMedicineNumber !== undefined ? Number(item.thresholdMedicineNumber) : (existingMedicine ? existingMedicine.thresholdMedicineNumber : 10);
+
     const count = await PharmacyInventory.countDocuments({ hospitalId });
     const sNo = count + 1;
 
-    const newStock = await PharmacyInventory.create({
+    const qUnits = (quantity + free) * unitsPerPack;
+
+    const newStock = new PharmacyInventory({
       hospitalId,
       sNo,
       itemName,
       batch,
-      quantity,
+      description: finalDescription,
+      dosageForm: finalDosageForm,
+      packType: finalPackType,
+      quantityPacks: quantity,
+      unitsPerPack,
+      quantityUnits: qUnits,
+      quantity: qUnits,
       free,
-      rate: Number(item.rate) || Number(item.purchaseRate) || 0,
-      mrp: Number(item.mrp) || 0,
-      pack: String(item.pack || '0').trim(),
+      rateExGst: sellingRateExGst,
+      mrp,
       expiry: new Date(item.expiry),
-      hsn: String(item.hsn || '0').trim(),
-      sgst: Number(item.sgst) || 0,
-      cst: Number(item.cgst) || Number(item.cst) || 0,
-      amount: (Number(item.quantity) || 0) * (Number(item.rate) || Number(item.purchaseRate) || 0),
+      hsn,
+      sgst: sellingSgst,
+      cgst: sellingCgst,
+      thresholdMedicineNumber: finalThreshold,
       supplierId: supplierId || null,
       supplierName: supplierName || '',
       lastPurchaseDate: new Date()
     });
+
+    await newStock.save();
 
     await PharmacyStockMovement.create({
       hospitalId,
       itemName: newStock.itemName,
       batch: newStock.batch,
       type: 'Purchase',
-      quantity,
+      quantity: qUnits,
       previousStock: 0,
-      newStock: newStock.quantity,
+      newStock: qUnits,
       performedBy: userId,
       remarks: `Purchase GRN Invoice: ${invoiceNumber}`
     });
@@ -371,24 +411,41 @@ const createPurchase = async (req, res) => {
       paymentType,
       dueDate: dueDate ? new Date(dueDate) : null,
       notes: notes || '',
-      items: items.map(it => ({
-        itemName: it.itemName.trim(),
-        batch: it.batch.trim(),
-        expiry: new Date(it.expiry),
-        pack: String(it.pack || '0').trim(),
-        quantity: Number(it.quantity) || 0,
-        free: Number(it.free) || 0,
-        rate: Number(it.rate) || Number(it.purchaseRate) || 0,
-        mrp: Number(it.mrp) || 0,
-        discountPercent: Number(it.discountPercent) || Number(it.dis) || 0,
-        discountAmount: Number(it.discountAmount) || 0,
-        sgst: Number(it.sgst) || 0,
-        cgst: Number(it.cgst) || Number(it.cst) || 0,
-        igst: Number(it.igst) || 0,
-        hsn: String(it.hsn || '0').trim(),
-        totalAmount: Number(it.totalAmount) || 0,
-        returnedQty: 0
-      })),
+      items: items.map(it => {
+        const sgst = Number(it.sgst) || 0;
+        const cgst = Number(it.cgst) || 0;
+        const sellingCgst = it.sellingCgst !== undefined ? Number(it.sellingCgst) : cgst;
+        const sellingSgst = it.sellingSgst !== undefined ? Number(it.sellingSgst) : sgst;
+        const sellingRateExGst = Number(it.sellingRateExGst) || 0;
+        const mrp = sellingRateExGst * (1 + (sellingSgst + sellingCgst) / 100);
+        return {
+          itemName: it.itemName.trim(),
+          batch: it.batch.trim(),
+          expiry: new Date(it.expiry),
+          pack: String(it.packType || it.pack || '0').trim(),
+          quantity: Number(it.quantity) || 0,
+          free: Number(it.free) || 0,
+          rate: Number(it.purchaseRateExGst) || Number(it.rate) || 0,
+          mrp: mrp,
+          discountPercent: Number(it.discountPercent) || Number(it.dis) || 0,
+          discountAmount: Number(it.discountAmount) || 0,
+          sgst: sgst,
+          cgst: cgst,
+          igst: Number(it.igst) || 0,
+          hsn: String(it.hsn || '0').trim(),
+          totalAmount: Number(it.totalAmount) || 0,
+          returnedQty: 0,
+          description: String(it.description || '').trim(),
+          dosageForm: String(it.dosageForm || '').trim(),
+          packType: String(it.packType || it.pack || '').trim(),
+          unitsPerPack: Number(it.unitsPerPack) || 1,
+          purchaseRateExGst: Number(it.purchaseRateExGst) || Number(it.rate) || 0,
+          sellingRateExGst: sellingRateExGst,
+          sellingCgst: sellingCgst,
+          sellingSgst: sellingSgst,
+          thresholdMedicineNumber: Number(it.thresholdMedicineNumber) || 10
+        };
+      }),
       totalAmount: Number(totalAmount) || 0,
       paidAmount: Number(paidAmount) || 0,
       pendingAmount: Number(pendingAmount) || 0,
@@ -459,10 +516,11 @@ const updatePurchase = async (req, res) => {
       });
 
       if (currentStock) {
-        const previousStock = currentStock.quantity;
-        currentStock.quantity = Math.max(0, currentStock.quantity - item.quantity);
+        const previousStock = currentStock.quantityUnits;
+        const unitsToRevert = (item.quantity + item.free) * (currentStock.unitsPerPack || 1);
+        currentStock.quantityUnits = Math.max(0, currentStock.quantityUnits - unitsToRevert);
+        currentStock.quantity = currentStock.quantityUnits;
         currentStock.free = Math.max(0, currentStock.free - item.free);
-        currentStock.amount = currentStock.rate * currentStock.quantity;
         await currentStock.save();
 
         // Stock movement revert log
@@ -471,9 +529,9 @@ const updatePurchase = async (req, res) => {
           itemName: currentStock.itemName,
           batch: currentStock.batch,
           type: 'Manual Adjustment',
-          quantity: -item.quantity,
+          quantity: -unitsToRevert,
           previousStock,
-          newStock: currentStock.quantity,
+          newStock: currentStock.quantityUnits,
           performedBy: req.user._id,
           remarks: `Reverted stock for Purchase Edit. Inv: ${oldPurchase.purchaseInvoiceNumber}`
         });
@@ -494,24 +552,41 @@ const updatePurchase = async (req, res) => {
     oldPurchase.paymentType = paymentType;
     oldPurchase.dueDate = dueDate ? new Date(dueDate) : null;
     oldPurchase.notes = notes || '';
-    oldPurchase.items = items.map(it => ({
-      itemName: it.itemName.trim(),
-      batch: it.batch.trim(),
-      expiry: new Date(it.expiry),
-      pack: String(it.pack || '0').trim(),
-      quantity: Number(it.quantity) || 0,
-      free: Number(it.free) || 0,
-      rate: Number(it.rate) || Number(it.purchaseRate) || 0,
-      mrp: Number(it.mrp) || 0,
-      discountPercent: Number(it.discountPercent) || Number(it.dis) || 0,
-      discountAmount: Number(it.discountAmount) || 0,
-      sgst: Number(it.sgst) || 0,
-      cgst: Number(it.cgst) || Number(it.cst) || 0,
-      igst: Number(it.igst) || 0,
-      hsn: String(it.hsn || '0').trim(),
-      totalAmount: Number(it.totalAmount) || 0,
-      returnedQty: it.returnedQty || 0
-    }));
+    oldPurchase.items = items.map(it => {
+      const sgst = Number(it.sgst) || 0;
+      const cgst = Number(it.cgst) || 0;
+      const sellingCgst = it.sellingCgst !== undefined ? Number(it.sellingCgst) : cgst;
+      const sellingSgst = it.sellingSgst !== undefined ? Number(it.sellingSgst) : sgst;
+      const sellingRateExGst = Number(it.sellingRateExGst) || 0;
+      const mrp = sellingRateExGst * (1 + (sellingSgst + sellingCgst) / 100);
+      return {
+        itemName: it.itemName.trim(),
+        batch: it.batch.trim(),
+        expiry: new Date(it.expiry),
+        pack: String(it.packType || it.pack || '0').trim(),
+        quantity: Number(it.quantity) || 0,
+        free: Number(it.free) || 0,
+        rate: Number(it.purchaseRateExGst) || Number(it.rate) || 0,
+        mrp: mrp,
+        discountPercent: Number(it.discountPercent) || Number(it.dis) || 0,
+        discountAmount: Number(it.discountAmount) || 0,
+        sgst: sgst,
+        cgst: cgst,
+        igst: Number(it.igst) || 0,
+        hsn: String(it.hsn || '0').trim(),
+        totalAmount: Number(it.totalAmount) || 0,
+        returnedQty: it.returnedQty || 0,
+        description: String(it.description || '').trim(),
+        dosageForm: String(it.dosageForm || '').trim(),
+        packType: String(it.packType || it.pack || '').trim(),
+        unitsPerPack: Number(it.unitsPerPack) || 1,
+        purchaseRateExGst: Number(it.purchaseRateExGst) || Number(it.rate) || 0,
+        sellingRateExGst: sellingRateExGst,
+        sellingCgst: sellingCgst,
+        sellingSgst: sellingSgst,
+        thresholdMedicineNumber: Number(it.thresholdMedicineNumber) || 10
+      };
+    });
     oldPurchase.totalAmount = Number(totalAmount) || 0;
     oldPurchase.paidAmount = Number(paidAmount) || 0;
     oldPurchase.pendingAmount = Number(pendingAmount) || 0;

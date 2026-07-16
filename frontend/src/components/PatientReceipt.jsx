@@ -157,7 +157,22 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
         <>
           <hr style={{ margin: '18px 0', border: '1px solid #000' }} />
           
-          {/* Diagnosis block removed as per request to not print remarks of doctor consultation */}
+          {/* Diagnosis / Remarks */}
+          {prescription.diagnosisRemark && (
+            <div style={{ marginBottom: '12px' }}>
+              <p style={{ fontWeight: 'bold', margin: '0 0 4px 0', fontSize: '11px' }}>{t(activeLang, 'diagnosis')}:</p>
+              <p style={{ 
+                margin: '0', 
+                padding: '6px 8px', 
+                border: '1px solid #000', 
+                fontSize: '10px',
+                lineHeight: '1.5',
+                whiteSpace: 'pre-line'
+              }}>
+                {prescription.diagnosisRemark}
+              </p>
+            </div>
+          )}
 
           {/* Medicines Table */}
           {prescription.medicines && prescription.medicines.filter(m => m.medicine).length > 0 && (

@@ -93,8 +93,8 @@ const createTreatment = async (req, res) => {
       source: finalSource,
       referredByDoctorName: finalReferredBy,
       referredByDoctorRemarks: referredByDoctorRemarks || '',
-      assignedStaffId: assignedStaffId || null,
-      assignedStaffName: assignedStaffName || '',
+      assignedStaffId: assignedStaffId || (req.user && req.user.role === 'doctor' ? req.user._id : null),
+      assignedStaffName: assignedStaffName || (req.user && req.user.role === 'doctor' ? (req.user.doctorName || req.user.username) : ''),
       chiefComplaint: chiefComplaint || '',
       presentIllness: presentIllness || '',
       clinicalFindings: clinicalFindings || '',
@@ -279,6 +279,11 @@ const getAllTreatments = async (req, res) => {
   try {
     const { treatmentType, status, fromDate, toDate, followUpRequired, followUpDate } = req.query;
     let query = tenantFilter(req);
+    
+    if (req.user && req.user.role === 'doctor') {
+      query.assignedStaffId = req.user._id;
+    }
+
     if (treatmentType) query.treatmentType = treatmentType;
     if (status) query.status = status;
     if (followUpRequired) query.followUpRequired = followUpRequired;
@@ -415,13 +420,21 @@ const getDialysisPatients = async (req, res) => {
     let query = tenantFilter(req);
 
     // Retrieve patients registered for same-day care or who already have daycare records
-    const sdtPatientIds = await SameDayTreatment.find(tenantFilter(req)).distinct('patientId');
-    const sdtVisitPatientIds = await Visit.find(tenantFilter(req, {
+    let sdtQuery = tenantFilter(req);
+    let visitQuery = {
       $or: [
         { department: { $regex: /^same day care$/i } },
         { visitType: 'Same Day Treatment' }
       ]
-    })).distinct('patientId');
+    };
+
+    if (req.user && req.user.role === 'doctor') {
+      sdtQuery.assignedStaffId = req.user._id;
+      visitQuery.doctorId = req.user._id;
+    }
+
+    const sdtPatientIds = await SameDayTreatment.find(sdtQuery).distinct('patientId');
+    const sdtVisitPatientIds = await Visit.find(tenantFilter(req, visitQuery)).distinct('patientId');
 
     const allowedPatientIds = [...new Set([
       ...sdtPatientIds.map(id => id.toString()),
@@ -488,6 +501,10 @@ const getDialysisRecords = async (req, res) => {
   try {
     const { search, physicianName, fromDate, toDate, status } = req.query;
     let query = tenantFilter(req, { treatmentType: 'Dialysis' });
+
+    if (req.user && req.user.role === 'doctor') {
+      query.assignedStaffId = req.user._id;
+    }
 
     if (status) {
       query.status = status;

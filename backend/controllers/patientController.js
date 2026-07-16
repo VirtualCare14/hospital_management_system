@@ -244,7 +244,9 @@ const createPatient = async (req, res) => {
         price: defaultPrice,
         isFixedPrice: true,
         createdBy: req.user._id,
-        updatedBy: req.user._id
+        updatedBy: req.user._id,
+        assignedStaffId: doctor._id,
+        assignedStaffName: doctor.doctorName || doctor.username
       });
 
       await sameDayTreatmentRecord.save();
@@ -319,13 +321,21 @@ const getPatients = async (req, res) => {
     }
 
     if (sameDayCareOnly === 'true') {
-      const sdtPatientIds = await SameDayTreatment.find(tenantQuery(req)).distinct('patientId');
-      const sdtVisitPatientIds = await Visit.find(tenantQuery(req, {
+      let sdtQuery = tenantQuery(req);
+      let visitQuery = {
         $or: [
           { department: { $regex: /^same day care$/i } },
           { visitType: 'Same Day Treatment' }
         ]
-      })).distinct('patientId');
+      };
+
+      if (req.user.role === 'doctor') {
+        sdtQuery.assignedStaffId = req.user._id;
+        visitQuery.doctorId = req.user._id;
+      }
+
+      const sdtPatientIds = await SameDayTreatment.find(sdtQuery).distinct('patientId');
+      const sdtVisitPatientIds = await Visit.find(tenantQuery(req, visitQuery)).distinct('patientId');
 
       const allowedPatientIds = [...new Set([
         ...sdtPatientIds.map(id => id.toString()),

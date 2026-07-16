@@ -65,10 +65,49 @@ const purchaseItemSchema = new mongoose.Schema({
     default: 0,
     min: 0
   },
-  hsn: {
+    hsn: {
     type: String,
     default: '0',
     trim: true
+  },
+  description: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  dosageForm: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  packType: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  unitsPerPack: {
+    type: Number,
+    default: 1
+  },
+  purchaseRateExGst: {
+    type: Number,
+    default: 0
+  },
+  sellingRateExGst: {
+    type: Number,
+    default: 0
+  },
+  sellingCgst: {
+    type: Number,
+    default: 0
+  },
+  sellingSgst: {
+    type: Number,
+    default: 0
+  },
+  thresholdMedicineNumber: {
+    type: Number,
+    default: 0
   },
   totalAmount: {
     type: Number,

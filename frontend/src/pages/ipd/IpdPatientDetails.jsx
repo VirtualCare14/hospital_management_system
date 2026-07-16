@@ -176,6 +176,7 @@ const IpdPatientDetails = () => {
   const [changeBedRooms, setChangeBedRooms] = useState([]);
   const [changeBedBeds, setChangeBedBeds] = useState([]);
   const [changingBed, setChangingBed] = useState(false);
+  const [loadingRooms, setLoadingRooms] = useState(false);
 
   // Pharmacy Requests Phase 2 State
   const [pharmacyRequests, setPharmacyRequests] = useState([]);
@@ -429,7 +430,24 @@ const IpdPatientDetails = () => {
     const { serviceName, price, gst, quantity } = consumableForm;
     if (!serviceName || !price || !quantity) { toast.error('Service name, price, and quantity are required'); return; }
     try {
-      const payload = { admissionId: id, serviceName, price: parseFloat(price), gst: parseFloat(gst || '0'), quantity: parseInt(quantity) };
+      const now = new Date();
+      const day = String(now.getDate()).padStart(2, '0');
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const year = now.getFullYear();
+      const dateStr = `${day}/${month}/${year}`;
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const timeStr = `${hours}:${minutes}`;
+
+      const payload = { 
+        admissionId: id, 
+        serviceName, 
+        price: parseFloat(price), 
+        gst: parseFloat(gst || '0'), 
+        quantity: parseInt(quantity),
+        date: dateStr,
+        time: timeStr
+      };
       const { data } = await client.post('/ipd/services/consumables', payload);
       toast.success(data.message);
       setShowAddConsumable(false);
@@ -535,14 +553,18 @@ const IpdPatientDetails = () => {
   };
 
   const handleOpenChangeBedModal = async () => {
+    setShowChangeBedModal(true);
+    setLoadingRooms(true);
     try {
       const { data: rooms } = await client.get('/rooms');
       setChangeBedRooms(rooms);
       setNewRoomType(admission?.roomId?.roomType || rooms[0]?.roomType || '');
       setNewBedId('');
-      setShowChangeBedModal(true);
     } catch (err) {
       toast.error('Failed to load rooms configuration');
+      setShowChangeBedModal(false);
+    } finally {
+      setLoadingRooms(false);
     }
   };
 
@@ -743,9 +765,10 @@ const IpdPatientDetails = () => {
               {admission.status !== 'Discharged' && (
                 <button
                   onClick={handleOpenChangeBedModal}
-                  className="btn-secondary text-xs py-1 px-2.5 flex items-center gap-1 text-orange-600 border-orange-200 hover:bg-orange-50"
+                  className="btn-secondary text-xs py-1 px-2.5 flex items-center gap-1 text-orange-600 border-orange-200 hover:bg-orange-50 cursor-pointer"
+                  disabled={loadingRooms}
                 >
-                  <RefreshCw className="h-3.5 w-3.5 text-orange-500 animate-hover" /> Change Bed
+                  <RefreshCw className={`h-3.5 w-3.5 text-orange-500 ${loadingRooms ? 'animate-spin' : 'animate-hover'}`} /> Change Bed
                 </button>
               )}
             </div>
@@ -1862,11 +1885,18 @@ const IpdPatientDetails = () => {
                       value={newRoomType}
                       onChange={(e) => setNewRoomType(e.target.value)}
                       required
+                      disabled={loadingRooms}
                     >
-                      <option value="">-- Select Room Type --</option>
-                      {[...new Set(changeBedRooms.map(r => r.roomType))].map((type) => (
-                        <option key={type} value={type}>{type}</option>
-                      ))}
+                      {loadingRooms ? (
+                        <option value="">Loading Room Types...</option>
+                      ) : (
+                        <>
+                          <option value="">-- Select Room Type --</option>
+                          {[...new Set(changeBedRooms.map(r => r.roomType))].map((type) => (
+                            <option key={type} value={type}>{type}</option>
+                          ))}
+                        </>
+                      )}
                     </select>
                   </div>
 
@@ -1877,7 +1907,7 @@ const IpdPatientDetails = () => {
                       value={newBedId}
                       onChange={(e) => setNewBedId(e.target.value)}
                       required
-                      disabled={!newRoomType}
+                      disabled={loadingRooms || !newRoomType}
                     >
                       <option value="">-- Select Bed --</option>
                       {changeBedBeds.map((bed) => (
@@ -1886,7 +1916,7 @@ const IpdPatientDetails = () => {
                         </option>
                       ))}
                     </select>
-                    {changeBedBeds.length === 0 && newRoomType && (
+                    {changeBedBeds.length === 0 && newRoomType && !loadingRooms && (
                       <p className="text-xs text-red-500 mt-1 font-semibold">No available beds in this room type.</p>
                     )}
                   </div>
@@ -1901,7 +1931,7 @@ const IpdPatientDetails = () => {
                     </button>
                     <button
                       type="submit"
-                      disabled={changingBed || !newBedId}
+                      disabled={changingBed || loadingRooms || !newBedId}
                       className="btn text-xs py-2 px-4 cursor-pointer bg-orange-500 hover:bg-orange-600"
                     >
                       {changingBed ? 'Changing...' : 'Change Bed'}
@@ -1914,14 +1944,28 @@ const IpdPatientDetails = () => {
         </div>
       )}
       <datalist id="ipd-pharmacy-medicines-datalist">
-        {pharmacyMedsList.map((m, i) => (
-          <option key={i} value={m.itemName} />
-        ))}
+        {pharmacyMedsList
+          .filter(m => {
+            const query = (medicineForm.medicineName || searchItemQuery || '').trim().toLowerCase();
+            if (!query) return false;
+            return m.itemName.toLowerCase().includes(query);
+          })
+          .map((m, i) => (
+            <option key={i} value={m.itemName} />
+          ))
+        }
       </datalist>
       <datalist id="ipd-consumables-datalist">
-        {consumableServicesList.map((c, i) => (
-          <option key={i} value={c.name} />
-        ))}
+        {consumableServicesList
+          .filter(c => {
+            const query = (consumableForm.serviceName || (requestItemType === 'consumable' ? searchItemQuery : '') || '').trim().toLowerCase();
+            if (!query) return false;
+            return c.name.toLowerCase().includes(query);
+          })
+          .map((c, i) => (
+            <option key={i} value={c.name} />
+          ))
+        }
       </datalist>
     </div>
   );
