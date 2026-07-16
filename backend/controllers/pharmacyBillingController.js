@@ -102,14 +102,46 @@ const createBill = async (req, res) => {
     const hospitalId = req.user.hospitalId;
     const userId = req.user._id;
 
+    if (!hospitalId) {
+      return res.status(400).json({ message: 'Hospital context is missing. Please re-login.' });
+    }
+
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: 'Bill must contain at least one item' });
     }
 
+    if (!paymentMethod || !['Cash', 'UPI', 'Card', 'Bank Transfer', 'Mixed Payment'].includes(paymentMethod)) {
+      return res.status(400).json({ message: 'Invalid or missing payment method' });
+    }
+
+    if (!paymentStatus || !['Paid', 'Partially Paid', 'Unpaid'].includes(paymentStatus)) {
+      return res.status(400).json({ message: 'Invalid or missing payment status' });
+    }
+
+    const gTotal = Number(grandTotal) || 0;
+    const pAmount = Number(paidAmount) || 0;
+    const balanceAmount = Math.max(0, gTotal - pAmount);
+
     // Verify stock and deduct
     for (const item of items) {
+      if (!item.itemName || typeof item.itemName !== 'string') {
+        return res.status(400).json({ message: 'Invalid or missing medicine name' });
+      }
+
+      if (!item.batch || typeof item.batch !== 'string') {
+        return res.status(400).json({ message: `Missing batch for ${item.itemName}` });
+      }
+
       if (typeof item.quantity !== 'number' || isNaN(item.quantity) || item.quantity <= 0) {
         return res.status(400).json({ message: `Invalid quantity for ${item.itemName}. Must be a positive decimal/integer.` });
+      }
+
+      if (typeof item.unitPrice !== 'number' || isNaN(item.unitPrice) || item.unitPrice < 0) {
+        return res.status(400).json({ message: `Invalid unit price for ${item.itemName}` });
+      }
+
+      if (typeof item.amount !== 'number' || isNaN(item.amount) || item.amount < 0) {
+        return res.status(400).json({ message: `Invalid amount for ${item.itemName}` });
       }
 
       const invItem = await PharmacyInventory.findOne({
@@ -170,7 +202,6 @@ const createBill = async (req, res) => {
     // Generate Bill Number
     const count = await PharmacyBill.countDocuments({ hospitalId });
     const billNumber = `PB-${10001 + count}`;
-    const balanceAmount = Math.max(0, grandTotal - (paidAmount || 0));
 
     let admissionId = null;
     if (patientId) {
@@ -190,11 +221,11 @@ const createBill = async (req, res) => {
       doctorId: doctorId || null,
       doctorName: doctorName || '',
       items,
-      subTotal,
-      discount: discount || 0,
-      gstAmount: gstAmount || 0,
-      grandTotal,
-      paidAmount: paidAmount || 0,
+      subTotal: Number(subTotal) || 0,
+      discount: Number(discount) || 0,
+      gstAmount: Number(gstAmount) || 0,
+      grandTotal: gTotal,
+      paidAmount: pAmount,
       balanceAmount,
       paymentMethod,
       mixedPayments: mixedPayments || [],
@@ -205,7 +236,7 @@ const createBill = async (req, res) => {
         performedBy: userId,
         performedByName: req.user.doctorName || req.user.username || 'System',
         timestamp: new Date(),
-        remarks: `Bill generated with amount ₹${grandTotal.toFixed(2)}`
+        remarks: `Bill generated with amount ₹${gTotal.toFixed(2)}`
       }]
     });
 
@@ -218,6 +249,10 @@ const createBill = async (req, res) => {
     res.status(201).json({ message: 'Pharmacy bill created successfully', bill: finalBill });
   } catch (error) {
     console.error('Create Bill Error:', error);
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(val => val.message);
+      return res.status(400).json({ message: `Validation Error: ${messages.join(', ')}` });
+    }
     res.status(500).json({ message: 'Server error' });
   }
 };
