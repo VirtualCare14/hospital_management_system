@@ -96,7 +96,8 @@ const createBill = async (req, res) => {
       paidAmount,
       paymentMethod,
       mixedPayments,
-      paymentStatus
+      paymentStatus,
+      remarks
     } = req.body;
 
     const hospitalId = req.user.hospitalId;
@@ -259,6 +260,7 @@ const createBill = async (req, res) => {
       paymentMethod,
       mixedPayments: mixedPayments || [],
       paymentStatus,
+      remarks: remarks || '',
       status: 'Active',
       auditTrail: [{
         action: 'Bill Created',

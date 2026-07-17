@@ -209,6 +209,10 @@ const pharmacyBillSchema = new mongoose.Schema({
     enum: ['Paid', 'Partially Paid', 'Unpaid'],
     required: true
   },
+  remarks: {
+    type: String,
+    default: ''
+  },
   status: {
     type: String,
     enum: ['Active', 'Returned', 'Partially Returned', 'Cancelled'],

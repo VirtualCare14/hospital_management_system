@@ -544,6 +544,7 @@ const getRegistrations = async (req, res) => {
       patientName: v.patientId?.patientName || '',
       mobile: v.patientId?.mobile || '',
       gender: v.patientId?.gender || '',
+      aadhaar: v.patientId?.aadhaar || '',
       department: v.department,
       doctorName: v.doctorId?.doctorName || v.doctorId?.username || '',
       appointmentDate: v.appointmentDate,

@@ -2158,6 +2158,7 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [mixedPayments, setMixedPayments] = useState({ Cash: 0, UPI: 0, Card: 0, BankTransfer: 0 });
   const [paidAmount, setPaidAmount] = useState(0);
+  const [remarks, setRemarks] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   // Printing State
@@ -2622,7 +2623,8 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
         paidAmount,
         paymentMethod,
         mixedPayments: paymentMethod === 'Mixed Payment' ? Object.entries(mixedPayments).map(([method, amount]) => ({ method, amount })) : [],
-        paymentStatus
+        paymentStatus,
+        remarks
       };
 
       const { data } = await client.post('/pharmacy/billing/bills', payload);
@@ -2632,6 +2634,7 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
       setBillItems([]);
       setPatientDetails({ name: '', mobile: '', age: '', gender: '' });
       clearPrescription();
+      setRemarks('');
 
       // Open Print Modal
       setPrintedBillId(data.bill._id);
@@ -2869,12 +2872,12 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
                 <th className="p-3">Expiry</th>
                 <th className="p-3 text-center">Stock</th>
                 <th className="p-3 w-[100px] text-center">Quantity</th>
-                <th className="p-3 text-right">Rate (Ex GST)</th>
+                <th className="p-3 text-right">MRP(ex gst)</th>
                 {gstMode !== 'none' && (
                   <>
-                    <th className="p-3 text-center">SGST %</th>
                     <th className="p-3 text-center">CGST %</th>
-                    <th className="p-3 text-right">MRP (Inc GST)</th>
+                    <th className="p-3 text-center">SGST %</th>
+                    <th className="p-3 text-right">MRP(Inc gst)</th>
                   </>
                 )}
                 <th className="p-3 w-[170px] text-center">Discount</th>
@@ -2938,26 +2941,11 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
                             onChange={(e) => handleCustomRateExGstChange(idx, e.target.value)}
                           />
                         ) : (
-                          <span>₹{item.baseRateExGst.toFixed(2)}</span>
+                          <span>₹{(item.unitRateExGst * item.unitsPerPack).toFixed(2)}</span>
                         )}
                       </td>
                       {gstMode !== 'none' && (
                         <>
-                          <td className="p-3 text-center font-semibold">
-                            {gstMode === 'custom' ? (
-                              <input 
-                                type="number" 
-                                step="0.1"
-                                min="0"
-                                max="100"
-                                className="input py-1 px-1 text-center text-xs w-[50px] border-indigo-200 focus:border-indigo-500"
-                                value={item.sgst}
-                                onChange={(e) => handleCustomSgstChange(idx, e.target.value)}
-                              />
-                            ) : (
-                              <span>{item.sgst}%</span>
-                            )}
-                          </td>
                           <td className="p-3 text-center font-semibold">
                             {gstMode === 'custom' ? (
                               <input 
@@ -2973,8 +2961,23 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
                               <span>{item.cgst}%</span>
                             )}
                           </td>
+                          <td className="p-3 text-center font-semibold">
+                            {gstMode === 'custom' ? (
+                              <input 
+                                type="number" 
+                                step="0.1"
+                                min="0"
+                                max="100"
+                                className="input py-1 px-1 text-center text-xs w-[50px] border-indigo-200 focus:border-indigo-500"
+                                value={item.sgst}
+                                onChange={(e) => handleCustomSgstChange(idx, e.target.value)}
+                              />
+                            ) : (
+                              <span>{item.sgst}%</span>
+                            )}
+                          </td>
                           <td className="p-3 text-right font-bold text-gray-800">
-                            ₹{item.rowMrp.toFixed(2)}
+                            ₹{(item.unitPrice * item.unitsPerPack).toFixed(2)}
                             {gstMode !== 'none' && (
                               <div className="text-[9px] text-gray-400 font-normal">(Tax: ₹{item.gstAmount.toFixed(2)})</div>
                             )}
@@ -3097,6 +3100,17 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
                 <option value="Bank Transfer">Bank Transfer</option>
                 <option value="Mixed Payment">Mixed Payment (Split)</option>
               </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block font-bold text-gray-500">Remarks (Optional)</label>
+              <input 
+                type="text" 
+                placeholder="Enter remarks for this bill..." 
+                className="input py-2 text-xs"
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+              />
             </div>
 
             {paymentMethod === 'Mixed Payment' ? (
@@ -3344,10 +3358,10 @@ const InvoicePrintModal = ({ billId, onClose }) => {
                   <th className="p-2.5">Medicine Details</th>
                   <th className="p-2.5">Batch</th>
                   <th className="p-2.5 text-center">Qty</th>
-                  <th className="p-2.5 text-right">Rate (Ex GST)</th>
-                  <th className="p-2.5 text-center">SGST</th>
+                  <th className="p-2.5 text-right">MRP(ex gst)</th>
                   <th className="p-2.5 text-center">CGST</th>
-                  <th className="p-2.5 text-right">Mrp (Inc GST)</th>
+                  <th className="p-2.5 text-center">SGST</th>
+                  <th className="p-2.5 text-right">MRP(Inc gst)</th>
                   <th className="p-2.5 text-right">Discount</th>
                   <th className="p-2.5 text-right">Total</th>
                 </tr>
@@ -3364,6 +3378,8 @@ const InvoicePrintModal = ({ billId, onClose }) => {
                   const baseRateExGst = item.baseRateExGst !== undefined 
                     ? item.baseRateExGst 
                     : (unitRateExGst * (item.quantity - item.returnedQty) * (item.unitsPerPack || 1));
+                  const packMrpExGst = unitRateExGst * (item.unitsPerPack || 1);
+                  const packMrpIncGst = unitPrice * (item.unitsPerPack || 1);
 
                   const discVal = item.discountValue !== undefined ? item.discountValue : item.discount;
                   const discType = item.discountType || 'percentage';
@@ -3397,10 +3413,10 @@ const InvoicePrintModal = ({ billId, onClose }) => {
                           <div className="text-[9px] font-black text-red-655 uppercase">Ret: {item.returnedQty}</div>
                         )}
                       </td>
-                      <td className="p-2.5 text-right font-semibold">₹{baseRateExGst.toFixed(2)}</td>
-                      <td className="p-2.5 text-center font-semibold">{sgstPercent}%</td>
+                      <td className="p-2.5 text-right font-semibold">₹{packMrpExGst.toFixed(2)}</td>
                       <td className="p-2.5 text-center font-semibold">{cgstPercent}%</td>
-                      <td className="p-2.5 text-right font-semibold">₹{unitPrice.toFixed(2)}</td>
+                      <td className="p-2.5 text-center font-semibold">{sgstPercent}%</td>
+                      <td className="p-2.5 text-right font-semibold">₹{packMrpIncGst.toFixed(2)}</td>
                       <td className="p-2.5 text-right font-semibold">{discountStr || '-'}</td>
                       <td className="p-2.5 text-right font-bold text-gray-950">₹{item.amount.toFixed(2)}</td>
                     </tr>
@@ -3592,19 +3608,20 @@ const SalesHistoryView = () => {
                 <th className="p-3.5 text-center">Method</th>
                 <th className="p-3.5 text-center">Payment</th>
                 <th className="p-3.5 text-center">Status</th>
+                <th className="p-3.5 text-left">Remarks</th>
                 <th className="p-3.5 pr-4 text-center">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-orange-50">
               {loading ? (
                 <tr>
-                  <td colSpan="11" className="p-8 text-center text-gray-400">
-                    <Loader2 className="h-6 w-6 animate-spin text-orange-500 inline mr-2" /> Loading invoices...
+                  <td colSpan="12" className="p-8 text-center text-gray-400">
+                    <Loader2 className="h-6 w-6 animate-spin text-orange-550 inline mr-2" /> Loading invoices...
                   </td>
                 </tr>
               ) : bills.length === 0 ? (
                 <tr>
-                  <td colSpan="11" className="p-8 text-center text-gray-400">
+                  <td colSpan="12" className="p-8 text-center text-gray-400">
                     <FileText className="h-8 w-8 mx-auto mb-2 opacity-50 text-orange-500" />
                     <p className="font-bold">No sales records found</p>
                     <p className="text-xs">Adjust search parameters or generate new bills.</p>
@@ -3649,6 +3666,9 @@ const SalesHistoryView = () => {
                       }`}>
                         {b.status}
                       </span>
+                    </td>
+                    <td className="p-3.5 text-xs text-gray-500 max-w-[150px] truncate" title={b.remarks || ''}>
+                      {b.remarks || '-'}
                     </td>
                     <td className="p-3.5 pr-4 text-center">
                       <button 
@@ -4321,6 +4341,7 @@ const ReportsWorkspace = () => {
                     <th className="p-3 text-center">Payment Mode</th>
                     <th className="p-3 text-right">Total Amount (₹)</th>
                     <th className="p-3">Prescribing Doctor</th>
+                    <th className="p-3 text-left">Remarks</th>
                     <th className="p-3 text-center">Status</th>
                   </>
                 )}
@@ -4440,6 +4461,9 @@ const ReportsWorkspace = () => {
                         <td className="p-2.5 text-center">{r.paymentMethod}</td>
                         <td className="p-2.5 text-right font-black text-gray-850">₹{r.grandTotal.toFixed(2)}</td>
                         <td className="p-2.5 text-gray-600 font-semibold">{r.doctorName || 'Self / Hospital'}</td>
+                        <td className="p-2.5 text-xs text-gray-500 max-w-[150px] truncate" title={r.remarks || ''}>
+                          {r.remarks || '-'}
+                        </td>
                         <td className="p-2.5 text-center">
                           <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-black uppercase ${
                             r.status === 'Active' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-750'

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Eye, Printer, Search, Trash2, X, Calendar, Hash, Users, FileText, Clock, Filter, ChevronDown } from 'lucide-react';
+import { Eye, Printer, Search, Trash2, X, Calendar, Hash, Users, FileText, Clock, Filter, ChevronDown, Copy } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import toast from 'react-hot-toast';
@@ -256,7 +256,27 @@ const PatientList = () => {
                   <tr key={reg._id} className="border-t border-orange-50">
                     <td className="p-3 font-mono font-bold text-xs text-blue-700">{reg.registrationNumber}</td>
                     <td className="p-3 font-bold text-orange-700 text-xs">{formatUhid(reg.uhid)}</td>
-                    <td className="p-3">{reg.patientName}</td>
+                    <td className="p-3">
+                      <div className="font-bold text-gray-800">{reg.patientName}</div>
+                      <div className="text-xs text-gray-500 flex flex-wrap items-center gap-2 mt-1">
+                        <span className="font-mono font-semibold">Mob: {reg.mobile || 'N/A'}</span>
+                        {reg.aadhaar && (
+                          <>
+                            <span className="text-gray-300">•</span>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(reg.aadhaar);
+                                toast.success('Aadhaar copied to clipboard!');
+                              }}
+                              className="text-[10px] text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 cursor-pointer font-medium bg-transparent border-none p-0"
+                              title="Copy Aadhaar Card Number"
+                            >
+                              <Copy className="h-3 w-3" /> Aadhaar: {reg.aadhaar}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </td>
                     <td className="p-3 text-xs">
                       {reg.registrationDate ? new Date(reg.registrationDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
                       <br />
