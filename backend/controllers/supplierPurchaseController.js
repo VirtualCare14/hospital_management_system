@@ -271,9 +271,13 @@ const increaseInventory = async (hospitalId, item, invoiceNumber, userId, suppli
     existingStock.quantityUnits = prevUnits + additionalUnits;
     existingStock.quantity = existingStock.quantityUnits;
     
-    existingStock.free += free;
+    existingStock.free = (existingStock.free || 0) + free;
     existingStock.rateExGst = sellingRateExGst;
     existingStock.mrp = mrp;
+    existingStock.purchaseRateExGst = purchaseRateExGst;
+    existingStock.purchaseRateIncGst = purchaseRateExGst * (1 + (cgst + sgst) / 100);
+    existingStock.mrpExGst = sellingRateExGst;
+    existingStock.purchaseInvoiceNumber = invoiceNumber;
     existingStock.description = description || existingStock.description;
     existingStock.dosageForm = dosageForm || existingStock.dosageForm;
     existingStock.packType = packType || existingStock.packType;
@@ -330,6 +334,10 @@ const increaseInventory = async (hospitalId, item, invoiceNumber, userId, suppli
       free,
       rateExGst: sellingRateExGst,
       mrp,
+      purchaseRateExGst: purchaseRateExGst,
+      purchaseRateIncGst: purchaseRateExGst * (1 + (cgst + sgst) / 100),
+      mrpExGst: sellingRateExGst,
+      purchaseInvoiceNumber: invoiceNumber,
       expiry: new Date(item.expiry),
       hsn,
       sgst: sellingSgst,
@@ -492,6 +500,19 @@ const updatePurchase = async (req, res) => {
       return res.status(400).json({ message: 'Invoice number and supplier details are required.' });
     }
 
+    // Check unique invoice number for this supplier & hospital (excluding this purchase entry)
+    const duplicateQuery = { hospitalId, purchaseInvoiceNumber, _id: { $ne: id } };
+    if (supplierId) {
+      duplicateQuery.supplierId = supplierId;
+    } else {
+      duplicateQuery.supplierName = finalSupplierName;
+      duplicateQuery.supplierId = null;
+    }
+    const duplicate = await Purchase.findOne(duplicateQuery);
+    if (duplicate) {
+      return res.status(400).json({ message: 'A purchase invoice with this number already exists for the selected supplier.' });
+    }
+
     // Check if stock has been used/sold/dispensed
     for (const item of oldPurchase.items) {
       const currentStock = await PharmacyInventory.findOne({
@@ -500,7 +521,8 @@ const updatePurchase = async (req, res) => {
         batch: { $regex: new RegExp('^' + item.batch.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '$', 'i') }
       });
 
-      if (!currentStock || currentStock.quantity < (item.quantity + item.free - item.returnedQty)) {
+      const requiredUnits = (item.quantity + item.free - (item.returnedQty || 0)) * (currentStock?.unitsPerPack || 1);
+      if (!currentStock || currentStock.quantityUnits < requiredUnits) {
         return res.status(400).json({
           message: `Cannot edit this invoice. Stock for medicine '${item.itemName}' (Batch: ${item.batch}) has already been partially used, returned, or dispensed.`
         });
@@ -520,7 +542,7 @@ const updatePurchase = async (req, res) => {
         const unitsToRevert = (item.quantity + item.free) * (currentStock.unitsPerPack || 1);
         currentStock.quantityUnits = Math.max(0, currentStock.quantityUnits - unitsToRevert);
         currentStock.quantity = currentStock.quantityUnits;
-        currentStock.free = Math.max(0, currentStock.free - item.free);
+        currentStock.free = Math.max(0, (currentStock.free || 0) - item.free);
         await currentStock.save();
 
         // Stock movement revert log

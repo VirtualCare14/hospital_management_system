@@ -75,6 +75,23 @@ const pharmacyInventorySchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  purchaseRateExGst: {
+    type: Number,
+    default: 0
+  },
+  purchaseRateIncGst: {
+    type: Number,
+    default: 0
+  },
+  mrpExGst: {
+    type: Number,
+    default: 0
+  },
+  purchaseInvoiceNumber: {
+    type: String,
+    default: '',
+    trim: true
+  },
   hsn: {
     type: String,
     default: '0',
@@ -177,6 +194,17 @@ pharmacyInventorySchema.pre('save', function() {
   this.amount = this.quantityPacks * this.rateExGst;
   this.amountExGst = this.rateExGst * this.quantityPacks;
   this.amountIncGst = this.mrp * this.quantityPacks;
+
+  // Set defaults for purchase rates and mrpExGst if they are not set
+  if (!this.purchaseRateExGst) {
+    this.purchaseRateExGst = this.rateExGst;
+  }
+  if (!this.purchaseRateIncGst) {
+    this.purchaseRateIncGst = this.purchaseRateExGst * (1 + ((this.sgst + this.cgst) / 100));
+  }
+  if (!this.mrpExGst) {
+    this.mrpExGst = this.mrp / (1 + ((this.sgst + this.cgst) / 100)) || this.rateExGst;
+  }
 });
 
 // Compound index for unique check per hospital, medicine name and batch number

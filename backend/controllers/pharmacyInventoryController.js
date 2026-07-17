@@ -75,6 +75,10 @@ const saveOrUpdateInventoryItem = async ({
     existing.sgst = sgst;
     existing.cgst = cgst;
     existing.mrp = mrp;
+    existing.purchaseRateExGst = existing.purchaseRateExGst || rateExGst;
+    existing.purchaseRateIncGst = existing.purchaseRateIncGst || (rateExGst * (1 + (sgst + cgst) / 100));
+    existing.mrpExGst = existing.mrpExGst || (mrp / (1 + (sgst + cgst) / 100)) || rateExGst;
+    existing.purchaseInvoiceNumber = existing.purchaseInvoiceNumber || invoiceNumber || '';
     existing.hsn = hsn;
     existing.expiry = expiryDate;
     existing.thresholdMedicineNumber = thresholdMedicineNumber;
@@ -131,6 +135,10 @@ const saveOrUpdateInventoryItem = async ({
       sgst,
       cgst,
       mrp,
+      purchaseRateExGst: rateExGst,
+      purchaseRateIncGst: rateExGst * (1 + (sgst + cgst) / 100),
+      mrpExGst: (mrp / (1 + (sgst + cgst) / 100)) || rateExGst,
+      purchaseInvoiceNumber: invoiceNumber || '',
       hsn: finalHsn,
       thresholdMedicineNumber: finalThreshold,
       supplierId: finalSupplierId,
