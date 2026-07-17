@@ -525,12 +525,63 @@ const InventoryView = () => {
     setPage(1);
   };
 
+  const handleDownloadStock = async () => {
+    const toastId = toast.loading('Preparing stock file for download...');
+    try {
+      const params = new URLSearchParams({
+        limit: 1000000,
+        page: 1,
+        search,
+        status,
+        sortBy,
+        sortOrder
+      });
+      const { data } = await client.get(`/pharmacy/inventory?${params.toString()}`);
+      const itemsToExport = data.items || [];
+
+      if (itemsToExport.length === 0) {
+        toast.error('No inventory items to export.', { id: toastId });
+        return;
+      }
+
+      // Map raw db items to a clean format for Excel columns
+      const formatted = itemsToExport.map((item, idx) => ({
+        'S.No': item.sNo || idx + 1,
+        'Medicine Name': item.itemName,
+        'Description': item.description || '',
+        'Dosage Form': item.dosageForm || '',
+        'Pack Type': item.packType || '',
+        'Units per Pack': item.unitsPerPack,
+        'Available Units': item.quantityUnits,
+        'Available Packs': item.quantityPacks,
+        'Batch No': item.batch,
+        'Expiry Date': item.expiry ? new Date(item.expiry).toLocaleDateString('en-GB') : '',
+        'Rate Ex GST (Pack)': item.rateExGst,
+        'Per Unit Rate': item.perUnitRate,
+        'SGST %': item.sgst,
+        'CGST %': item.cgst,
+        'MRP Inc GST (Pack)': item.mrp,
+        'HSN Code': item.hsn || '',
+        'Threshold Qty': item.thresholdMedicineNumber
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(formatted);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Stock Inventory');
+      XLSX.writeFile(workbook, `Pharmacy_Stock_Inventory_${new Date().toISOString().split('T')[0]}.xlsx`);
+      toast.success('Stock inventory downloaded successfully!', { id: toastId });
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to download stock inventory.', { id: toastId });
+    }
+  };
+
   return (
     <div className="space-y-4 animate-fade-in">
       {/* Filters Card */}
       <div className="card p-5 space-y-4">
-        <div className="flex flex-col md:flex-row gap-3">
-          <div className="relative flex-1">
+        <div className="flex flex-col lg:flex-row gap-4 justify-between items-start lg:items-center">
+          <div className="relative w-full lg:max-w-xs">
             <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
             <input 
               type="text" 
@@ -540,28 +591,63 @@ const InventoryView = () => {
               onChange={handleSearchChange}
             />
           </div>
-          <div className="flex flex-wrap gap-1.5 items-center">
-            <span className="text-xs font-bold text-gray-500 mr-1.5">Filters:</span>
-            {[
-              { label: 'All', code: '' },
-              { label: 'Green', code: 'Green' },
-              { label: 'Yellow', code: 'Yellow' },
-              { label: 'Red', code: 'Red' },
-              { label: 'Blue', code: 'Blue' },
-              { label: 'Orange', code: 'Orange' }
-            ].map(f => (
-              <button 
-                key={f.label} 
-                onClick={() => handleStatusFilter(f.code)}
-                className={`px-3 py-1 rounded-xl text-xs font-bold border transition ${
-                  status === f.code 
-                    ? 'bg-orange-500 text-white border-orange-500 shadow-sm' 
-                    : 'bg-orange-50/30 text-gray-700 border-orange-100 hover:bg-orange-50'
-                }`}
+          
+          <div className="flex flex-wrap gap-4 items-center w-full lg:w-auto">
+            <div className="flex flex-wrap gap-1.5 items-center">
+              <span className="text-xs font-bold text-gray-550 mr-1.5">Filters:</span>
+              {[
+                { label: 'All', code: '' },
+                { label: 'Green', code: 'Green' },
+                { label: 'Yellow', code: 'Yellow' },
+                { label: 'Red', code: 'Red' },
+                { label: 'Blue', code: 'Blue' },
+                { label: 'Orange', code: 'Orange' }
+              ].map(f => (
+                <button 
+                  key={f.label} 
+                  onClick={() => handleStatusFilter(f.code)}
+                  className={`px-3 py-1 rounded-xl text-xs font-bold border transition ${
+                    status === f.code 
+                      ? 'bg-orange-500 text-white border-orange-500 shadow-sm' 
+                      : 'bg-orange-50/30 text-gray-700 border-orange-100 hover:bg-orange-50'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-gray-550">Sort By:</span>
+              <select
+                value={`${sortBy}-${sortOrder}`}
+                onChange={(e) => {
+                  const [field, order] = e.target.value.split('-');
+                  setSortBy(field);
+                  setSortOrder(order);
+                  setPage(1);
+                }}
+                className="input py-1.5 px-3 text-xs font-semibold w-[180px] bg-white border-orange-100 focus:border-orange-500 rounded-xl"
               >
-                {f.label}
-              </button>
-            ))}
+                <option value="itemName-asc">Alphabetical (A-Z)</option>
+                <option value="itemName-desc">Alphabetical (Z-A)</option>
+                <option value="createdAt-desc">Date Added (Newest)</option>
+                <option value="createdAt-asc">Date Added (Oldest)</option>
+                <option value="sNo-asc">Serial Number (Asc)</option>
+                <option value="sNo-desc">Serial Number (Desc)</option>
+                <option value="quantity-desc">Quantity (High-Low)</option>
+                <option value="quantity-asc">Quantity (Low-High)</option>
+                <option value="expiry-asc">Expiry Date (Soonest)</option>
+                <option value="expiry-desc">Expiry Date (Latest)</option>
+              </select>
+            </div>
+
+            <button
+              onClick={handleDownloadStock}
+              className="btn py-2 px-4 text-xs font-bold flex items-center gap-1.5 cursor-pointer bg-gradient-to-r from-green-600 to-emerald-605 text-white border-0 shadow-sm hover:from-green-700 hover:to-emerald-700 transition-all rounded-xl"
+            >
+              <FileSpreadsheet className="h-4 w-4" /> Download Stock
+            </button>
           </div>
         </div>
       </div>
@@ -572,7 +658,9 @@ const InventoryView = () => {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="bg-gradient-to-r from-orange-50 to-amber-50 text-[10px] font-bold uppercase text-gray-600 border-b border-orange-100 select-none">
-                <th className="p-3 pl-4">Sno.</th>
+                <th onClick={() => toggleSort('sNo')} className="p-3 pl-4 cursor-pointer hover:text-orange-600 transition">
+                  Sno. {sortBy === 'sNo' ? (sortOrder === 'asc' ? '▲' : '▼') : ''}
+                </th>
                 <th onClick={() => toggleSort('itemName')} className="p-3 cursor-pointer hover:text-orange-600 transition">
                   Medicine {sortBy === 'itemName' ? (sortOrder === 'asc' ? '▲' : '▼') : ''}
                 </th>
@@ -3296,7 +3384,6 @@ const InvoicePrintModal = ({ billId, onClose }) => {
                         <span className={`font-extrabold text-gray-900 ${item.returnedQty === item.quantity ? 'line-through text-red-500' : ''}`}>
                           {item.itemName}
                         </span>
-                        {item.pack && <span className="text-[10px] text-gray-400 ml-1.5 font-semibold">({item.pack})</span>}
                         {item.returnedQty === item.quantity && (
                           <span className="text-[9px] font-black uppercase text-red-600 bg-red-50 border border-red-200 px-1 py-0.5 rounded ml-2">
                             Fully Returned

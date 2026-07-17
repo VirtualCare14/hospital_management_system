@@ -27,7 +27,7 @@ const Home = () => {
   const [hospital, setHospital] = useState(null);
 
   // Portal lookup form state
-  const [searchName, setSearchName] = useState('');
+  const [searchCode, setSearchCode] = useState('');
   const [searching, setSearching] = useState(false);
 
   // Active website section state
@@ -55,19 +55,19 @@ const Home = () => {
 
   const handlePortalLookup = async (e) => {
     e.preventDefault();
-    if (!searchName.trim()) {
-      toast.error('Please enter a hospital name');
+    if (!searchCode.trim()) {
+      toast.error('Please enter a hospital unique access code');
       return;
     }
     setSearching(true);
     try {
-      const { data } = await client.get(`/auth/hospital-lookup?name=${encodeURIComponent(searchName.trim())}`);
+      const { data } = await client.get(`/auth/hospital-lookup?code=${encodeURIComponent(searchCode.trim())}`);
       toast.success(`Redirecting to ${data.name} Portal...`);
       // Redirect to the super admin created URL
       navigate(`/hospital/${data.id}`);
     } catch (err) {
       console.error(err);
-      toast.error(err.response?.data?.message || 'Hospital not found in super admin records.');
+      toast.error(err.response?.data?.message || 'Hospital code not found in super admin records.');
     } finally {
       setSearching(false);
     }
@@ -193,9 +193,9 @@ const Home = () => {
                   <form onSubmit={handlePortalLookup} className="flex gap-2">
                     <input
                       type="text"
-                      placeholder="Enter hospital name..."
-                      value={searchName}
-                      onChange={(e) => setSearchName(e.target.value)}
+                      placeholder="Enter hospital access code..."
+                      value={searchCode}
+                      onChange={(e) => setSearchCode(e.target.value)}
                       className="input rounded-xl border-orange-100 focus:border-orange-500 py-3"
                       disabled={searching}
                     />
@@ -426,18 +426,18 @@ const Home = () => {
                   <UserCheck className="h-8 w-8" />
                 </div>
                 <h3 className="text-2xl font-black text-gray-900 tracking-tight">Hospital Portal Entry</h3>
-                <p className="text-xs text-gray-500 mt-1">Enter your organization name registered in super admin records.</p>
+                <p className="text-xs text-gray-550 mt-1">Enter your unique hospital access code provided by super admin.</p>
               </div>
 
               <form onSubmit={handlePortalLookup} className="space-y-4 text-xs font-semibold text-gray-700">
                 <div>
-                  <label className="block mb-2 font-bold uppercase tracking-wider text-gray-500">Hospital Name</label>
+                  <label className="block mb-2 font-bold uppercase tracking-wider text-gray-500">Hospital Access Code</label>
                   <input
                     type="text"
                     required
-                    placeholder="Enter hospital name (e.g. Prayas healthcare)..."
-                    value={searchName}
-                    onChange={(e) => setSearchName(e.target.value)}
+                    placeholder="Enter hospital access code..."
+                    value={searchCode}
+                    onChange={(e) => setSearchCode(e.target.value)}
                     className="input rounded-xl py-3 text-sm focus:border-orange-500 focus:ring-orange-100 transition-all duration-300"
                     disabled={searching}
                   />

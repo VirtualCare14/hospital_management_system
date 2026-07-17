@@ -35,7 +35,8 @@ import {
   DoorOpen,
   Trash2,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  CreditCard
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -149,7 +150,7 @@ const Sidebar = () => {
         )}
 
         {/* Reception Links (Module 1) */}
-        {!location.pathname.startsWith('/admin') && hasAccess([1]) && (
+        {hasAccess([1]) && (
           <div className={user.role === 'admin' ? "mt-6" : ""}>
             <span className="px-4 text-xs font-bold text-orange-400 uppercase tracking-widest block mb-2">Patient Services</span>
             <div className="space-y-1">
@@ -169,7 +170,7 @@ const Sidebar = () => {
         )}
 
         {/* Doctor Links (Module 2 & 3) */}
-        {!location.pathname.startsWith('/admin') && hasAccess([2]) && (
+        {hasAccess([2]) && (
           <div className="mt-6">
             <span className="px-4 text-xs font-bold text-orange-400 uppercase tracking-widest block mb-2">Clinical Portal</span>
             <div className="space-y-1">
@@ -187,7 +188,7 @@ const Sidebar = () => {
             </div>
           </div>
         )}
-        {!location.pathname.startsWith('/admin') && hasAccess([4]) && (
+        {hasAccess([4]) && (
           <div className="mt-6">
             <span className="px-4 text-xs font-bold text-orange-400 uppercase tracking-widest block mb-2">Diagnostics</span>
             <NavLink to="/lab" className={({ isActive }) => isActive ? activeStyle : inactiveStyle}>
@@ -208,7 +209,7 @@ const Sidebar = () => {
             </div>
           </div>
         )}
-        {!location.pathname.startsWith('/admin') && hasAccess([5]) && (
+        {hasAccess([5]) && (
           <div className="mt-6">
             <span className="px-4 text-xs font-bold text-orange-400 uppercase tracking-widest block mb-2">Inpatient Services</span>
             <div className="space-y-1">
@@ -239,7 +240,7 @@ const Sidebar = () => {
             </div>
           </div>
         )}
-        {!location.pathname.startsWith('/admin') && hasAccess([6]) && (
+        {hasAccess([6]) && (
           <div className="mt-6">
             <span className="px-4 text-xs font-bold text-orange-400 uppercase tracking-widest block mb-2">Day Care</span>
             <div className="space-y-1">
@@ -266,7 +267,7 @@ const Sidebar = () => {
             </div>
           </div>
         )}
-        {!location.pathname.startsWith('/admin') && hasAccess([7]) && (
+        {hasAccess([7]) && (
           <div className="mt-6">
             <span className="px-4 text-xs font-bold text-orange-400 uppercase tracking-widest block mb-2">Pharmacy</span>
             <NavLink to="/pharmacy" className={({ isActive }) => isActive ? activeStyle : inactiveStyle}>
@@ -342,6 +343,23 @@ const Sidebar = () => {
                   </NavLink>
                 );
               })}
+            </div>
+          </div>
+        )}
+        {hasAccess([8]) && (
+          <div className="mt-6">
+            <span className="px-4 text-xs font-bold text-orange-400 uppercase tracking-widest block mb-2">Billing Desk</span>
+            <NavLink to="/module/8?tab=billing" className={({ isActive }) => isActive && window.location.search.includes('tab=billing') ? activeStyle : inactiveStyle}>
+              <CreditCard className="h-5 w-5" />
+              OPD/IPD Billing Desk
+            </NavLink>
+            <div className="mt-2 space-y-1">
+              <NavLink to="/module/8?tab=registry" className={() => window.location.search.includes('tab=registry') ? activeSubStyle : inactiveSubStyle}>
+                <FileText className="h-4 w-4" /> Invoice Registry
+              </NavLink>
+              <NavLink to="/module/8?tab=dashboard" className={() => window.location.search.includes('tab=dashboard') ? activeSubStyle : inactiveSubStyle}>
+                <LayoutDashboard className="h-4 w-4" /> Billing Dashboard
+              </NavLink>
             </div>
           </div>
         )}

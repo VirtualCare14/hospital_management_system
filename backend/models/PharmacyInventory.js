@@ -165,16 +165,32 @@ const pharmacyInventorySchema = new mongoose.Schema({
 
 // Pre-save middleware to keep quantity, quantityUnits, quantityPacks, rates, and amounts automatically synchronized
 pharmacyInventorySchema.pre('save', function() {
-  // Sync quantity and quantityUnits
-  if (this.isModified('quantity')) {
-    this.quantityUnits = this.quantity;
-  } else if (this.isModified('quantityUnits')) {
+  const up = this.unitsPerPack > 0 ? this.unitsPerPack : 1;
+
+  // 1. If quantityPacks is explicitly modified but quantityUnits/quantity are not
+  if (this.isModified('quantityPacks') && !this.isModified('quantityUnits') && !this.isModified('quantity')) {
+    this.quantityUnits = Math.round(this.quantityPacks * up);
     this.quantity = this.quantityUnits;
   }
-
-  // Recalculate quantityPacks (number of packs available)
-  const up = this.unitsPerPack > 0 ? this.unitsPerPack : 1;
-  this.quantityPacks = Math.round((this.quantityUnits / up) * 10000) / 10000;
+  // 2. If quantity is explicitly modified but quantityUnits is not
+  else if (this.isModified('quantity') && !this.isModified('quantityUnits')) {
+    this.quantityUnits = this.quantity;
+    this.quantityPacks = Math.round((this.quantityUnits / up) * 10000) / 10000;
+  }
+  // 3. If quantityUnits is explicitly modified but quantity is not
+  else if (this.isModified('quantityUnits') && !this.isModified('quantity')) {
+    this.quantity = this.quantityUnits;
+    this.quantityPacks = Math.round((this.quantityUnits / up) * 10000) / 10000;
+  }
+  // 4. Default fallback: when both/neither is modified or document is new
+  else {
+    if (this.isModified('quantity')) {
+      this.quantityUnits = this.quantity;
+    } else if (this.isModified('quantityUnits')) {
+      this.quantity = this.quantityUnits;
+    }
+    this.quantityPacks = Math.round((this.quantityUnits / up) * 10000) / 10000;
+  }
 
   // Recalculate MRP if 0 or empty
   if (!this.mrp) {

@@ -10,6 +10,7 @@ import jsPDF from 'jspdf';
 import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 import html2canvas from 'html2canvas';
 import { useAuth } from '../../context/AuthContext';
+import { useSearchParams } from 'react-router-dom';
 import client from '../../api/client';
 import { formatUhid } from '../../utils/uhid';
 
@@ -39,9 +40,16 @@ const PAYMENT_MODES = ['Cash', 'UPI', 'Card', 'Net Banking', 'Cheque', 'Insuranc
 const BillingPage = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+  const [searchParams, setSearchParams] = useSearchParams();
+  const queryTab = searchParams.get('tab') || 'billing';
 
   // Navigation tab state: 'billing' = billing desk, 'registry' = invoice search, 'dashboard' = dashboard analysis
-  const [activeTab, setActiveTab] = useState('billing');
+  const [activeTab, setActiveTab] = useState(queryTab);
+
+  useEffect(() => {
+    setActiveTab(queryTab);
+  }, [queryTab]);
+
   const [view, setView] = useState('list'); // 'list' = search patient, 'bill' = invoice generation
 
   // Patient search state

@@ -22,6 +22,7 @@ const buildHospitalResponse = async (req, hospital) => {
     _id: hospital._id,
     name: hospital.name,
     loginId: hospital.loginId,
+    code: hospital.code || '',
     isActive: hospital.isActive,
     maxUsers: hospital.maxUsers || 10,
     allowDataDeletion: Boolean(hospital.allowDataDeletion),
@@ -57,19 +58,23 @@ const listHospitals = async (req, res) => {
 };
 
 const createHospital = async (req, res) => {
-  let { name, loginId, password, maxUsers } = req.body;
+  let { name, loginId, password, maxUsers, code } = req.body;
   name = name?.trim();
   loginId = loginId?.toLowerCase().trim();
+  code = code?.toLowerCase().trim();
 
-  if (!name || !loginId || !password) {
-    return res.status(400).json({ message: 'Hospital name, login ID, and password are required' });
+  if (!name || !loginId || !password || !code) {
+    return res.status(400).json({ message: 'Hospital name, login ID, password, and unique access code are required' });
   }
 
   try {
     const exists = await Hospital.findOne({ loginId });
     if (exists) return res.status(400).json({ message: 'Hospital login ID already exists' });
 
-    const hospital = await Hospital.create({ name, loginId, password, isActive: true, maxUsers: parseInt(maxUsers) || 10, allowDataDeletion: false });
+    const codeExists = await Hospital.findOne({ code });
+    if (codeExists) return res.status(400).json({ message: 'Hospital unique access code already exists' });
+
+    const hospital = await Hospital.create({ name, loginId, password, code, isActive: true, maxUsers: parseInt(maxUsers) || 10, allowDataDeletion: false });
     await User.create({
       hospitalId: hospital._id,
       username: loginId,
@@ -88,7 +93,7 @@ const createHospital = async (req, res) => {
 };
 
 const updateHospital = async (req, res) => {
-  const { name, loginId, password, isActive, maxUsers, allowDataDeletion } = req.body;
+  const { name, loginId, password, isActive, maxUsers, allowDataDeletion, code } = req.body;
   const hospital = await Hospital.findById(req.params.id);
   if (!hospital) return res.status(404).json({ message: 'Hospital not found' });
 
@@ -100,6 +105,15 @@ const updateHospital = async (req, res) => {
     const exists = await Hospital.findOne({ loginId: normalizedLoginId, _id: { $ne: hospital._id } });
     if (exists) return res.status(400).json({ message: 'Hospital login ID already exists' });
     hospital.loginId = normalizedLoginId;
+  }
+  if (code !== undefined) {
+    const normalizedCode = code.toLowerCase().trim();
+    if (!normalizedCode) {
+      return res.status(400).json({ message: 'Hospital unique access code cannot be empty' });
+    }
+    const exists = await Hospital.findOne({ code: normalizedCode, _id: { $ne: hospital._id } });
+    if (exists) return res.status(400).json({ message: 'Hospital unique access code already exists' });
+    hospital.code = normalizedCode;
   }
   if (password) hospital.password = password;
   if (allowDataDeletion !== undefined) hospital.allowDataDeletion = Boolean(allowDataDeletion);

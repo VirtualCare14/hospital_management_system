@@ -122,60 +122,17 @@ const getLevenshteinDistance = (a, b) => {
 
 const hospitalLookup = async (req, res) => {
   try {
-    const { name } = req.query;
-    if (!name) {
-      return res.status(400).json({ message: 'Hospital name is required' });
+    const { code } = req.query;
+    if (!code) {
+      return res.status(400).json({ message: 'Hospital unique access code is required' });
     }
 
-    const escapedName = name.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-    
-    // 1. Try exact match first
-    let hospital = await Hospital.findOne({
-      name: { $regex: new RegExp(`^${escapedName}$`, 'i') }
+    const hospital = await Hospital.findOne({
+      code: code.trim().toLowerCase()
     });
 
-    // 2. Try partial match
     if (!hospital) {
-      hospital = await Hospital.findOne({
-        name: { $regex: new RegExp(escapedName, 'i') }
-      });
-    }
-
-    // 3. Try fuzzy match using Levenshtein distance
-    if (!hospital) {
-      const cleanSearch = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-      const allHospitals = await Hospital.find({});
-      
-      let bestMatch = null;
-      let minDistance = Infinity;
-      
-      for (const h of allHospitals) {
-        const cleanDbName = h.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const cleanDbNameShort = cleanDbName.replace('hospital', '');
-        
-        const dist1 = getLevenshteinDistance(cleanSearch, cleanDbName);
-        const dist2 = getLevenshteinDistance(cleanSearch, cleanDbNameShort);
-        const dist = Math.min(dist1, dist2);
-        
-        const maxLength = Math.max(cleanSearch.length, cleanDbNameShort.length || 1);
-        const similarityRatio = dist / maxLength;
-        
-        // Match if distance is very low or similarity is high (> 60% similarity)
-        if (similarityRatio < 0.4 || dist <= 3) {
-          if (dist < minDistance) {
-            minDistance = dist;
-            bestMatch = h;
-          }
-        }
-      }
-      
-      if (bestMatch) {
-        hospital = bestMatch;
-      }
-    }
-
-    if (!hospital) {
-      return res.status(404).json({ message: 'Hospital not found' });
+      return res.status(404).json({ message: 'Hospital code not found in super admin records' });
     }
 
     res.status(200).json({

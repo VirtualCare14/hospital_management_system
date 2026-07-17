@@ -5,6 +5,7 @@ const hospitalSchema = new mongoose.Schema({
   name: { type: String, required: true },
   loginId: { type: String, required: true, unique: true, lowercase: true, trim: true },
   password: { type: String, required: true },
+  code: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
   isActive: { type: Boolean, default: true },
   currentSessionId: { type: String, default: null },
   maxUsers: { type: Number, default: 10 },
