@@ -6940,11 +6940,12 @@ const MedicineHistoryModal = ({ itemName, onClose }) => {
               <div className="overflow-x-auto border border-orange-50 rounded-xl bg-white">
                 <table className="w-full text-left">
                   <thead>
-                    <tr className="bg-orange-50/20 font-bold text-gray-550 border-b border-orange-50">
+                    <tr className="bg-orange-50/20 font-bold text-gray-555 border-b border-orange-50">
                       <th className="p-2 pl-3">Batch No</th>
                       <th className="p-2">Expiry</th>
                       <th className="p-2 text-center">Available Qty</th>
                       <th className="p-2 text-right">mrp (Ex gst)</th>
+                      <th className="p-2 text-right">mrp (Inc gst)</th>
                       <th className="p-2 text-right">purchase rate (Inc gst)</th>
                       <th className="p-2 text-right">purchase rate (Ex gst)</th>
                       <th className="p-2 pr-3">Supplier Reference</th>
@@ -6957,6 +6958,7 @@ const MedicineHistoryModal = ({ itemName, onClose }) => {
                         <td className="p-2 text-gray-555">{new Date(b.expiry).toLocaleDateString('en-GB', { month: '2-digit', year: 'numeric' })}</td>
                         <td className="p-2 text-center font-bold">{b.quantity}</td>
                         <td className="p-2 text-right font-mono">₹{(b.mrpExGst || b.rateExGst || 0).toFixed(2)}</td>
+                        <td className="p-2 text-right font-mono">₹{(b.mrp || 0).toFixed(2)}</td>
                         <td className="p-2 text-right font-mono">₹{(b.purchaseRateIncGst || 0).toFixed(2)}</td>
                         <td className="p-2 text-right font-mono">₹{(b.purchaseRateExGst || 0).toFixed(2)}</td>
                         <td className="p-2 pr-3 text-gray-550">
