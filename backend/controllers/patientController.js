@@ -579,10 +579,12 @@ const getRegistrations = async (req, res) => {
     const enriched = visits.map(v => {
       let effectiveFollowUpDate = v.followUpDate || null;
       let effectiveFollowUpSource = v.followUpSource || null;
+      let effectiveFollowUpRemarks = v.followUpRemarks || '';
 
       if (v.followUpSource === 'reception') {
         effectiveFollowUpDate = v.followUpDate || null;
         effectiveFollowUpSource = v.followUpDate ? 'reception' : null;
+        effectiveFollowUpRemarks = v.followUpRemarks || '';
       } else {
         const docFollowUp = consultationMap[v._id.toString()] || (v.patientId?._id ? patientConsultationMap[v.patientId._id.toString()] : null);
         if (docFollowUp) {
@@ -613,7 +615,8 @@ const getRegistrations = async (req, res) => {
         patientId: v.patientId?._id,
         doctorId: v.doctorId?._id,
         followUpDate: effectiveFollowUpDate,
-        followUpSource: effectiveFollowUpSource
+        followUpSource: effectiveFollowUpSource,
+        followUpRemarks: effectiveFollowUpRemarks
       };
     });
 
@@ -644,7 +647,34 @@ const getVisitHistory = async (req, res) => {
       .populate('doctorId', 'doctorName username')
       .sort({ registrationDate: -1 });
 
-    res.json(visits);
+    const Consultation = require('../models/Consultation');
+    const visitIds = visits.map(v => v._id);
+    const consultations = await Consultation.find(
+      tenantQuery(req, { visitId: { $in: visitIds } })
+    ).select('visitId followUpDate followUpRemarks');
+
+    const consultationMap = {};
+    consultations.forEach(c => {
+      if (c.visitId) {
+        consultationMap[c.visitId.toString()] = c;
+      }
+    });
+
+    const enrichedVisits = visits.map(v => {
+      const docConsult = consultationMap[v._id.toString()];
+      const effectiveDate = v.followUpDate || docConsult?.followUpDate || null;
+      const effectiveSource = v.followUpSource || (docConsult?.followUpDate ? 'doctor' : null);
+      const effectiveRemarks = v.followUpRemarks || docConsult?.followUpRemarks || '';
+
+      return {
+        ...v.toObject(),
+        followUpDate: effectiveDate,
+        followUpSource: effectiveSource,
+        followUpRemarks: effectiveRemarks
+      };
+    });
+
+    res.json({ visits: enrichedVisits });
   } catch (error) {
     console.error('Get Visit History Error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -911,7 +941,7 @@ const updatePatient = async (req, res) => {
 const updateFollowUpDate = async (req, res) => {
   try {
     const { id } = req.params; // Visit ID
-    const { followUpDate, noFollowUp } = req.body;
+    const { followUpDate, followUpRemarks, noFollowUp } = req.body;
 
     const visit = await Visit.findOne(tenantQuery(req, { _id: id }));
     if (!visit) {
@@ -921,9 +951,13 @@ const updateFollowUpDate = async (req, res) => {
     if (noFollowUp || !followUpDate) {
       visit.followUpDate = null;
       visit.followUpSource = 'reception';
+      visit.followUpRemarks = '';
     } else {
       visit.followUpDate = followUpDate.trim();
       visit.followUpSource = 'reception';
+      if (followUpRemarks !== undefined) {
+        visit.followUpRemarks = followUpRemarks.trim();
+      }
     }
 
     await visit.save();
@@ -933,7 +967,8 @@ const updateFollowUpDate = async (req, res) => {
       visit: {
         _id: visit._id,
         followUpDate: visit.followUpDate,
-        followUpSource: visit.followUpSource
+        followUpSource: visit.followUpSource,
+        followUpRemarks: visit.followUpRemarks
       }
     });
   } catch (error) {
@@ -963,13 +998,14 @@ const getFollowUpPatients = async (req, res) => {
     const visitIds = visits.map(v => v._id);
     const consultations = await Consultation.find(
       tenantQuery(req, { visitId: { $in: visitIds } })
-    ).select('visitId followUpDate doctorId').populate('doctorId', 'doctorName username');
+    ).select('visitId followUpDate followUpRemarks doctorId').populate('doctorId', 'doctorName username');
 
     const consultationMap = {};
     consultations.forEach(c => {
       if (c.visitId && c.followUpDate) {
         consultationMap[c.visitId.toString()] = {
           date: c.followUpDate,
+          remarks: c.followUpRemarks || '',
           doctorName: c.doctorId?.doctorName || c.doctorId?.username || ''
         };
       }
@@ -989,6 +1025,7 @@ const getFollowUpPatients = async (req, res) => {
         if (c.patientId && !patientConsultationMap[c.patientId.toString()]) {
           patientConsultationMap[c.patientId.toString()] = {
             date: c.followUpDate,
+            remarks: c.followUpRemarks || '',
             doctorName: c.doctorId?.doctorName || c.doctorId?.username || ''
           };
         }
@@ -999,21 +1036,25 @@ const getFollowUpPatients = async (req, res) => {
     visits.forEach(v => {
       let fDate = null;
       let fSource = null;
+      let fRemarks = '';
       let setterName = '';
 
       if (v.followUpSource === 'reception') {
         fDate = v.followUpDate || null;
         fSource = v.followUpDate ? 'reception' : null;
+        fRemarks = v.followUpRemarks || '';
         setterName = 'Reception';
       } else {
         const docConsult = consultationMap[v._id.toString()] || (v.patientId?._id ? patientConsultationMap[v.patientId._id.toString()] : null);
         if (docConsult?.date) {
           fDate = docConsult.date;
           fSource = 'doctor';
+          fRemarks = docConsult.remarks || v.followUpRemarks || '';
           setterName = docConsult.doctorName ? `Dr. ${docConsult.doctorName}` : 'Doctor';
         } else if (v.followUpDate) {
           fDate = v.followUpDate;
           fSource = v.followUpSource || 'doctor';
+          fRemarks = v.followUpRemarks || '';
           setterName = v.doctorId?.doctorName ? `Dr. ${v.doctorId.doctorName}` : 'Doctor';
         }
       }
@@ -1035,6 +1076,7 @@ const getFollowUpPatients = async (req, res) => {
           doctorName: v.doctorId?.doctorName || v.doctorId?.username || '',
           followUpDate: fDate,
           followUpSource: fSource,
+          followUpRemarks: fRemarks,
           setterName: setterName,
           consultationStatus: v.consultationStatus
         });

@@ -28,6 +28,7 @@ const ConsultationPage = () => {
   const [generalPastHistory, setGeneralPastHistory] = useState('');
   const [diagnosisRemark, setDiagnosisRemark] = useState('');
   const [followUpDate, setFollowUpDate] = useState('');
+  const [followUpRemarks, setFollowUpRemarks] = useState('');
   const [visitId, setVisitId] = useState(null);
   const [previousConsultation, setPreviousConsultation] = useState(null);
   const [subServices, setSubServices] = useState([]);
@@ -225,7 +226,8 @@ const ConsultationPage = () => {
       vitals: mergedVitals,
       tests: mergedTests,
       sendToLab: data.sendToLab,
-      followUpDate: followUpDate || previousConsultation?.followUpDate
+      followUpDate: followUpDate || previousConsultation?.followUpDate,
+      followUpRemarks: followUpRemarks || previousConsultation?.followUpRemarks
     };
 
     try {
@@ -615,12 +617,25 @@ const ConsultationPage = () => {
       <section className="card space-y-4 p-5">
         <h2 className="font-bold text-gray-800">Follow-up Scheduling</h2>
         <div className="grid gap-4 md:grid-cols-2">
-          <input 
-            className="input" 
-            type="date" 
-            value={followUpDate}
-            onChange={(e) => setFollowUpDate(e.target.value)}
-          />
+          <div>
+            <label className="text-xs font-bold text-gray-500 mb-1 block">Follow-up Date</label>
+            <input 
+              className="input py-2 text-xs" 
+              type="date" 
+              value={followUpDate}
+              onChange={(e) => setFollowUpDate(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-gray-500 mb-1 block">Follow-up Remarks / Instructions</label>
+            <input 
+              className="input py-2 text-xs" 
+              type="text" 
+              placeholder="e.g. Check BP, review lab reports, etc."
+              value={followUpRemarks}
+              onChange={(e) => setFollowUpRemarks(e.target.value)}
+            />
+          </div>
         </div>
         {patient.isDischarged && (
           <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200 font-medium">

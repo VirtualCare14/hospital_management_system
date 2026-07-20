@@ -95,6 +95,10 @@ const visitSchema = new mongoose.Schema({
     type: String,
     enum: ['doctor', 'reception', null],
     default: null
+  },
+  followUpRemarks: {
+    type: String,
+    default: ''
   }
 }, { timestamps: true });
 

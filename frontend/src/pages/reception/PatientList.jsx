@@ -59,6 +59,7 @@ const PatientList = () => {
   // Follow Up modal
   const [followUpModal, setFollowUpModal] = useState(null);
   const [followUpDateInput, setFollowUpDateInput] = useState('');
+  const [followUpRemarksInput, setFollowUpRemarksInput] = useState('');
   const [noFollowUpCheck, setNoFollowUpCheck] = useState(false);
   const [savingFollowUp, setSavingFollowUp] = useState(false);
 
@@ -122,7 +123,7 @@ const PatientList = () => {
     setLoadingHistory(true);
     try {
       const { data } = await client.get(`/patients/registrations/history/${encodeURIComponent(uhid)}`);
-      setVisitHistory(data || []);
+      setVisitHistory(data.visits || data || []);
     } catch (error) {
       console.error('Visit history error:', error);
       setVisitHistory([]);
@@ -195,6 +196,7 @@ const PatientList = () => {
   const handleOpenFollowUpModal = (reg) => {
     setFollowUpModal(reg);
     setFollowUpDateInput(reg.followUpDate ? new Date(reg.followUpDate).toISOString().split('T')[0] : '');
+    setFollowUpRemarksInput(reg.followUpRemarks || '');
     setNoFollowUpCheck(!reg.followUpDate);
   };
 
@@ -207,6 +209,7 @@ const PatientList = () => {
     try {
       await client.put(`/patients/registrations/${followUpModal._id}/follow-up`, {
         followUpDate: noFollowUpCheck ? null : followUpDateInput,
+        followUpRemarks: noFollowUpCheck ? '' : followUpRemarksInput,
         noFollowUp: noFollowUpCheck
       });
       toast.success('Follow-up date updated successfully');
@@ -676,13 +679,26 @@ const PatientList = () => {
 
                 {!noFollowUpCheck && (
                   <div className="pl-6 space-y-2">
-                    <input
-                      type="date"
-                      className="input text-xs py-2 w-full"
-                      value={followUpDateInput}
-                      onChange={(e) => setFollowUpDateInput(e.target.value)}
-                      min={new Date().toISOString().split('T')[0]}
-                    />
+                    <div>
+                      <label className="text-[10px] font-bold uppercase text-gray-500 block mb-1">Follow Up Date *</label>
+                      <input
+                        type="date"
+                        className="input text-xs py-2 w-full"
+                        value={followUpDateInput}
+                        onChange={(e) => setFollowUpDateInput(e.target.value)}
+                        min={new Date().toISOString().split('T')[0]}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold uppercase text-gray-500 block mb-1">Remarks / Instructions</label>
+                      <input
+                        type="text"
+                        placeholder="Enter follow-up remarks..."
+                        className="input text-xs py-2 w-full"
+                        value={followUpRemarksInput}
+                        onChange={(e) => setFollowUpRemarksInput(e.target.value)}
+                      />
+                    </div>
                     {/* Quick Date Presets */}
                     <div className="flex flex-wrap gap-1.5 pt-1">
                       {[
@@ -716,6 +732,7 @@ const PatientList = () => {
                     onChange={() => {
                       setNoFollowUpCheck(true);
                       setFollowUpDateInput('');
+                      setFollowUpRemarksInput('');
                     }}
                     className="text-red-600 focus:ring-red-500"
                   />
@@ -793,6 +810,26 @@ const PatientList = () => {
                           {visit.registrationDate ? new Date(visit.registrationDate).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '-'}
                           {visit.appointmentDate && ` • Appt: ${visit.appointmentDate} ${visit.slot}`}
                         </p>
+                        {visit.followUpDate && (
+                          <div className="mt-2 p-2 bg-white rounded-lg border border-orange-100 text-xs flex flex-col gap-0.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-gray-700">Follow-Up:</span>
+                              <span className="font-extrabold text-orange-700">
+                                {new Date(visit.followUpDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                              </span>
+                              <span className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold uppercase ${
+                                visit.followUpSource === 'doctor' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'
+                              }`}>
+                                {visit.followUpSource === 'doctor' ? 'Doctor' : 'Reception'}
+                              </span>
+                            </div>
+                            {visit.followUpRemarks && (
+                              <div className="text-gray-600 text-[11px]">
+                                <strong className="text-gray-500">Remarks:</strong> {visit.followUpRemarks}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}

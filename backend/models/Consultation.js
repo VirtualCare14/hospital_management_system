@@ -48,6 +48,10 @@ const consultationSchema = new mongoose.Schema({
   followUpDate: {
     type: String
   },
+  followUpRemarks: {
+    type: String,
+    default: ''
+  },
   consultationStatus: {
     type: String,
     enum: ["pending", "completed"],

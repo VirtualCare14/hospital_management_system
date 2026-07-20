@@ -66,7 +66,8 @@ const createConsultation = async (req, res) => {
       collectionType,
       collectionTime,
       bookingDate,
-      followUpDate
+      followUpDate,
+      followUpRemarks
     } = req.body;
 
     const doctorId = req.user._id;
@@ -115,18 +116,24 @@ const createConsultation = async (req, res) => {
       vitals: sanitizeVitals(vitals),
       tests: tests || [],
       followUpDate,
+      followUpRemarks: followUpRemarks || '',
       consultationDateTime: new Date() // Auto capture system timestamp
     });
 
-    // Update Visit followUpDate if set by doctor
-    if (followUpDate) {
+    // Update Visit followUpDate & followUpRemarks if set by doctor
+    if (followUpDate || followUpRemarks) {
       const Visit = require('../models/Visit');
+      const updateData = { followUpSource: 'doctor' };
+      if (followUpDate !== undefined) updateData.followUpDate = followUpDate;
+      if (followUpRemarks !== undefined) updateData.followUpRemarks = followUpRemarks;
+
       if (visitId) {
-        await Visit.findByIdAndUpdate(visitId, { followUpDate, followUpSource: 'doctor' });
+        await Visit.findByIdAndUpdate(visitId, updateData);
       } else {
         const latestVisit = await Visit.findOne(tenantQuery(req, { patientId })).sort({ createdAt: -1 });
         if (latestVisit) {
-          latestVisit.followUpDate = followUpDate;
+          if (followUpDate !== undefined) latestVisit.followUpDate = followUpDate;
+          if (followUpRemarks !== undefined) latestVisit.followUpRemarks = followUpRemarks;
           latestVisit.followUpSource = 'doctor';
           await latestVisit.save();
         }
@@ -197,7 +204,8 @@ const updateConsultation = async (req, res) => {
       diagnosisRemark,
       vitals,
       tests,
-      followUpDate
+      followUpDate,
+      followUpRemarks
     } = req.body;
 
     if (symptoms !== undefined) consultation.symptoms = symptoms;
@@ -205,15 +213,22 @@ const updateConsultation = async (req, res) => {
     if (diagnosisRemark !== undefined) consultation.diagnosisRemark = diagnosisRemark;
     if (vitals !== undefined) consultation.vitals = sanitizeVitals(vitals);
     if (tests !== undefined) consultation.tests = tests;
-    if (followUpDate !== undefined) {
-      consultation.followUpDate = followUpDate;
+    if (followUpDate !== undefined) consultation.followUpDate = followUpDate;
+    if (followUpRemarks !== undefined) consultation.followUpRemarks = followUpRemarks;
+
+    if (followUpDate !== undefined || followUpRemarks !== undefined) {
       const Visit = require('../models/Visit');
+      const updateData = { followUpSource: 'doctor' };
+      if (followUpDate !== undefined) updateData.followUpDate = followUpDate;
+      if (followUpRemarks !== undefined) updateData.followUpRemarks = followUpRemarks;
+
       if (consultation.visitId) {
-        await Visit.findByIdAndUpdate(consultation.visitId, { followUpDate, followUpSource: 'doctor' });
+        await Visit.findByIdAndUpdate(consultation.visitId, updateData);
       } else if (consultation.patientId) {
         const latestVisit = await Visit.findOne(tenantQuery(req, { patientId: consultation.patientId })).sort({ createdAt: -1 });
         if (latestVisit) {
-          latestVisit.followUpDate = followUpDate;
+          if (followUpDate !== undefined) latestVisit.followUpDate = followUpDate;
+          if (followUpRemarks !== undefined) latestVisit.followUpRemarks = followUpRemarks;
           latestVisit.followUpSource = 'doctor';
           await latestVisit.save();
         }
