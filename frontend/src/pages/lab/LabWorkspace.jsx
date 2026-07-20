@@ -272,6 +272,7 @@ const LabWorkspace = () => {
     const canvas = await html2canvas(element, {
       scale: 2,
       useCORS: true,
+      allowTaint: true,
       backgroundColor: '#ffffff',
       imageTimeout: 20000,
       onclone: (clonedDoc) => sanitizeClonedDocumentForPdf(clonedDoc)
@@ -284,7 +285,7 @@ const LabWorkspace = () => {
     return pdf;
   };
 
-  const waitForReportRef = async (timeout = 1200) => {
+  const waitForReportRef = async (timeout = 2000) => {
     const start = Date.now();
     while (!reportPrintRef.current && Date.now() - start < timeout) {
       await new Promise((resolve) => setTimeout(resolve, 50));
@@ -293,6 +294,57 @@ const LabWorkspace = () => {
       throw new Error('Printable report element did not mount in time');
     }
     return reportPrintRef.current;
+  };
+
+  const waitForBillRef = async (timeout = 2000) => {
+    const start = Date.now();
+    while (!billPrintRef.current && Date.now() - start < timeout) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    if (!billPrintRef.current) {
+      throw new Error('Printable bill element did not mount in time');
+    }
+    return billPrintRef.current;
+  };
+
+  const printPdfDocument = (pdf) => {
+    try {
+      const blob = pdf.output('blob');
+      const blobUrl = URL.createObjectURL(blob);
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      iframe.src = blobUrl;
+      document.body.appendChild(iframe);
+
+      iframe.onload = () => {
+        setTimeout(() => {
+          try {
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
+          } catch (err) {
+            console.warn('Iframe print failed, fallback to window.open:', err);
+            const win = window.open(blobUrl, '_blank');
+            if (win) win.focus();
+          }
+          setTimeout(() => {
+            try { document.body.removeChild(iframe); } catch (e) {}
+            URL.revokeObjectURL(blobUrl);
+          }, 60000);
+        }, 250);
+      };
+    } catch (err) {
+      console.error('Print PDF error:', err);
+      pdf.autoPrint();
+      const win = window.open(pdf.output('bloburl'), '_blank');
+      if (!win) {
+        toast.error('Pop-up blocked. Please allow pop-ups for this site or download PDF directly.');
+      }
+    }
   };
 
   const loadAll = async () => {
@@ -607,8 +659,13 @@ const LabWorkspace = () => {
 
   const downloadBillPdf = async (bill) => {
     try {
+      if (!billPrintRef.current || activeBill?._id !== bill?._id) {
+        setActiveBill(bill);
+        setModal('printBill');
+        await waitForBillRef();
+      }
       const pdf = await captureElementAsPdf(billPrintRef.current);
-      const filename = `${bill.labId || 'bill'}_Bill.pdf`;
+      const filename = `${bill?.labId || 'bill'}_Bill.pdf`;
       const blob = pdf.output('blob');
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -627,9 +684,13 @@ const LabWorkspace = () => {
 
   const printBill = async (bill) => {
     try {
+      if (!billPrintRef.current || activeBill?._id !== bill?._id) {
+        setActiveBill(bill);
+        setModal('printBill');
+        await waitForBillRef();
+      }
       const pdf = await captureElementAsPdf(billPrintRef.current);
-      pdf.autoPrint();
-      window.open(pdf.output('bloburl'), '_blank');
+      printPdfDocument(pdf);
     } catch (error) {
       console.error('PDF print error:', error);
       toast.error('Error opening print window. Please try again.');
@@ -1186,11 +1247,12 @@ const LabWorkspace = () => {
 
   const printReport = async (request) => {
     try {
-      openModal('viewReport', request);
-      await waitForReportRef();
+      if (!reportPrintRef.current || activeRequest?._id !== request?._id) {
+        openModal('viewReport', request);
+        await waitForReportRef();
+      }
       const pdf = await captureElementAsPdf(reportPrintRef.current);
-      pdf.autoPrint();
-      window.open(pdf.output('bloburl'), '_blank');
+      printPdfDocument(pdf);
     } catch (error) {
       console.error('PDF print error:', error);
       toast.error('Error opening print window. Please try again.');
@@ -1199,13 +1261,13 @@ const LabWorkspace = () => {
 
   const downloadPdf = async (request) => {
     try {
-      if (!reportPrintRef.current) {
+      if (!reportPrintRef.current || activeRequest?._id !== request?._id) {
         openModal('viewReport', request);
         await waitForReportRef();
       }
       const pdf = await captureElementAsPdf(reportPrintRef.current);
-      const patientName = sanitizePatientName(request.patientId?.patientName || 'Patient');
-      const filename = `${patientName}_${request.labId || 'report'}.pdf`;
+      const patientName = sanitizePatientName(request?.patientId?.patientName || 'Patient');
+      const filename = `${patientName}_${request?.labId || 'report'}.pdf`;
       const blob = pdf.output('blob');
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1245,8 +1307,7 @@ const LabWorkspace = () => {
       openModal('viewReport', updatedRequest);
       await waitForReportRef();
       const pdf = await captureElementAsPdf(reportPrintRef.current);
-      pdf.autoPrint();
-      window.open(pdf.output('bloburl'), '_blank');
+      printPdfDocument(pdf);
     } catch (error) {
       console.error('Save and Print Error:', error);
       toast.error('Error saving or printing report');
@@ -1276,8 +1337,8 @@ const LabWorkspace = () => {
       openModal('viewReport', updatedRequest);
       await waitForReportRef();
       const pdf = await captureElementAsPdf(reportPrintRef.current);
-      const patientName = sanitizePatientName(updatedRequest.patientId?.patientName || 'Patient');
-      const filename = `${patientName}_${updatedRequest.labId || 'report'}.pdf`;
+      const patientName = sanitizePatientName(updatedRequest?.patientId?.patientName || 'Patient');
+      const filename = `${patientName}_${updatedRequest?.labId || 'report'}.pdf`;
       const blob = pdf.output('blob');
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');

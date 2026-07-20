@@ -12,6 +12,7 @@ import ManageDepartments from './pages/admin/ManageDepartments.jsx';
 import PatientRegistration from './pages/reception/PatientRegistration.jsx';
 import PatientList from './pages/reception/PatientList.jsx';
 import PatientDetails from './pages/reception/PatientDetails.jsx';
+import PatientFollowUps from './pages/reception/PatientFollowUps.jsx';
 import DoctorDashboard from './pages/doctor/DoctorDashboard.jsx';
 import DoctorPatientList from './pages/doctor/DoctorPatientList.jsx';
 import CompletedConsultations from './pages/doctor/CompletedConsultations.jsx';
@@ -93,6 +94,7 @@ function App() {
             <Route path="/reception/register" element={<PatientRegistration />} />
             <Route path="/reception/patients" element={<PatientList />} />
             <Route path="/reception/patients/:id" element={<PatientDetails />} />
+            <Route path="/reception/follow-ups" element={<PatientFollowUps />} />
           </Route>
           <Route element={<ProtectedRoute allowedRoles={['admin', 'doctor']} />}>
             <Route path="/doctor" element={<DoctorDashboard />} />

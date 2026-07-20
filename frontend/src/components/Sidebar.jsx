@@ -36,7 +36,8 @@ import {
   Trash2,
   ChevronDown,
   ChevronRight,
-  CreditCard
+  CreditCard,
+  CalendarCheck
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -66,6 +67,7 @@ const Sidebar = () => {
   const receptionLinks = [
     { to: '/reception/register', label: 'Register Patient', icon: ClipboardList },
     { to: '/reception/patients', label: 'Patient List', icon: Users },
+    { to: '/reception/follow-ups', label: 'Patient Follow-Ups Tracking', icon: CalendarCheck },
   ];
 
   const doctorLinks = [

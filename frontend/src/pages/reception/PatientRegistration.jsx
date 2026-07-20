@@ -25,11 +25,6 @@ const PatientRegistration = () => {
   const allSlots = ['09:00 AM', '09:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM', '12:00 PM', '12:30 PM', '02:00 PM', '02:30 PM', '03:00 PM', '03:30 PM', '04:00 PM', '04:30 PM', '05:00 PM'];
   const freeSlots = allSlots.filter((slot) => !bookedSlots.includes(slot));
 
-  // Aadhaar lookup state
-  const [aadhaarLookup, setAadhaarLookup] = useState(null);
-  const [lookingUpAadhaar, setLookingUpAadhaar] = useState(false);
-  const [isExistingPatient, setIsExistingPatient] = useState(false);
-
   const Field = ({ label, children, className = '' }) => (
     <label className={`block ${className}`}>
       <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-gray-500">{label}</span>
@@ -74,40 +69,52 @@ const PatientRegistration = () => {
     }
   }, [doctorId, appointmentDate]);
 
-  // Aadhaar lookup handler
-  const handleAadhaarBlur = async (e) => {
-    const aadhaar = e.target.value?.trim();
-    if (!aadhaar || aadhaar.length < 4) {
-      setAadhaarLookup(null);
-      setIsExistingPatient(false);
-      return;
-    }
+  // Patient lookup state (Mobile or Aadhaar)
+  const [existingPatientData, setExistingPatientData] = useState(null);
+  const [lookingUp, setLookingUp] = useState(false);
+  const [isExistingPatient, setIsExistingPatient] = useState(false);
 
-    setLookingUpAadhaar(true);
+  const performLookup = async (params) => {
+    setLookingUp(true);
     try {
-      const { data } = await client.get(`/patients/aadhaar/${encodeURIComponent(aadhaar)}`);
+      const { data } = await client.get('/patients/lookup', { params });
       if (data.found && data.patient) {
-        setAadhaarLookup(data.patient);
+        setExistingPatientData(data.patient);
         setIsExistingPatient(true);
 
         // Auto-fill existing patient details
-        setValue('patientName', data.patient.patientName || '');
-        setValue('mobile', data.patient.mobile || '');
-        setValue('dob', data.patient.dob ? new Date(data.patient.dob).toISOString().split('T')[0] : '');
-        setValue('gender', data.patient.gender || '');
-        setValue('address', data.patient.address || '');
+        if (data.patient.patientName) setValue('patientName', data.patient.patientName);
+        if (data.patient.mobile) setValue('mobile', data.patient.mobile);
+        if (data.patient.aadhaar) setValue('aadhaar', data.patient.aadhaar);
+        if (data.patient.dob) setValue('dob', new Date(data.patient.dob).toISOString().split('T')[0]);
+        if (data.patient.gender) setValue('gender', data.patient.gender);
+        if (data.patient.address) setValue('address', data.patient.address);
 
         const visitCount = data.latestVisit ? `Visit #${(data.latestVisit.visitNumber || 0) + 1} next` : 'First visit';
         toast.success(`Existing patient found! UHID: ${formatUhid(data.patient.uhid)} — ${visitCount}. Details auto-filled.`);
       } else {
-        setAadhaarLookup(false);
+        setExistingPatientData(false);
         setIsExistingPatient(false);
       }
     } catch (err) {
-      setAadhaarLookup(false);
+      setExistingPatientData(false);
       setIsExistingPatient(false);
     } finally {
-      setLookingUpAadhaar(false);
+      setLookingUp(false);
+    }
+  };
+
+  const handleMobileBlur = (e) => {
+    const mobile = e.target.value?.trim();
+    if (mobile && mobile.length === 10 && !isExistingPatient) {
+      performLookup({ mobile });
+    }
+  };
+
+  const handleAadhaarBlur = (e) => {
+    const aadhaar = e.target.value?.trim();
+    if (aadhaar && aadhaar.length >= 4 && !isExistingPatient) {
+      performLookup({ aadhaar });
     }
   };
 
@@ -125,7 +132,7 @@ const PatientRegistration = () => {
       setShowReceipt(true);
       reset();
       setBookedSlots([]);
-      setAadhaarLookup(null);
+      setExistingPatientData(null);
       setIsExistingPatient(false);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Registration failed');
@@ -164,31 +171,30 @@ const PatientRegistration = () => {
       <form onSubmit={handleSubmit(onSubmit)} className="card space-y-5 p-5">
         <div>
           <h1 className="text-2xl font-extrabold text-gray-900">Patient Registration / EMR</h1>
-          <p className="text-sm text-gray-500">Register patients for OPD, IPD, or Same Day Care. Aadhaar-based patient lookup with auto UHID generation.</p>
+          <p className="text-sm text-gray-500">Register patients for OPD, IPD, or Same Day Care. Mobile or Aadhaar-based patient lookup with auto UHID generation.</p>
         </div>
 
         {/* Existing Patient Banner */}
-        {isExistingPatient && aadhaarLookup && (
+        {isExistingPatient && existingPatientData && (
           <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
             <UserCheck className="h-6 w-6 text-green-600 flex-shrink-0" />
             <div className="flex-1">
               <p className="text-sm font-bold text-green-800">
-                Existing Patient Found — UHID: {formatUhid(aadhaarLookup.uhid)}
+                Existing Patient Found — UHID: {formatUhid(existingPatientData.uhid)}
               </p>
               <p className="text-xs text-green-600 mt-0.5">
-                {aadhaarLookup.patientName} • {aadhaarLookup.gender} • {aadhaarLookup.mobile}
-                {aadhaarLookup.doctorId?.doctorName && ` • Last Doctor: Dr. ${aadhaarLookup.doctorId.doctorName}`}
+                {existingPatientData.patientName} • {existingPatientData.gender} • {existingPatientData.mobile}
+                {existingPatientData.doctorId?.doctorName && ` • Last Doctor: Dr. ${existingPatientData.doctorId.doctorName}`}
               </p>
               <p className="text-xs text-green-700 mt-1 font-semibold">
-                Patient details auto-filled. Select visit type, department, doctor, date, and slot.
-                {aadhaarLookup.visitNumber > 0 && ` (This will be Visit #${aadhaarLookup.visitNumber + 1})`}
+                Patient details auto-filled. Select visit type, department, doctor, date, and slot to register a new visit.
               </p>
             </div>
             <button
               type="button"
               className="text-xs font-bold text-green-700 hover:bg-green-100 px-2 py-1 rounded"
               onClick={() => {
-                setAadhaarLookup(null);
+                setExistingPatientData(null);
                 setIsExistingPatient(false);
                 reset();
                 setBookedSlots([]);
@@ -199,11 +205,11 @@ const PatientRegistration = () => {
           </div>
         )}
 
-        {aadhaarLookup === false && (
+        {existingPatientData === false && (
           <div className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-xl">
             <Search className="h-5 w-5 text-blue-500 flex-shrink-0" />
             <p className="text-sm text-blue-700">
-              No existing patient found with this Aadhaar. A new UHID will be created.
+              No existing patient found. A new UHID will be generated.
             </p>
           </div>
         )}
@@ -213,37 +219,42 @@ const PatientRegistration = () => {
             <input className="input" placeholder="Enter patient name" {...register('patientName', { required: true })} />
           </Field>
           <Field label="Mobile Number / WhatsApp">
-            <input
-              className={`input ${errors.mobile ? 'border-red-500 focus:ring-red-500' : ''}`}
-              placeholder="Enter mobile number"
-              {...register('mobile', {
-                required: 'Mobile number is required',
-                pattern: {
-                  value: /^\d{10}$/,
-                  message: 'Mobile number must be exactly 10 digits'
-                }
-              })}
-            />
+            <div className="relative">
+              <input
+                className={`input ${errors.mobile ? 'border-red-500 focus:ring-red-500' : ''}`}
+                placeholder="Enter mobile number"
+                {...register('mobile', {
+                  required: 'Mobile number is required',
+                  pattern: {
+                    value: /^\d{10}$/,
+                    message: 'Mobile number must be exactly 10 digits'
+                  }
+                })}
+                onBlur={handleMobileBlur}
+              />
+              {lookingUp && (
+                <span className="absolute right-3 top-2.5 text-xs text-blue-500 font-bold">Checking...</span>
+              )}
+            </div>
             {errors.mobile && (
               <p className="mt-1 text-xs font-semibold text-red-500">{errors.mobile.message}</p>
             )}
           </Field>
-          <Field label="Aadhaar Card Number">
+          <Field label="Aadhaar Card Number (Optional)">
             <div className="relative">
               <input
                 className={`input pr-8 ${errors.aadhaar ? 'border-red-500 focus:ring-red-500' : ''}`}
-                placeholder="Enter Aadhaar number"
+                placeholder="Enter Aadhaar number (optional)"
                 {...register('aadhaar', {
-                  required: 'Aadhaar number is required',
                   pattern: {
                     value: /^\d{12}$/,
                     message: 'Aadhaar number must be exactly 12 digits'
                   }
                 })}
                 onBlur={handleAadhaarBlur}
-                disabled={lookingUpAadhaar}
+                disabled={lookingUp}
               />
-              {lookingUpAadhaar && (
+              {lookingUp && (
                 <span className="absolute right-3 top-2.5 text-xs text-blue-500 font-bold">Checking...</span>
               )}
             </div>

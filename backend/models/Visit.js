@@ -86,6 +86,15 @@ const visitSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: false
+  },
+  followUpDate: {
+    type: String,
+    default: null
+  },
+  followUpSource: {
+    type: String,
+    enum: ['doctor', 'reception', null],
+    default: null
   }
 }, { timestamps: true });
 

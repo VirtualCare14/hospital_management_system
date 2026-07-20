@@ -34,7 +34,7 @@ const patientSchema = new mongoose.Schema({
   },
   aadhaar: {
     type: String,
-    required: true,
+    required: false,
     trim: true
   },
   category: {

@@ -280,7 +280,7 @@ const IpdAdmission = () => {
       finalPatientId = selectedPatient._id;
     } else {
       // Register new patient first
-      if (!newPatientName || !newPatientMobile || !newPatientAadhaar || !newPatientDob || !newPatientGender || !newPatientAddress || !newPatientDept || !newPatientDoc || !newPatientDate || !newPatientSlot) {
+      if (!newPatientName || !newPatientMobile || !newPatientDob || !newPatientGender || !newPatientAddress || !newPatientDept || !newPatientDoc || !newPatientDate || !newPatientSlot) {
         toast.error('All patient registration fields are required.');
         return;
       }

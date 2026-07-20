@@ -118,6 +118,21 @@ const createConsultation = async (req, res) => {
       consultationDateTime: new Date() // Auto capture system timestamp
     });
 
+    // Update Visit followUpDate if set by doctor
+    if (followUpDate) {
+      const Visit = require('../models/Visit');
+      if (visitId) {
+        await Visit.findByIdAndUpdate(visitId, { followUpDate, followUpSource: 'doctor' });
+      } else {
+        const latestVisit = await Visit.findOne(tenantQuery(req, { patientId })).sort({ createdAt: -1 });
+        if (latestVisit) {
+          latestVisit.followUpDate = followUpDate;
+          latestVisit.followUpSource = 'doctor';
+          await latestVisit.save();
+        }
+      }
+    }
+
     // 3. Create Lab Request entries if tests are assigned and sendToLab is checked
     if (tests && Array.isArray(tests) && tests.length > 0 && sendToLab) {
       const requests = tests.map((test) => {
@@ -190,7 +205,20 @@ const updateConsultation = async (req, res) => {
     if (diagnosisRemark !== undefined) consultation.diagnosisRemark = diagnosisRemark;
     if (vitals !== undefined) consultation.vitals = sanitizeVitals(vitals);
     if (tests !== undefined) consultation.tests = tests;
-    if (followUpDate !== undefined) consultation.followUpDate = followUpDate;
+    if (followUpDate !== undefined) {
+      consultation.followUpDate = followUpDate;
+      const Visit = require('../models/Visit');
+      if (consultation.visitId) {
+        await Visit.findByIdAndUpdate(consultation.visitId, { followUpDate, followUpSource: 'doctor' });
+      } else if (consultation.patientId) {
+        const latestVisit = await Visit.findOne(tenantQuery(req, { patientId: consultation.patientId })).sort({ createdAt: -1 });
+        if (latestVisit) {
+          latestVisit.followUpDate = followUpDate;
+          latestVisit.followUpSource = 'doctor';
+          await latestVisit.save();
+        }
+      }
+    }
     
     await consultation.save();
 
