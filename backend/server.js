@@ -43,6 +43,7 @@ app.use('/api/ipd', require('./routes/dischargeRoutes'));
 app.use('/api/ipd', require('./routes/otManagementRoutes'));
 app.use('/api/ipd', require('./routes/ipdReferralRoutes'));
 app.use('/api/same-day-care', require('./routes/sameDayCareRoutes'));
+app.use('/api/demo-request', require('./routes/demoRequestRoutes'));
 app.use('/api', require('./routes/billingRoutes'));
 
 // Basic health check route
