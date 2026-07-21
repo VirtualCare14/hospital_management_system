@@ -487,6 +487,8 @@ export default function Services() {
           onUpdate: (self) => updateProgress(self.progress),
         });
 
+        setTimeout(() => ScrollTrigger.refresh(), 100);
+
         return () => st.kill();
       });
 
