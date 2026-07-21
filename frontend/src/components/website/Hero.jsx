@@ -167,30 +167,30 @@ export default function Hero() {
         <div className="absolute -top-20 -right-20 w-64 h-64 rounded-full bg-white/[0.01] border border-white/[0.02] pointer-events-none" />
         <div className="absolute -bottom-10 -left-10 w-48 h-48 rounded-full bg-white/[0.01] border border-white/[0.02] pointer-events-none" />
 
-        <div className="max-w-[1380px] mx-auto px-6 lg:px-12 flex flex-col md:flex-row justify-between items-center gap-8 md:gap-4">
+        <div className="max-w-[1380px] mx-auto px-4 sm:px-6 lg:px-12 grid grid-cols-2 gap-3.5 sm:gap-6 md:flex md:flex-row md:justify-between md:items-center">
           {STATS.map((stat, idx) => {
             const Icon = stat.icon;
             return (
               <motion.div
                 key={idx}
-                className="flex items-center gap-4 text-left flex-1 justify-center group"
+                className="flex items-center gap-3 sm:gap-4 text-left p-3.5 sm:p-4 rounded-2xl bg-slate-800/30 md:bg-transparent border border-slate-700/30 md:border-0 md:flex-1 md:justify-center group transition-all hover:bg-slate-800/50"
                 initial={{ opacity: 0, y: 16 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: idx * 0.08, duration: 0.4 }}
               >
-                <div className="w-12 h-12 rounded-xl bg-slate-800/40 backdrop-blur-sm flex items-center justify-center flex-shrink-0 border border-slate-700/40 shadow-inner group-hover:border-[#FF8C3A]/50 group-hover:bg-slate-800/80 transition-all duration-300">
-                  <Icon className="w-5 h-5 text-[#FF8C3A] group-hover:text-white transition-colors duration-300" />
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-slate-800/60 backdrop-blur-sm flex items-center justify-center flex-shrink-0 border border-slate-700/50 shadow-inner group-hover:border-[#FF8C3A]/50 group-hover:bg-slate-800/90 transition-all duration-300">
+                  <Icon className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-[#FF8C3A] group-hover:text-white transition-colors duration-300" />
                 </div>
-                <div>
+                <div className="min-w-0 flex-1">
                   <div
-                    className="font-extrabold text-[28px] md:text-[32px] text-white tracking-tight leading-none mb-1 bg-gradient-to-r from-white via-white to-slate-300 bg-clip-text text-transparent"
+                    className="font-extrabold text-[20px] sm:text-[28px] md:text-[32px] text-white tracking-tight leading-none mb-1 bg-gradient-to-r from-white via-white to-slate-300 bg-clip-text text-transparent truncate"
                     style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                   >
                     {stat.value}
                   </div>
                   <div
-                    className="text-[10px] font-extrabold text-[#94A3B8] leading-tight uppercase tracking-widest"
+                    className="text-[9px] sm:text-[10px] font-extrabold text-[#94A3B8] leading-tight uppercase tracking-wider sm:tracking-widest truncate"
                     style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                   >
                     {stat.label}
