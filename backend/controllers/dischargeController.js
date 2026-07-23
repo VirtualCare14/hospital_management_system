@@ -9,6 +9,30 @@ const tenantFilter = (req, query = {}) => (
   req.user.hospitalId ? { ...query, hospitalId: req.user.hospitalId } : query
 );
 
+const addTimeline = async (req, admissionId, patientId, activity, description, metadata = {}) => {
+  try {
+    const IpdActivityTimeline = require('../models/IpdActivityTimeline');
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+
+    await IpdActivityTimeline.create({
+      hospitalId: req.user.hospitalId,
+      admissionId,
+      patientId,
+      activity,
+      description,
+      date: dateStr,
+      time: timeStr,
+      performedBy: req.user._id,
+      performedByName: req.user.doctorName || req.user.username || 'System',
+      metadata
+    });
+  } catch (err) {
+    console.error('Error logging timeline activity:', err);
+  }
+};
+
 // @desc    Create a new Discharge record (Save Draft)
 // @route   POST /api/ipd/discharge
 // @access  Private
@@ -234,6 +258,12 @@ const updateDischarge = async (req, res) => {
       return res.status(400).json({ message: 'Cannot update a completed discharge record' });
     }
 
+    // Reset status to Draft if it was Rejected
+    if (record.status === 'Rejected') {
+      record.status = 'Draft';
+      record.rejectionRemarks = '';
+    }
+
     const updatableFields = [
       'patientName', 'admissionDate', 'reason',
       'diagnosisAtInternment', 'treatmentSummary',
@@ -309,7 +339,8 @@ const getDischargeById = async (req, res) => {
     const { id } = req.params;
     const record = await IpdDischarge.findOne(tenantFilter(req, { _id: id }))
       .populate('createdBy', 'username doctorName')
-      .populate('updatedBy', 'username doctorName');
+      .populate('updatedBy', 'username doctorName')
+      .populate('assignedDoctorId', 'username doctorName');
 
     if (!record) {
       return res.status(404).json({ message: 'Discharge record not found' });
@@ -343,6 +374,192 @@ const checkDischargeStatus = async (req, res) => {
   }
 };
 
+// @desc    List potential discharge reviewers (doctors and admins) in the hospital
+// @route   GET /api/ipd/discharge/reviewers
+// @access  Private
+const listDischargeReviewers = async (req, res) => {
+  try {
+    const User = require('../models/User');
+    const reviewers = await User.find(tenantFilter(req, {
+      role: { $in: ['doctor', 'admin', 'nursing'] },
+      isActive: true
+    })).select('doctorName username role department');
+    
+    const formatted = reviewers.map(u => ({
+      _id: u._id,
+      name: u.doctorName || u.username,
+      role: u.role,
+      department: u.department || ''
+    }));
+
+    res.json(formatted);
+  } catch (error) {
+    console.error('List Discharge Reviewers Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Submit a discharge summary for doctor review
+// @route   POST /api/ipd/discharge/submit-review
+// @access  Private
+const submitForReview = async (req, res) => {
+  try {
+    const { dischargeId, reviewerId } = req.body;
+    if (!dischargeId || !reviewerId) {
+      return res.status(400).json({ message: 'Discharge ID and Reviewer ID are required' });
+    }
+
+    const record = await IpdDischarge.findOne(tenantFilter(req, { _id: dischargeId }));
+    if (!record) {
+      return res.status(404).json({ message: 'Discharge record not found' });
+    }
+
+    if (record.status === 'Completed') {
+      return res.status(400).json({ message: 'Cannot submit a completed discharge record' });
+    }
+
+    record.status = 'Pending Review';
+    record.assignedDoctorId = reviewerId;
+    record.rejectionRemarks = '';
+    record.updatedBy = req.user._id;
+
+    const saved = await record.save();
+
+    // Log timeline event
+    await addTimeline(
+      req,
+      record.admissionId,
+      record.patientId,
+      'Discharge Review Requested',
+      'Discharge summary submitted for doctor review.'
+    );
+
+    res.json({ message: 'Discharge summary submitted for review', record: saved });
+  } catch (error) {
+    console.error('Submit For Review Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Get pending reviews for the logged-in doctor/reviewer
+// @route   GET /api/ipd/discharge/pending-reviews
+// @access  Private
+const getPendingReviews = async (req, res) => {
+  try {
+    const records = await IpdDischarge.find(tenantFilter(req, {
+      assignedDoctorId: req.user._id,
+      status: 'Pending Review'
+    }))
+      .populate('patientId', 'patientName uhid mobile gender dob age')
+      .populate('admissionId', 'ipdNumber pidNumber admissionDate bedId roomId')
+      .sort({ createdAt: -1 });
+
+    res.json(records);
+  } catch (error) {
+    console.error('Get Pending Reviews Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Approve or reject a discharge summary review
+// @route   POST /api/ipd/discharge/review
+// @access  Private
+const reviewDischarge = async (req, res) => {
+  try {
+    const { dischargeId, decision, remarks, prescription } = req.body;
+    if (!dischargeId || !decision) {
+      return res.status(400).json({ message: 'Discharge ID and decision are required' });
+    }
+
+    const record = await IpdDischarge.findOne(tenantFilter(req, { _id: dischargeId }));
+    if (!record) {
+      return res.status(404).json({ message: 'Discharge record not found' });
+    }
+
+    if (record.status !== 'Pending Review') {
+      return res.status(400).json({ message: 'This record is not pending review' });
+    }
+
+    if (decision === 'Reject') {
+      if (!remarks) {
+        return res.status(400).json({ message: 'Remarks are required when sending back' });
+      }
+      record.status = 'Rejected';
+      record.rejectionRemarks = remarks;
+      record.updatedBy = req.user._id;
+
+      const saved = await record.save();
+
+      // Log timeline event
+      await addTimeline(
+        req,
+        record.admissionId,
+        record.patientId,
+        'Discharge Summary Sent Back',
+        `Discharge summary sent back to IPD with remarks: "${remarks}".`
+      );
+
+      return res.json({ message: 'Discharge summary sent back to IPD', record: saved });
+    }
+
+    if (decision === 'Approve') {
+      // 1. Update discharge summary details
+      record.status = 'Completed';
+      record.physicianApproval = 'Yes';
+      record.dischargePrescription = prescription || [];
+      record.updatedBy = req.user._id;
+
+      // Extract details for physician initials/name if current reviewer is a doctor
+      if (req.user.doctorName) {
+        const nameParts = req.user.doctorName.split(' ');
+        record.dischargingPhysicianTitle = 'Dr.';
+        record.dischargingPhysicianFirstName = nameParts[0] || '';
+        record.dischargingPhysicianLastName = nameParts.slice(1).join(' ') || '';
+        record.dischargingPhysicianInitials = nameParts.map(n => n.charAt(0).toUpperCase()).join('').slice(0, 3);
+      }
+
+      const saved = await record.save();
+
+      // 2. Discharge the patient in admission
+      const admission = await IpdAdmission.findById(record.admissionId);
+      if (admission) {
+        admission.status = 'Discharged';
+        admission.dischargeDate = record.dischargeDate || new Date();
+        await admission.save();
+
+        // 3. Free the bed stay
+        if (admission.bedId) {
+          const bed = await Bed.findById(admission.bedId);
+          if (bed) {
+            bed.status = 'Available';
+            bed.patientId = null;
+            bed.admissionId = null;
+            bed.reservedAt = null;
+            bed.reservedFor = null;
+            await bed.save();
+          }
+        }
+      }
+
+      // Log timeline event
+      await addTimeline(
+        req,
+        record.admissionId,
+        record.patientId,
+        'Discharge Summary Approved',
+        `Discharge approved by Dr. ${req.user.doctorName || req.user.username}. Patient Discharged and Bed released.`
+      );
+
+      return res.json({ message: 'Discharge approved and completed successfully', record: saved });
+    }
+
+    res.status(400).json({ message: 'Invalid decision' });
+  } catch (error) {
+    console.error('Review Discharge Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   createDischarge,
   completeDischarge,
@@ -350,5 +567,9 @@ module.exports = {
   getDischargesByAdmission,
   getDischargesByPatient,
   getDischargeById,
-  checkDischargeStatus
+  checkDischargeStatus,
+  listDischargeReviewers,
+  submitForReview,
+  getPendingReviews,
+  reviewDischarge
 };

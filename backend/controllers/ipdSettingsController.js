@@ -21,9 +21,39 @@ const getSettings = async (req, res) => {
         pidStartNumber: 1,
         pidCurrentNumber: 1,
         admissionStatuses: ['Admitted', 'Under Observation', 'Shifted', 'Discharged'],
-        reservationTimeout: 15
+        reservationTimeout: 15,
+        sameDayCareCategories: [{
+          name: 'Dialysis',
+          subServices: [{
+            name: 'Dialysis',
+            price: 2000,
+            isActive: true
+          }],
+          isActive: true
+        }]
       });
       await settings.save();
+    } else {
+      let hasDialysis = false;
+      if (settings.sameDayCareCategories && settings.sameDayCareCategories.length > 0) {
+        hasDialysis = settings.sameDayCareCategories.some(c => c.name.toLowerCase() === 'dialysis');
+      } else {
+        settings.sameDayCareCategories = [];
+      }
+
+      if (!hasDialysis) {
+        settings.sameDayCareCategories.push({
+          name: 'Dialysis',
+          subServices: [{
+            name: 'Dialysis',
+            price: 2000,
+            isActive: true
+          }],
+          isActive: true
+        });
+        settings.markModified('sameDayCareCategories');
+        await settings.save();
+      }
     }
 
     res.status(200).json(settings);
@@ -108,6 +138,7 @@ const updateSettings = async (req, res) => {
         description: s.description || '',
         isActive: s.isActive !== undefined ? s.isActive : true
       }));
+      settings.markModified('consumableServices');
     }
 
     if (medicines !== undefined) {
@@ -123,6 +154,66 @@ const updateSettings = async (req, res) => {
         description: m.description || '',
         isActive: m.isActive !== undefined ? m.isActive : true
       }));
+      settings.markModified('medicines');
+    }
+
+    if (req.body.sameDayCareCategories !== undefined) {
+      if (!Array.isArray(req.body.sameDayCareCategories)) {
+        return res.status(400).json({ message: 'Same Day Care categories must be an array' });
+      }
+      
+      const categories = req.body.sameDayCareCategories.map(c => {
+        const subServices = Array.isArray(c.subServices) 
+          ? c.subServices.map(s => ({
+              name: s.name.trim(),
+              price: Number(s.price || 0),
+              isActive: s.isActive !== undefined ? s.isActive : true,
+              investigations: Array.isArray(s.investigations)
+                ? s.investigations.map(inv => ({
+                    name: inv.name.trim()
+                  }))
+                : []
+            }))
+          : [];
+        return {
+          name: c.name.trim(),
+          subServices,
+          isActive: c.isActive !== undefined ? c.isActive : true
+        };
+      });
+
+      // Ensure Dialysis exists and is protected
+      let dialysisCat = categories.find(c => c.name.toLowerCase() === 'dialysis');
+      if (!dialysisCat) {
+        dialysisCat = {
+          name: 'Dialysis',
+          subServices: [{
+            name: 'Dialysis',
+            price: 2000,
+            isActive: true
+          }],
+          isActive: true
+        };
+        categories.push(dialysisCat);
+      } else {
+        dialysisCat.name = 'Dialysis';
+        dialysisCat.isActive = true;
+        let dialysisSub = dialysisCat.subServices.find(s => s.name.toLowerCase() === 'dialysis');
+        if (!dialysisSub) {
+          dialysisSub = {
+            name: 'Dialysis',
+            price: 2000,
+            isActive: true
+          };
+          dialysisCat.subServices.push(dialysisSub);
+        } else {
+          dialysisSub.name = 'Dialysis';
+          dialysisSub.isActive = true;
+        }
+      }
+
+      settings.sameDayCareCategories = categories;
+      settings.markModified('sameDayCareCategories');
     }
 
     if (req.body.sameDayTreatmentPrices !== undefined) {
@@ -134,6 +225,7 @@ const updateSettings = async (req, res) => {
         price: Number(p.price),
         isActive: p.isActive !== undefined ? p.isActive : true
       }));
+      settings.markModified('sameDayTreatmentPrices');
     }
 
     await settings.save();

@@ -1324,6 +1324,15 @@ const createDirectLabRequest = async (req, res) => {
       return res.status(404).json({ message: 'Patient not found.' });
     }
 
+    const IpdAdmission = require('../models/IpdAdmission');
+    const latestIpdAdmission = await IpdAdmission.findOne({
+      patientId: patient._id,
+      ...(req.user.hospitalId ? { hospitalId: req.user.hospitalId } : {})
+    }).sort({ createdAt: -1 });
+    if (latestIpdAdmission?.status === 'Discharged') {
+      return res.status(400).json({ message: 'Patient is discharged. No further actions can be performed.' });
+    }
+
     // Resolve doctorId
     let doctorId = req.body.doctorId;
     if (!doctorId) {

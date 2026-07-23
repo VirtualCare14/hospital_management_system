@@ -14,7 +14,7 @@ const billItemSchema = new mongoose.Schema({
   quantity: {
     type: Number,
     required: true,
-    min: 1
+    min: 0
   },
   unitPrice: {
     type: Number,
@@ -22,6 +22,36 @@ const billItemSchema = new mongoose.Schema({
     min: 0
   },
   discount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  discountType: {
+    type: String,
+    enum: ['percentage', 'amount'],
+    default: 'percentage'
+  },
+  discountValue: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  sgst: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  cgst: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  unitRateExGst: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  baseRateExGst: {
     type: Number,
     default: 0,
     min: 0
@@ -45,6 +75,14 @@ const billItemSchema = new mongoose.Schema({
     type: Number,
     default: 0,
     min: 0
+  },
+  unitsPerPack: {
+    type: Number,
+    default: 1
+  },
+  pack: {
+    type: String,
+    default: ''
   }
 }, { _id: false });
 
@@ -98,6 +136,11 @@ const pharmacyBillSchema = new mongoose.Schema({
   prescriptionId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Prescription',
+    default: null
+  },
+  admissionId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'IpdAdmission',
     default: null
   },
   patientId: {
@@ -165,6 +208,10 @@ const pharmacyBillSchema = new mongoose.Schema({
     type: String,
     enum: ['Paid', 'Partially Paid', 'Unpaid'],
     required: true
+  },
+  remarks: {
+    type: String,
+    default: ''
   },
   status: {
     type: String,

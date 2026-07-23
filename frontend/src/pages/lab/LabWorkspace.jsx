@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import client from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 import DiagnosisTemplateDesigner from './DiagnosisTemplateDesigner.jsx';
 import DiagnosisDynamicReport from './DiagnosisDynamicReport.jsx';
 
@@ -271,6 +272,7 @@ const LabWorkspace = () => {
     const canvas = await html2canvas(element, {
       scale: 2,
       useCORS: true,
+      allowTaint: true,
       backgroundColor: '#ffffff',
       imageTimeout: 20000,
       onclone: (clonedDoc) => sanitizeClonedDocumentForPdf(clonedDoc)
@@ -283,7 +285,7 @@ const LabWorkspace = () => {
     return pdf;
   };
 
-  const waitForReportRef = async (timeout = 1200) => {
+  const waitForReportRef = async (timeout = 2000) => {
     const start = Date.now();
     while (!reportPrintRef.current && Date.now() - start < timeout) {
       await new Promise((resolve) => setTimeout(resolve, 50));
@@ -292,6 +294,57 @@ const LabWorkspace = () => {
       throw new Error('Printable report element did not mount in time');
     }
     return reportPrintRef.current;
+  };
+
+  const waitForBillRef = async (timeout = 2000) => {
+    const start = Date.now();
+    while (!billPrintRef.current && Date.now() - start < timeout) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    if (!billPrintRef.current) {
+      throw new Error('Printable bill element did not mount in time');
+    }
+    return billPrintRef.current;
+  };
+
+  const printPdfDocument = (pdf) => {
+    try {
+      const blob = pdf.output('blob');
+      const blobUrl = URL.createObjectURL(blob);
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      iframe.src = blobUrl;
+      document.body.appendChild(iframe);
+
+      iframe.onload = () => {
+        setTimeout(() => {
+          try {
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
+          } catch (err) {
+            console.warn('Iframe print failed, fallback to window.open:', err);
+            const win = window.open(blobUrl, '_blank');
+            if (win) win.focus();
+          }
+          setTimeout(() => {
+            try { document.body.removeChild(iframe); } catch (e) {}
+            URL.revokeObjectURL(blobUrl);
+          }, 60000);
+        }, 250);
+      };
+    } catch (err) {
+      console.error('Print PDF error:', err);
+      pdf.autoPrint();
+      const win = window.open(pdf.output('bloburl'), '_blank');
+      if (!win) {
+        toast.error('Pop-up blocked. Please allow pop-ups for this site or download PDF directly.');
+      }
+    }
   };
 
   const loadAll = async () => {
@@ -521,15 +574,18 @@ const LabWorkspace = () => {
   };
 
   const handleSelectPatient = async (patient) => {
-    setSelectedPatient(patient);
     setSearchedPatients([]);
     try {
+      const { data: fullPatient } = await client.get(`/patients/${patient._id}`);
+      setSelectedPatient(fullPatient);
+      
       const res = await client.get(`/lab/patients/${patient._id}/recommended-tests`);
       setRecommendedTests(res.data.recommendedTests || []);
       setConsultationInfo(res.data.consultation || null);
       setDirectTests(res.data.recommendedTests || []);
     } catch (err) {
-      console.error('Error fetching recommended tests', err);
+      console.error('Error fetching full patient or recommended tests', err);
+      setSelectedPatient(patient);
     }
   };
 
@@ -603,8 +659,13 @@ const LabWorkspace = () => {
 
   const downloadBillPdf = async (bill) => {
     try {
+      if (!billPrintRef.current || activeBill?._id !== bill?._id) {
+        setActiveBill(bill);
+        setModal('printBill');
+        await waitForBillRef();
+      }
       const pdf = await captureElementAsPdf(billPrintRef.current);
-      const filename = `${bill.labId || 'bill'}_Bill.pdf`;
+      const filename = `${bill?.labId || 'bill'}_Bill.pdf`;
       const blob = pdf.output('blob');
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -623,9 +684,13 @@ const LabWorkspace = () => {
 
   const printBill = async (bill) => {
     try {
+      if (!billPrintRef.current || activeBill?._id !== bill?._id) {
+        setActiveBill(bill);
+        setModal('printBill');
+        await waitForBillRef();
+      }
       const pdf = await captureElementAsPdf(billPrintRef.current);
-      pdf.autoPrint();
-      window.open(pdf.output('bloburl'), '_blank');
+      printPdfDocument(pdf);
     } catch (error) {
       console.error('PDF print error:', error);
       toast.error('Error opening print window. Please try again.');
@@ -1182,11 +1247,12 @@ const LabWorkspace = () => {
 
   const printReport = async (request) => {
     try {
-      openModal('viewReport', request);
-      await waitForReportRef();
+      if (!reportPrintRef.current || activeRequest?._id !== request?._id) {
+        openModal('viewReport', request);
+        await waitForReportRef();
+      }
       const pdf = await captureElementAsPdf(reportPrintRef.current);
-      pdf.autoPrint();
-      window.open(pdf.output('bloburl'), '_blank');
+      printPdfDocument(pdf);
     } catch (error) {
       console.error('PDF print error:', error);
       toast.error('Error opening print window. Please try again.');
@@ -1195,13 +1261,13 @@ const LabWorkspace = () => {
 
   const downloadPdf = async (request) => {
     try {
-      if (!reportPrintRef.current) {
+      if (!reportPrintRef.current || activeRequest?._id !== request?._id) {
         openModal('viewReport', request);
         await waitForReportRef();
       }
       const pdf = await captureElementAsPdf(reportPrintRef.current);
-      const patientName = sanitizePatientName(request.patientId?.patientName || 'Patient');
-      const filename = `${patientName}_${request.labId || 'report'}.pdf`;
+      const patientName = sanitizePatientName(request?.patientId?.patientName || 'Patient');
+      const filename = `${patientName}_${request?.labId || 'report'}.pdf`;
       const blob = pdf.output('blob');
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1241,8 +1307,7 @@ const LabWorkspace = () => {
       openModal('viewReport', updatedRequest);
       await waitForReportRef();
       const pdf = await captureElementAsPdf(reportPrintRef.current);
-      pdf.autoPrint();
-      window.open(pdf.output('bloburl'), '_blank');
+      printPdfDocument(pdf);
     } catch (error) {
       console.error('Save and Print Error:', error);
       toast.error('Error saving or printing report');
@@ -1272,8 +1337,8 @@ const LabWorkspace = () => {
       openModal('viewReport', updatedRequest);
       await waitForReportRef();
       const pdf = await captureElementAsPdf(reportPrintRef.current);
-      const patientName = sanitizePatientName(updatedRequest.patientId?.patientName || 'Patient');
-      const filename = `${patientName}_${updatedRequest.labId || 'report'}.pdf`;
+      const patientName = sanitizePatientName(updatedRequest?.patientId?.patientName || 'Patient');
+      const filename = `${patientName}_${updatedRequest?.labId || 'report'}.pdf`;
       const blob = pdf.output('blob');
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -2771,7 +2836,9 @@ const LabWorkspace = () => {
                       )}
                     </div>
                     {diagnosisTemplateLoading ? (
-                      <EmptyState title="Loading diagnosis template..." />
+                      <div className="rounded-xl border border-orange-100 bg-white p-4">
+                        <SkeletonTable rows={5} columns={4} className="w-full" />
+                      </div>
                     ) : (
                       <DiagnosisDynamicReport
                         template={diagnosisTemplate}
@@ -3349,6 +3416,18 @@ const LabWorkspace = () => {
               {/* Selected Patient Demographics Card */}
               {selectedPatient && (
                 <div className="space-y-4 text-left">
+                  {selectedPatient.isDischarged && (
+                    <div className="p-4 border border-red-200 bg-red-50 text-red-700 flex items-center gap-3 rounded-xl">
+                      <AlertCircle className="h-5 w-5 shrink-0" />
+                      <div>
+                        <h4 className="font-extrabold text-xs uppercase tracking-wider">Patient is Discharged</h4>
+                        <p className="text-[11px] mt-0.5 font-semibold">
+                          This patient has been discharged from the hospital. The case is read-only. No new lab requests can be created.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4 rounded-lg border border-orange-100 bg-white p-4 text-xs relative shadow-sm">
                     <button
                       type="button"
@@ -3432,110 +3511,90 @@ const LabWorkspace = () => {
                   )}
 
                   {/* Add Additional Tests Section */}
-                  <div className="border border-orange-100 rounded-lg p-4 bg-orange-50/10 space-y-3">
-                    <h4 className="text-xs font-bold uppercase text-orange-900 tracking-wider">2. Add Tests / Request Items</h4>
-                    
-                    <div className="grid gap-3 md:grid-cols-3 items-end">
-                      <Field label="Test Category">
-                        <SearchableDropdown
-                          value={selectedCategory}
-                          options={categoryOptions}
-                          getLabel={(category) => category.name}
-                          placeholder="Search category..."
-                          onSelect={(category) => {
-                            setSelectedCategory(category.name);
+                  {!selectedPatient.isDischarged && (
+                    <div className="border border-orange-100 rounded-lg p-4 bg-orange-50/10 space-y-3">
+                      <h4 className="text-xs font-bold uppercase text-orange-900 tracking-wider">2. Add Tests / Request Items</h4>
+                      
+                      <div className="grid gap-3 md:grid-cols-3 items-end">
+                        <Field label="Test Category">
+                          <SearchableDropdown
+                            value={selectedCategory}
+                            options={categoryOptions}
+                            getLabel={(category) => category.name}
+                            placeholder="Search category..."
+                            onSelect={(category) => {
+                              setSelectedCategory(category.name);
+                              setSelectedTestTitle('');
+                            }}
+                            onCreate={async (name) => {
+                              const category = await createCategory(name);
+                              if (category) setSelectedCategory(category.name);
+                            }}
+                            createLabel={(name) => `+ Create new category "${name}"`}
+                          />
+                        </Field>
+                        <Field label="Test Title">
+                          <SearchableDropdown
+                            value={selectedTestTitle}
+                            options={tests.filter(t => normalizeKey(t.category) === normalizeKey(selectedCategory))}
+                            getLabel={(test) => test.title}
+                            placeholder={selectedCategory ? 'Search test...' : 'Select category first'}
+                            disabled={!selectedCategory}
+                            onSelect={(test) => setSelectedTestTitle(test.title)}
+                            onCreate={(name) => createTestForCategory(name, selectedCategory, true)}
+                            createLabel={(name) => `+ Create new test "${name}"`}
+                            renderOption={(test) => (
+                              <div>
+                                <p className="font-bold text-gray-900">{test.title}</p>
+                                <p className="text-xs font-semibold text-gray-500">{test.category} | {money(test.totalAmount)}</p>
+                              </div>
+                            )}
+                          />
+                        </Field>
+                        <button
+                          type="button"
+                          className="btn py-2 text-xs flex items-center justify-center gap-1"
+                          onClick={() => {
+                            handleAddAdditionalTest(selectedTestTitle);
                             setSelectedTestTitle('');
                           }}
-                          onCreate={async (name) => {
-                            const category = await createCategory(name);
-                            if (category) setSelectedCategory(category.name);
-                          }}
-                          createLabel={(name) => `+ Create new category "${name}"`}
-                        />
-                      </Field>
-                      <Field label="Test Title">
-                        <SearchableDropdown
-                          value={selectedTestTitle}
-                          options={tests.filter(t => normalizeKey(t.category) === normalizeKey(selectedCategory))}
-                          getLabel={(test) => test.title}
-                          placeholder={selectedCategory ? 'Search test...' : 'Select category first'}
-                          disabled={!selectedCategory}
-                          onSelect={(test) => setSelectedTestTitle(test.title)}
-                          onCreate={(name) => createTestForCategory(name, selectedCategory, true)}
-                          createLabel={(name) => `+ Create new test "${name}"`}
-                          renderOption={(test) => (
-                            <div>
-                              <p className="font-bold text-gray-900">{test.title}</p>
-                              <p className="text-xs font-semibold text-gray-500">{test.category} | {money(test.totalAmount)}</p>
-                            </div>
-                          )}
-                        />
-                      </Field>
-                      <button
-                        type="button"
-                        className="btn py-2 text-xs flex items-center justify-center gap-1"
-                        onClick={() => {
-                          handleAddAdditionalTest(selectedTestTitle);
-                          setSelectedTestTitle('');
-                        }}
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                        <span>Add Test</span>
-                      </button>
-                    </div>
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          <span>Add Test</span>
+                        </button>
+                      </div>
 
-                    {/* Selected Tests List */}
-                    <div className="space-y-2 pt-2 border-t border-orange-100/50">
-                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Selected Tests for Assignment:</p>
-                      {directTests.length === 0 ? (
-                        <p className="text-xs text-gray-400 italic">No tests selected yet. Add or select doctor recommendations.</p>
-                      ) : (
-                        <div className="flex flex-wrap gap-2">
-                          {directTests.map((testTitle) => {
-                            const master = testByTitle.get(normalizeKey(testTitle));
-                            return (
-                            <div key={testTitle} className="bg-orange-100 text-orange-800 text-xs font-bold py-1.5 px-3 rounded-full flex items-center gap-1.5 border border-orange-200">
-                              {master?.category && <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] uppercase tracking-wide text-orange-700">{master.category}</span>}
-                              <span>{testTitle}</span>
-                              <button
-                                type="button"
-                                className="text-orange-600 hover:text-rose-600 font-extrabold focus:outline-none"
-                                onClick={() => handleRemoveDirectTest(testTitle)}
-                              >
-                                &times;
-                              </button>
-                            </div>
-                            );
-                          })}
-                        </div>
-                      )}
+                      {/* Selected Tests List */}
+                      <div className="space-y-2 pt-2 border-t border-orange-100/50">
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Selected Tests for Assignment:</p>
+                        {directTests.length === 0 ? (
+                          <p className="text-xs text-gray-400 italic">No tests selected yet. Add or select doctor recommendations.</p>
+                        ) : (
+                          <div className="flex flex-wrap gap-2">
+                            {directTests.map((testTitle) => {
+                              const master = testByTitle.get(normalizeKey(testTitle));
+                              return (
+                              <div key={testTitle} className="bg-orange-100 text-orange-800 text-xs font-bold py-1.5 px-3 rounded-full flex items-center gap-1.5 border border-orange-200">
+                                {master?.category && <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] uppercase tracking-wide text-orange-700">{master.category}</span>}
+                                <span>{testTitle}</span>
+                                <button
+                                  type="button"
+                                  className="text-orange-600 hover:text-rose-600 font-extrabold focus:outline-none"
+                                  onClick={() => handleRemoveDirectTest(testTitle)}
+                                >
+                                  &times;
+                                </button>
+                              </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Booking Settings Form */}
-                  <form className="space-y-4" onSubmit={handleCreateDirectRequest}>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <Field label="Collection Type">
-                        <select
-                          className="input text-xs"
-                          value={directCollectionType}
-                          onChange={(e) => setDirectCollectionType(e.target.value)}
-                        >
-                          <option value="Lab Visit">Lab Visit (Walk-in)</option>
-                          <option value="Home Sample Collection">Home Sample Collection</option>
-                        </select>
-                      </Field>
-                    </div>
-
-                    <Field label="Remarks / Booking Notes">
-                      <textarea
-                        className="input min-h-20 text-xs"
-                        placeholder="E.g. urgent delivery, fasting sample, preferred collection times..."
-                        value={directRemarks}
-                        onChange={(e) => setDirectRemarks(e.target.value)}
-                      />
-                    </Field>
-
+                  {selectedPatient.isDischarged ? (
                     <div className="flex justify-end gap-2 border-t border-orange-100 pt-4">
                       <button
                         type="button"
@@ -3546,17 +3605,55 @@ const LabWorkspace = () => {
                           setDirectTests([]);
                         }}
                       >
-                        Cancel
-                      </button>
-                      <button
-                        type="submit"
-                        className="btn text-xs px-5"
-                        disabled={directTests.length === 0}
-                      >
-                        Create Lab Request(s)
+                        Close
                       </button>
                     </div>
-                  </form>
+                  ) : (
+                    <form className="space-y-4" onSubmit={handleCreateDirectRequest}>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Field label="Collection Type">
+                          <select
+                            className="input text-xs"
+                            value={directCollectionType}
+                            onChange={(e) => setDirectCollectionType(e.target.value)}
+                          >
+                            <option value="Lab Visit">Lab Visit (Walk-in)</option>
+                            <option value="Home Sample Collection">Home Sample Collection</option>
+                          </select>
+                        </Field>
+                      </div>
+
+                      <Field label="Remarks / Booking Notes">
+                        <textarea
+                          className="input min-h-20 text-xs"
+                          placeholder="E.g. urgent delivery, fasting sample, preferred collection times..."
+                          value={directRemarks}
+                          onChange={(e) => setDirectRemarks(e.target.value)}
+                        />
+                      </Field>
+
+                      <div className="flex justify-end gap-2 border-t border-orange-100 pt-4">
+                        <button
+                          type="button"
+                          className="btn-secondary text-xs"
+                          onClick={() => {
+                            setModal(null);
+                            setSelectedPatient(null);
+                            setDirectTests([]);
+                          }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          className="btn text-xs px-5"
+                          disabled={directTests.length === 0}
+                        >
+                          Create Lab Request(s)
+                        </button>
+                      </div>
+                    </form>
+                  )}
                 </div>
               )}
             </div>
@@ -3696,7 +3793,11 @@ const LabWorkspace = () => {
       </div>
       <div className="space-y-4">
         <main className="space-y-4">
-          {loading ? <div className="flex items-center gap-2 rounded-lg border border-orange-100 bg-white p-6 font-bold text-orange-600"><Loader2 className="h-5 w-5 animate-spin" /> Loading lab module</div> : (
+          {loading ? (
+        <div className="card p-4">
+          <SkeletonTable rows={5} columns={7} className="w-full" />
+        </div>
+      ) : (
             <>
               {['requests', 'tracking', 'reports'].includes(section) && renderTrackingFilters()}
               {section === 'dashboard' && renderDashboard()}

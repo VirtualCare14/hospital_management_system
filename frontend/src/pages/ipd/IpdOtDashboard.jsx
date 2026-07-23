@@ -332,6 +332,11 @@ const IpdOtDashboard = () => {
                       <tr key={admission._id} className="hover:bg-orange-50/20">
                         <td className="p-3 pl-4">
                           <span className="font-bold text-gray-900">{patient.patientName || 'N/A'}</span>
+                          {admission.provisionalDiagnosis && (
+                            <span className="block text-[10px] text-gray-500 italic mt-0.5 max-w-xs">
+                              Remarks: {admission.provisionalDiagnosis}
+                            </span>
+                          )}
                         </td>
                         <td className="p-3">
                           <span className="font-mono text-orange-700 text-xs font-bold">

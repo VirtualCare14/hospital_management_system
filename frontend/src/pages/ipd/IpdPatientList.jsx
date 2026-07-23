@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import client from '../../api/client';
+import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 import { formatUhid } from '../../utils/uhid';
 
 const statusColors = {
@@ -117,7 +118,8 @@ const IpdPatientList = () => {
 
   // Re-filter when search or filters change
   useEffect(() => {
-    let results = [...admissions];
+    // Filter out discharged patients by default from the patient list
+    let results = admissions.filter(a => a.status !== 'Discharged');
 
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -183,10 +185,6 @@ const IpdPatientList = () => {
 
   const handleViewServices = (admission) => {
     navigate(`/ipd/patient/${admission._id}?tab=services`);
-  };
-
-  const handleViewBilling = (admission) => {
-    navigate(`/ipd/patient/${admission._id}?tab=billing`);
   };
 
   const handleOpenOt = (admission) => {
@@ -263,7 +261,6 @@ const IpdPatientList = () => {
                 <option value="Admitted">Admitted</option>
                 <option value="Under Observation">Under Observation</option>
                 <option value="Shifted">Shifted</option>
-                <option value="Discharged">Discharged</option>
               </select>
             </div>
             <div>
@@ -362,11 +359,8 @@ const IpdPatientList = () => {
             <tbody className="divide-y divide-orange-50">
               {loading ? (
                 <tr>
-                  <td colSpan="10" className="p-12 text-center">
-                    <div className="flex items-center justify-center gap-2 text-gray-500">
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                      Loading patients...
-                    </div>
+                  <td colSpan="10" className="p-8">
+                    <SkeletonTable rows={4} columns={10} className="w-full" />
                   </td>
                 </tr>
               ) : paginatedData.length === 0 ? (
@@ -422,13 +416,19 @@ const IpdPatientList = () => {
                         </div>
                       </td>
                       <td className="p-3">
-                        <div className="flex flex-col">
-                          <span className="text-xs font-bold text-gray-700">{admission.roomId?.roomType || 'N/A'}</span>
-                          <span className="text-[10px] text-gray-500 font-mono">
-                            <Bed className="h-3 w-3 inline mr-0.5" />
-                            {admission.bedId?.bedNumber || 'N/A'} (₹{admission.bedId?.pricePerDay || 0}/day)
+                        {admission.roomId ? (
+                          <div className="flex flex-col">
+                            <span className="text-xs font-bold text-gray-700">{admission.roomId.roomType}</span>
+                            <span className="text-[10px] text-gray-500 font-mono">
+                              <Bed className="h-3 w-3 inline mr-0.5 text-gray-400" />
+                              {admission.bedId?.bedNumber || 'N/A'} (₹{admission.bedId?.pricePerDay || 0}/day)
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="inline-flex px-2 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                            <Clock className="h-2.5 w-2.5 mr-1" /> Pending Bed Allocation
                           </span>
-                        </div>
+                        )}
                       </td>
                       <td className="p-3 text-xs">
                         <CalendarDays className="h-3 w-3 inline mr-1 text-gray-400" />
@@ -475,13 +475,6 @@ const IpdPatientList = () => {
                             title="Open Services"
                           >
                             <Syringe className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleViewBilling(admission)}
-                            className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                            title="View Billing Summary"
-                          >
-                            <CreditCard className="h-4 w-4" />
                           </button>
                           <button
                             onClick={() => handleOpenOt(admission)}

@@ -2,6 +2,8 @@ const PharmacyRequest = require('../models/PharmacyRequest');
 const PharmacyInventory = require('../models/PharmacyInventory');
 const IpdAdmission = require('../models/IpdAdmission');
 const IpdMedicine = require('../models/IpdMedicine');
+const IpdConsumable = require('../models/IpdConsumable');
+const IpdAdminSettings = require('../models/IpdAdminSettings');
 const IpdActivityTimeline = require('../models/IpdActivityTimeline');
 const PharmacyStockMovement = require('../models/PharmacyStockMovement');
 
@@ -37,10 +39,10 @@ const getRequests = async (req, res) => {
     const { patientId, admissionId, status, search, doctorId, doctorNotifiedOfReturn } = req.query;
     let query = tenantFilter(req);
 
-    if (patientId) query.patientId = patientId;
-    if (admissionId) query.admissionId = admissionId;
-    if (status) query.status = status;
-    if (doctorId) query.doctorId = doctorId;
+    if (patientId && patientId !== 'undefined' && patientId !== 'null') query.patientId = patientId;
+    if (admissionId && admissionId !== 'undefined' && admissionId !== 'null') query.admissionId = admissionId;
+    if (status && status !== 'undefined' && status !== 'null') query.status = status;
+    if (doctorId && doctorId !== 'undefined' && doctorId !== 'null') query.doctorId = doctorId;
     if (doctorNotifiedOfReturn !== undefined) {
       query.doctorNotifiedOfReturn = doctorNotifiedOfReturn === 'true';
     }
@@ -59,9 +61,9 @@ const getRequests = async (req, res) => {
     if (search) {
       const regex = new RegExp(search, 'i');
       filtered = requests.filter(r => 
-        r.requestNumber.match(regex) ||
-        r.procedureName.match(regex) ||
-        r.patientId?.patientName.match(regex) ||
+        r.requestNumber?.match(regex) ||
+        r.procedureName?.match(regex) ||
+        r.patientId?.patientName?.match(regex) ||
         r.doctorId?.doctorName?.match(regex) ||
         r.doctorId?.username?.match(regex)
       );
@@ -121,23 +123,62 @@ const createRequest = async (req, res) => {
     const hospitalId = req.user.hospitalId;
     const doctorId = req.user._id;
 
-    // Generate Request Number
-    const count = await PharmacyRequest.countDocuments({ hospitalId });
-    const requestNumber = `PR-${10001 + count}`;
+    // Generate unique Request Number (finding the highest number + collision safeguard)
+    let nextNum = 10001;
+    const latestRequest = await PharmacyRequest.findOne({ hospitalId })
+      .sort({ requestNumber: -1 })
+      .select('requestNumber');
+
+    if (latestRequest && latestRequest.requestNumber) {
+      const match = latestRequest.requestNumber.match(/PR-(\d+)/);
+      if (match) {
+        nextNum = parseInt(match[1]) + 1;
+      }
+    } else {
+      const count = await PharmacyRequest.countDocuments({ hospitalId });
+      nextNum = 10001 + count;
+    }
+
+    let requestNumber;
+    let isUnique = false;
+    let attempts = 0;
+    while (!isUnique && attempts < 50) {
+      requestNumber = `PR-${nextNum + attempts}`;
+      const existing = await PharmacyRequest.findOne({ hospitalId, requestNumber });
+      if (!existing) {
+        isUnique = true;
+      } else {
+        attempts++;
+      }
+    }
+
+    if (!isUnique) {
+      requestNumber = `PR-${nextNum}-${Date.now()}`;
+    }
+
+    // Fetch all active/valid inventory items for the hospital to verify custom items
+    const inventoryItems = await PharmacyInventory.find({ hospitalId });
+    const inventoryNames = new Set(inventoryItems.map(inv => inv.itemName.toLowerCase().trim()));
 
     // Map items, setting all initial quantites
-    const parsedItems = items.map(item => ({
-      itemName: String(item.itemName).trim(),
-      requestedQty: parseInt(item.requestedQty) || 1,
-      approvedQty: 0,
-      issuedQty: 0,
-      usedQty: 0,
-      returnedQty: 0,
-      damagedQty: 0,
-      pendingQty: 0,
-      rejectedQty: 0,
-      batch: ''
-    })).filter(i => i.itemName);
+    const parsedItems = items.map(item => {
+      const nameClean = String(item.itemName).trim();
+      const isCustom = !inventoryNames.has(nameClean.toLowerCase());
+      return {
+        itemName: nameClean,
+        requestedQty: parseInt(item.requestedQty) || 1,
+        approvedQty: 0,
+        issuedQty: 0,
+        usedQty: 0,
+        returnedQty: 0,
+        damagedQty: 0,
+        pendingQty: 0,
+        rejectedQty: 0,
+        batch: '',
+        isCustom,
+        isAvailable: true
+      };
+    }).filter(i => i.itemName);
 
     if (parsedItems.length === 0) {
       return res.status(400).json({ message: 'No valid items provided' });
@@ -201,10 +242,13 @@ const reviewRequest = async (req, res) => {
     request.items = request.items.map(origItem => {
       const reviewItem = items.find(i => i.itemName.toLowerCase() === origItem.itemName.toLowerCase());
       
-      if (!reviewItem || reviewItem.isRejected) {
+      const isRejected = !reviewItem || reviewItem.isRejected || reviewItem.isAvailable === false;
+      
+      if (isRejected) {
         origItem.rejectedQty = origItem.requestedQty;
         origItem.approvedQty = 0;
         origItem.pendingQty = 0;
+        origItem.isAvailable = reviewItem ? reviewItem.isAvailable : false;
       } else {
         allRejected = false;
         const appQty = parseInt(reviewItem.approvedQty) || 0;
@@ -212,6 +256,11 @@ const reviewRequest = async (req, res) => {
         origItem.batch = String(reviewItem.batch || '').trim();
         origItem.rejectedQty = 0;
         origItem.pendingQty = Math.max(0, origItem.requestedQty - appQty);
+        origItem.isAvailable = true;
+        if (origItem.isCustom) {
+          origItem.unitPrice = parseFloat(reviewItem.unitPrice) || 0;
+          origItem.gst = parseFloat(reviewItem.gst) || 0;
+        }
 
         if (origItem.pendingQty > 0) {
           hasPending = true;
@@ -275,6 +324,11 @@ const issueRequest = async (req, res) => {
     // Verify stock availability and deduct
     for (const item of request.items) {
       if (item.approvedQty > 0 && item.issuedQty === 0) {
+        if (item.isCustom) {
+          item.issuedQty = item.approvedQty;
+          continue;
+        }
+
         if (!item.batch) {
           return res.status(400).json({ message: `No batch selected for medicine: ${item.itemName}` });
         }
@@ -319,22 +373,22 @@ const issueRequest = async (req, res) => {
       }
     }
 
-    request.status = 'Issued';
+    request.status = 'Sent';
     request.issuedTo = issuedTo;
     request.auditTrail.push({
-      status: 'Issued',
-      action: 'Items Issued',
+      status: 'Sent',
+      action: 'Items Sent',
       performedBy: req.user._id,
       performedByName: req.user.doctorName || req.user.username || 'Pharmacist',
       timestamp: new Date(),
-      remarks: `Items issued to ${issuedTo}. ${remarks || ''}`
+      remarks: `Items issued and sent to ${issuedTo}. ${remarks || ''}`
     });
 
     await request.save();
 
     // Log to IPD Timeline
     await addTimeline(req, request.admissionId, request.patientId, 'Service Added',
-      `Pharmacy Request #${request.requestNumber} items issued to ${issuedTo}`
+      `Pharmacy Request #${request.requestNumber} items sent to ${issuedTo}`
     );
 
     res.status(200).json({ message: 'Items issued successfully and inventory updated', request });
@@ -651,8 +705,13 @@ const completeRequest = async (req, res) => {
 // Helper to auto-post medicine consumption to IPD Patient billing
 const autoPostToBilling = async (req, request) => {
   const now = new Date();
-  const dateStr = now.toISOString().split('T')[0];
+  const day = String(now.getDate()).padStart(2, '0');
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const year = now.getFullYear();
+  const dateStr = `${day}/${month}/${year}`;
   const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+
+  const adminSettings = await IpdAdminSettings.findOne({ hospitalId: request.hospitalId });
 
   for (const item of request.items) {
     const consumedQty = item.usedQty + item.damagedQty; // items used or wasted are billable
@@ -669,26 +728,56 @@ const autoPostToBilling = async (req, request) => {
       const basePrice = invItem ? invItem.rate : 0;
       const totalAmount = consumedQty * unitPrice;
 
-      // Auto-create IPD billing entry
-      await IpdMedicine.create({
-        hospitalId: request.hospitalId,
-        admissionId: request.admissionId,
-        patientId: request.patientId,
-        medicineName: item.itemName,
-        quantity: consumedQty,
-        unitPrice,
-        gst,
-        baseUnitPrice: basePrice,
-        totalAmount,
-        date: dateStr,
-        time: timeStr,
-        addedBy: request.doctorId
-      });
+      // Check if item is configured as a consumable in IpdAdminSettings
+      let isConsumable = false;
+      if (adminSettings && adminSettings.consumableServices) {
+        isConsumable = adminSettings.consumableServices.some(
+          c => c.name.trim().toLowerCase() === item.itemName.trim().toLowerCase()
+        );
+      }
 
-      // Timeline entry for each billed item
-      await addTimeline(req, request.admissionId, request.patientId, 'Medicine Added',
-        `Procedure Medicine Billed: ${item.itemName} x ${consumedQty} = ₹${totalAmount}`
-      );
+      if (isConsumable) {
+        // Auto-create IPD Consumable billing entry
+        await IpdConsumable.create({
+          hospitalId: request.hospitalId,
+          admissionId: request.admissionId,
+          patientId: request.patientId,
+          serviceName: item.itemName,
+          price: unitPrice,
+          gst: gst,
+          quantity: consumedQty,
+          totalAmount,
+          date: dateStr,
+          time: timeStr,
+          addedBy: request.doctorId
+        });
+
+        // Timeline entry for each billed consumable
+        await addTimeline(req, request.admissionId, request.patientId, 'Service Added',
+          `Consumable Billed: ${item.itemName} x ${consumedQty} = ₹${totalAmount}`
+        );
+      } else {
+        // Auto-create IPD Medicine billing entry
+        await IpdMedicine.create({
+          hospitalId: request.hospitalId,
+          admissionId: request.admissionId,
+          patientId: request.patientId,
+          medicineName: item.itemName,
+          quantity: consumedQty,
+          unitPrice,
+          gst,
+          baseUnitPrice: basePrice,
+          totalAmount,
+          date: dateStr,
+          time: timeStr,
+          addedBy: request.doctorId
+        });
+
+        // Timeline entry for each billed medicine
+        await addTimeline(req, request.admissionId, request.patientId, 'Medicine Added',
+          `Procedure Medicine Billed: ${item.itemName} x ${consumedQty} = ₹${totalAmount}`
+        );
+      }
     }
   }
 };
@@ -713,6 +802,191 @@ const dismissNotification = async (req, res) => {
   }
 };
 
+// @desc    IPD mark request as received
+// @route   POST /api/pharmacy/requests/:id/receive
+// @access  Private
+const receiveRequest = async (req, res) => {
+  try {
+    const request = await PharmacyRequest.findOne(tenantFilter(req, { _id: req.params.id }));
+    if (!request) {
+      return res.status(404).json({ message: 'Request not found' });
+    }
+
+    if (request.status !== 'Sent') {
+      return res.status(400).json({ message: 'Only requests marked as Sent can be received' });
+    }
+
+    request.items.forEach(item => {
+      item.receivedQty = item.issuedQty;
+    });
+
+    request.status = 'Received';
+    request.auditTrail.push({
+      status: 'Received',
+      action: 'Items Received',
+      performedBy: req.user._id,
+      performedByName: req.user.doctorName || req.user.username || 'Staff',
+      timestamp: new Date(),
+      remarks: 'Request marked as received in IPD'
+    });
+
+    await request.save();
+
+    await addTimeline(req, request.admissionId, request.patientId, 'Service Added',
+      `Pharmacy Request #${request.requestNumber} items marked as received in IPD`
+    );
+
+    res.status(200).json({ message: 'Request marked as received successfully', request });
+  } catch (error) {
+    console.error('Receive Request Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    IPD return leftover medicines (marked sent)
+// @route   POST /api/pharmacy/requests/:id/return-sent
+// @access  Private
+const returnSentRequest = async (req, res) => {
+  try {
+    const { items, remarks } = req.body;
+    if (!Array.isArray(items)) {
+      return res.status(400).json({ message: 'Items array is required' });
+    }
+
+    const request = await PharmacyRequest.findOne(tenantFilter(req, { _id: req.params.id }));
+    if (!request) {
+      return res.status(404).json({ message: 'Request not found' });
+    }
+
+    if (request.status !== 'Received') {
+      return res.status(400).json({ message: 'Returns can only be sent for Received requests' });
+    }
+
+    // Verify that return quantity doesn't exceed received quantity
+    for (const item of items) {
+      const origItem = request.items.find(i => i.itemName.toLowerCase() === item.itemName.toLowerCase());
+      if (!origItem) {
+        return res.status(400).json({ message: `Item ${item.itemName} not found in original request` });
+      }
+      const returnQty = parseInt(item.returnQty) || 0;
+      if (returnQty > origItem.receivedQty) {
+        return res.status(400).json({ message: `Returned quantity for ${item.itemName} (${returnQty}) cannot exceed received quantity (${origItem.receivedQty})` });
+      }
+      origItem.returnedQty = returnQty;
+    }
+
+    request.status = 'Return Sent';
+    request.remarks = remarks || '';
+    request.auditTrail.push({
+      status: 'Return Sent',
+      action: 'Returns Sent',
+      performedBy: req.user._id,
+      performedByName: req.user.doctorName || req.user.username || 'Staff',
+      timestamp: new Date(),
+      remarks: remarks || 'Leftover medicines returned to pharmacy'
+    });
+
+    await request.save();
+
+    await addTimeline(req, request.admissionId, request.patientId, 'Bill Updated',
+      `Leftover medicines for Pharmacy Request #${request.requestNumber} marked as Return Sent`
+    );
+
+    res.status(200).json({ message: 'Return sent successfully', request });
+  } catch (error) {
+    console.error('Return Sent Request Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Pharmacy approve returned items (mark received & put in stock)
+// @route   POST /api/pharmacy/requests/:id/return-received
+// @access  Private
+const returnReceivedRequest = async (req, res) => {
+  try {
+    const { items, remarks } = req.body;
+    if (!Array.isArray(items)) {
+      return res.status(400).json({ message: 'Items verification array is required' });
+    }
+
+    const request = await PharmacyRequest.findOne(tenantFilter(req, { _id: req.params.id }));
+    if (!request) {
+      return res.status(404).json({ message: 'Request not found' });
+    }
+
+    if (request.status !== 'Return Sent') {
+      return res.status(400).json({ message: 'Only requests with Return Sent status can be received' });
+    }
+
+    // Process return items and update pharmacy stock
+    for (const item of request.items) {
+      if (item.returnedQty > 0) {
+        const verifyItem = items.find(i => i.itemName.toLowerCase() === item.itemName.toLowerCase());
+        
+        if (verifyItem && verifyItem.returnAccepted) {
+          item.returnAcceptedQty = item.returnedQty;
+          
+          if (!item.isCustom) {
+            // Put standard items back to inventory stock
+            const invItem = await PharmacyInventory.findOne({
+              hospitalId: req.user.hospitalId,
+              itemName: { $regex: new RegExp('^' + item.itemName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '$', 'i') },
+              batch: item.batch
+            });
+
+            if (invItem) {
+              const previousStock = invItem.quantity;
+              invItem.quantity += item.returnedQty;
+              invItem.amount = invItem.rate * invItem.quantity;
+              await invItem.save();
+
+              // Log Stock Movement
+              await PharmacyStockMovement.create({
+                hospitalId: req.user.hospitalId,
+                itemName: item.itemName,
+                batch: item.batch,
+                type: 'OT Return',
+                quantity: item.returnedQty,
+                previousStock,
+                newStock: invItem.quantity,
+                referenceId: request._id,
+                performedBy: req.user._id,
+                remarks: `Returned items put back to inventory for request #${request.requestNumber}`
+              });
+            }
+          }
+        } else {
+          // If return rejected, it's counted as damaged/wasted
+          item.damagedQty += item.returnedQty;
+          item.returnedQty = 0;
+        }
+      }
+    }
+
+    request.status = 'Return Received';
+    request.remarks = remarks || '';
+    request.auditTrail.push({
+      status: 'Return Received',
+      action: 'Returns Received',
+      performedBy: req.user._id,
+      performedByName: req.user.doctorName || req.user.username || 'Pharmacist',
+      timestamp: new Date(),
+      remarks: remarks || 'Returned items accepted and put back to stock'
+    });
+
+    await request.save();
+
+    await addTimeline(req, request.admissionId, request.patientId, 'Bill Updated',
+      `Pharmacy Request #${request.requestNumber} returns accepted & marked Return Received`
+    );
+
+    res.status(200).json({ message: 'Return received and stock inventory updated', request });
+  } catch (error) {
+    console.error('Return Received Request Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   getRequests,
   getRequestDetails,
@@ -723,5 +997,8 @@ module.exports = {
   verifyReturn,
   issueRemainingPending,
   completeRequest,
-  dismissNotification
+  dismissNotification,
+  receiveRequest,
+  returnSentRequest,
+  returnReceivedRequest
 };

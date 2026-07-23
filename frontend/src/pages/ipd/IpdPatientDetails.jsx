@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 import {
   ArrowLeft,
   User,
@@ -48,6 +49,14 @@ const getStatusBadgeText = (status) => {
   switch (status) {
     case 'Issued':
       return 'Pharmacy Sent Medicine';
+    case 'Sent':
+      return 'Sent by Pharmacy';
+    case 'Received':
+      return 'Received in Ward';
+    case 'Return Sent':
+      return 'Return Sent to Pharmacy';
+    case 'Return Received':
+      return 'Return Received & Stock Restored';
     case 'Remaining Items Issued':
       return 'Pharmacy Sent Medicine (Remaining)';
     case 'Return Requested':
@@ -71,10 +80,15 @@ const getStatusBadgeClass = (status) => {
     case 'Partially Approved':
       return 'bg-orange-100 text-orange-850 border border-orange-200';
     case 'Issued':
+    case 'Sent':
     case 'Remaining Items Issued':
       return 'bg-blue-100 text-blue-800 border border-blue-200';
+    case 'Received':
+      return 'bg-indigo-100 text-indigo-850 border border-indigo-200';
+    case 'Return Sent':
     case 'Return Requested':
       return 'bg-purple-100 text-purple-800 border border-purple-200';
+    case 'Return Received':
     case 'Return Accepted':
     case 'Completed':
       return 'bg-green-100 text-green-800 border border-green-200';
@@ -98,7 +112,6 @@ const TABS = [
 
 const SERVICE_CATEGORIES = [
   { id: 'consumables', label: 'Consumable Services', icon: Activity },
-  { id: 'medicines', label: 'Medicines', icon: Pill },
   { id: 'lab-tests', label: 'Lab Tests', icon: FlaskConical },
   { id: 'medication-chart', label: 'Medication Chart', icon: ClipboardList },
 ];
@@ -133,7 +146,12 @@ const IpdPatientDetails = () => {
   const [medicines, setMedicines] = useState([]);
   const [medicinesLoading, setMedicinesLoading] = useState(false);
   const [showAddMedicine, setShowAddMedicine] = useState(false);
+  const [receivedMedicines, setReceivedMedicines] = useState([]);
+  const [selectedReceivedMed, setSelectedReceivedMed] = useState(null);
   const [medicineForm, setMedicineForm] = useState({ medicineName: '', quantity: '1', unitPrice: '', gst: '', baseUnitPrice: '' });
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [returnRemarks, setReturnRemarks] = useState('');
+  const [returnItemsForm, setReturnItemsForm] = useState([]);
   const [labTests, setLabTests] = useState([]);
   const [labTestsLoading, setLabTestsLoading] = useState(false);
   const [showAddLabTest, setShowAddLabTest] = useState(false);
@@ -150,7 +168,15 @@ const IpdPatientDetails = () => {
   const [dischargeRecords, setDischargeRecords] = useState([]);
   const [dischargeRecordsLoading, setDischargeRecordsLoading] = useState(false);
   const [consumableServicesList, setConsumableServicesList] = useState([]);
-  const [medicineSettingsList, setMedicineSettingsList] = useState([]);
+
+  // Bed Change States
+  const [showChangeBedModal, setShowChangeBedModal] = useState(false);
+  const [newRoomType, setNewRoomType] = useState('');
+  const [newBedId, setNewBedId] = useState('');
+  const [changeBedRooms, setChangeBedRooms] = useState([]);
+  const [changeBedBeds, setChangeBedBeds] = useState([]);
+  const [changingBed, setChangingBed] = useState(false);
+  const [loadingRooms, setLoadingRooms] = useState(false);
 
   // Pharmacy Requests Phase 2 State
   const [pharmacyRequests, setPharmacyRequests] = useState([]);
@@ -163,6 +189,20 @@ const IpdPatientDetails = () => {
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [showConsumeModal, setShowConsumeModal] = useState(false);
   const [consumeForm, setConsumeForm] = useState([]);
+
+  useEffect(() => {
+    if (newRoomType) {
+      client.get(`/rooms/beds?roomType=${encodeURIComponent(newRoomType)}`)
+        .then(({ data }) => {
+          setChangeBedBeds(data.filter(b => b.status === 'Available'));
+          setNewBedId('');
+        })
+        .catch(() => {
+          setChangeBedBeds([]);
+          setNewBedId('');
+        });
+    }
+  }, [newRoomType]);
 
   const loadAdmission = useCallback(async () => {
     setLoading(true);
@@ -183,9 +223,26 @@ const IpdPatientDetails = () => {
 
   const loadMedicines = useCallback(async () => {
     setMedicinesLoading(true);
-    try { const { data } = await client.get(`/ipd/services/medicines/${id}`); setMedicines(data); }
-    catch (err) { console.error(err); } finally { setMedicinesLoading(false); }
+    try {
+      const { data } = await client.get(`/ipd/services/medicines/${id}`);
+      setMedicines(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setMedicinesLoading(false);
+    }
   }, [id]);
+
+  const loadReceivedMedicines = useCallback(async () => {
+    try {
+      const { data } = await client.get(`/ipd/services/received-medicines/${id}`);
+      setReceivedMedicines(data);
+    } catch (err) {
+      console.error('Failed to load received medicines', err);
+    }
+  }, [id]);
+
+
 
   const loadLabTests = useCallback(async () => {
     setLabTestsLoading(true);
@@ -250,11 +307,72 @@ const IpdPatientDetails = () => {
     }
   };
 
+  const handleMarkRequestReceived = async (reqId) => {
+    try {
+      await client.post(`/pharmacy/requests/${reqId}/receive`);
+      toast.success('Request items marked as received successfully!');
+      loadPharmacyRequests();
+      loadReceivedMedicines();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to receive request');
+    }
+  };
+
+  const handleOpenReturnModal = (reqItem) => {
+    // Populate return items list with items that have been received and not yet returned
+    const initialReturns = reqItem.items
+      .filter(item => item.receivedQty > 0)
+      .map(item => ({
+        itemName: item.itemName,
+        receivedQty: item.receivedQty,
+        returnedQty: item.returnedQty || 0,
+        returnQty: 0
+      }));
+    setReturnItemsForm(initialReturns);
+    setSelectedRequest(reqItem);
+    setReturnRemarks('');
+    setShowReturnModal(true);
+  };
+
+  const handleReturnSubmit = async (e) => {
+    e.preventDefault();
+    const activeReturns = returnItemsForm.filter(item => parseInt(item.returnQty) > 0).map(item => ({
+      itemName: item.itemName,
+      returnQty: parseInt(item.returnQty)
+    }));
+    if (activeReturns.length === 0) {
+      toast.error('Please specify at least one medicine and quantity to return');
+      return;
+    }
+
+    try {
+      await client.post(`/pharmacy/requests/${selectedRequest._id}/return-sent`, {
+        items: activeReturns,
+        remarks: returnRemarks
+      });
+      toast.success('Return requested successfully!');
+      setShowReturnModal(false);
+      setSelectedRequest(null);
+      loadPharmacyRequests();
+      loadReceivedMedicines();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to request return');
+    }
+  };
+
   const loadPharmacyMeds = useCallback(async () => {
     try {
-      const { data } = await client.get('/pharmacy/inventory?limit=1000');
-      const uniqueNames = [...new Set(data.items.map(item => item.itemName))];
-      setPharmacyMedsList(uniqueNames);
+      const { data } = await client.get('/pharmacy/inventory?limit=5000');
+      const items = data.items || [];
+      const seen = new Set();
+      const uniqueMeds = [];
+      for (const item of items) {
+        if (!seen.has(item.itemName)) {
+          seen.add(item.itemName);
+          uniqueMeds.push(item);
+        }
+      }
+      setPharmacyMedsList(uniqueMeds);
     } catch (err) {
       console.warn('Could not load pharmacy inventory for searching:', err.message);
     }
@@ -264,7 +382,6 @@ const IpdPatientDetails = () => {
     try {
       const { data } = await client.get('/ipd/settings');
       if (data?.consumableServices) setConsumableServicesList(data.consumableServices.filter(s => s.isActive));
-      if (data?.medicines) setMedicineSettingsList(data.medicines.filter(m => m.isActive));
     } catch (err) { console.warn(err); }
   }, []);
 
@@ -283,17 +400,18 @@ const IpdPatientDetails = () => {
     loadAvailableLabTests();
     loadOtHospitalInfo();
     loadDischargeRecords();
-  }, [loadAdmission, loadAdminSettings, loadAvailableLabTests, loadOtHospitalInfo, loadDischargeRecords]);
+    loadPharmacyMeds();
+  }, [loadAdmission, loadAdminSettings, loadAvailableLabTests, loadOtHospitalInfo, loadDischargeRecords, loadPharmacyMeds]);
 
   useEffect(() => {
-    if (activeTab === 'services') { loadConsumables(); loadMedicines(); loadLabTests(); }
+    if (activeTab === 'services') { loadConsumables(); loadMedicines(); loadReceivedMedicines(); loadLabTests(); loadPharmacyMeds(); }
     if (activeTab === 'billing') { loadBilling(); loadConsumables(); loadMedicines(); loadLabTests(); }
     if (activeTab === 'dashboard') loadDashboard();
     if (activeTab === 'timeline') loadTimeline();
     if (activeTab === 'ot-records') loadOtRecords();
     if (activeTab === 'discharge-records') loadDischargeRecords();
     if (activeTab === 'pharmacy-requests') { loadPharmacyRequests(); loadPharmacyMeds(); }
-  }, [activeTab, loadConsumables, loadMedicines, loadLabTests, loadBilling, loadDashboard, loadTimeline, loadOtRecords, loadDischargeRecords, loadPharmacyRequests, loadPharmacyMeds]);
+  }, [activeTab, loadConsumables, loadMedicines, loadReceivedMedicines, loadLabTests, loadBilling, loadDashboard, loadTimeline, loadOtRecords, loadDischargeRecords, loadPharmacyRequests, loadPharmacyMeds]);
 
   useEffect(() => {
     const params = new URLSearchParams(searchParams);
@@ -312,7 +430,24 @@ const IpdPatientDetails = () => {
     const { serviceName, price, gst, quantity } = consumableForm;
     if (!serviceName || !price || !quantity) { toast.error('Service name, price, and quantity are required'); return; }
     try {
-      const payload = { admissionId: id, serviceName, price: parseFloat(price), gst: parseFloat(gst || '0'), quantity: parseInt(quantity) };
+      const now = new Date();
+      const day = String(now.getDate()).padStart(2, '0');
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const year = now.getFullYear();
+      const dateStr = `${day}/${month}/${year}`;
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const timeStr = `${hours}:${minutes}`;
+
+      const payload = { 
+        admissionId: id, 
+        serviceName, 
+        price: parseFloat(price), 
+        gst: parseFloat(gst || '0'), 
+        quantity: parseInt(quantity),
+        date: dateStr,
+        time: timeStr
+      };
       const { data } = await client.post('/ipd/services/consumables', payload);
       toast.success(data.message);
       setShowAddConsumable(false);
@@ -330,28 +465,7 @@ const IpdPatientDetails = () => {
     } catch (err) { toast.error('Failed to delete consumable'); }
   };
 
-  const handleAddMedicine = async (e) => {
-    e.preventDefault();
-    const { medicineName, quantity, unitPrice, gst, baseUnitPrice } = medicineForm;
-    if (!medicineName || !quantity || !unitPrice) { toast.error('Medicine name, quantity, and unit price are required'); return; }
-    try {
-      const payload = { admissionId: id, medicineName, quantity: parseInt(quantity), unitPrice: parseFloat(unitPrice), gst: parseFloat(gst || '0'), baseUnitPrice: parseFloat(baseUnitPrice || unitPrice) };
-      const { data } = await client.post('/ipd/services/medicines', payload);
-      toast.success(data.message);
-      setShowAddMedicine(false);
-      setMedicineForm({ medicineName: '', quantity: '1', unitPrice: '', gst: '', baseUnitPrice: '' });
-      loadMedicines(); loadBilling(); loadDashboard();
-    } catch (err) { toast.error(err.response?.data?.message || 'Failed to add medicine'); }
-  };
 
-  const handleDeleteMedicine = async (medicineId) => {
-    if (!window.confirm('Delete this medicine record?')) return;
-    try {
-      await client.delete(`/ipd/services/medicines/${medicineId}`);
-      toast.success('Medicine record deleted');
-      loadMedicines(); loadBilling(); loadDashboard();
-    } catch (err) { toast.error('Failed to delete medicine'); }
-  };
 
   const handleAddLabTest = async (e) => {
     e.preventDefault();
@@ -381,14 +495,116 @@ const IpdPatientDetails = () => {
     setLabTestForm({ testName, testCategory: test?.category || '', testPrice: String(test?.totalAmount || test?.basePrice || '0') });
   };
 
+  const handleReceivedMedicineSelect = (itemName) => {
+    const med = pharmacyMedsList.find(m => m.itemName === itemName);
+    if (med) {
+      const totalGst = (med.sgst || 0) + (med.cst || 0);
+      setMedicineForm({
+        medicineName: med.itemName,
+        quantity: '1',
+        unitPrice: String(med.mrp || 0),
+        gst: String(totalGst),
+        baseUnitPrice: String(med.rate || med.mrp || 0)
+      });
+    } else {
+      setMedicineForm(p => ({
+        ...p,
+        medicineName: itemName
+      }));
+    }
+  };
+
+  const handleAddMedicine = async (e) => {
+    e.preventDefault();
+    const { medicineName, quantity, unitPrice, gst, baseUnitPrice } = medicineForm;
+    if (!medicineName || !quantity || !unitPrice) {
+      toast.error('Medicine name, quantity, and unit price are required');
+      return;
+    }
+    try {
+      const payload = {
+        admissionId: id,
+        medicineName,
+        quantity: parseInt(quantity),
+        unitPrice: parseFloat(unitPrice),
+        gst: parseFloat(gst || '0'),
+        baseUnitPrice: parseFloat(baseUnitPrice || unitPrice)
+      };
+      const { data } = await client.post('/ipd/services/medicines', payload);
+      toast.success(data.message);
+      setShowAddMedicine(false);
+      setMedicineForm({ medicineName: '', quantity: '1', unitPrice: '', gst: '', baseUnitPrice: '' });
+      setSelectedReceivedMed(null);
+      loadMedicines(); loadReceivedMedicines(); loadBilling(); loadDashboard();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to add medicine');
+    }
+  };
+
+  const handleDeleteMedicine = async (medId) => {
+    if (!window.confirm('Delete this medicine record?')) return;
+    try {
+      await client.delete(`/ipd/services/medicines/${medId}`);
+      toast.success('Medicine record deleted');
+      loadMedicines(); loadReceivedMedicines(); loadBilling(); loadDashboard();
+    } catch (err) {
+      toast.error('Failed to delete medicine');
+    }
+  };
+
+  const handleOpenChangeBedModal = async () => {
+    setShowChangeBedModal(true);
+    setLoadingRooms(true);
+    try {
+      const { data: rooms } = await client.get('/rooms');
+      setChangeBedRooms(rooms);
+      setNewRoomType(admission?.roomId?.roomType || rooms[0]?.roomType || '');
+      setNewBedId('');
+    } catch (err) {
+      toast.error('Failed to load rooms configuration');
+      setShowChangeBedModal(false);
+    } finally {
+      setLoadingRooms(false);
+    }
+  };
+
+  const handleChangeBedSubmit = async (e) => {
+    e.preventDefault();
+    if (!newRoomType || !newBedId) {
+      toast.error('Please select room type and bed number');
+      return;
+    }
+    const chosenRoom = changeBedRooms.find(r => r.roomType === newRoomType);
+    if (!chosenRoom) {
+      toast.error('Invalid room type selected');
+      return;
+    }
+    setChangingBed(true);
+    try {
+      await client.put(`/ipd/admissions/${id}/change-bed`, {
+        newRoomId: chosenRoom._id,
+        newBedId: newBedId
+      });
+      toast.success('Bed changed successfully');
+      setShowChangeBedModal(false);
+      loadAdmission();
+      loadBilling();
+      loadDashboard();
+      loadTimeline();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to change bed');
+    } finally {
+      setChangingBed(false);
+    }
+  };
+
   const filteredLabTests = labTestSearch
     ? availableLabTests.filter(t => (t.title || t.test || '').toLowerCase().includes(labTestSearch.toLowerCase()) || (t.category || '').toLowerCase().includes(labTestSearch.toLowerCase()))
     : availableLabTests;
 
   const categoryFilteredLabTests = labTestCategoryFilter ? filteredLabTests.filter(t => t.category === labTestCategoryFilter) : filteredLabTests;
 
-  const medicineTotal = medicineForm.quantity && medicineForm.unitPrice
-    ? (parseInt(medicineForm.quantity) * parseFloat(medicineForm.unitPrice)).toFixed(2) : '0.00';
+
 
   const applyGstToUnitPrice = (base, gstPct) => {
     const b = parseFloat(base || 0);
@@ -462,6 +678,18 @@ const IpdPatientDetails = () => {
         </button>
       </div>
 
+      {admission.status === 'Discharged' && (
+        <div className="card p-4 border border-gray-255 bg-gray-50 flex items-center gap-3 no-print">
+          <AlertCircle className="text-gray-500 h-6 w-6 shrink-0" />
+          <div>
+            <h4 className="font-extrabold text-gray-800 text-xs uppercase tracking-wider">Patient is Discharged</h4>
+            <p className="text-[11px] text-gray-650 mt-0.5 font-semibold">
+              This patient has been discharged from the hospital. The IPD case record is read-only. No further modifications, charges, or clinical chart updates can be performed.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Patient Profile Header */}
       <div className="card p-5 bg-gradient-to-br from-orange-50 to-white border-orange-200">
         <div className="flex flex-col sm:flex-row items-start gap-4">
@@ -529,7 +757,21 @@ const IpdPatientDetails = () => {
             </div>
           </div>
           <div className="card p-5 space-y-4">
-            <div className="flex items-center gap-2 border-b border-orange-100 pb-3"><Bed className="h-5 w-5 text-orange-500" /><h3 className="font-extrabold text-gray-900">Bed Information</h3></div>
+            <div className="flex items-center justify-between border-b border-orange-100 pb-3">
+              <div className="flex items-center gap-2">
+                <Bed className="h-5 w-5 text-orange-500" />
+                <h3 className="font-extrabold text-gray-900">Bed Information</h3>
+              </div>
+              {admission.status !== 'Discharged' && (
+                <button
+                  onClick={handleOpenChangeBedModal}
+                  className="btn-secondary text-xs py-1 px-2.5 flex items-center gap-1 text-orange-600 border-orange-200 hover:bg-orange-50 cursor-pointer"
+                  disabled={loadingRooms}
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 text-orange-500 ${loadingRooms ? 'animate-spin' : 'animate-hover'}`} /> Change Bed
+                </button>
+              )}
+            </div>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div><span className="block text-[10px] font-bold uppercase text-gray-400">Room Type</span><div className="flex items-center gap-1 font-bold text-gray-800"><Building2 className="h-3.5 w-3.5 text-gray-400" />{admission.roomId?.roomType || 'N/A'}</div></div>
               <div><span className="block text-[10px] font-bold uppercase text-gray-400">Bed Type</span><span className="font-bold text-gray-800">{admission.bedId?.bedType || 'N/A'}</span></div>
@@ -553,16 +795,11 @@ const IpdPatientDetails = () => {
           {dashboardLoading ? (<div className="flex items-center justify-center p-12"><Loader2 className="h-6 w-6 animate-spin text-gray-500" /></div>
           ) : dashboard ? (
             <>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="card p-4 text-center bg-blue-50 border-blue-100">
                   <Activity className="h-6 w-6 text-blue-500 mx-auto mb-1" />
                   <span className="block text-2xl font-black text-blue-700">{dashboard.counts.consumables}</span>
                   <span className="text-[10px] font-bold uppercase text-blue-500">Services</span>
-                </div>
-                <div className="card p-4 text-center bg-green-50 border-green-100">
-                  <Pill className="h-6 w-6 text-green-500 mx-auto mb-1" />
-                  <span className="block text-2xl font-black text-green-700">{dashboard.counts.medicines}</span>
-                  <span className="text-[10px] font-bold uppercase text-green-500">Medicines</span>
                 </div>
                 <div className="card p-4 text-center bg-purple-50 border-purple-100">
                   <FlaskConical className="h-6 w-6 text-purple-500 mx-auto mb-1" />
@@ -606,14 +843,16 @@ const IpdPatientDetails = () => {
             <div className="card overflow-hidden">
               <div className="p-4 border-b border-orange-100 flex items-center justify-between bg-orange-50/30">
                 <h3 className="font-extrabold text-gray-900 flex items-center gap-2"><Activity className="h-5 w-5 text-orange-500" /> Consumable Services</h3>
-                <button onClick={() => setShowAddConsumable(!showAddConsumable)} className="btn text-xs py-2 px-3"><Plus className="h-3.5 w-3.5" /> Add Service</button>
+                {admission.status !== 'Discharged' && (
+                  <button onClick={() => setShowAddConsumable(!showAddConsumable)} className="btn text-xs py-2 px-3"><Plus className="h-3.5 w-3.5" /> Add Service</button>
+                )}
               </div>
               {showAddConsumable && (
                 <div className="p-4 border-b border-orange-100 bg-orange-50/20">
                   <form onSubmit={handleAddConsumable} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="sm:col-span-2">
                       <label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">Service Name</label>
-                      <input list="consumable-services" className="input py-2 text-xs" placeholder="Search or select service" value={consumableForm.serviceName}
+                      <input list="ipd-consumables-datalist" className="input py-2 text-xs" placeholder="Search or select service" value={consumableForm.serviceName}
                         onChange={(e) => {
                           const val = e.target.value;
                           setConsumableForm(p => {
@@ -626,7 +865,6 @@ const IpdPatientDetails = () => {
                             };
                           });
                         }} />
-                      <datalist id="consumable-services">{consumableServicesList.map((s, i) => <option key={i} value={s.name} />)}</datalist>
                     </div>
                     <div><label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">Qty</label><input type="number" min="1" className="input py-2 text-xs" value={consumableForm.quantity} onChange={(e) => setConsumableForm(p => ({ ...p, quantity: e.target.value }))} /></div>
                     <div className="col-span-full flex justify-end gap-2"><button type="button" onClick={() => { setShowAddConsumable(false); setConsumableForm({ serviceName: '', price: '', gst: '', quantity: '1' }); }} className="btn-secondary text-xs py-2 px-4">Cancel</button><button type="submit" className="btn text-xs py-2 px-4"><Plus className="h-3.5 w-3.5" /> Add</button></div>
@@ -637,14 +875,23 @@ const IpdPatientDetails = () => {
                 <table className="w-full text-left text-sm">
                   <thead><tr className="bg-gray-50 text-xs font-bold uppercase text-gray-500 border-b border-orange-100"><th className="p-3 pl-4">Date</th><th className="p-3">Time</th><th className="p-3">Service Name</th><th className="p-3">Qty</th><th className="p-3">Added By</th><th className="p-3 pr-4 text-center">Action</th></tr></thead>
                   <tbody className="divide-y divide-orange-50">
-                    {consumablesLoading ? <tr><td colSpan="6" className="p-8 text-center"><Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading...</td></tr>
-                    : consumables.length === 0 ? <tr><td colSpan="6" className="p-8 text-center text-gray-400"><Activity className="h-8 w-8 mx-auto mb-2 opacity-50" /><p className="font-bold">No consumable services added yet</p></td></tr>
+                    {consumablesLoading ? (
+                      <tr>
+                        <td colSpan="6" className="p-8">
+                          <SkeletonTable rows={4} columns={6} className="w-full" />
+                        </td>
+                      </tr>
+                    ) : consumables.length === 0 ? <tr><td colSpan="6" className="p-8 text-center text-gray-400"><Activity className="h-8 w-8 mx-auto mb-2 opacity-50" /><p className="font-bold">No consumable services added yet</p></td></tr>
                     : consumables.map(c => (
                       <tr key={c._id} className="hover:bg-orange-50/20">
                         <td className="p-3 pl-4 text-xs">{c.date}</td><td className="p-3 text-xs">{c.time}</td>
                         <td className="p-3 font-bold text-gray-800">{c.serviceName}</td><td className="p-3">{c.quantity}</td>
                         <td className="p-3 text-xs text-gray-500">{c.addedBy?.doctorName || c.addedBy?.username || 'N/A'}</td>
-                        <td className="p-3 pr-4 text-center"><button onClick={() => handleDeleteConsumable(c._id)} className="p-1 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="h-3.5 w-3.5" /></button></td>
+                        <td className="p-3 pr-4 text-center">
+                          {admission.status !== 'Discharged' && (
+                            <button onClick={() => handleDeleteConsumable(c._id)} className="p-1 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="h-3.5 w-3.5" /></button>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -656,52 +903,96 @@ const IpdPatientDetails = () => {
           {serviceCategory === 'medicines' && (
             <div className="card overflow-hidden">
               <div className="p-4 border-b border-orange-100 flex items-center justify-between bg-orange-50/30">
-                <h3 className="font-extrabold text-gray-900 flex items-center gap-2"><Pill className="h-5 w-5 text-orange-500" /> Medicines</h3>
-                <button onClick={() => setShowAddMedicine(!showAddMedicine)} className="btn text-xs py-2 px-3"><Plus className="h-3.5 w-3.5" /> Add Medicine</button>
+                <h3 className="font-extrabold text-gray-900 flex items-center gap-2"><Pill className="h-5 w-5 text-orange-500" /> Administered Medicines</h3>
+                {admission.status !== 'Discharged' && (
+                  <button onClick={() => setShowAddMedicine(!showAddMedicine)} className="btn text-xs py-2 px-3"><Plus className="h-3.5 w-3.5" /> Administer Medicine</button>
+                )}
               </div>
               {showAddMedicine && (
                 <div className="p-4 border-b border-orange-100 bg-orange-50/20">
                   <form onSubmit={handleAddMedicine} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="sm:col-span-2">
                       <label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">Medicine Name</label>
-                      <input list="medicine-list" className="input py-2 text-xs" placeholder="Search or select medicine" value={medicineForm.medicineName}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setMedicineForm(p => {
-                            const m = medicineSettingsList.find(med => med.name === val);
-                            return {
-                              ...p,
-                              medicineName: val,
-                              unitPrice: m ? String(m.price || '0') : '',
-                              gst: m ? String(m.gst || '0') : '',
-                              baseUnitPrice: m ? String(m.price || '0') : ''
-                            };
-                          });
-                        }} />
-                      <datalist id="medicine-list">{medicineSettingsList.map((m, i) => <option key={i} value={m.name} />)}</datalist>
+                      <input 
+                        type="text"
+                        list="ipd-pharmacy-medicines-datalist"
+                        className="input py-2 text-xs" 
+                        placeholder="Search or select medicine from pharmacy"
+                        value={medicineForm.medicineName}
+                        onChange={(e) => handleReceivedMedicineSelect(e.target.value)}
+                      />
                     </div>
-                    <div><label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">Quantity</label><input type="number" min="1" className="input py-2 text-xs" value={medicineForm.quantity} onChange={(e) => setMedicineForm(p => ({ ...p, quantity: e.target.value }))} /></div>
-                    <div className="col-span-full flex items-center justify-between">
-                      <div className="text-sm"><span className="text-gray-500">Total: </span><span className="font-extrabold text-green-700">₹{medicineTotal}</span></div>
-                      <div className="flex gap-2"><button type="button" onClick={() => { setShowAddMedicine(false); setMedicineForm({ medicineName: '', quantity: '1', unitPrice: '' }); }} className="btn-secondary text-xs py-2 px-4">Cancel</button><button type="submit" className="btn text-xs py-2 px-4"><Plus className="h-3.5 w-3.5" /> Add</button></div>
+                    <div>
+                      <label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">
+                        Qty
+                      </label>
+                      <input 
+                        type="number" 
+                        min="1" 
+                        className="input py-2 text-xs" 
+                        value={medicineForm.quantity} 
+                        onChange={(e) => setMedicineForm(p => ({ ...p, quantity: e.target.value }))} 
+                      />
+                    </div>
+                    <div className="col-span-full flex justify-end gap-2">
+                      <button 
+                        type="button" 
+                        onClick={() => { setShowAddMedicine(false); setMedicineForm({ medicineName: '', quantity: '1', unitPrice: '', gst: '', baseUnitPrice: '' }); setSelectedReceivedMed(null); }} 
+                        className="btn-secondary text-xs py-2 px-4"
+                      >
+                        Cancel
+                      </button>
+                      <button type="submit" className="btn text-xs py-2 px-4">
+                        <Plus className="h-3.5 w-3.5" /> Add
+                      </button>
                     </div>
                   </form>
                 </div>
               )}
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
-                  <thead><tr className="bg-gray-50 text-xs font-bold uppercase text-gray-500 border-b border-orange-100"><th className="p-3 pl-4">Date</th><th className="p-3">Time</th><th className="p-3">Medicine Name</th><th className="p-3">Qty</th><th className="p-3">Added By</th><th className="p-3 pr-4 text-center">Action</th></tr></thead>
+                  <thead>
+                    <tr className="bg-gray-50 text-xs font-bold uppercase text-gray-500 border-b border-orange-100">
+                      <th className="p-3 pl-4">Date</th>
+                      <th className="p-3">Time</th>
+                      <th className="p-3">Medicine Name</th>
+                      <th className="p-3">Qty</th>
+                      <th className="p-3">Added By</th>
+                      <th className="p-3 pr-4 text-center">Action</th>
+                    </tr>
+                  </thead>
                   <tbody className="divide-y divide-orange-50">
-                    {medicinesLoading ? <tr><td colSpan="6" className="p-8 text-center"><Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading...</td></tr>
-                    : medicines.length === 0 ? <tr><td colSpan="6" className="p-8 text-center text-gray-400"><Pill className="h-8 w-8 mx-auto mb-2 opacity-50" /><p className="font-bold">No medicines added yet</p></td></tr>
-                    : medicines.map(m => (
-                      <tr key={m._id} className="hover:bg-orange-50/20">
-                        <td className="p-3 pl-4 text-xs">{m.date}</td><td className="p-3 text-xs">{m.time}</td>
-                        <td className="p-3 font-bold text-gray-800">{m.medicineName}</td><td className="p-3">{m.quantity}</td>
-                        <td className="p-3 text-xs text-gray-500">{m.addedBy?.doctorName || m.addedBy?.username || 'N/A'}</td>
-                        <td className="p-3 pr-4 text-center"><button onClick={() => handleDeleteMedicine(m._id)} className="p-1 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="h-3.5 w-3.5" /></button></td>
+                    {medicinesLoading ? (
+                      <tr>
+                        <td colSpan="6" className="p-8">
+                          <SkeletonTable rows={4} columns={6} className="w-full" />
+                        </td>
                       </tr>
-                    ))}
+                    ) : medicines.length === 0 ? (
+                      <tr>
+                        <td colSpan="6" className="p-8 text-center text-gray-400">
+                          <Pill className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                          <p className="font-bold">No medicines administered yet</p>
+                        </td>
+                      </tr>
+                    ) : (
+                      medicines.map(m => (
+                        <tr key={m._id} className="hover:bg-orange-50/20">
+                          <td className="p-3 pl-4 text-xs">{m.date}</td>
+                          <td className="p-3 text-xs">{m.time}</td>
+                          <td className="p-3 font-bold text-gray-800">{m.medicineName}</td>
+                          <td className="p-3">{m.quantity}</td>
+                          <td className="p-3 text-xs text-gray-500">{m.addedBy?.doctorName || m.addedBy?.username || 'N/A'}</td>
+                          <td className="p-3 pr-4 text-center">
+                            {admission.status !== 'Discharged' && (
+                              <button onClick={() => handleDeleteMedicine(m._id)} className="p-1 text-red-500 hover:bg-red-50 rounded-lg">
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -712,7 +1003,9 @@ const IpdPatientDetails = () => {
             <div className="card overflow-hidden">
               <div className="p-4 border-b border-orange-100 flex items-center justify-between bg-orange-50/30">
                 <h3 className="font-extrabold text-gray-900 flex items-center gap-2"><FlaskConical className="h-5 w-5 text-orange-500" /> Lab Tests</h3>
-                <button onClick={() => setShowAddLabTest(!showAddLabTest)} className="btn text-xs py-2 px-3"><Plus className="h-3.5 w-3.5" /> Add Lab Test</button>
+                {admission.status !== 'Discharged' && (
+                  <button onClick={() => setShowAddLabTest(!showAddLabTest)} className="btn text-xs py-2 px-3"><Plus className="h-3.5 w-3.5" /> Add Lab Test</button>
+                )}
               </div>
               {showAddLabTest && (
                 <div className="p-4 border-b border-orange-100 bg-orange-50/20">
@@ -760,8 +1053,13 @@ const IpdPatientDetails = () => {
                 <table className="w-full text-left text-sm">
                   <thead><tr className="bg-gray-50 text-xs font-bold uppercase text-gray-500 border-b border-orange-100"><th className="p-3 pl-4">Date</th><th className="p-3">Time</th><th className="p-3">Test Name</th><th className="p-3">Category</th><th className="p-3">Report Status</th><th className="p-3">Report Date</th><th className="p-3">Added By</th><th className="p-3 pr-4 text-center">Action</th></tr></thead>
                   <tbody className="divide-y divide-orange-50">
-                    {labTestsLoading ? <tr><td colSpan="8" className="p-8 text-center"><Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading...</td></tr>
-                    : labTests.length === 0 ? <tr><td colSpan="8" className="p-8 text-center text-gray-400"><FlaskConical className="h-8 w-8 mx-auto mb-2 opacity-50" /><p className="font-bold">No lab tests ordered yet</p></td></tr>
+                    {labTestsLoading ? (
+                      <tr>
+                        <td colSpan="8" className="p-8">
+                          <SkeletonTable rows={4} columns={8} className="w-full" />
+                        </td>
+                      </tr>
+                    ) : labTests.length === 0 ? <tr><td colSpan="8" className="p-8 text-center text-gray-400"><FlaskConical className="h-8 w-8 mx-auto mb-2 opacity-50" /><p className="font-bold">No lab tests ordered yet</p></td></tr>
                     : labTests.map(t => (
                       <tr key={t._id} className="hover:bg-orange-50/20">
                         <td className="p-3 pl-4 text-xs">{t.date}</td><td className="p-3 text-xs">{t.time}</td>
@@ -774,7 +1072,9 @@ const IpdPatientDetails = () => {
                             {t.labRequestId && (t.reportStatus === 'Completed' || t.reportStatus === 'Approved') && (
                               <a href={`/lab?section=tracking&requestId=${t.labRequestId?._id || t.labRequestId}`} target="_blank" rel="noopener noreferrer" className="p-1 text-blue-600 hover:bg-blue-50 rounded-lg" title="View Report"><Eye className="h-3.5 w-3.5" /></a>
                             )}
-                            <button onClick={() => handleDeleteLabTest(t._id)} className="p-1 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="h-3.5 w-3.5" /></button>
+                            {admission.status !== 'Discharged' && (
+                              <button onClick={() => handleDeleteLabTest(t._id)} className="p-1 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="h-3.5 w-3.5" /></button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -791,76 +1091,26 @@ const IpdPatientDetails = () => {
         </div>
       )}
 
-      {/* TAB: Billing */}
-      {activeTab === 'billing' && (
-        <div className="space-y-6">
-          <div className="card overflow-hidden">
-            <div className="p-5 border-b border-orange-100 bg-gradient-to-r from-orange-50 to-white">
-              <h3 className="font-extrabold text-gray-900 flex items-center gap-2"><CreditCard className="h-5 w-5 text-orange-500" /> Complete Billing Summary</h3>
-              <p className="text-xs text-gray-500 mt-1">Room: {admission.roomId?.roomType} | Bed: {admission.bedId?.bedNumber} | Days: {billingSummary?.daysAdmitted || 0}</p>
-            </div>
-            {billingLoading ? (<div className="p-8 text-center"><Loader2 className="h-6 w-6 animate-spin inline mr-2" /> Loading billing...</div>
-            ) : billingSummary ? (
-              <div className="p-5 space-y-6">
-                <div className="bg-blue-50 rounded-2xl p-4 border border-blue-100">
-                  <div className="flex justify-between items-center mb-3"><h4 className="font-bold text-blue-800"><Building2 className="h-4 w-4 inline mr-1" /> Room Charges</h4><span className="font-black text-blue-700 text-xl">₹{billingSummary.roomCharges.toFixed(2)}</span></div>
-                  <div className="text-xs text-blue-600">{admission.roomId?.roomType} | ₹{billingSummary.bedPricePerDay}/day × {billingSummary.daysAdmitted} day(s)</div>
-                </div>
-                <div className="bg-green-50 rounded-2xl p-4 border border-green-100">
-                  <div className="flex justify-between items-center mb-3"><h4 className="font-bold text-green-800"><Activity className="h-4 w-4 inline mr-1" /> Consumable Charges</h4><span className="font-black text-green-700 text-xl">₹{billingSummary.consumableCharges.toFixed(2)}</span></div>
-                  {billingSummary.consumableDetails?.length > 0 && (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs">
-                        <thead><tr className="text-green-600 border-b border-green-200"><th className="p-1 text-left">Date</th><th className="p-1 text-left">Service</th><th className="p-1 text-right">Qty</th><th className="p-1 text-right">Price</th><th className="p-1 text-right">GST</th><th className="p-1 text-right">Total</th></tr></thead>
-                        <tbody>{billingSummary.consumableDetails.map((c, i) => (<tr key={i} className="border-b border-green-100"><td className="p-1">{c.date}</td><td className="p-1 font-bold">{c.serviceName}</td><td className="p-1 text-right">{c.quantity}</td><td className="p-1 text-right">₹{c.price.toFixed(2)}</td><td className="p-1 text-right">{c.gst}%</td><td className="p-1 text-right font-bold">₹{c.totalAmount.toFixed(2)}</td></tr>))}</tbody>
-                        <tfoot><tr className="font-bold text-green-700"><td colSpan="5" className="p-1 text-right">Subtotal (excl. GST):</td><td className="p-1 text-right">₹{billingSummary.consumableSubtotal?.toFixed(2)}</td></tr>
-                        <tr className="font-bold text-green-700"><td colSpan="5" className="p-1 text-right">GST Amount:</td><td className="p-1 text-right">₹{billingSummary.consumableGST?.toFixed(2)}</td></tr></tfoot>
-                      </table>
-                    </div>
-                  )}
-                </div>
-                <div className="bg-amber-50 rounded-2xl p-4 border border-amber-100">
-                  <div className="flex justify-between items-center mb-3"><h4 className="font-bold text-amber-800"><Pill className="h-4 w-4 inline mr-1" /> Medicine Charges</h4><span className="font-black text-amber-700 text-xl">₹{billingSummary.medicineCharges.toFixed(2)}</span></div>
-                  {billingSummary.medicineDetails?.length > 0 && (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs">
-                        <thead><tr className="text-amber-600 border-b border-amber-200"><th className="p-1 text-left">Date</th><th className="p-1 text-left">Medicine</th><th className="p-1 text-right">Qty</th><th className="p-1 text-right">Unit Price</th><th className="p-1 text-right">Total</th></tr></thead>
-                        <tbody>{billingSummary.medicineDetails.map((m, i) => (<tr key={i} className="border-b border-amber-100"><td className="p-1">{m.date}</td><td className="p-1 font-bold">{m.medicineName}</td><td className="p-1 text-right">{m.quantity}</td><td className="p-1 text-right">₹{m.unitPrice.toFixed(2)}</td><td className="p-1 text-right font-bold">₹{m.totalAmount.toFixed(2)}</td></tr>))}</tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-                <div className="bg-purple-50 rounded-2xl p-4 border border-purple-100">
-                  <div className="flex justify-between items-center mb-3"><h4 className="font-bold text-purple-800"><FlaskConical className="h-4 w-4 inline mr-1" /> Lab Charges</h4><span className="font-black text-purple-700 text-xl">₹{billingSummary.labCharges.toFixed(2)}</span></div>
-                </div>
-                <div className="bg-gradient-to-r from-orange-500 to-amber-500 rounded-2xl p-5 text-white">
-                  <div className="flex justify-between items-center">
-                    <div><span className="block text-[10px] font-bold uppercase text-white/80">Grand Total</span><span className="text-3xl font-black">₹{billingSummary.grandTotal.toFixed(2)}</span></div>
-                    <CreditCard className="h-10 w-10 text-white/30" />
-                  </div>
-                </div>
-                <button onClick={() => { loadBilling(); loadConsumables(); loadMedicines(); loadLabTests(); }} className="btn-secondary text-xs py-2 px-4 w-fit"><RefreshCw className="h-3.5 w-3.5" /> Refresh Billing</button>
-              </div>
-            ) : (
-              <div className="p-8 text-center text-gray-400"><CreditCard className="h-10 w-10 mx-auto mb-2 opacity-50" /><p className="font-bold">Unable to load billing</p></div>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* TAB: OT Records */}
       {activeTab === 'ot-records' && (
         <div className="space-y-6">
           <div className="card overflow-hidden">
             <div className="p-4 border-b border-orange-100 flex items-center justify-between bg-gradient-to-r from-indigo-50 to-white">
               <h3 className="font-extrabold text-gray-900 flex items-center gap-2"><Scissors className="h-5 w-5 text-indigo-500" /> OT Records</h3>
-              <button onClick={() => navigate(`/ipd/ot/${id}`)} className="btn text-xs py-2 px-3 flex items-center gap-1"><Plus className="h-3.5 w-3.5" /> New OT Record</button>
+              {admission.status !== 'Discharged' && (
+                <button onClick={() => navigate(`/ipd/ot/${id}`)} className="btn text-xs py-2 px-3 flex items-center gap-1"><Plus className="h-3.5 w-3.5" /> New OT Record</button>
+              )}
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead><tr className="bg-gray-50 text-xs font-bold uppercase text-gray-500 border-b border-orange-100"><th className="p-3 pl-4">Surgery Date</th><th className="p-3">Surgeon Name</th><th className="p-3">Procedure</th><th className="p-3">Created Date</th><th className="p-3">Status</th><th className="p-3 pr-4 text-center">Actions</th></tr></thead>
                 <tbody className="divide-y divide-orange-50">
-                  {otRecordsLoading ? (<tr><td colSpan="6" className="p-8 text-center"><Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading...</td></tr>
+                  {otRecordsLoading ? (
+                    <tr>
+                      <td colSpan="6" className="p-8">
+                        <SkeletonTable rows={4} columns={6} className="w-full" />
+                      </td>
+                    </tr>
                   ) : otRecords.length === 0 ? (<tr><td colSpan="6" className="p-8 text-center text-gray-400"><Scissors className="h-8 w-8 mx-auto mb-2 opacity-50" /><p className="font-bold">No OT records found</p><p className="text-xs">Click "New OT Record" to create the first operative report</p></td></tr>
                   ) : (
                     otRecords.map(record => (
@@ -873,7 +1123,9 @@ const IpdPatientDetails = () => {
                         <td className="p-3 pr-4">
                           <div className="flex items-center justify-center gap-1">
                             <button onClick={() => navigate(`/ipd/ot/${id}?otId=${record._id}`)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="View"><Eye className="h-3.5 w-3.5" /></button>
-                            <button onClick={() => navigate(`/ipd/ot/${id}?otId=${record._id}`)} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg" title="Edit"><Edit3 className="h-3.5 w-3.5" /></button>
+                            {admission.status !== 'Discharged' && (
+                              <button onClick={() => navigate(`/ipd/ot/${id}?otId=${record._id}`)} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg" title="Edit"><Edit3 className="h-3.5 w-3.5" /></button>
+                            )}
                             <button onClick={() => { navigate(`/ipd/ot/${id}?otId=${record._id}`); setTimeout(() => window.print(), 1500); }} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg" title="Print"><Printer className="h-3.5 w-3.5" /></button>
                             <button onClick={() => { navigate(`/ipd/ot/${id}?otId=${record._id}`); setTimeout(() => { toast.success('Use browser Print → Save as PDF'); window.print(); }, 1500); }} className="p-1.5 text-purple-600 hover:bg-purple-50 rounded-lg" title="Download PDF"><Download className="h-3.5 w-3.5" /></button>
                           </div>
@@ -896,28 +1148,79 @@ const IpdPatientDetails = () => {
             <div className="p-4 border-b border-orange-100 flex items-center justify-between bg-gradient-to-r from-red-50 to-white">
               <h3 className="font-extrabold text-gray-900 flex items-center gap-2"><DoorOpen className="h-5 w-5 text-red-500" /> Discharge Records</h3>
               {admission.status !== 'Discharged' && (
-                <button onClick={() => navigate(`/ipd/discharge/${id}`)} className="btn text-xs py-2 px-3 flex items-center gap-1 bg-red-600 hover:bg-red-700"><DoorOpen className="h-3.5 w-3.5" /> Discharge Patient</button>
+                <button 
+                  onClick={() => {
+                    const existing = dischargeRecords[0];
+                    if (existing) {
+                      if (existing.status === 'Completed' || existing.status === 'Pending Review') {
+                        navigate(`/ipd/discharge/${id}?dischargeId=${existing._id}&view=true`);
+                      } else {
+                        navigate(`/ipd/discharge/${id}?dischargeId=${existing._id}`);
+                      }
+                    } else {
+                      navigate(`/ipd/discharge/${id}`);
+                    }
+                  }} 
+                  className="btn text-xs py-2 px-3 flex items-center gap-1 bg-red-600 hover:bg-red-700"
+                >
+                  <DoorOpen className="h-3.5 w-3.5" /> Discharge Patient
+                </button>
               )}
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead><tr className="bg-gray-50 text-xs font-bold uppercase text-gray-500 border-b border-orange-100"><th className="p-3 pl-4">Discharge Date</th><th className="p-3">Discharge Status</th><th className="p-3">Discharge Reason</th><th className="p-3">Consultant Doctor</th><th className="p-3">Created Date</th><th className="p-3 pr-4 text-center">Actions</th></tr></thead>
                 <tbody className="divide-y divide-orange-50">
-                  {dischargeRecordsLoading ? (<tr><td colSpan="6" className="p-8 text-center"><Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading...</td></tr>
+                  {dischargeRecordsLoading ? (
+                    <tr>
+                      <td colSpan="6" className="p-8">
+                        <SkeletonTable rows={4} columns={6} className="w-full" />
+                      </td>
+                    </tr>
                   ) : dischargeRecords.length === 0 ? (<tr><td colSpan="6" className="p-8 text-center text-gray-400"><DoorOpen className="h-8 w-8 mx-auto mb-2 opacity-50" /><p className="font-bold">No discharge records found</p><p className="text-xs">Discharge records will appear here after patient is discharged</p></td></tr>
                   ) : (
                     dischargeRecords.map(record => (
                       <tr key={record._id} className="hover:bg-red-50/20">
                         <td className="p-3 pl-4 text-xs font-bold text-gray-800">{record.dischargeDate ? new Date(record.dischargeDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</td>
-                        <td className="p-3"><span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold ${record.status === 'Completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{record.status === 'Completed' ? <CheckCircle className="h-3 w-3" /> : <Clock className="h-3 w-3" />}{record.status}</span></td>
+                        <td className="p-3">
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold border ${
+                            record.status === 'Completed' ? 'bg-green-100 text-green-800 border-green-200' :
+                            record.status === 'Pending Review' ? 'bg-blue-100 text-blue-800 border-blue-200' :
+                            record.status === 'Rejected' ? 'bg-red-100 text-red-800 border-red-200' :
+                            'bg-yellow-100 text-yellow-800 border-yellow-200'
+                          }`}>
+                            {record.status === 'Completed' && <CheckCircle className="h-3 w-3" />}
+                            {record.status === 'Pending Review' && <Clock className="h-3 w-3 animate-pulse" />}
+                            {record.status === 'Rejected' && <AlertCircle className="h-3 w-3" />}
+                            {record.status === 'Draft' && <Clock className="h-3 w-3" />}
+                            {record.status}
+                          </span>
+                        </td>
                         <td className="p-3 text-xs">{record.dischargeReason === 'Other' ? record.otherDischargeReason : record.dischargeReason || '-'}</td>
                         <td className="p-3 text-xs">{[record.dischargingPhysicianTitle, record.dischargingPhysicianFirstName, record.dischargingPhysicianLastName].filter(Boolean).join(' ') || '-'}</td>
                         <td className="p-3 text-xs text-gray-500">{new Date(record.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
                         <td className="p-3 pr-4">
                           <div className="flex items-center justify-center gap-1">
-                            <button onClick={() => navigate(`/ipd/discharge/${id}?dischargeId=${record._id}&view=true`)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="View"><Eye className="h-3.5 w-3.5" /></button>
-                            <button onClick={() => { navigate(`/ipd/discharge/${id}?dischargeId=${record._id}&view=true`); setTimeout(() => window.print(), 1500); }} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg" title="Print"><Printer className="h-3.5 w-3.5" /></button>
-                            <button onClick={() => { navigate(`/ipd/discharge/${id}?dischargeId=${record._id}&view=true`); setTimeout(() => { toast.success('Use browser Print → Save as PDF'); window.print(); }, 1500); }} className="p-1.5 text-purple-600 hover:bg-purple-50 rounded-lg" title="Download PDF"><Download className="h-3.5 w-3.5" /></button>
+                            <button onClick={() => navigate(`/ipd/discharge/${id}?dischargeId=${record._id}&view=true`)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg cursor-pointer" title="View"><Eye className="h-3.5 w-3.5" /></button>
+                            {(record.status === 'Draft' || record.status === 'Rejected') && (
+                              <button onClick={() => navigate(`/ipd/discharge/${id}?dischargeId=${record._id}`)} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg cursor-pointer" title="Edit Summary"><Edit3 className="h-3.5 w-3.5" /></button>
+                            )}
+                            <button 
+                              disabled={record.status !== 'Completed'} 
+                              onClick={() => { navigate(`/ipd/discharge/${id}?dischargeId=${record._id}&view=true`); setTimeout(() => window.print(), 1500); }} 
+                              className={`p-1.5 rounded-lg cursor-pointer ${record.status === 'Completed' ? 'text-green-600 hover:bg-green-50' : 'text-gray-300 cursor-not-allowed'}`} 
+                              title="Print (Approved Only)"
+                            >
+                              <Printer className="h-3.5 w-3.5" />
+                            </button>
+                            <button 
+                              disabled={record.status !== 'Completed'} 
+                              onClick={() => { navigate(`/ipd/discharge/${id}?dischargeId=${record._id}&view=true`); setTimeout(() => { toast.success('Use browser Print → Save as PDF'); window.print(); }, 1500); }} 
+                              className={`p-1.5 rounded-lg cursor-pointer ${record.status === 'Completed' ? 'text-purple-600 hover:bg-purple-50' : 'text-gray-300 cursor-not-allowed'}`} 
+                              title="Download PDF"
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -1005,8 +1308,8 @@ const IpdPatientDetails = () => {
               </h3>
               <p className="text-xs text-gray-500">Submit, track, and manage procedure stock requests</p>
             </div>
-            {/* Create Request button - only for doctor/admin role */}
-            {(user.role === 'doctor' || user.role === 'admin') && (
+            {/* Create Request button - only for doctor/admin/nursing/ipd role */}
+            {(user.role === 'doctor' || user.role === 'admin' || user.role === 'nursing' || user.role === 'ipd') && (
               <button 
                 onClick={() => {
                   setShowAddRequest(true);
@@ -1036,7 +1339,11 @@ const IpdPatientDetails = () => {
                 </thead>
                 <tbody className="divide-y divide-orange-50">
                   {requestsLoading ? (
-                    <tr><td colSpan="6" className="p-8 text-center"><Loader2 className="h-5 w-5 animate-spin inline mr-2 text-orange-500" /> Loading requests...</td></tr>
+                    <tr>
+                      <td colSpan="6" className="p-8">
+                        <SkeletonTable rows={4} columns={6} className="w-full" />
+                      </td>
+                    </tr>
                   ) : pharmacyRequests.length === 0 ? (
                     <tr>
                       <td colSpan="6" className="p-8 text-center text-gray-400">
@@ -1070,6 +1377,22 @@ const IpdPatientDetails = () => {
                                 className="p-1.5 text-orange-600 hover:bg-orange-50 rounded-lg text-xs font-bold flex items-center gap-1 border border-orange-100 bg-white shadow-sm cursor-pointer"
                               >
                                 <Syringe className="h-3.5 w-3.5" /> Record Consumption
+                              </button>
+                            )}
+                            {reqItem.status === 'Sent' && (
+                              <button 
+                                onClick={() => handleMarkRequestReceived(reqItem._id)}
+                                className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg text-xs font-bold flex items-center gap-1 border border-green-100 bg-white shadow-sm cursor-pointer"
+                              >
+                                <CheckCircle className="h-3.5 w-3.5" /> Mark Received
+                              </button>
+                            )}
+                            {reqItem.status === 'Received' && (
+                              <button 
+                                onClick={() => handleOpenReturnModal(reqItem)}
+                                className="p-1.5 text-purple-600 hover:bg-purple-50 rounded-lg text-xs font-bold flex items-center gap-1 border border-purple-100 bg-white shadow-sm cursor-pointer"
+                              >
+                                <ArrowLeft className="h-3.5 w-3.5" /> Return Leftover
                               </button>
                             )}
                           </div>
@@ -1236,18 +1559,12 @@ const IpdPatientDetails = () => {
                         </label>
                         <input 
                           type="text" 
-                          list="search-meds-datalist"
+                          list={requestItemType === 'medicine' ? "ipd-pharmacy-medicines-datalist" : "ipd-consumables-datalist"}
                           className="input py-1.5 text-xs"
                           placeholder={requestItemType === 'medicine' ? "Type or search medicine" : "Type or search consumable"}
                           value={searchItemQuery}
                           onChange={(e) => setSearchItemQuery(e.target.value)}
                         />
-                        <datalist id="search-meds-datalist">
-                          {requestItemType === 'medicine'
-                            ? pharmacyMedsList.map((m, i) => <option key={i} value={m} />)
-                            : consumableServicesList.map((c, i) => <option key={i} value={c.name} />)
-                          }
-                        </datalist>
                       </div>
                       <div>
                         <label className="mb-0.5 block text-[10px] uppercase font-bold text-gray-400">Qty</label>
@@ -1466,8 +1783,190 @@ const IpdPatientDetails = () => {
               </div>
             </div>
           )}
+          {/* Return Medicines Modal */}
+          {showReturnModal && selectedRequest && (
+            <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl p-6 max-w-2xl w-full border border-orange-100 shadow-2xl max-h-[85vh] overflow-y-auto space-y-5">
+                <div className="flex justify-between items-center border-b border-orange-50 pb-3">
+                  <div>
+                    <h2 className="font-extrabold text-gray-900 text-lg flex items-center gap-2">
+                      <ArrowLeft className="text-orange-500 h-5 w-5" />
+                      Return Medicines: {selectedRequest.requestNumber}
+                    </h2>
+                    <p className="text-xs text-gray-400 font-semibold mt-0.5">Select unused quantities to return back to stock</p>
+                  </div>
+                  <button onClick={() => { setShowReturnModal(false); setSelectedRequest(null); }} className="text-gray-400 hover:text-gray-600 p-1 hover:bg-orange-50 rounded-lg cursor-pointer"><X className="h-5 w-5" /></button>
+                </div>
+
+                <form onSubmit={handleReturnSubmit} className="space-y-4">
+                  <div className="overflow-x-auto border border-orange-100 rounded-2xl bg-white">
+                    <table className="w-full text-left text-xs text-gray-700">
+                      <thead>
+                        <tr className="bg-orange-50/50 text-[10px] uppercase font-bold text-gray-500 border-b border-orange-100">
+                          <th className="p-2.5 pl-4">Medicine Name</th>
+                          <th className="p-2.5">Received Qty</th>
+                          <th className="p-2.5">Previously Returned</th>
+                          <th className="p-2.5 pr-4 w-[110px]">Return Qty</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-orange-50">
+                        {returnItemsForm.map((item, idx) => (
+                          <tr key={idx} className="hover:bg-orange-50/10">
+                            <td className="p-2.5 pl-4 font-bold text-gray-800">{item.itemName}</td>
+                            <td className="p-2.5 font-semibold text-gray-600">{item.receivedQty}</td>
+                            <td className="p-2.5 text-gray-500">{item.returnedQty}</td>
+                            <td className="p-2.5 pr-4">
+                              <input 
+                                type="number" 
+                                min="0" 
+                                max={item.receivedQty - item.returnedQty}
+                                className="input py-1 px-1.5 text-center text-xs w-[80px]"
+                                value={item.returnQty}
+                                onChange={(e) => {
+                                  const val = Math.min(item.receivedQty - item.returnedQty, Math.max(0, parseInt(e.target.value) || 0));
+                                  const updated = [...returnItemsForm];
+                                  updated[idx].returnQty = val;
+                                  setReturnItemsForm(updated);
+                                }}
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-gray-500">Remarks / Return Reason</label>
+                    <input 
+                      type="text" 
+                      className="input py-2 text-xs" 
+                      placeholder="e.g. Leftover doses, patient shifted..."
+                      value={returnRemarks}
+                      onChange={(e) => setReturnRemarks(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-2 border-t border-orange-50 pt-4">
+                    <button type="button" onClick={() => { setShowReturnModal(false); setSelectedRequest(null); }} className="btn-secondary text-xs py-2 px-4 cursor-pointer">Cancel</button>
+                    <button type="submit" className="btn text-xs py-2 px-4 cursor-pointer bg-purple-600 hover:bg-purple-700">
+                      Send Return Request
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+          {/* Change Bed Modal */}
+          {showChangeBedModal && (
+            <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-orange-100 shadow-2xl relative animate-in fade-in zoom-in duration-200">
+                <button
+                  type="button"
+                  onClick={() => setShowChangeBedModal(false)}
+                  className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-1 hover:bg-orange-50 rounded-lg cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+                <div className="mb-4">
+                  <h2 className="font-extrabold text-gray-900 text-lg flex items-center gap-2">
+                    <RefreshCw className="text-orange-500 h-5 w-5 animate-spin" style={{ animationDuration: '3s' }} />
+                    Change Patient Bed
+                  </h2>
+                  <p className="text-xs text-gray-400 font-semibold mt-0.5">Select a new room type and bed number</p>
+                </div>
+
+                <form onSubmit={handleChangeBedSubmit} className="space-y-4">
+                  <div>
+                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-500">Room Type</label>
+                    <select
+                      className="input py-2 text-sm text-gray-600"
+                      value={newRoomType}
+                      onChange={(e) => setNewRoomType(e.target.value)}
+                      required
+                      disabled={loadingRooms}
+                    >
+                      {loadingRooms ? (
+                        <option value="">Loading Room Types...</option>
+                      ) : (
+                        <>
+                          <option value="">-- Select Room Type --</option>
+                          {[...new Set(changeBedRooms.map(r => r.roomType))].map((type) => (
+                            <option key={type} value={type}>{type}</option>
+                          ))}
+                        </>
+                      )}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-500">New Bed Number</label>
+                    <select
+                      className="input py-2 text-sm text-gray-600"
+                      value={newBedId}
+                      onChange={(e) => setNewBedId(e.target.value)}
+                      required
+                      disabled={loadingRooms || !newRoomType}
+                    >
+                      <option value="">-- Select Bed --</option>
+                      {changeBedBeds.map((bed) => (
+                        <option key={bed._id} value={bed._id}>
+                          {bed.bedNumber} | {bed.bedType} | ₹{bed.pricePerDay}/day
+                        </option>
+                      ))}
+                    </select>
+                    {changeBedBeds.length === 0 && newRoomType && !loadingRooms && (
+                      <p className="text-xs text-red-500 mt-1 font-semibold">No available beds in this room type.</p>
+                    )}
+                  </div>
+
+                  <div className="flex justify-end gap-2 border-t border-orange-50 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowChangeBedModal(false)}
+                      className="btn-secondary text-xs py-2 px-4 cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={changingBed || loadingRooms || !newBedId}
+                      className="btn text-xs py-2 px-4 cursor-pointer bg-orange-500 hover:bg-orange-600"
+                    >
+                      {changingBed ? 'Changing...' : 'Change Bed'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
         </div>
       )}
+      <datalist id="ipd-pharmacy-medicines-datalist">
+        {pharmacyMedsList
+          .filter(m => {
+            const query = (medicineForm.medicineName || searchItemQuery || '').trim().toLowerCase();
+            if (!query) return false;
+            return m.itemName.toLowerCase().includes(query);
+          })
+          .map((m, i) => (
+            <option key={i} value={m.itemName} />
+          ))
+        }
+      </datalist>
+      <datalist id="ipd-consumables-datalist">
+        {consumableServicesList
+          .filter(c => {
+            const query = (consumableForm.serviceName || (requestItemType === 'consumable' ? searchItemQuery : '') || '').trim().toLowerCase();
+            if (!query) return false;
+            return c.name.toLowerCase().includes(query);
+          })
+          .map((c, i) => (
+            <option key={i} value={c.name} />
+          ))
+        }
+      </datalist>
     </div>
   );
 };

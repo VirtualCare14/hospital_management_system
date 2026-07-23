@@ -768,9 +768,17 @@ const DoctorOtForm = () => {
                   </div>
                 ))}
                 <datalist id="ot-medicines-datalist">
-                  {pharmacyMedsList.map((m, i) => (
-                    <option key={i} value={m} />
-                  ))}
+                  {pharmacyMedsList
+                    .filter(m => {
+                      const matches = reqMedicines.some(rm => {
+                        const q = (rm.medicineName || '').trim().toLowerCase();
+                        return q && m.toLowerCase().includes(q);
+                      });
+                      return matches;
+                    })
+                    .map((m, i) => (
+                      <option key={i} value={m} />
+                    ))}
                 </datalist>
                 {!otRecord.pharmacyRequestSent && (
                   <button
@@ -822,9 +830,17 @@ const DoctorOtForm = () => {
                   </div>
                 ))}
                 <datalist id="ot-consumables-datalist">
-                  {consumablesList.map((c, i) => (
-                    <option key={i} value={c} />
-                  ))}
+                  {consumablesList
+                    .filter(c => {
+                      const matches = reqConsumables.some(rc => {
+                        const q = (rc.consumableName || '').trim().toLowerCase();
+                        return q && c.toLowerCase().includes(q);
+                      });
+                      return matches;
+                    })
+                    .map((c, i) => (
+                      <option key={i} value={c} />
+                    ))}
                 </datalist>
                 {!otRecord.pharmacyRequestSent && (
                   <button

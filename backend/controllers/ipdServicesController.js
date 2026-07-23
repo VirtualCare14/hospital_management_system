@@ -3,6 +3,7 @@ const IpdConsumable = require('../models/IpdConsumable');
 const IpdMedicine = require('../models/IpdMedicine');
 const IpdLabTest = require('../models/IpdLabTest');
 const IpdActivityTimeline = require('../models/IpdActivityTimeline');
+const PharmacyRequest = require('../models/PharmacyRequest');
 const Patient = require('../models/Patient');
 const Bed = require('../models/Bed');
 const User = require('../models/User');
@@ -188,7 +189,7 @@ const getIpdPatientDetails = async (req, res) => {
 // @access  Private
 const addConsumable = async (req, res) => {
   try {
-    const { admissionId, serviceName, price, gst, quantity } = req.body;
+    const { admissionId, serviceName, price, gst, quantity, date, time } = req.body;
 
     if (!admissionId || !serviceName || !price || !quantity) {
       return res.status(400).json({ message: 'Admission ID, service name, price, and quantity are required' });
@@ -202,8 +203,14 @@ const addConsumable = async (req, res) => {
     const totalAmount = subtotal + (subtotal * gstAmount / 100);
 
     const now = new Date();
-    const dateStr = now.toISOString().split('T')[0];
-    const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+    let dateStr = date;
+    if (!dateStr) {
+      const day = String(now.getDate()).padStart(2, '0');
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const year = now.getFullYear();
+      dateStr = `${day}/${month}/${year}`;
+    }
+    const timeStr = time || now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
 
     const consumable = await IpdConsumable.create({
       hospitalId: req.user.hospitalId,
@@ -280,6 +287,30 @@ const addMedicine = async (req, res) => {
 
     const admission = await IpdAdmission.findOne(tenantFilter(req, { _id: admissionId }));
     if (!admission) return res.status(404).json({ message: 'Admission record not found' });
+
+    // Stock Check: Ensure medicine was received from pharmacy and we have available quantity
+    const pharmacyRequests = await PharmacyRequest.find(tenantFilter(req, {
+      admissionId,
+      status: { $in: ['Received', 'Return Sent', 'Return Received'] }
+    }));
+
+    let totalReceived = 0;
+    pharmacyRequests.forEach(request => {
+      const item = request.items.find(i => i.itemName.toLowerCase() === medicineName.toLowerCase().trim());
+      if (item) {
+        totalReceived += (item.receivedQty || 0) - (item.returnedQty || 0) - (item.damagedQty || 0);
+      }
+    });
+
+    const administered = await IpdMedicine.find(tenantFilter(req, { admissionId, medicineName: { $regex: new RegExp('^' + medicineName.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '$', 'i') } }));
+    const totalAdministered = administered.reduce((sum, item) => sum + item.quantity, 0);
+
+    const availableQty = totalReceived - totalAdministered;
+    if (quantity > availableQty) {
+      return res.status(400).json({
+        message: `Only medicines received from the Pharmacy can be administered. Available received stock: ${availableQty}, requested: ${quantity}`
+      });
+    }
 
     // totalAmount is quantity * unitPrice (unitPrice expected to be GST-inclusive when gst provided)
     const totalAmount = quantity * unitPrice;
@@ -515,9 +546,11 @@ const getTimeline = async (req, res) => {
 const getPatientDashboard = async (req, res) => {
   try {
     const admission = await IpdAdmission.findOne(tenantFilter(req, { _id: req.params.admissionId }))
-      .populate('patientId', 'patientName uhid mobile dob gender')
+      .populate('patientId', 'patientName uhid dob gender mobile address')
       .populate('roomId', 'roomType')
       .populate('bedId', 'bedNumber bedType pricePerDay')
+      .populate('bedHistory.roomId', 'roomType')
+      .populate('bedHistory.bedId', 'bedNumber bedType pricePerDay')
       .populate('doctorInCharge', 'doctorName username');
 
     if (!admission) return res.status(404).json({ message: 'Admission record not found' });
@@ -533,12 +566,25 @@ const getPatientDashboard = async (req, res) => {
     const completedReports = labTests.filter(t => t.reportStatus === 'Completed' || t.reportStatus === 'Approved').length;
 
     // Calculate billing
+    let roomCharges = 0;
+    let daysAdmitted = 0;
     const bedPricePerDay = admission.bedId?.pricePerDay || 0;
-    const admissionDate = new Date(admission.admissionDate);
-    const currentDate = admission.status === 'Discharged' && admission.dischargeDate
-      ? new Date(admission.dischargeDate) : new Date();
-    const daysAdmitted = Math.max(1, Math.ceil((currentDate - admissionDate) / (1000 * 60 * 60 * 24)));
-    const roomCharges = bedPricePerDay * daysAdmitted;
+
+    if (admission.bedHistory && admission.bedHistory.length > 0) {
+      admission.bedHistory.forEach(hist => {
+        const startDate = new Date(hist.startDate);
+        const endDate = hist.endDate ? new Date(hist.endDate) : new Date();
+        const days = Math.max(1, Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)));
+        daysAdmitted += days;
+        roomCharges += (hist.pricePerDay || 0) * days;
+      });
+    } else {
+      const admissionDate = new Date(admission.admissionDate);
+      const currentDate = admission.status === 'Discharged' && admission.dischargeDate
+        ? new Date(admission.dischargeDate) : new Date();
+      daysAdmitted = Math.max(1, Math.ceil((currentDate - admissionDate) / (1000 * 60 * 60 * 24)));
+      roomCharges = bedPricePerDay * daysAdmitted;
+    }
 
     const consumableCharges = (await IpdConsumable.find(
       tenantFilter(req, { admissionId: req.params.admissionId })
@@ -595,17 +641,30 @@ const getPatientDashboard = async (req, res) => {
 const getBillingSummary = async (req, res) => {
   try {
     const admission = await IpdAdmission.findOne(tenantFilter(req, { _id: req.params.admissionId }))
-      .populate('bedId', 'pricePerDay');
+      .populate('bedId', 'pricePerDay')
+      .populate('bedHistory.bedId', 'pricePerDay');
 
     if (!admission) return res.status(404).json({ message: 'Admission record not found' });
 
-    const bedPricePerDay = admission.bedId?.pricePerDay || 0;
-    const admissionDate = new Date(admission.admissionDate);
-    const currentDate = admission.status === 'Discharged' && admission.dischargeDate
-      ? new Date(admission.dischargeDate) : new Date();
-    const daysAdmitted = Math.max(1, Math.ceil((currentDate - admissionDate) / (1000 * 60 * 60 * 24)));
+    let roomCharges = 0;
+    let daysAdmitted = 0;
+    if (admission.bedHistory && admission.bedHistory.length > 0) {
+      admission.bedHistory.forEach(hist => {
+        const startDate = new Date(hist.startDate);
+        const endDate = hist.endDate ? new Date(hist.endDate) : new Date();
+        const days = Math.max(1, Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)));
+        daysAdmitted += days;
+        roomCharges += (hist.pricePerDay || 0) * days;
+      });
+    } else {
+      const bedPricePerDay = admission.bedId?.pricePerDay || 0;
+      const admissionDate = new Date(admission.admissionDate);
+      const currentDate = admission.status === 'Discharged' && admission.dischargeDate
+        ? new Date(admission.dischargeDate) : new Date();
+      daysAdmitted = Math.max(1, Math.ceil((currentDate - admissionDate) / (1000 * 60 * 60 * 24)));
+      roomCharges = bedPricePerDay * daysAdmitted;
+    }
 
-    const roomCharges = bedPricePerDay * daysAdmitted;
     const bedCharges = 0; // Included in room charges
 
     const consumables = await IpdConsumable.find(
@@ -676,6 +735,73 @@ const getBillingSummary = async (req, res) => {
   }
 };
 
+// @desc    Get received medicines available to administer
+// @route   GET /api/ipd/services/received-medicines/:admissionId
+// @access  Private
+const getReceivedMedicines = async (req, res) => {
+  try {
+    const { admissionId } = req.params;
+    
+    // Find all Received (or Return Sent/Return Received) requests for this admission
+    const pharmacyRequests = await PharmacyRequest.find(tenantFilter(req, {
+      admissionId,
+      status: { $in: ['Received', 'Return Sent', 'Return Received'] }
+    }));
+
+    // Accumulate total received/returned quantities
+    const receivedMap = {};
+    pharmacyRequests.forEach(request => {
+      request.items.forEach(item => {
+        const nameKey = item.itemName.toLowerCase().trim();
+        if (item.receivedQty > 0) {
+          if (!receivedMap[nameKey]) {
+            receivedMap[nameKey] = {
+              itemName: item.itemName,
+              totalReceived: 0,
+              totalReturned: 0,
+              totalDamaged: 0,
+              unitPrice: item.unitPrice || 0,
+              gst: item.gst || 0,
+              baseUnitPrice: item.baseUnitPrice || item.unitPrice || 0,
+              isCustom: item.isCustom || false
+            };
+          }
+          receivedMap[nameKey].totalReceived += item.receivedQty || 0;
+          receivedMap[nameKey].totalReturned += item.returnedQty || 0;
+          receivedMap[nameKey].totalDamaged += item.damagedQty || 0;
+        }
+      });
+    });
+
+    // Find all already administered medicines
+    const administered = await IpdMedicine.find(tenantFilter(req, { admissionId }));
+    const administeredMap = {};
+    administered.forEach(item => {
+      const nameKey = item.medicineName.toLowerCase().trim();
+      administeredMap[nameKey] = (administeredMap[nameKey] || 0) + item.quantity;
+    });
+
+    // Format list of available medicines
+    const availableMedicines = Object.values(receivedMap).map(med => {
+      const nameKey = med.itemName.toLowerCase().trim();
+      const administeredQty = administeredMap[nameKey] || 0;
+      const netReceived = med.totalReceived - med.totalReturned - med.totalDamaged;
+      const availableQty = Math.max(0, netReceived - administeredQty);
+      
+      return {
+        ...med,
+        administeredQty,
+        availableQty
+      };
+    });
+
+    res.status(200).json(availableMedicines);
+  } catch (error) {
+    console.error('Get Received Medicines Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   getIpdPatientList,
   getIpdPatientDetails,
@@ -690,5 +816,6 @@ module.exports = {
   deleteLabTest,
   getTimeline,
   getPatientDashboard,
-  getBillingSummary
+  getBillingSummary,
+  getReceivedMedicines
 };

@@ -3,27 +3,54 @@ import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { Save, Stethoscope } from 'lucide-react';
 import client from '../../api/client';
+import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 import { modules } from '../../utils/options';
 
 const ManageDoctors = () => {
   const [doctors, setDoctors] = useState([]);
   const [departments, setDepartments] = useState([]);
+  const [loading, setLoading] = useState(true);
   const { register, handleSubmit, reset } = useForm({
     defaultValues: { moduleAccess: ['2', '3'] }
   });
 
   const load = async () => {
-    const [doctorRes, deptRes] = await Promise.all([
-      client.get('/admin/doctors?includeInactive=true'),
-      client.get('/admin/departments')
-    ]);
-    setDoctors(doctorRes.data);
-    setDepartments(deptRes.data.filter((dept) => dept.isActive));
+    setLoading(true);
+    try {
+      const [doctorRes, deptRes] = await Promise.all([
+        client.get('/admin/doctors?includeInactive=true'),
+        client.get('/admin/departments')
+      ]);
+      setDoctors(doctorRes.data);
+      setDepartments(deptRes.data.filter((dept) => dept.isActive));
+    } catch (err) {
+      toast.error('Failed to load doctors and departments');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
     load();
   }, []);
+
+  if (loading) {
+    return (
+      <div className="grid gap-6 xl:grid-cols-[420px_1fr] animate-fadeIn">
+        <div className="space-y-4">
+          <div className="card p-5">
+            <SkeletonTable rows={6} columns={1} className="w-full" />
+          </div>
+          <div className="card p-5">
+            <SkeletonTable rows={4} columns={1} className="w-full" />
+          </div>
+        </div>
+        <div className="card p-5">
+          <SkeletonTable rows={6} columns={4} className="w-full" />
+        </div>
+      </div>
+    );
+  }
 
   const createDoctor = async (data) => {
     await client.post('/admin/create-user', {

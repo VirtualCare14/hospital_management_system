@@ -1,4 +1,35 @@
 @import "tailwindcss";
+@import "./components/TableStyles.css";
+
+@theme {
+  --color-primary:       #FF6A00;
+  --color-primary-hover: #E05D00;
+  --color-dark:          #101828;
+  --color-light:         #FAFAFA;
+  --color-gray-text:     #667085;
+  --color-border:        #EAECF0;
+
+  --font-sans:    'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-display: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+
+  /* Keyframes */
+  @keyframes float {
+    0%, 100% { transform: translateY(0px) rotate(0deg); }
+    50%       { transform: translateY(-14px) rotate(1.5deg); }
+  }
+  @keyframes pulse-slow {
+    0%, 100% { opacity: 0.06; transform: scale(1); }
+    50%       { opacity: 0.18; transform: scale(1.06); }
+  }
+  @keyframes shimmer {
+    from { background-position: -200% 0; }
+    to   { background-position:  200% 0; }
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
 
 body {
   margin: 0;
@@ -6,10 +37,88 @@ body {
   background: #fff7ed;
   color: #374151;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #root {
   min-height: 100vh;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #FAFAFA; }
+::-webkit-scrollbar-thumb { background: rgba(16,24,40,0.12); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #FF6A00; }
+
+/* ── Glassmorphism: Navbar ── */
+.glass-navbar {
+  background: rgba(250, 250, 250, 0.82);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid rgba(16, 24, 40, 0.06);
+}
+
+/* ── Glassmorphism: Cards ── */
+.glass-card {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(16, 24, 40, 0.05);
+  box-shadow:
+    0 1px 3px rgba(16, 24, 40, 0.03),
+    0 8px 24px rgba(16, 24, 40, 0.04);
+  transition: all 0.38s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform, box-shadow;
+}
+.glass-card:hover {
+  background: rgba(255, 255, 255, 0.88);
+  border-color: rgba(255, 106, 0, 0.16);
+  transform: translateY(-5px);
+  box-shadow:
+    0 2px 6px rgba(16, 24, 40, 0.02),
+    0 16px 40px rgba(255, 106, 0, 0.07);
+}
+
+/* ── Background grid ── */
+.grid-bg {
+  background-size: 40px 40px;
+  background-image:
+    linear-gradient(to right,  rgba(16,24,40,0.025) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(16,24,40,0.025) 1px, transparent 1px);
+}
+
+/* ── Gradient text ── */
+.text-gradient {
+  background: linear-gradient(135deg, #101828 0%, #475467 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.text-gradient-orange {
+  background: linear-gradient(135deg, #FF9E00 0%, #FF6A00 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Floating animations ── */
+.animate-float      { animation: float 6s ease-in-out infinite; }
+.animate-pulse-slow { animation: pulse-slow 5s ease-in-out infinite; }
+
+/* ── Shimmer pill ── */
+.shimmer-badge {
+  background: linear-gradient(90deg, rgba(255,106,0,0.08) 25%, rgba(255,158,0,0.18) 50%, rgba(255,106,0,0.08) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 3s linear infinite;
+}
+
+/* ── Section separator ── */
+.section-divider {
+  border: none;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(16,24,40,0.06) 30%, rgba(16,24,40,0.06) 70%, transparent);
 }
 
 .input {
@@ -79,5 +188,19 @@ select {
 select, option {
   background-color: #ffffff !important;
   color: #374151 !important;
+}
+
+/* Global utility overrides to prevent absolute icons from overlapping with input text */
+input.input[class*="pl-9"], .pl-9 {
+  padding-left: 2.25rem !important;
+}
+input.input[class*="pl-10"], .pl-10 {
+  padding-left: 2.5rem !important;
+}
+input.input[class*="pl-11"], .pl-11 {
+  padding-left: 2.75rem !important;
+}
+input.input[class*="pl-12"], .pl-12 {
+  padding-left: 3rem !important;
 }
 

@@ -14,10 +14,14 @@ const tenantFilter = (req, query = {}) => (
 // @access  Private
 const admitPatient = async (req, res) => {
   try {
-    const { patientId, roomId, bedId, doctorInCharge, admissionDate, status } = req.body;
+    const { patientId, roomId, bedId, doctorInCharge, admissionDate, status, isSameDayCare, provisionalDiagnosis } = req.body;
 
-    if (!patientId || !roomId || !bedId || !doctorInCharge) {
-      return res.status(400).json({ message: 'Patient, room, bed, and doctor in charge are required' });
+    if (!patientId || !doctorInCharge) {
+      return res.status(400).json({ message: 'Patient and doctor in charge are required' });
+    }
+
+    if ((roomId && !bedId) || (!roomId && bedId)) {
+      return res.status(400).json({ message: 'Both room and bed are required for allocation' });
     }
 
     // 1. Verify patient exists
@@ -41,14 +45,17 @@ const admitPatient = async (req, res) => {
       return res.status(400).json({ message: 'Selected doctor is invalid or inactive' });
     }
 
-    // 4. Verify bed exists, belongs to room
-    const bed = await Bed.findOne(tenantFilter(req, { _id: bedId, roomId }));
-    if (!bed) {
-      return res.status(404).json({ message: 'Selected bed was not found in this room' });
-    }
+    // 4. Verify bed exists, belongs to room (only if provided)
+    let bed = null;
+    if (bedId && roomId) {
+      bed = await Bed.findOne(tenantFilter(req, { _id: bedId, roomId }));
+      if (!bed) {
+        return res.status(404).json({ message: 'Selected bed was not found in this room' });
+      }
 
-    if (bed.status === 'Occupied') {
-      return res.status(400).json({ message: 'The selected bed is already occupied' });
+      if (bed.status === 'Occupied') {
+        return res.status(400).json({ message: 'The selected bed is already occupied' });
+      }
     }
 
     // 5. Fetch settings and increment sequential counts atomically
@@ -70,24 +77,34 @@ const admitPatient = async (req, res) => {
     const newAdmission = new IpdAdmission({
       hospitalId: req.user.hospitalId,
       patientId,
-      roomId,
-      bedId,
+      roomId: roomId || null,
+      bedId: bedId || null,
       doctorInCharge,
       admissionDate: admissionDate || new Date(),
       ipdNumber: formattedIpdNumber,
       pidNumber: formattedPidNumber,
-      status: status || 'Admitted'
+      status: status || (bedId ? 'Admitted' : 'Pending Allocation'),
+      isSameDayCare: !!isSameDayCare,
+      provisionalDiagnosis: provisionalDiagnosis || '',
+      bedHistory: (bedId && roomId && bed) ? [{
+        roomId: roomId,
+        bedId: bedId,
+        startDate: admissionDate || new Date(),
+        pricePerDay: bed.pricePerDay || 0
+      }] : []
     });
 
     const savedAdmission = await newAdmission.save();
 
     // 7. Mark Bed as occupied
-    bed.status = 'Occupied';
-    bed.patientId = patientId;
-    bed.admissionId = savedAdmission._id;
-    bed.reservedAt = null;
-    bed.reservedFor = null;
-    await bed.save();
+    if (bed) {
+      bed.status = 'Occupied';
+      bed.patientId = patientId;
+      bed.admissionId = savedAdmission._id;
+      bed.reservedAt = null;
+      bed.reservedFor = null;
+      await bed.save();
+    }
 
     res.status(201).json({ 
       message: 'Patient admitted successfully', 
@@ -149,6 +166,12 @@ const dischargePatient = async (req, res) => {
     // Update admission record
     admission.status = 'Discharged';
     admission.dischargeDate = new Date();
+    if (admission.bedHistory && admission.bedHistory.length > 0) {
+      const lastIndex = admission.bedHistory.length - 1;
+      if (!admission.bedHistory[lastIndex].endDate) {
+        admission.bedHistory[lastIndex].endDate = admission.dischargeDate;
+      }
+    }
     await admission.save();
 
     res.status(200).json({ message: 'Patient discharged successfully and bed is now available' });
@@ -158,8 +181,162 @@ const dischargePatient = async (req, res) => {
   }
 };
 
+// @desc    Allocate a bed to a pending IPD admission
+// @route   PUT /api/ipd/admissions/:id/allocate-bed
+// @access  Private
+const allocateBed = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { roomId, bedId } = req.body;
+
+    if (!roomId || !bedId) {
+      return res.status(400).json({ message: 'Room and Bed are required' });
+    }
+
+    const admission = await IpdAdmission.findOne(tenantFilter(req, { _id: id }));
+    if (!admission) {
+      return res.status(404).json({ message: 'Admission record not found' });
+    }
+
+    if (admission.status === 'Discharged') {
+      return res.status(400).json({ message: 'Cannot allocate bed for a discharged patient' });
+    }
+
+    // Verify bed exists and is available
+    const bed = await Bed.findOne(tenantFilter(req, { _id: bedId, roomId }));
+    if (!bed) {
+      return res.status(404).json({ message: 'Selected bed was not found in this room' });
+    }
+
+    if (bed.status === 'Occupied') {
+      return res.status(400).json({ message: 'The selected bed is already occupied' });
+    }
+
+    // Allocate the bed to the admission
+    admission.roomId = roomId;
+    admission.bedId = bedId;
+    admission.status = 'Admitted';
+    admission.bedHistory = [{
+      roomId,
+      bedId,
+      startDate: admission.admissionDate || new Date(),
+      pricePerDay: bed.pricePerDay || 0
+    }];
+    await admission.save();
+
+    // Mark bed as occupied
+    bed.status = 'Occupied';
+    bed.patientId = admission.patientId;
+    bed.admissionId = admission._id;
+    await bed.save();
+
+    res.status(200).json({
+      message: 'Bed allocated successfully',
+      admission
+    });
+  } catch (error) {
+    console.error('Allocate Bed Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Change a bed for an IPD admission
+const changeBed = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { newRoomId, newBedId } = req.body;
+
+    if (!newRoomId || !newBedId) {
+      return res.status(400).json({ message: 'New room and new bed are required' });
+    }
+
+    const admission = await IpdAdmission.findOne(tenantFilter(req, { _id: id }));
+    if (!admission) {
+      return res.status(404).json({ message: 'Admission record not found' });
+    }
+
+    if (admission.status === 'Discharged') {
+      return res.status(400).json({ message: 'Cannot change bed for a discharged patient' });
+    }
+
+    // Verify the new bed exists and is available
+    const newBed = await Bed.findOne(tenantFilter(req, { _id: newBedId, roomId: newRoomId }));
+    if (!newBed) {
+      return res.status(404).json({ message: 'Selected new bed was not found in the new room' });
+    }
+
+    if (newBed.status === 'Occupied') {
+      return res.status(400).json({ message: 'The selected new bed is already occupied' });
+    }
+
+    // 1. Release the current bed
+    if (admission.bedId) {
+      const currentBed = await Bed.findById(admission.bedId);
+      if (currentBed) {
+        currentBed.status = 'Available';
+        currentBed.patientId = null;
+        currentBed.admissionId = null;
+        await currentBed.save();
+      }
+    }
+
+    // 2. Update the active bedHistory entry
+    const now = new Date();
+    let updatedHistory = false;
+    if (admission.bedHistory && admission.bedHistory.length > 0) {
+      const lastIndex = admission.bedHistory.length - 1;
+      if (!admission.bedHistory[lastIndex].endDate) {
+        admission.bedHistory[lastIndex].endDate = now;
+        updatedHistory = true;
+      }
+    }
+
+    // If bedHistory was empty, populate it first
+    if (!updatedHistory && admission.bedId) {
+      const oldBed = await Bed.findById(admission.bedId);
+      admission.bedHistory = [{
+        roomId: admission.roomId,
+        bedId: admission.bedId,
+        startDate: admission.admissionDate,
+        endDate: now,
+        pricePerDay: oldBed ? oldBed.pricePerDay : 0
+      }];
+    }
+
+    // 3. Mark the new bed as occupied
+    newBed.status = 'Occupied';
+    newBed.patientId = admission.patientId;
+    newBed.admissionId = admission._id;
+    await newBed.save();
+
+    // 4. Add the new bed to history
+    admission.bedHistory.push({
+      roomId: newRoomId,
+      bedId: newBedId,
+      startDate: now,
+      pricePerDay: newBed.pricePerDay
+    });
+
+    // 5. Update current bed/room references on admission
+    admission.roomId = newRoomId;
+    admission.bedId = newBedId;
+    
+    await admission.save();
+
+    res.status(200).json({
+      message: 'Bed changed successfully',
+      admission
+    });
+  } catch (error) {
+    console.error('Change Bed Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   admitPatient,
   getAdmissions,
-  dischargePatient
+  dischargePatient,
+  allocateBed,
+  changeBed
 };

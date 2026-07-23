@@ -112,9 +112,25 @@ const ipdDischargeSchema = new mongoose.Schema({
   // Status
   status: {
     type: String,
-    enum: ['Draft', 'Completed'],
+    enum: ['Draft', 'Pending Review', 'Approved', 'Rejected', 'Completed'],
     default: 'Draft'
   },
+  assignedDoctorId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  rejectionRemarks: {
+    type: String,
+    default: ''
+  },
+  dischargePrescription: [{
+    medicineName: { type: String, required: true },
+    dosage: { type: String, default: '' },
+    frequency: { type: String, default: '' },
+    duration: { type: String, default: '' },
+    remarks: { type: String, default: '' }
+  }],
   // Audit
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,

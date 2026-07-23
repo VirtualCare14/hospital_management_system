@@ -146,9 +146,35 @@ const PrescriptionPage = () => {
       }
       
       if (redirectAfterSave) navigate('/doctor/completed');
+      return true;
     } catch (error) {
       toast.error('Error saving prescription');
       console.error(error);
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveAndPrint = async () => {
+    setIsSaving(true);
+    try {
+      const success = await savePrescription(false);
+      if (!success) {
+        return;
+      }
+      
+      // Wait a moment for state and DOM to synchronize
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      const pdf = await generateA4Print();
+      pdf.autoPrint();
+      window.open(pdf.output('bloburl'), '_blank');
+      
+      navigate('/doctor/completed');
+    } catch (error) {
+      console.error('Save & Print error:', error);
+      toast.error('Error auto-printing prescription. Please check popup blocker.');
     } finally {
       setIsSaving(false);
     }
@@ -263,13 +289,17 @@ const PrescriptionPage = () => {
 
   const handleSendToIpd = async () => {
     if (!patient) return;
+    const defaultNotes = `Referred from OPD by Dr. ${user?.doctorName || user?.username || 'Doctor'}. Diagnosis: ${translatedDiagnosisRemark || consultation?.diagnosisRemark || 'N/A'}`;
+    const customRemarks = window.prompt("Enter remarks for IPD Referral:", defaultNotes);
+    if (customRemarks === null) return;
+
     setSendingToIpd(true);
     try {
       const consultationId = consultation?._id || null;
       await client.post('/ipd/referrals', {
         patientId: patient._id,
         consultationId,
-        notes: `Referred from OPD by Dr. ${user?.doctorName || user?.username || 'Doctor'}. Diagnosis: ${translatedDiagnosisRemark || consultation?.diagnosisRemark || 'N/A'}`
+        notes: customRemarks
       });
       toast.success(`${patient.patientName} has been referred to IPD successfully!`);
       setReferralSent(true);
@@ -287,6 +317,18 @@ const PrescriptionPage = () => {
 
   return (
     <div className="space-y-5">
+      {patient.isDischarged && (
+        <div className="card p-4 border border-gray-255 bg-gray-50 flex items-center gap-3">
+          <ShieldAlert className="text-gray-500 h-6 w-6 shrink-0" />
+          <div>
+            <h4 className="font-extrabold text-gray-800 text-sm uppercase tracking-wider">Patient is Discharged</h4>
+            <p className="text-xs text-gray-650 mt-0.5 font-semibold">
+              This patient has been discharged from the hospital. The OPD case record is read-only. No new consultations, referrals, or prescriptions can be saved.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="card flex flex-col gap-3 p-5 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-2xl font-extrabold text-gray-900">Digital Prescription</h1>
@@ -367,11 +409,19 @@ const PrescriptionPage = () => {
         ))}
         <button className="btn-secondary" type="button" onClick={() => setMedicines([...medicines, { medicine: '', duration: '', morning: false, afternoon: false, night: false, remarks: '' }])}><Plus className="h-4 w-4" /> Add Medicine</button>
         <datalist id="pharmacy-medicines">
-          {pharmacyMedicines.map((med) => (
-            <option key={med.name} value={med.name}>
-              {med.stock <= 0 ? 'Out of Stock' : `Stock: ${med.stock} available`}
-            </option>
-          ))}
+          {pharmacyMedicines
+            .filter(med => {
+              const matches = medicines.some(m => {
+                const q = (m.medicine || '').trim().toLowerCase();
+                return q && med.name.toLowerCase().includes(q);
+              });
+              return matches;
+            })
+            .map((med) => (
+              <option key={med.name} value={med.name}>
+                {med.stock <= 0 ? 'Out of Stock' : `Stock: ${med.stock} available`}
+              </option>
+            ))}
         </datalist>
       </div>
 
@@ -401,22 +451,28 @@ const PrescriptionPage = () => {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <button className="btn-secondary" disabled={isSaving} onClick={() => savePrescription(true)}><Save className="h-4 w-4" /> {isSaving ? 'Saving...' : 'Save'}</button>
-        <button className="btn" disabled={isSaving} onClick={() => makePdf('download')}><Download className="h-4 w-4" /> Download PDF</button>
-        <button className="btn-secondary" disabled={isSaving} onClick={() => makePdf('print')}><Printer className="h-4 w-4" /> Print</button>
-        <button className="btn-secondary" disabled={isSaving} onClick={shareWhatsApp}><MessageCircle className="h-4 w-4" /> WhatsApp</button>
-        {referralSent ? (
-          <span className="btn-secondary bg-green-50 text-green-700 border-green-200 cursor-default">
-            ✓ Referred to IPD
-          </span>
+        {patient.isDischarged ? (
+          <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200 font-medium">
+            This patient has been discharged and the prescription cannot be updated.
+          </div>
         ) : (
-          <button
-            className="btn bg-indigo-600 hover:bg-indigo-700 text-white"
-            onClick={handleSendToIpd}
-            disabled={sendingToIpd}
-          >
-            <Send className="h-4 w-4" /> {sendingToIpd ? 'Sending...' : 'Send to IPD'}
-          </button>
+          <>
+            <button className="btn-secondary" disabled={isSaving} onClick={handleSaveAndPrint}><Save className="h-4 w-4" /> {isSaving ? 'Saving...' : 'Save'}</button>
+            <button className="btn-secondary" disabled={isSaving} onClick={shareWhatsApp}><MessageCircle className="h-4 w-4" /> WhatsApp</button>
+            {referralSent ? (
+              <span className="btn-secondary bg-green-50 text-green-700 border-green-200 cursor-default">
+                ✓ Referred to IPD
+              </span>
+            ) : (
+              <button
+                className="btn bg-indigo-600 hover:bg-indigo-700 text-white"
+                onClick={handleSendToIpd}
+                disabled={sendingToIpd}
+              >
+                <Send className="h-4 w-4" /> {sendingToIpd ? 'Sending...' : 'Send to IPD'}
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>

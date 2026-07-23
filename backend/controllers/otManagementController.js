@@ -350,7 +350,7 @@ const getOtBookings = async (req, res) => {
     const bookings = await OtBooking.find(query)
       .populate('otId', 'otCode otName')
       .populate('patientId', 'patientName uhid')
-      .populate('admissionId', 'ipdNumber pidNumber')
+      .populate('admissionId', 'ipdNumber pidNumber provisionalDiagnosis')
       .populate('otRecordId', 'surgeon proceduresPerformed')
       .populate('createdBy', 'username doctorName')
       .sort({ surgeryDate: -1, startTime: 1 });

@@ -6,6 +6,7 @@ const Prescription = require('../models/Prescription');
 const Patient = require('../models/Patient');
 const Visit = require('../models/Visit');
 const HospitalSettings = require('../models/HospitalSettings');
+const IpdAdmission = require('../models/IpdAdmission');
 
 const tenantFilter = (req, query = {}) => (
   req.user.hospitalId ? { ...query, hospitalId: req.user.hospitalId } : query
@@ -95,18 +96,55 @@ const createBill = async (req, res) => {
       paidAmount,
       paymentMethod,
       mixedPayments,
-      paymentStatus
+      paymentStatus,
+      remarks
     } = req.body;
 
     const hospitalId = req.user.hospitalId;
     const userId = req.user._id;
 
+    if (!hospitalId) {
+      return res.status(400).json({ message: 'Hospital context is missing. Please re-login.' });
+    }
+
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: 'Bill must contain at least one item' });
     }
 
+    if (!paymentMethod || !['Cash', 'UPI', 'Card', 'Bank Transfer', 'Mixed Payment'].includes(paymentMethod)) {
+      return res.status(400).json({ message: 'Invalid or missing payment method' });
+    }
+
+    if (!paymentStatus || !['Paid', 'Partially Paid', 'Unpaid'].includes(paymentStatus)) {
+      return res.status(400).json({ message: 'Invalid or missing payment status' });
+    }
+
+    const gTotal = Number(grandTotal) || 0;
+    const pAmount = Number(paidAmount) || 0;
+    const balanceAmount = Math.max(0, gTotal - pAmount);
+
     // Verify stock and deduct
     for (const item of items) {
+      if (!item.itemName || typeof item.itemName !== 'string') {
+        return res.status(400).json({ message: 'Invalid or missing medicine name' });
+      }
+
+      if (!item.batch || typeof item.batch !== 'string') {
+        return res.status(400).json({ message: `Missing batch for ${item.itemName}` });
+      }
+
+      if (typeof item.quantity !== 'number' || isNaN(item.quantity) || item.quantity <= 0) {
+        return res.status(400).json({ message: `Invalid quantity for ${item.itemName}. Must be a positive decimal/integer.` });
+      }
+
+      if (typeof item.unitPrice !== 'number' || isNaN(item.unitPrice) || item.unitPrice < 0) {
+        return res.status(400).json({ message: `Invalid unit price for ${item.itemName}` });
+      }
+
+      if (typeof item.amount !== 'number' || isNaN(item.amount) || item.amount < 0) {
+        return res.status(400).json({ message: `Invalid amount for ${item.itemName}` });
+      }
+
       const invItem = await PharmacyInventory.findOne({
         hospitalId,
         itemName: { $regex: new RegExp('^' + item.itemName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '$', 'i') },
@@ -117,62 +155,119 @@ const createBill = async (req, res) => {
         return res.status(400).json({ message: `Inventory batch not found for ${item.itemName} (Batch: ${item.batch})` });
       }
 
-      if (invItem.quantity < item.quantity) {
+      // Expired check
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (new Date(invItem.expiry) <= today) {
+        return res.status(400).json({ message: `Cannot bill expired medicine ${item.itemName} (Batch: ${item.batch})` });
+      }
+
+      const unitsPerPack = invItem.unitsPerPack || 1;
+      const unitsSold = Math.round((item.quantity * unitsPerPack) * 10000) / 10000;
+
+      if (typeof item.gstPercentage === 'number' && (item.gstPercentage < 0 || item.gstPercentage > 100)) {
+        return res.status(400).json({ message: `Invalid GST percentage for ${item.itemName}. Must be between 0 and 100.` });
+      }
+
+      if (unitsSold <= 0) {
+        return res.status(400).json({ message: `Calculated units to sell for ${item.itemName} is invalid (0 or negative)` });
+      }
+
+      const availableUnits = invItem.quantityUnits || invItem.quantity || 0;
+      if (availableUnits < unitsSold) {
         return res.status(400).json({
-          message: `Insufficient stock for ${item.itemName} (Batch: ${item.batch}). Available: ${invItem.quantity}, Requested: ${item.quantity}`
+          message: `Insufficient stock for ${item.itemName} (Batch: ${item.batch}). Available: ${availableUnits} units, Requested: ${unitsSold} units (${item.quantity} packs)`
         });
       }
 
       // Deduct quantity
-      const previousStock = invItem.quantity;
-      invItem.quantity -= item.quantity;
-      invItem.amount = invItem.rate * invItem.quantity;
+      const previousStock = availableUnits;
+      invItem.quantityUnits = availableUnits - unitsSold;
+      invItem.quantity = invItem.quantityUnits; // keep in sync
       await invItem.save();
 
-      // Create Stock Movement log
+      // Create Stock Movement log (movement quantity is in units)
       await PharmacyStockMovement.create({
         hospitalId,
         itemName: item.itemName,
         batch: item.batch,
         type: 'Sale',
-        quantity: -item.quantity,
+        quantity: -unitsSold,
         previousStock,
-        newStock: invItem.quantity,
+        newStock: invItem.quantityUnits,
         performedBy: userId,
-        remarks: `Sold via Bill generation`
+        remarks: `Sold via Bill generation (Qty: ${item.quantity} packs)`
       });
     }
 
-    // Generate Bill Number
-    const count = await PharmacyBill.countDocuments({ hospitalId });
-    const billNumber = `PB-${10001 + count}`;
-    const balanceAmount = Math.max(0, grandTotal - (paidAmount || 0));
+    // Generate unique Bill Number (finding the highest number + collision safeguard)
+    let nextNum = 10001;
+    const latestBill = await PharmacyBill.findOne({ hospitalId })
+      .sort({ billNumber: -1 })
+      .select('billNumber');
+
+    if (latestBill && latestBill.billNumber) {
+      const match = latestBill.billNumber.match(/PB-(\d+)/);
+      if (match) {
+        nextNum = parseInt(match[1]) + 1;
+      }
+    } else {
+      const count = await PharmacyBill.countDocuments({ hospitalId });
+      nextNum = 10001 + count;
+    }
+
+    let billNumber;
+    let isUnique = false;
+    let attempts = 0;
+    while (!isUnique && attempts < 50) {
+      billNumber = `PB-${nextNum + attempts}`;
+      const existing = await PharmacyBill.findOne({ hospitalId, billNumber });
+      if (!existing) {
+        isUnique = true;
+      } else {
+        attempts++;
+      }
+    }
+
+    if (!isUnique) {
+      billNumber = `PB-${nextNum}-${Date.now()}`;
+    }
+
+    let admissionId = null;
+    if (patientId) {
+      const activeAdmission = await IpdAdmission.findOne({ patientId, status: { $ne: 'Discharged' } });
+      if (activeAdmission) {
+        admissionId = activeAdmission._id;
+      }
+    }
 
     const finalBill = await PharmacyBill.create({
       hospitalId,
       billNumber,
       prescriptionId: prescriptionId || null,
+      admissionId,
       patientId: patientId || null,
       customerDetails: customerDetails || { name: '', mobile: '', age: null, gender: '' },
       doctorId: doctorId || null,
       doctorName: doctorName || '',
       items,
-      subTotal,
-      discount: discount || 0,
-      gstAmount: gstAmount || 0,
-      grandTotal,
-      paidAmount: paidAmount || 0,
+      subTotal: Number(subTotal) || 0,
+      discount: Number(discount) || 0,
+      gstAmount: Number(gstAmount) || 0,
+      grandTotal: gTotal,
+      paidAmount: pAmount,
       balanceAmount,
       paymentMethod,
       mixedPayments: mixedPayments || [],
       paymentStatus,
+      remarks: remarks || '',
       status: 'Active',
       auditTrail: [{
         action: 'Bill Created',
         performedBy: userId,
         performedByName: req.user.doctorName || req.user.username || 'System',
         timestamp: new Date(),
-        remarks: `Bill generated with amount ₹${grandTotal.toFixed(2)}`
+        remarks: `Bill generated with amount ₹${gTotal.toFixed(2)}`
       }]
     });
 
@@ -185,6 +280,10 @@ const createBill = async (req, res) => {
     res.status(201).json({ message: 'Pharmacy bill created successfully', bill: finalBill });
   } catch (error) {
     console.error('Create Bill Error:', error);
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(val => val.message);
+      return res.status(400).json({ message: `Validation Error: ${messages.join(', ')}` });
+    }
     res.status(500).json({ message: 'Server error' });
   }
 };
@@ -218,8 +317,8 @@ const getBills = async (req, res) => {
     if (search) {
       const regex = new RegExp(search, 'i');
       filtered = bills.filter(b => 
-        b.billNumber.match(regex) ||
-        b.patientId?.patientName.match(regex) ||
+        b.billNumber?.match(regex) ||
+        b.patientId?.patientName?.match(regex) ||
         b.customerDetails?.name?.match(regex) ||
         b.customerDetails?.mobile?.match(regex) ||
         b.doctorName?.match(regex)
@@ -287,12 +386,12 @@ const processReturn = async (req, res) => {
         return res.status(400).json({ message: `Item ${ret.itemName} (Batch: ${ret.batch}) not found in the original invoice` });
       }
 
-      const returnQty = parseInt(ret.quantity) || 0;
+      const returnQty = parseFloat(ret.quantity) || 0;
       if (returnQty <= 0) continue;
 
-      if (billItem.returnedQty + returnQty > billItem.quantity) {
+      if (billItem.returnedQty + returnQty > billItem.quantity + 1e-9) {
         return res.status(400).json({
-          message: `Cannot return ${returnQty} of ${ret.itemName}. Max returnable quantity: ${billItem.quantity - billItem.returnedQty}`
+          message: `Cannot return ${returnQty} of ${ret.itemName}. Max returnable quantity: ${(billItem.quantity - billItem.returnedQty).toFixed(3)}`
         });
       }
 
@@ -308,27 +407,31 @@ const processReturn = async (req, res) => {
         });
 
         if (invItem) {
-          const previousStock = invItem.quantity;
-          invItem.quantity += returnQty;
-          invItem.amount = invItem.rate * invItem.quantity;
+          const unitsPerPack = billItem.unitsPerPack || 1;
+          const unitsReturned = Math.round(returnQty * unitsPerPack);
+          const previousStock = invItem.quantityUnits || invItem.quantity || 0;
+          invItem.quantityUnits = previousStock + unitsReturned;
+          invItem.quantity = invItem.quantityUnits;
           await invItem.save();
 
-          // Log Stock Movement
+          // Log Stock Movement (quantity and stock levels logged in units)
           await PharmacyStockMovement.create({
             hospitalId,
             itemName: ret.itemName,
             batch: ret.batch,
             type: 'Sales Return',
-            quantity: returnQty,
+            quantity: unitsReturned,
             previousStock,
-            newStock: invItem.quantity,
+            newStock: invItem.quantityUnits,
             referenceId: bill._id,
             performedBy: userId,
-            remarks: `Sales Return accepted (Refunded)`
+            remarks: `Sales Return accepted (Refunded): Qty ${returnQty} packs (${unitsReturned} units)`
           });
         }
       } else {
         // Rejected returns log
+        const unitsPerPack = billItem.unitsPerPack || 1;
+        const unitsReturned = Math.round(returnQty * unitsPerPack);
         await PharmacyStockMovement.create({
           hospitalId,
           itemName: ret.itemName,
@@ -339,9 +442,63 @@ const processReturn = async (req, res) => {
           newStock: 0,
           referenceId: bill._id,
           performedBy: userId,
-          remarks: `Sales Return rejected (Wasted/Damaged): Qty ${returnQty}`
+          remarks: `Sales Return rejected (Wasted/Damaged): Qty ${returnQty} packs (${unitsReturned} units)`
         });
       }
+    }
+
+    // Recalculate bill amounts and totals based on effective quantities
+    let newSubTotal = 0;
+    let newDiscount = 0;
+    let newGstAmount = 0;
+    let newGrandTotal = 0;
+
+    for (const item of bill.items) {
+      const unitsPerPack = item.unitsPerPack || 1;
+      const effectiveQty = item.quantity - item.returnedQty;
+      const effectiveQtyUnits = effectiveQty * unitsPerPack;
+      
+      const gstPercentage = item.gstPercentage || 0;
+      const unitPriceExGst = item.unitPrice / (1 + gstPercentage / 100);
+      
+      const itemSubtotal = unitPriceExGst * effectiveQtyUnits;
+      const itemDiscount = itemSubtotal * ((item.discount || 0) / 100);
+      const taxableAmount = itemSubtotal - itemDiscount;
+      const itemGst = taxableAmount * (gstPercentage / 100);
+      const itemTotal = taxableAmount + itemGst;
+
+      item.gstAmount = Number(itemGst.toFixed(2)) || 0;
+      item.amount = Number(itemTotal.toFixed(2)) || 0;
+
+      if (gstPercentage === 0) {
+        newSubTotal += itemSubtotal;
+      } else {
+        const itemRowMrp = item.unitPrice * effectiveQtyUnits;
+        newSubTotal += itemRowMrp;
+      }
+      newDiscount += itemDiscount;
+      newGstAmount += itemGst;
+      newGrandTotal += itemTotal;
+    }
+
+    bill.subTotal = Number(newSubTotal.toFixed(2)) || 0;
+    bill.discount = Number(newDiscount.toFixed(2)) || 0;
+    bill.gstAmount = Number(newGstAmount.toFixed(2)) || 0;
+    bill.grandTotal = Number(newGrandTotal.toFixed(2)) || 0;
+
+    // Refund handling: adjust paidAmount and balanceAmount dynamically
+    if (bill.paidAmount > bill.grandTotal) {
+      bill.paidAmount = bill.grandTotal;
+    }
+    bill.balanceAmount = Math.max(0, bill.grandTotal - bill.paidAmount);
+
+    // Update payment status dynamically
+    if (bill.balanceAmount === 0) {
+      bill.paymentStatus = 'Paid';
+    } else if (bill.paidAmount > 0) {
+      bill.paymentStatus = 'Partially Paid';
+    } else {
+      bill.paymentStatus = 'Unpaid';
     }
 
     // Determine status of invoice

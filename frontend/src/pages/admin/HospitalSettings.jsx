@@ -3,6 +3,9 @@ import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { Building2, Save, Upload, X, Loader2, Info, Percent, Settings, ShieldAlert, FileText, Globe, Mail, PhoneCall } from 'lucide-react';
 import client from '../../api/client';
+import SkeletonCard from '../../components/Skeleton/SkeletonCard';
+import SkeletonInput from '../../components/Skeleton/SkeletonInput';
+import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 
 const HospitalSettings = () => {
   const [settings, setSettings] = useState(null);
@@ -28,12 +31,16 @@ const HospitalSettings = () => {
       gstNumber: '',
       panNumber: '',
       registrationNumber: '',
+      dlNumber: '',
       invoiceFooterMessage: '',
       invoicePrefix: 'HOSP-INV-2026-',
       invoiceCounter: 1,
       invoiceFormat: '{PREFIX}{COUNTER}',
       discountEnabled: true,
-      sdtPricingInBilling: true
+      sdtPricingInBilling: true,
+      accessDiscount: false,
+      medicationGracePeriod: 30,
+      medicationMissedThreshold: 60
     }
   });
 
@@ -115,6 +122,7 @@ const HospitalSettings = () => {
           gstNumber: data.data.gstNumber || '',
           panNumber: data.data.panNumber || '',
           registrationNumber: data.data.registrationNumber || '',
+          dlNumber: data.data.dlNumber || '',
           invoiceFooterMessage: data.data.invoiceFooterMessage || '',
           invoicePrefix: data.data.invoicePrefix || 'HOSP-INV-2026-',
           invoiceCounter: data.data.invoiceCounter || 1,
@@ -127,7 +135,10 @@ const HospitalSettings = () => {
           discountPercentage: data.data.discountPercentage !== undefined ? data.data.discountPercentage : 0,
           discountFixedAmount: data.data.discountFixedAmount !== undefined ? data.data.discountFixedAmount : 0,
           patientSpecificDiscounts: data.data.patientSpecificDiscounts !== undefined ? data.data.patientSpecificDiscounts : 'Staff:10,EWS:100',
-          sdtPricingInBilling: data.data.sdtPricingInBilling !== undefined ? data.data.sdtPricingInBilling : true
+          sdtPricingInBilling: data.data.sdtPricingInBilling !== undefined ? data.data.sdtPricingInBilling : true,
+          accessDiscount: data.data.accessDiscount !== undefined ? data.data.accessDiscount : false,
+          medicationGracePeriod: data.data.medicationGracePeriod !== undefined ? data.data.medicationGracePeriod : 30,
+          medicationMissedThreshold: data.data.medicationMissedThreshold !== undefined ? data.data.medicationMissedThreshold : 60
         });
         setPreviewLogo(data.data.logoUrl);
       }
@@ -222,6 +233,7 @@ const HospitalSettings = () => {
         gstNumber: data.gstNumber || '',
         panNumber: data.panNumber || '',
         registrationNumber: data.registrationNumber || '',
+        dlNumber: data.dlNumber || '',
         invoiceFooterMessage: data.invoiceFooterMessage || '',
         invoicePrefix: data.invoicePrefix || 'HOSP-INV-2026-',
         invoiceCounter: Number(data.invoiceCounter || 1),
@@ -234,7 +246,10 @@ const HospitalSettings = () => {
         discountPercentage: 0,
         discountFixedAmount: 0,
         patientSpecificDiscounts: '',
-        sdtPricingInBilling: Boolean(data.sdtPricingInBilling)
+        sdtPricingInBilling: Boolean(data.sdtPricingInBilling),
+        accessDiscount: Boolean(data.accessDiscount),
+        medicationGracePeriod: Number(data.medicationGracePeriod || 30),
+        medicationMissedThreshold: Number(data.medicationMissedThreshold || 60)
       };
 
       await client.post('/admin/hospital-settings', payload);
@@ -247,8 +262,15 @@ const HospitalSettings = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
+      <div className="space-y-6 max-w-4xl mx-auto py-8">
+        <SkeletonCard className="w-full" />
+        <div className="grid gap-4 md:grid-cols-2">
+          <SkeletonInput />
+          <SkeletonInput />
+          <SkeletonInput />
+          <SkeletonInput />
+        </div>
+        <SkeletonCard className="w-full" />
       </div>
     );
   }
@@ -296,6 +318,17 @@ const HospitalSettings = () => {
           }`}
         >
           <Percent className="h-4 w-4" /> Apply discounts %
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('medication')}
+          className={`flex-1 flex items-center justify-center gap-2 py-3 text-xs font-bold rounded-lg transition-all ${
+            activeTab === 'medication'
+              ? 'bg-orange-500 text-white shadow-sm'
+              : 'text-gray-500 hover:text-orange-500 hover:bg-orange-50/50'
+          }`}
+        >
+          <Settings className="h-4 w-4" /> Medication Administration
         </button>
       </div>
 
@@ -449,6 +482,18 @@ const HospitalSettings = () => {
                 />
               </div>
 
+              {/* DL Number (Drug License) */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
+                  DL Number (Drug License) (Optional)
+                </label>
+                <input
+                  className="input"
+                  placeholder="e.g. DL-123456"
+                  {...register('dlNumber')}
+                />
+              </div>
+
               {/* Hospital Custom Heading */}
               <div>
                 <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
@@ -579,6 +624,32 @@ const HospitalSettings = () => {
         {/* ===================== TAB 3: APPLY DISCOUNTS % ===================== */}
         {activeTab === 'gst-discount' && (
           <div className="space-y-6 animate-fadeIn">
+            {/* Access Discount Switch */}
+            <div className="bg-orange-50/20 p-5 rounded-2xl border border-orange-100/60 shadow-sm space-y-4 text-left">
+              <div className="flex items-center justify-between gap-4">
+                <label htmlFor="accessDiscount" className="cursor-pointer select-none">
+                  <h4 className="text-sm font-extrabold text-gray-900">Access Discount Permission</h4>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Allow direct item-wise or percentage discount entry in the billing module without requiring admin approval.
+                  </p>
+                </label>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0 select-none">
+                  <input
+                    type="checkbox"
+                    id="accessDiscount"
+                    className="sr-only peer"
+                    {...register('accessDiscount')}
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
+                </label>
+              </div>
+              <div className="pt-2 border-t border-orange-100/50 flex justify-end">
+                <button type="submit" className="btn text-xs py-2 px-4 flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600">
+                  <Save className="h-3.5 w-3.5" /> Save Discount Setting
+                </button>
+              </div>
+            </div>
+
             <h3 className="text-base font-extrabold text-gray-900 border-b border-orange-100 pb-2 flex items-center justify-between">
               <span className="flex items-center gap-2">
                 <Percent className="h-4.5 w-4.5 text-orange-500" /> Pending Discount Requests ({discountRequests.length})
@@ -593,9 +664,8 @@ const HospitalSettings = () => {
             </h3>
 
             {loadingRequests ? (
-              <div className="p-12 text-center text-gray-500 flex flex-col items-center justify-center gap-2">
-                <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
-                <span className="text-xs font-bold">Loading pending discount requests...</span>
+              <div className="p-4">
+                <SkeletonTable rows={4} columns={3} className="w-full" />
               </div>
             ) : discountRequests.length === 0 ? (
               <div className="p-12 text-center border-2 border-dashed border-gray-200 rounded-2xl bg-gray-50">
@@ -692,6 +762,45 @@ const HospitalSettings = () => {
                 })}
               </div>
             )}
+          </div>
+        )}
+
+        {/* ===================== TAB 4: MEDICATION ADMINISTRATION ===================== */}
+        {activeTab === 'medication' && (
+          <div className="space-y-6 animate-fadeIn">
+            <h3 className="text-base font-extrabold text-gray-900 border-b border-orange-100 pb-2 flex items-center gap-2">
+              <Settings className="h-4 w-4 text-orange-500" /> Medication Administration Configuration
+            </h3>
+            <div className="grid gap-6 md:grid-cols-2">
+              <div>
+                <label className="mb-2 block text-xs font-bold uppercase text-gray-600">Medication Grace Period (Minutes) *</label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  className="input py-2.5 text-sm"
+                  placeholder="e.g. 30"
+                  {...register('medicationGracePeriod', { valueAsNumber: true })}
+                />
+                <span className="text-[10px] text-gray-400 mt-1 block">
+                  Configures the grace window within which administered medications are considered "On Time".
+                </span>
+              </div>
+              <div>
+                <label className="mb-2 block text-xs font-bold uppercase text-gray-600">Missed Dose Threshold (Minutes) *</label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  className="input py-2.5 text-sm"
+                  placeholder="e.g. 60"
+                  {...register('medicationMissedThreshold', { valueAsNumber: true })}
+                />
+                <span className="text-[10px] text-gray-400 mt-1 block">
+                  Configures the limit after which an unadministered medication is automatically marked as "Missed Dose".
+                </span>
+              </div>
+            </div>
           </div>
         )}
 

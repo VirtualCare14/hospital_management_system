@@ -21,9 +21,36 @@ const DoctorDashboard = () => {
       .catch((err) => console.error("Error fetching return notifications:", err));
   }, [user]);
 
+  const [missedAlerts, setMissedAlerts] = useState([]);
+
+  const fetchMissedAlerts = useCallback(() => {
+    if (!user || user.role !== 'doctor') return;
+    client.get('/ipd/medication-orders/missed-alerts')
+      .then(({ data }) => setMissedAlerts(data))
+      .catch((err) => console.error("Error fetching missed alerts:", err));
+  }, [user]);
+
   useEffect(() => {
     fetchReturnNotifications();
-  }, [fetchReturnNotifications]);
+    fetchMissedAlerts();
+  }, [fetchReturnNotifications, fetchMissedAlerts]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      fetchMissedAlerts();
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [fetchMissedAlerts]);
+
+  const handleDismissMissedAlert = async (alertId) => {
+    try {
+      await client.post(`/ipd/medication-administrations/${alertId}/dismiss-missed-alert`);
+      toast.success('Missed alert acknowledged');
+      fetchMissedAlerts();
+    } catch (err) {
+      toast.error('Failed to dismiss alert');
+    }
+  };
 
   const handleDismissNotification = async (reqId) => {
     try {
@@ -54,6 +81,7 @@ const DoctorDashboard = () => {
   const refreshAll = () => {
     fetchPatients();
     fetchReturnNotifications();
+    fetchMissedAlerts();
     client.get('/consultation/stats').then(({ data }) => setCounts(data)).catch(() => setCounts(null));
   };
 
@@ -91,6 +119,30 @@ const DoctorDashboard = () => {
 
   return (
     <div className="space-y-5">
+      {/* Missed Medication Alerts */}
+      {missedAlerts.map((alert) => (
+        <div key={alert._id} className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-center justify-between shadow-sm animate-pulse mb-2">
+          <div className="flex items-center gap-3">
+            <span className="p-2 rounded-xl bg-red-600 text-white font-extrabold text-xs">🚨</span>
+            <div>
+              <p className="text-sm font-bold text-red-900">Missed Medication Alert</p>
+              <p className="text-xs text-red-700 mt-0.5">
+                Patient: <span className="font-bold">{alert.patientName}</span> | 
+                Medicine: <span className="font-bold">{alert.medicineName}</span> | 
+                Scheduled: <span className="font-bold">{alert.scheduledTime}</span> | 
+                Delay: <span className="font-bold">{alert.currentDelay}</span>
+              </p>
+            </div>
+          </div>
+          <button 
+            onClick={() => handleDismissMissedAlert(alert._id)}
+            className="text-[10px] font-bold text-red-700 hover:text-red-900 hover:underline px-3 py-1.5 rounded-xl bg-red-100/50 cursor-pointer"
+          >
+            Acknowledge
+          </button>
+        </div>
+      ))}
+
       {/* Return Notifications */}
       {returnNotifications.map((noti) => (
         <div key={noti._id} className="bg-green-50 border border-green-200 rounded-2xl p-4 flex items-center justify-between shadow-sm animate-pulse mb-4">
@@ -214,7 +266,14 @@ const DoctorDashboard = () => {
             <tbody className="bg-white">
               {filteredPatients.map((patient) => (
                 <tr key={patient._id} className="border-b">
-                  <td className="p-3 font-semibold">{patient.patientName}</td>
+                  <td className="p-3">
+                    <span className="font-semibold text-gray-950 block">{patient.patientName}</span>
+                    {patient.registeredBy && patient.registeredBy !== 'N/A' && (
+                      <span className="text-[10px] text-gray-500 font-bold block mt-0.5">
+                        Registered by: <span className="capitalize text-orange-600">{patient.registeredBy}</span>
+                      </span>
+                    )}
+                  </td>
                   <td className="p-3">{patient.uhid}</td>
                   <td className="p-3">{formatDate(patient.appointmentDate)} {patient.slot ? `(${patient.slot})` : ''}</td>
                   <td className="p-3">{patient.department}</td>
@@ -235,8 +294,28 @@ const DoctorDashboard = () => {
                         </Link>
                       ) : (
                         <>
-                          <Link className="btn-secondary text-xs" to={`/doctor/consultation/${patient._id}`}><Stethoscope className="h-3 w-3" /> Consult</Link>
-                          <Link className="btn text-xs" to={`/doctor/prescription/${patient._id}`}><FileText className="h-3 w-3" /> Rx</Link>
+                          <Link 
+                            className={`text-xs inline-flex items-center gap-1 px-3 py-1 rounded-lg font-bold transition duration-150 cursor-pointer text-white ${
+                              patient.consultationStatus === 'completed' 
+                                ? 'bg-green-600 hover:bg-green-700' 
+                                : 'bg-orange-500 hover:bg-orange-600'
+                            }`} 
+                            to={`/doctor/consultation/${patient._id}`}
+                          >
+                            <Stethoscope className="h-3 w-3" /> Consult
+                          </Link>
+                          <Link 
+                            className={`text-xs inline-flex items-center gap-1 px-3 py-1 rounded-lg font-bold transition duration-150 cursor-pointer ${
+                              patient.consultationStatus === 'completed' 
+                                ? (patient.hasPrescription 
+                                  ? 'bg-green-600 text-white hover:bg-green-700' 
+                                  : 'bg-orange-500 text-white hover:bg-orange-600') 
+                                : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                            }`} 
+                            to={`/doctor/prescription/${patient._id}`}
+                          >
+                            <FileText className="h-3 w-3" /> Rx
+                          </Link>
                         </>
                       )}
                       <Link className="btn-secondary text-xs text-green-600" to={`/doctor/consultation-track/${patient._id}`}><History className="h-3 w-3" /> Track</Link>

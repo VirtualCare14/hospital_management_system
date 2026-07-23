@@ -25,8 +25,16 @@ const createPrescription = async (req, res) => {
       return res.status(404).json({ message: 'Patient not found' });
     }
 
-    if (!medicines || !Array.isArray(medicines) || medicines.length === 0) {
-      return res.status(400).json({ message: 'Medicines list cannot be empty' });
+    const IpdAdmission = require('../models/IpdAdmission');
+    const latestIpdAdmission = await IpdAdmission.findOne(
+      tenantQuery(req, { patientId: patient._id })
+    ).sort({ createdAt: -1 });
+    if (latestIpdAdmission?.status === 'Discharged') {
+      return res.status(400).json({ message: 'Patient is discharged. No further actions can be performed.' });
+    }
+
+    if (!medicines || !Array.isArray(medicines)) {
+      return res.status(400).json({ message: 'Medicines list is required' });
     }
 
     // 1. Find the latest pending consultation OR the latest consultation to mark completed
@@ -116,7 +124,7 @@ const createPrescription = async (req, res) => {
       );
     } else {
       // Fallback: update latest pending visit for patient/doctor
-      await Visit.updateOne(
+      await Visit.findOneAndUpdate(
         tenantQuery(req, { patientId, doctorId, consultationStatus: 'pending' }),
         { consultationStatus: 'completed', consultationCompletedDate: new Date() },
         { sort: { createdAt: -1 } }

@@ -19,6 +19,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import client from '../../api/client';
+import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 
 const ConsumableServiceSettings = () => {
   const [services, setServices] = useState([]);
@@ -201,8 +202,8 @@ const ConsumableServiceSettings = () => {
             <tbody className="divide-y divide-orange-50">
               {loading ? (
                 <tr>
-                  <td colSpan="6" className="p-8 text-center">
-                    <Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading...
+                  <td colSpan="6" className="p-4">
+                    <SkeletonTable rows={4} columns={6} className="w-full" />
                   </td>
                 </tr>
               ) : paginatedServices.length === 0 ? (

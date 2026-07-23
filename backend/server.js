@@ -11,6 +11,10 @@ dotenv.config({ path: path.join(__dirname, '.env') });
 // Connect to Database
 connectDB();
 
+// Start Medication grace period background checker
+const { startMedicationScheduler } = require('./utils/medicationScheduler');
+startMedicationScheduler();
+
 const app = express();
 
 // Middleware
@@ -39,6 +43,7 @@ app.use('/api/ipd', require('./routes/dischargeRoutes'));
 app.use('/api/ipd', require('./routes/otManagementRoutes'));
 app.use('/api/ipd', require('./routes/ipdReferralRoutes'));
 app.use('/api/same-day-care', require('./routes/sameDayCareRoutes'));
+app.use('/api/demo-request', require('./routes/demoRequestRoutes'));
 app.use('/api', require('./routes/billingRoutes'));
 app.use('/api/abha', require('./routes/abhaRoutes'));
 

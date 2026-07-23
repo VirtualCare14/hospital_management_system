@@ -13,16 +13,28 @@ const {
   updateDoctorAvailability,
   getDoctorAvailability,
   getHospitalTracking,
+  getDeleteDataPermission,
+  deletePatientData,
+  searchDeleteItems,
+  deletePharmacyInvoice,
+  deleteGeneralInvoice,
+  deletePrescription,
   getPatientSummary,
-  getUserLimit
+  getUserLimit,
+  getPatientTrackingTimeline,
+  getPatientBills,
+  searchBills,
+  updateBillDate
 } = require('../controllers/adminController');
 const authMiddleware = require('../middleware/authMiddleware');
 
 // Middleware to restrict route to administrators only
 const adminOnly = (req, res, next) => {
-  if (req.user && req.user.role === 'admin') {
+  const role = req.user?.role?.toLowerCase?.().trim?.() || (typeof req.user?.role === 'string' ? req.user.role.toLowerCase().trim() : '');
+  if (role === 'admin') {
     next();
   } else {
+    console.log('[DEBUG] Admin access denied in adminRoutes. User role:', req.user?.role, 'Username:', req.user?.username);
     res.status(403).json({ message: 'Access denied: admin permission required' });
   }
 };
@@ -44,6 +56,17 @@ router.put('/doctors/:id/availability', authMiddleware, adminOnly, updateDoctorA
 
 // Tracking and patient summary routes for admin dashboard
 router.get('/hospital-tracking', authMiddleware, adminOnly, getHospitalTracking);
+router.get('/delete-data/permission', authMiddleware, adminOnly, getDeleteDataPermission);
+router.post('/delete-data/patient', authMiddleware, adminOnly, deletePatientData);
+router.get('/delete-data/search', authMiddleware, adminOnly, searchDeleteItems);
+router.delete('/delete-data/pharmacy-bill/:id', authMiddleware, adminOnly, deletePharmacyInvoice);
+router.delete('/delete-data/billing-invoice/:id', authMiddleware, adminOnly, deleteGeneralInvoice);
+router.delete('/delete-data/prescription/:id', authMiddleware, adminOnly, deletePrescription);
 router.get('/patient-summary/:id', authMiddleware, adminOnly, getPatientSummary);
+router.get('/patient-tracking/:patientId', authMiddleware, adminOnly, getPatientTrackingTimeline);
+
+router.get('/bills/patient/:patientId', authMiddleware, adminOnly, getPatientBills);
+router.get('/bills/search', authMiddleware, adminOnly, searchBills);
+router.put('/bills/:billType/:billId/date', authMiddleware, adminOnly, updateBillDate);
 
 module.exports = router;

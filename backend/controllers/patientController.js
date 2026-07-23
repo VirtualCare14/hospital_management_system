@@ -97,12 +97,12 @@ const createPatient = async (req, res) => {
       temperature
     } = req.body;
 
-    if (!patientName || !mobile || !address || !dob || !gender || !aadhaar || !department || !doctorId || !appointmentDate || !slot) {
+    if (!patientName || !mobile || !address || !dob || !gender || !department || !doctorId || !appointmentDate || !slot) {
       return res.status(400).json({ message: 'All required registration fields must be provided' });
     }
 
-    // Verify doctor exists and has role doctor
-    const doctor = await User.findOne(tenantQuery(req, { _id: doctorId, role: 'doctor' }));
+    // Verify doctor exists and has role doctor or nursing
+    const doctor = await User.findOne(tenantQuery(req, { _id: doctorId, role: { $in: ['doctor', 'nursing'] } }));
     if (!doctor) {
       return res.status(400).json({ message: 'Selected doctor is invalid' });
     }
@@ -119,10 +119,17 @@ const createPatient = async (req, res) => {
       return res.status(400).json({ message: 'This slot is already booked for the selected doctor and date.' });
     }
 
-    // Check if patient with this Aadhaar already exists
-    const existingPatient = await Patient.findOne(
-      tenantQuery(req, { aadhaar: aadhaar.trim() })
-    );
+    // Check if patient with this Aadhaar or Mobile number already exists
+    const cleanAadhaar = aadhaar ? aadhaar.trim() : '';
+    const cleanMobile = mobile ? mobile.trim() : '';
+
+    let existingPatient = null;
+    if (cleanAadhaar && cleanAadhaar.length >= 4) {
+      existingPatient = await Patient.findOne(tenantQuery(req, { aadhaar: cleanAadhaar }));
+    }
+    if (!existingPatient && cleanMobile && cleanMobile.length >= 4) {
+      existingPatient = await Patient.findOne(tenantQuery(req, { mobile: cleanMobile }));
+    }
 
     let patient;
     let uhid;
@@ -131,10 +138,14 @@ const createPatient = async (req, res) => {
 
     if (existingPatient) {
       patient = existingPatient;
-      if (category) {
-        patient.category = category;
-        await patient.save();
-      }
+      let updated = false;
+      if (category && patient.category !== category) { patient.category = category; updated = true; }
+      if (patientName && patient.patientName !== patientName) { patient.patientName = patientName; updated = true; }
+      if (cleanMobile && patient.mobile !== cleanMobile) { patient.mobile = cleanMobile; updated = true; }
+      if (address && patient.address !== address) { patient.address = address; updated = true; }
+      if (cleanAadhaar && patient.aadhaar !== cleanAadhaar) { patient.aadhaar = cleanAadhaar; updated = true; }
+      if (updated) await patient.save();
+
       uhid = existingPatient.uhid;
       isExistingPatient = true;
 
@@ -143,17 +154,17 @@ const createPatient = async (req, res) => {
       );
       visitNumber = visitCount + 1;
     } else {
-      uhid = await generateUhid(aadhaar.trim());
+      uhid = await generateUhid(cleanAadhaar);
 
       patient = new Patient({
         hospitalId: req.user.hospitalId,
         uhid,
         patientName,
-        mobile,
+        mobile: cleanMobile,
         address,
         dob,
         gender,
-        aadhaar,
+        aadhaar: cleanAadhaar,
         category: category || 'General'
       });
 
@@ -170,7 +181,10 @@ const createPatient = async (req, res) => {
     );
 
     // Determine visit type
-    const finalVisitType = visitType || 'OPD';
+    let finalVisitType = visitType || 'OPD';
+    if (department && department.toLowerCase().trim() === 'same day care') {
+      finalVisitType = 'Same Day Treatment';
+    }
 
     // Create a Visit record
     const visit = new Visit({
@@ -194,7 +208,8 @@ const createPatient = async (req, res) => {
         height: height || undefined,
         bloodPressure: bloodPressure || undefined,
         temperature: temperature || undefined
-      }
+      },
+      createdBy: req.user._id
     });
 
     await visit.save();
@@ -205,12 +220,24 @@ const createPatient = async (req, res) => {
       const age = dob ? Math.floor((new Date() - new Date(dob)) / (365.25 * 24 * 60 * 60 * 1000)) : null;
 
       // Get default price from settings
-      let defaultPrice = 0;
+      let defaultPrice = 300; // default fallback for 'Minor Injury'
       try {
         const settings = await IpdAdminSettings.findOne(tenantQuery(req));
-        if (settings?.sameDayTreatmentPrices?.length > 0) {
-          defaultPrice = settings.sameDayTreatmentPrices[0]?.price || 0;
+        let foundPrice = null;
+        if (settings?.sameDayCareCategories) {
+          for (const cat of settings.sameDayCareCategories) {
+            const sub = cat.subServices.find(s => s.name.toLowerCase() === 'minor injury');
+            if (sub) {
+              foundPrice = sub.price;
+              break;
+            }
+          }
         }
+        if (foundPrice === null && settings?.sameDayTreatmentPrices) {
+          const service = settings.sameDayTreatmentPrices.find(s => s.name === 'Minor Injury');
+          if (service) foundPrice = service.price;
+        }
+        if (foundPrice !== null) defaultPrice = foundPrice;
       } catch (e) { /* ignore */ }
 
       sameDayTreatmentRecord = new SameDayTreatment({
@@ -225,8 +252,12 @@ const createPatient = async (req, res) => {
         treatmentDate: new Date(),
         diagnosis: '',
         status: 'Draft',
+        price: defaultPrice,
+        isFixedPrice: true,
         createdBy: req.user._id,
-        updatedBy: req.user._id
+        updatedBy: req.user._id,
+        assignedStaffId: doctor._id,
+        assignedStaffName: doctor.doctorName || doctor.username
       });
 
       await sameDayTreatmentRecord.save();
@@ -289,7 +320,7 @@ const createPatient = async (req, res) => {
 // @access  Private
 const getPatients = async (req, res) => {
   try {
-    const { search, excludeCompleted } = req.query;
+    const { search, excludeCompleted, sameDayCareOnly } = req.query;
     let query = tenantQuery(req);
 
     // Role-based filtering
@@ -298,6 +329,36 @@ const getPatients = async (req, res) => {
         .select('patientId');
       const patientIds = [...new Set(doctorVisits.map(v => v.patientId.toString()))];
       query = { ...query, _id: { $in: patientIds } };
+    }
+
+    if (sameDayCareOnly === 'true') {
+      let sdtQuery = tenantQuery(req);
+      let visitQuery = {
+        $or: [
+          { department: { $regex: /^same day care$/i } },
+          { visitType: 'Same Day Treatment' }
+        ]
+      };
+
+      if (req.user.role === 'doctor') {
+        sdtQuery.assignedStaffId = req.user._id;
+        visitQuery.doctorId = req.user._id;
+      }
+
+      const sdtPatientIds = await SameDayTreatment.find(sdtQuery).distinct('patientId');
+      const sdtVisitPatientIds = await Visit.find(tenantQuery(req, visitQuery)).distinct('patientId');
+
+      const allowedPatientIds = [...new Set([
+        ...sdtPatientIds.map(id => id.toString()),
+        ...sdtVisitPatientIds.map(id => id.toString())
+      ])];
+
+      if (query._id) {
+        const intersection = query._id.$in.filter(id => allowedPatientIds.includes(id));
+        query._id = { $in: intersection };
+      } else {
+        query._id = { $in: allowedPatientIds };
+      }
     }
 
     if (search) {
@@ -317,7 +378,14 @@ const getPatients = async (req, res) => {
       patients.map(async (pat) => {
         const latestVisit = await Visit.findOne(tenantQuery(req, { patientId: pat._id }))
           .populate('doctorId', 'doctorName username department')
+          .populate('createdBy', 'username doctorName role')
           .sort({ createdAt: -1 });
+
+        const Prescription = require('../models/Prescription');
+        const hasPrescription = latestVisit 
+          ? await Prescription.exists(tenantQuery(req, { patientId: pat._id, visitId: latestVisit._id }))
+          : false;
+
         return {
           ...pat.toObject(),
           department: latestVisit?.department || '',
@@ -327,7 +395,9 @@ const getPatients = async (req, res) => {
           appointmentNumber: latestVisit?.appointmentNumber || null,
           registrationNumber: latestVisit?.registrationNumber || '',
           visitType: latestVisit?.visitType || 'OPD',
-          consultationStatus: latestVisit?.consultationStatus || 'pending'
+          consultationStatus: latestVisit?.consultationStatus || 'pending',
+          hasPrescription: !!hasPrescription,
+          registeredBy: latestVisit?.createdBy ? (latestVisit.createdBy.doctorName || latestVisit.createdBy.username) : 'N/A'
         };
       })
     );
@@ -365,7 +435,14 @@ const getPatientById = async (req, res) => {
 
     const latestVisit = await Visit.findOne(tenantQuery(req, { patientId: patient._id }))
       .populate('doctorId', 'doctorName username department')
+      .populate('createdBy', 'username doctorName role')
       .sort({ createdAt: -1 });
+
+    const IpdAdmission = require('../models/IpdAdmission');
+    const latestIpdAdmission = await IpdAdmission.findOne(
+      tenantQuery(req, { patientId: patient._id })
+    ).sort({ createdAt: -1 });
+    const isDischarged = latestIpdAdmission?.status === 'Discharged';
 
     const responseData = {
       ...patient.toObject(),
@@ -376,7 +453,10 @@ const getPatientById = async (req, res) => {
       appointmentNumber: latestVisit?.appointmentNumber || null,
       registrationNumber: latestVisit?.registrationNumber || '',
       visitType: latestVisit?.visitType || 'OPD',
-      consultationStatus: latestVisit?.consultationStatus || 'pending'
+      consultationStatus: latestVisit?.consultationStatus || 'pending',
+      demographics: latestVisit?.demographics || null,
+      isDischarged,
+      registeredBy: latestVisit?.createdBy ? (latestVisit.createdBy.doctorName || latestVisit.createdBy.username) : 'N/A'
     };
 
     res.status(200).json(responseData);
@@ -465,25 +545,80 @@ const getRegistrations = async (req, res) => {
       .skip(skip)
       .limit(parseInt(limit));
 
-    // Enrich with patient data
-    const enriched = visits.map(v => ({
-      _id: v._id,
-      registrationNumber: v.registrationNumber,
-      registrationDate: v.registrationDate,
-      visitType: v.visitType,
-      uhid: v.uhid,
-      patientName: v.patientId?.patientName || '',
-      mobile: v.patientId?.mobile || '',
-      gender: v.patientId?.gender || '',
-      department: v.department,
-      doctorName: v.doctorId?.doctorName || v.doctorId?.username || '',
-      appointmentDate: v.appointmentDate,
-      slot: v.slot,
-      appointmentNumber: v.appointmentNumber,
-      consultationStatus: v.consultationStatus,
-      patientId: v.patientId?._id,
-      doctorId: v.doctorId?._id
-    }));
+    // Fetch linked consultation follow-up dates for doctor-assigned follow-ups
+    const Consultation = require('../models/Consultation');
+    const visitIds = visits.map(v => v._id);
+    const consultations = await Consultation.find(
+      tenantQuery(req, { visitId: { $in: visitIds } })
+    ).select('visitId followUpDate');
+
+    const consultationMap = {};
+    consultations.forEach(c => {
+      if (c.visitId && c.followUpDate) {
+        consultationMap[c.visitId.toString()] = c.followUpDate;
+      }
+    });
+
+    const unlinkedVisitPatientIds = visits
+      .filter(v => !v.followUpDate && !consultationMap[v._id.toString()] && v.patientId?._id)
+      .map(v => v.patientId._id);
+
+    let patientConsultationMap = {};
+    if (unlinkedVisitPatientIds.length > 0) {
+      const patientConsults = await Consultation.find(
+        tenantQuery(req, { patientId: { $in: unlinkedVisitPatientIds }, followUpDate: { $exists: true, $ne: null, $ne: '' } })
+      ).sort({ createdAt: -1 });
+      patientConsults.forEach(c => {
+        if (c.patientId && !patientConsultationMap[c.patientId.toString()]) {
+          patientConsultationMap[c.patientId.toString()] = c.followUpDate;
+        }
+      });
+    }
+
+    // Enrich with patient data & follow-up information
+    const enriched = visits.map(v => {
+      let effectiveFollowUpDate = v.followUpDate || null;
+      let effectiveFollowUpSource = v.followUpSource || null;
+      let effectiveFollowUpRemarks = v.followUpRemarks || '';
+
+      if (v.followUpSource === 'reception') {
+        effectiveFollowUpDate = v.followUpDate || null;
+        effectiveFollowUpSource = v.followUpDate ? 'reception' : null;
+        effectiveFollowUpRemarks = v.followUpRemarks || '';
+      } else {
+        const docFollowUp = consultationMap[v._id.toString()] || (v.patientId?._id ? patientConsultationMap[v.patientId._id.toString()] : null);
+        if (docFollowUp) {
+          effectiveFollowUpDate = docFollowUp;
+          effectiveFollowUpSource = 'doctor';
+        } else if (v.followUpDate) {
+          effectiveFollowUpDate = v.followUpDate;
+          effectiveFollowUpSource = v.followUpSource || 'doctor';
+        }
+      }
+
+      return {
+        _id: v._id,
+        registrationNumber: v.registrationNumber,
+        registrationDate: v.registrationDate,
+        visitType: v.visitType,
+        uhid: v.uhid,
+        patientName: v.patientId?.patientName || '',
+        mobile: v.patientId?.mobile || '',
+        gender: v.patientId?.gender || '',
+        aadhaar: v.patientId?.aadhaar || '',
+        department: v.department,
+        doctorName: v.doctorId?.doctorName || v.doctorId?.username || '',
+        appointmentDate: v.appointmentDate,
+        slot: v.slot,
+        appointmentNumber: v.appointmentNumber,
+        consultationStatus: v.consultationStatus,
+        patientId: v.patientId?._id,
+        doctorId: v.doctorId?._id,
+        followUpDate: effectiveFollowUpDate,
+        followUpSource: effectiveFollowUpSource,
+        followUpRemarks: effectiveFollowUpRemarks
+      };
+    });
 
     res.json({
       registrations: enriched,
@@ -512,7 +647,34 @@ const getVisitHistory = async (req, res) => {
       .populate('doctorId', 'doctorName username')
       .sort({ registrationDate: -1 });
 
-    res.json(visits);
+    const Consultation = require('../models/Consultation');
+    const visitIds = visits.map(v => v._id);
+    const consultations = await Consultation.find(
+      tenantQuery(req, { visitId: { $in: visitIds } })
+    ).select('visitId followUpDate followUpRemarks');
+
+    const consultationMap = {};
+    consultations.forEach(c => {
+      if (c.visitId) {
+        consultationMap[c.visitId.toString()] = c;
+      }
+    });
+
+    const enrichedVisits = visits.map(v => {
+      const docConsult = consultationMap[v._id.toString()];
+      const effectiveDate = v.followUpDate || docConsult?.followUpDate || null;
+      const effectiveSource = v.followUpSource || (docConsult?.followUpDate ? 'doctor' : null);
+      const effectiveRemarks = v.followUpRemarks || docConsult?.followUpRemarks || '';
+
+      return {
+        ...v.toObject(),
+        followUpDate: effectiveDate,
+        followUpSource: effectiveSource,
+        followUpRemarks: effectiveRemarks
+      };
+    });
+
+    res.json({ visits: enrichedVisits });
   } catch (error) {
     console.error('Get Visit History Error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -679,16 +841,319 @@ const updatePatientDiscount = async (req, res) => {
   }
 };
 
+// @desc    Look up existing patient by Aadhaar OR Mobile number
+// @route   GET /api/patients/lookup
+// @access  Private
+const lookupPatient = async (req, res) => {
+  try {
+    const { aadhaar, mobile } = req.query;
+    if ((!aadhaar || aadhaar.trim().length < 4) && (!mobile || mobile.trim().length < 4)) {
+      return res.status(400).json({ message: 'Valid Aadhaar or Mobile number is required' });
+    }
+
+    const conditions = [];
+    if (aadhaar && aadhaar.trim().length >= 4) {
+      conditions.push({ aadhaar: aadhaar.trim() });
+    }
+    if (mobile && mobile.trim().length >= 4) {
+      conditions.push({ mobile: mobile.trim() });
+    }
+
+    const patient = await Patient.findOne(tenantQuery(req, { $or: conditions })).sort({ createdAt: -1 });
+
+    if (!patient) {
+      return res.status(200).json({ message: 'No patient found', found: false });
+    }
+
+    // Get the latest visit for this patient
+    const latestVisit = await Visit.findOne(tenantQuery(req, { patientId: patient._id }))
+      .populate('doctorId', 'doctorName username department')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({ found: true, patient, latestVisit });
+  } catch (error) {
+    console.error('Lookup Patient Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Update patient details (and optional visit details)
+// @route   PUT /api/patients/:id
+// @access  Private
+const updatePatient = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      patientName,
+      mobile,
+      address,
+      dob,
+      gender,
+      aadhaar,
+      category,
+      department,
+      doctorId,
+      appointmentDate,
+      slot,
+      visitId
+    } = req.body;
+
+    const patient = await Patient.findOne(tenantQuery(req, { _id: id }));
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient not found' });
+    }
+
+    if (patientName !== undefined) patient.patientName = patientName.trim();
+    if (mobile !== undefined) patient.mobile = mobile.trim();
+    if (address !== undefined) patient.address = address;
+    if (dob !== undefined) patient.dob = dob;
+    if (gender !== undefined) patient.gender = gender;
+    if (aadhaar !== undefined) patient.aadhaar = aadhaar ? aadhaar.trim() : '';
+    if (category !== undefined) patient.category = category;
+
+    await patient.save();
+
+    // If visitId or visit details provided, update Visit record as well
+    if (visitId) {
+      const visit = await Visit.findOne(tenantQuery(req, { _id: visitId }));
+      if (visit) {
+        if (department !== undefined) visit.department = department;
+        if (doctorId !== undefined) visit.doctorId = doctorId;
+        if (appointmentDate !== undefined) visit.appointmentDate = appointmentDate;
+        if (slot !== undefined) visit.slot = slot;
+        await visit.save();
+      }
+    }
+
+    res.status(200).json({
+      message: 'Patient details updated successfully',
+      patient
+    });
+  } catch (error) {
+    console.error('Update Patient Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Update visit follow-up date (set by reception)
+// @route   PUT /api/patients/registrations/:id/follow-up
+// @access  Private
+const updateFollowUpDate = async (req, res) => {
+  try {
+    const { id } = req.params; // Visit ID
+    const { followUpDate, followUpRemarks, noFollowUp } = req.body;
+
+    const visit = await Visit.findOne(tenantQuery(req, { _id: id }));
+    if (!visit) {
+      return res.status(404).json({ message: 'Registration visit not found' });
+    }
+
+    if (noFollowUp || !followUpDate) {
+      visit.followUpDate = null;
+      visit.followUpSource = 'reception';
+      visit.followUpRemarks = '';
+    } else {
+      visit.followUpDate = followUpDate.trim();
+      visit.followUpSource = 'reception';
+      if (followUpRemarks !== undefined) {
+        visit.followUpRemarks = followUpRemarks.trim();
+      }
+    }
+
+    await visit.save();
+
+    res.status(200).json({
+      message: 'Follow-up date updated successfully',
+      visit: {
+        _id: visit._id,
+        followUpDate: visit.followUpDate,
+        followUpSource: visit.followUpSource,
+        followUpRemarks: visit.followUpRemarks
+      }
+    });
+  } catch (error) {
+    console.error('Update Follow Up Date Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Get follow-up patients list with filtering (today, upcoming, date range, search)
+// @route   GET /api/patients/registrations/follow-ups
+// @access  Private
+const getFollowUpPatients = async (req, res) => {
+  try {
+    const { filter = 'today', fromDate, toDate, search, department } = req.query;
+
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    let visitQuery = tenantQuery(req);
+    if (department) visitQuery.department = department;
+
+    const visits = await Visit.find(visitQuery)
+      .populate('patientId', 'patientName mobile gender aadhaar dob address')
+      .populate('doctorId', 'doctorName username')
+      .sort({ registrationDate: -1 });
+
+    const Consultation = require('../models/Consultation');
+    const visitIds = visits.map(v => v._id);
+    const consultations = await Consultation.find(
+      tenantQuery(req, { visitId: { $in: visitIds } })
+    ).select('visitId followUpDate followUpRemarks doctorId').populate('doctorId', 'doctorName username');
+
+    const consultationMap = {};
+    consultations.forEach(c => {
+      if (c.visitId && c.followUpDate) {
+        consultationMap[c.visitId.toString()] = {
+          date: c.followUpDate,
+          remarks: c.followUpRemarks || '',
+          doctorName: c.doctorId?.doctorName || c.doctorId?.username || ''
+        };
+      }
+    });
+
+    const unlinkedVisitPatientIds = visits
+      .filter(v => !v.followUpDate && !consultationMap[v._id.toString()] && v.patientId?._id)
+      .map(v => v.patientId._id);
+
+    let patientConsultationMap = {};
+    if (unlinkedVisitPatientIds.length > 0) {
+      const patientConsults = await Consultation.find(
+        tenantQuery(req, { patientId: { $in: unlinkedVisitPatientIds }, followUpDate: { $exists: true, $ne: null, $ne: '' } })
+      ).populate('doctorId', 'doctorName username').sort({ createdAt: -1 });
+
+      patientConsults.forEach(c => {
+        if (c.patientId && !patientConsultationMap[c.patientId.toString()]) {
+          patientConsultationMap[c.patientId.toString()] = {
+            date: c.followUpDate,
+            remarks: c.followUpRemarks || '',
+            doctorName: c.doctorId?.doctorName || c.doctorId?.username || ''
+          };
+        }
+      });
+    }
+
+    let list = [];
+    visits.forEach(v => {
+      let fDate = null;
+      let fSource = null;
+      let fRemarks = '';
+      let setterName = '';
+
+      if (v.followUpSource === 'reception') {
+        fDate = v.followUpDate || null;
+        fSource = v.followUpDate ? 'reception' : null;
+        fRemarks = v.followUpRemarks || '';
+        setterName = 'Reception';
+      } else {
+        const docConsult = consultationMap[v._id.toString()] || (v.patientId?._id ? patientConsultationMap[v.patientId._id.toString()] : null);
+        if (docConsult?.date) {
+          fDate = docConsult.date;
+          fSource = 'doctor';
+          fRemarks = docConsult.remarks || v.followUpRemarks || '';
+          setterName = docConsult.doctorName ? `Dr. ${docConsult.doctorName}` : 'Doctor';
+        } else if (v.followUpDate) {
+          fDate = v.followUpDate;
+          fSource = v.followUpSource || 'doctor';
+          fRemarks = v.followUpRemarks || '';
+          setterName = v.doctorId?.doctorName ? `Dr. ${v.doctorId.doctorName}` : 'Doctor';
+        }
+      }
+
+      if (fDate) {
+        list.push({
+          _id: v._id,
+          registrationNumber: v.registrationNumber,
+          registrationDate: v.registrationDate,
+          uhid: v.uhid,
+          patientId: v.patientId?._id,
+          patientName: v.patientId?.patientName || '',
+          mobile: v.patientId?.mobile || '',
+          gender: v.patientId?.gender || '',
+          aadhaar: v.patientId?.aadhaar || '',
+          address: v.patientId?.address || '',
+          department: v.department,
+          doctorId: v.doctorId?._id,
+          doctorName: v.doctorId?.doctorName || v.doctorId?.username || '',
+          followUpDate: fDate,
+          followUpSource: fSource,
+          followUpRemarks: fRemarks,
+          setterName: setterName,
+          consultationStatus: v.consultationStatus
+        });
+      }
+    });
+
+    // Remove duplicates (keep latest per patient)
+    const uniqueMap = {};
+    list.forEach(item => {
+      const key = item.patientId ? item.patientId.toString() : item.uhid;
+      if (!uniqueMap[key] || new Date(item.registrationDate) > new Date(uniqueMap[key].registrationDate)) {
+        uniqueMap[key] = item;
+      }
+    });
+
+    let result = Object.values(uniqueMap);
+
+    // Calculate stats
+    const todayCount = result.filter(item => item.followUpDate.split('T')[0] === todayStr).length;
+    const upcomingCount = result.filter(item => item.followUpDate.split('T')[0] >= todayStr).length;
+    const totalCount = result.length;
+
+    // Apply Filter
+    if (filter === 'today') {
+      result = result.filter(item => item.followUpDate.split('T')[0] === todayStr);
+    } else if (filter === 'upcoming') {
+      result = result.filter(item => item.followUpDate.split('T')[0] >= todayStr);
+    } else if (filter === 'range' && (fromDate || toDate)) {
+      result = result.filter(item => {
+        const itemDateStr = item.followUpDate.split('T')[0];
+        if (fromDate && itemDateStr < fromDate) return false;
+        if (toDate && itemDateStr > toDate) return false;
+        return true;
+      });
+    }
+
+    if (search && search.trim() !== '') {
+      const q = search.trim().toLowerCase();
+      result = result.filter(item =>
+        item.patientName.toLowerCase().includes(q) ||
+        item.uhid.toLowerCase().includes(q) ||
+        item.mobile.includes(q) ||
+        item.doctorName.toLowerCase().includes(q) ||
+        item.setterName.toLowerCase().includes(q)
+      );
+    }
+
+    result.sort((a, b) => new Date(a.followUpDate) - new Date(b.followUpDate));
+
+    res.json({
+      followUps: result,
+      stats: {
+        todayCount,
+        upcomingCount,
+        totalCount
+      }
+    });
+  } catch (error) {
+    console.error('Get Follow Up Patients Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   createPatient,
   getPatients,
   getPatientById,
   getPatientByAadhaar,
+  lookupPatient,
   getPatientVisits,
   getRegistrations,
   getVisitHistory,
   getBookedSlots,
   deletePatient,
   getPatientWithPrescription,
-  updatePatientDiscount
+  updatePatientDiscount,
+  updatePatient,
+  updateFollowUpDate,
+  getFollowUpPatients
 };

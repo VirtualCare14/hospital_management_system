@@ -69,8 +69,15 @@ const CompletedConsultations = () => {
                     <td className="p-3 font-bold text-orange-700">
                       {consultation.patientId?.uhid}
                     </td>
-                    <td className="p-3 font-semibold">
-                      {consultation.patientId?.patientName}
+                    <td className="p-3">
+                      <span className="font-semibold text-gray-950 block">{consultation.patientId?.patientName}</span>
+                      {consultation.visitId?.createdBy && (
+                        <span className="text-[10px] text-gray-500 font-bold block mt-0.5">
+                          Registered by: <span className="capitalize text-orange-600">
+                            {consultation.visitId.createdBy.doctorName || consultation.visitId.createdBy.username}
+                          </span>
+                        </span>
+                      )}
                     </td>
                     <td className="p-3 text-xs">
                       <div className="line-clamp-2">

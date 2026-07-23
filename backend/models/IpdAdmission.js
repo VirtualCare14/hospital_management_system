@@ -14,12 +14,12 @@ const ipdAdmissionSchema = new mongoose.Schema({
   roomId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Room',
-    required: true
+    required: false
   },
   bedId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Bed',
-    required: true
+    required: false
   },
   admissionDate: {
     type: Date,
@@ -66,7 +66,18 @@ const ipdAdmissionSchema = new mongoose.Schema({
   guardianMobile: {
     type: String,
     default: ''
-  }
+  },
+  isSameDayCare: {
+    type: Boolean,
+    default: false
+  },
+  bedHistory: [{
+    roomId: { type: mongoose.Schema.Types.ObjectId, ref: 'Room' },
+    bedId: { type: mongoose.Schema.Types.ObjectId, ref: 'Bed' },
+    startDate: { type: Date, default: Date.now },
+    endDate: { type: Date },
+    pricePerDay: { type: Number, default: 0 }
+  }]
 }, { timestamps: true });
 
 module.exports = mongoose.model('IpdAdmission', ipdAdmissionSchema);

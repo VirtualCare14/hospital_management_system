@@ -10,6 +10,7 @@ const SuperAdminDashboard = () => {
   const { user, logout } = useAuth();
   const [hospitals, setHospitals] = useState([]);
   const [editing, setEditing] = useState(null);
+  const [allowDataDeletion, setAllowDataDeletion] = useState(false);
   const { register, handleSubmit, reset, setValue } = useForm();
 
   const loadHospitals = async () => {
@@ -28,12 +29,14 @@ const SuperAdminDashboard = () => {
     const payload = {
       name: data.name?.trim(),
       loginId: data.loginId?.trim().toLowerCase(),
-      maxUsers: Number(data.maxUsers) || 10
+      code: data.code?.trim().toLowerCase(),
+      maxUsers: Number(data.maxUsers) || 10,
+      allowDataDeletion: allowDataDeletion
     };
     if (data.password) payload.password = data.password;
 
-    if (!payload.name || !payload.loginId || (!editing && !payload.password)) {
-      toast.error('Please provide hospital name, login ID and password.');
+    if (!payload.name || !payload.loginId || !payload.code || (!editing && !payload.password)) {
+      toast.error('Please provide hospital name, login ID, unique access code and password.');
       return;
     }
 
@@ -46,7 +49,8 @@ const SuperAdminDashboard = () => {
         toast.success('Hospital created');
       }
       setEditing(null);
-      reset({ name: '', loginId: '', password: '', maxUsers: 10 });
+      setAllowDataDeletion(false);
+      reset({ name: '', loginId: '', code: '', password: '', maxUsers: 10 });
       loadHospitals();
     } catch (error) {
       toast.error(error.response?.data?.message || 'Unable to save hospital.');
@@ -57,8 +61,11 @@ const SuperAdminDashboard = () => {
     setEditing(hospital);
     setValue('name', hospital.name);
     setValue('loginId', hospital.loginId);
+    setValue('code', hospital.code || '');
     setValue('password', '');
     setValue('maxUsers', hospital.maxUsers || 10);
+    setAllowDataDeletion(Boolean(hospital.allowDataDeletion));
+    setEditing(hospital);
   };
 
   const updateStatus = async (hospital) => {
@@ -90,12 +97,27 @@ const SuperAdminDashboard = () => {
           <button className="btn-secondary" onClick={() => logout(false)}>Logout</button>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="card grid gap-3 p-5 md:grid-cols-[1fr_200px_200px_120px_auto]">
-          <input className="input" placeholder="Hospital name" {...register('name', { required: true })} />
-          <input className="input" placeholder="Hospital login ID" {...register('loginId', { required: true })} />
-          <input className="input" type="password" placeholder={editing ? 'New password optional' : 'Password'} {...register('password', { required: !editing })} />
-          <input className="input" type="number" min="1" placeholder="User Limit" {...register('maxUsers', { required: true, valueAsNumber: true })} />
-          <button className="btn" type="submit"><Save className="h-4 w-4" /> {editing ? 'Update' : 'Create'}</button>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
+          <div className="card grid gap-3 p-5 md:grid-cols-[1fr_180px_180px_180px_120px_auto]">
+            <input className="input" placeholder="Hospital name" {...register('name', { required: true })} />
+            <input className="input" placeholder="Hospital login ID" {...register('loginId', { required: true })} />
+            <input className="input" placeholder="Unique Access Code" {...register('code', { required: true })} />
+            <input className="input" type="password" placeholder={editing ? 'New password optional' : 'Password'} {...register('password', { required: !editing })} />
+            <input className="input" type="number" min="1" placeholder="User Limit" {...register('maxUsers', { required: true, valueAsNumber: true })} />
+            <button className="btn" type="submit"><Save className="h-4 w-4" /> {editing ? 'Update' : 'Create'}</button>
+          </div>
+
+          <div className="card p-4">
+            <label className="flex items-center justify-between gap-3 rounded-xl border border-orange-100 bg-orange-50/50 px-4 py-3 text-sm font-semibold text-gray-700">
+              <span>Allow this hospital to use Delete Data option</span>
+              <input
+                type="checkbox"
+                className="h-5 w-5 rounded border-orange-300 text-orange-600 focus:ring-orange-500"
+                checked={allowDataDeletion}
+                onChange={(e) => setAllowDataDeletion(e.target.checked)}
+              />
+            </label>
+          </div>
         </form>
 
         <div className="card overflow-hidden">
@@ -104,6 +126,7 @@ const SuperAdminDashboard = () => {
               <tr>
                 <th className="p-3">Hospital</th>
                 <th className="p-3">Login ID</th>
+                <th className="p-3">Access Code</th>
                 <th className="p-3">Users</th>
                 <th className="p-3">Status</th>
                 <th className="p-3">Link</th>
@@ -115,6 +138,7 @@ const SuperAdminDashboard = () => {
                 <tr key={hospital.id} className="border-t border-orange-50">
                   <td className="p-3 font-bold">{hospital.name}</td>
                   <td className="p-3">{hospital.loginId}</td>
+                  <td className="p-3 font-mono font-bold text-orange-600">{hospital.code || '-'}</td>
                   <td className="p-3 font-mono">{hospital.userCount} / {hospital.maxUsers || 10}</td>
                   <td className="p-3">{hospital.isActive ? 'Active' : 'Disabled'}</td>
                   <td className="p-3">

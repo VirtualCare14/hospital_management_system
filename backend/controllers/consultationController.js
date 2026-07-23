@@ -27,7 +27,8 @@ const buildPatientData = (visit) => {
     appointmentDate: visit.appointmentDate || '',
     slot: visit.slot || '',
     consultationStatus: visit.consultationStatus || 'pending',
-    createdAt: visit.createdAt || patientObj.createdAt
+    createdAt: visit.createdAt || patientObj.createdAt,
+    registeredBy: visit.createdBy ? (visit.createdBy.doctorName || visit.createdBy.username) : 'N/A'
   };
 };
 
@@ -65,7 +66,8 @@ const createConsultation = async (req, res) => {
       collectionType,
       collectionTime,
       bookingDate,
-      followUpDate
+      followUpDate,
+      followUpRemarks
     } = req.body;
 
     const doctorId = req.user._id;
@@ -78,6 +80,14 @@ const createConsultation = async (req, res) => {
     const patient = await Patient.findOne(tenantQuery(req, { _id: patientId }));
     if (!patient) {
       return res.status(404).json({ message: 'Patient not found' });
+    }
+
+    const IpdAdmission = require('../models/IpdAdmission');
+    const latestIpdAdmission = await IpdAdmission.findOne(
+      tenantQuery(req, { patientId: patient._id })
+    ).sort({ createdAt: -1 });
+    if (latestIpdAdmission?.status === 'Discharged') {
+      return res.status(400).json({ message: 'Patient is discharged. No further actions can be performed.' });
     }
 
     // 1. Save new symptoms to the Symptom autocomplete index
@@ -106,8 +116,29 @@ const createConsultation = async (req, res) => {
       vitals: sanitizeVitals(vitals),
       tests: tests || [],
       followUpDate,
+      followUpRemarks: followUpRemarks || '',
       consultationDateTime: new Date() // Auto capture system timestamp
     });
+
+    // Update Visit followUpDate & followUpRemarks if set by doctor
+    if (followUpDate || followUpRemarks) {
+      const Visit = require('../models/Visit');
+      const updateData = { followUpSource: 'doctor' };
+      if (followUpDate !== undefined) updateData.followUpDate = followUpDate;
+      if (followUpRemarks !== undefined) updateData.followUpRemarks = followUpRemarks;
+
+      if (visitId) {
+        await Visit.findByIdAndUpdate(visitId, updateData);
+      } else {
+        const latestVisit = await Visit.findOne(tenantQuery(req, { patientId })).sort({ createdAt: -1 });
+        if (latestVisit) {
+          if (followUpDate !== undefined) latestVisit.followUpDate = followUpDate;
+          if (followUpRemarks !== undefined) latestVisit.followUpRemarks = followUpRemarks;
+          latestVisit.followUpSource = 'doctor';
+          await latestVisit.save();
+        }
+      }
+    }
 
     // 3. Create Lab Request entries if tests are assigned and sendToLab is checked
     if (tests && Array.isArray(tests) && tests.length > 0 && sendToLab) {
@@ -159,13 +190,22 @@ const updateConsultation = async (req, res) => {
       return res.status(404).json({ message: 'Consultation not found' });
     }
 
+    const IpdAdmission = require('../models/IpdAdmission');
+    const latestIpdAdmission = await IpdAdmission.findOne(
+      tenantQuery(req, { patientId: consultation.patientId })
+    ).sort({ createdAt: -1 });
+    if (latestIpdAdmission?.status === 'Discharged') {
+      return res.status(400).json({ message: 'Patient is discharged. No further actions can be performed.' });
+    }
+
     const {
       symptoms,
       pastHistory,
       diagnosisRemark,
       vitals,
       tests,
-      followUpDate
+      followUpDate,
+      followUpRemarks
     } = req.body;
 
     if (symptoms !== undefined) consultation.symptoms = symptoms;
@@ -174,6 +214,26 @@ const updateConsultation = async (req, res) => {
     if (vitals !== undefined) consultation.vitals = sanitizeVitals(vitals);
     if (tests !== undefined) consultation.tests = tests;
     if (followUpDate !== undefined) consultation.followUpDate = followUpDate;
+    if (followUpRemarks !== undefined) consultation.followUpRemarks = followUpRemarks;
+
+    if (followUpDate !== undefined || followUpRemarks !== undefined) {
+      const Visit = require('../models/Visit');
+      const updateData = { followUpSource: 'doctor' };
+      if (followUpDate !== undefined) updateData.followUpDate = followUpDate;
+      if (followUpRemarks !== undefined) updateData.followUpRemarks = followUpRemarks;
+
+      if (consultation.visitId) {
+        await Visit.findByIdAndUpdate(consultation.visitId, updateData);
+      } else if (consultation.patientId) {
+        const latestVisit = await Visit.findOne(tenantQuery(req, { patientId: consultation.patientId })).sort({ createdAt: -1 });
+        if (latestVisit) {
+          if (followUpDate !== undefined) latestVisit.followUpDate = followUpDate;
+          if (followUpRemarks !== undefined) latestVisit.followUpRemarks = followUpRemarks;
+          latestVisit.followUpSource = 'doctor';
+          await latestVisit.save();
+        }
+      }
+    }
     
     await consultation.save();
 
@@ -254,6 +314,7 @@ const getDoctorAppointments = async (req, res) => {
         consultationStatus: { $ne: 'completed' }
       }))
         .populate('patientId')
+        .populate('createdBy', 'username doctorName role')
         .sort({ appointmentDate: -1, slot: 1 });
       
       patients = visits.map(buildPatientData).filter(Boolean);
@@ -306,6 +367,7 @@ const getDoctorAppointments = async (req, res) => {
         consultationStatus: { $ne: 'completed' }
       }))
         .populate('patientId')
+        .populate('createdBy', 'username doctorName role')
         .sort({ slot: 1 });
       
       patients = visits.map(buildPatientData).filter(Boolean);
@@ -358,6 +420,7 @@ const getDoctorAppointments = async (req, res) => {
         consultationStatus: { $ne: 'completed' }
       }))
         .populate('patientId')
+        .populate('createdBy', 'username doctorName role')
         .sort({ appointmentDate: 1, slot: 1 });
       
       patients = visits.map(buildPatientData).filter(Boolean);
@@ -514,6 +577,14 @@ const getCompletedConsultations = async (req, res) => {
     const consultations = await Consultation.find(query)
       .populate('patientId', 'uhid patientName mobile gender dob department')
       .populate('doctorId', 'doctorName username department')
+      .populate({
+        path: 'visitId',
+        select: 'createdBy',
+        populate: {
+          path: 'createdBy',
+          select: 'username doctorName role'
+        }
+      })
       .sort({ consultationCompletedDate: -1, updatedAt: -1 });
 
     res.json(consultations);
@@ -538,6 +609,14 @@ const getAllPatientConsultations = async (req, res) => {
     const consultations = await Consultation.find(tenantQuery(req, { patientId }))
       .populate('doctorId', 'doctorName username department')
       .populate('patientId', 'uhid patientName mobile gender dob')
+      .populate({
+        path: 'visitId',
+        select: 'createdBy',
+        populate: {
+          path: 'createdBy',
+          select: 'username doctorName role'
+        }
+      })
       .sort({ consultationDateTime: -1, createdAt: -1 });
 
     // Also get ALL related prescriptions  
@@ -559,7 +638,15 @@ const getCompletedConsultationDetails = async (req, res) => {
   try {
     const consultation = await Consultation.findOne(tenantQuery(req, { _id: req.params.consultationId }))
       .populate('patientId', 'uhid patientName mobile gender dob department appointmentDate slot address aadhaar')
-      .populate('doctorId', 'doctorName username department');
+      .populate('doctorId', 'doctorName username department')
+      .populate({
+        path: 'visitId',
+        select: 'createdBy',
+        populate: {
+          path: 'createdBy',
+          select: 'username doctorName role'
+        }
+      });
 
     if (!consultation) return res.status(404).json({ message: 'Consultation not found' });
 

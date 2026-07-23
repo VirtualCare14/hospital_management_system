@@ -16,6 +16,9 @@ const IpdOtRecord = require('../models/IpdOtRecord');
 const PharmacyBill = require('../models/PharmacyBill');
 const AdvancePayment = require('../models/AdvancePayment');
 const Visit = require('../models/Visit');
+const PharmacyInventory = require('../models/PharmacyInventory');
+const IpdAdminSettings = require('../models/IpdAdminSettings');
+
 
 
 const tenantFilter = (req, query = {}) => (
@@ -111,6 +114,23 @@ const checkBillableItems = async (patientId) => {
   // Check if patient already has a Final bill
   const hasExistingBills = finalizedBills.length > 0;
 
+  // Fetch all pharmacy bills for the patient
+  const pharmacyBills = await PharmacyBill.find({ patientId });
+
+  // Build a map of paid medicine quantities
+  const paidMedicinesQty = {}; // medicineName.toLowerCase() -> quantity
+  pharmacyBills.forEach(pBill => {
+    if (pBill.paymentStatus === 'Paid' && pBill.status !== 'Cancelled') {
+      pBill.items.forEach(pItem => {
+        const nameKey = pItem.itemName.toLowerCase().trim();
+        const qty = pItem.quantity - pItem.returnedQty;
+        if (qty > 0) {
+          paidMedicinesQty[nameKey] = (paidMedicinesQty[nameKey] || 0) + qty;
+        }
+      });
+    }
+  });
+
   // Check OPD Visits (Registrations)
   const visits = await Visit.find({ patientId, visitType: 'OPD' }).populate('doctorId', 'opdFees');
   const pendingVisits = visits.filter(v => !billedSourceIds.has(v._id.toString()));
@@ -157,14 +177,23 @@ const checkBillableItems = async (patientId) => {
   if (activeAdmissions.length > 0) {
     for (const admission of activeAdmissions) {
       // Bed charges
-      const bed = await Bed.findById(admission.bedId);
-      if (bed?.pricePerDay) {
-        const daysAdmitted = Math.ceil((new Date(admission.dischargeDate || new Date()) - new Date(admission.admissionDate)) / (1000 * 60 * 60 * 24)) || 1;
-        const roomCharge = bed.pricePerDay * daysAdmitted;
-        if (!categories.includes('BedCharge')) categories.push('BedCharge');
-        totalPendingAmount += roomCharge;
-
-
+      if (admission.bedHistory && admission.bedHistory.length > 0) {
+        admission.bedHistory.forEach(hist => {
+          const startDate = new Date(hist.startDate);
+          const endDate = hist.endDate ? new Date(hist.endDate) : new Date();
+          const days = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) || 1;
+          const charge = (hist.pricePerDay || 0) * days;
+          if (!categories.includes('BedCharge')) categories.push('BedCharge');
+          totalPendingAmount += charge;
+        });
+      } else {
+        const bed = await Bed.findById(admission.bedId);
+        if (bed?.pricePerDay) {
+          const daysAdmitted = Math.ceil((new Date(admission.dischargeDate || new Date()) - new Date(admission.admissionDate)) / (1000 * 60 * 60 * 24)) || 1;
+          const roomCharge = bed.pricePerDay * daysAdmitted;
+          if (!categories.includes('BedCharge')) categories.push('BedCharge');
+          totalPendingAmount += roomCharge;
+        }
       }
 
       // Consumables
@@ -179,15 +208,33 @@ const checkBillableItems = async (patientId) => {
       const medicines = await IpdMedicine.find({ admissionId: admission._id });
       const pendingMedicines = medicines.filter(m => !billedSourceIds.has(m._id.toString()));
       if (pendingMedicines.length > 0) {
-        if (!categories.includes('Medicine')) categories.push('Medicine');
-        totalPendingAmount += pendingMedicines.reduce((sum, m) => sum + (m.totalAmount || 0), 0);
+        let hasUnpaidMeds = false;
+        pendingMedicines.forEach(m => {
+          const nameKey = m.medicineName.toLowerCase().trim();
+          let unpaidQty = m.quantity;
+          if (paidMedicinesQty[nameKey] && paidMedicinesQty[nameKey] > 0) {
+            if (paidMedicinesQty[nameKey] >= m.quantity) {
+              paidMedicinesQty[nameKey] -= m.quantity;
+              unpaidQty = 0;
+            } else {
+              unpaidQty = m.quantity - paidMedicinesQty[nameKey];
+              paidMedicinesQty[nameKey] = 0;
+            }
+          }
+          if (unpaidQty > 0) {
+            hasUnpaidMeds = true;
+            totalPendingAmount += (m.unitPrice || 0) * unpaidQty;
+          }
+        });
+        if (hasUnpaidMeds && !categories.includes('Medicine')) {
+          categories.push('Medicine');
+        }
       }
     }
   }
 
   // Check Pharmacy Bills (consistently with generateBillItems)
-  const pharmacyBills = await PharmacyBill.find({ patientId, paymentStatus: { $ne: 'Paid' } });
-  const pendingPharmacyBills = pharmacyBills.filter(pb => !billedSourceIds.has(pb._id.toString()));
+  const pendingPharmacyBills = pharmacyBills.filter(pb => pb.paymentStatus !== 'Paid' && !billedSourceIds.has(pb._id.toString()));
   if (pendingPharmacyBills.length > 0) {
     if (!categories.includes('Medicine')) categories.push('Medicine');
     pendingPharmacyBills.forEach(pBill => {
@@ -249,6 +296,43 @@ const searchPatient = async (req, res) => {
 // @desc    Generate bill items for a patient by UHID
 // @route   GET /api/billing/generate/:uhid
 // @access  Private
+const getItemLatestPrice = async (hospitalId, itemName, category, fallbackPrice, adminSettings) => {
+  try {
+    const cleanName = itemName.trim().toLowerCase();
+
+    // 1. Check Pharmacy Inventory first
+    const pharmacyItem = await PharmacyInventory.findOne({
+      hospitalId,
+      itemName: { $regex: new RegExp('^' + cleanName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '$', 'i') }
+    }).sort({ createdAt: -1 });
+
+    if (pharmacyItem) {
+      return pharmacyItem.mrp;
+    }
+
+    // 2. Check Admin Settings (IpdAdminSettings)
+    if (adminSettings) {
+      if (category === 'Consumable' && adminSettings.consumableServices) {
+        const consumable = adminSettings.consumableServices.find(
+          c => c.name.trim().toLowerCase() === cleanName
+        );
+        if (consumable) return consumable.price;
+      }
+      if (category === 'Medicine' && adminSettings.medicines) {
+        const medicine = adminSettings.medicines.find(
+          m => m.name.trim().toLowerCase() === cleanName
+        );
+        if (medicine) return medicine.price;
+      }
+    }
+
+    return fallbackPrice;
+  } catch (error) {
+    console.error('Error fetching latest price for item:', itemName, error);
+    return fallbackPrice;
+  }
+};
+
 const generateBillItems = async (req, res) => {
   try {
     const { uhid } = req.params;
@@ -259,6 +343,7 @@ const generateBillItems = async (req, res) => {
 
     // Fetch hospital configurations
     const settings = await HospitalSettings.findOne({ hospitalId: req.user.hospitalId });
+    const adminSettings = await IpdAdminSettings.findOne({ hospitalId: req.user.hospitalId });
     const gstEnabled = settings ? settings.gstEnabled : true;
     const gstPercentage = settings ? settings.gstPercentage : 18;
     const discountEnabled = settings ? settings.discountEnabled : true;
@@ -354,24 +439,28 @@ const generateBillItems = async (req, res) => {
 
     if (includeSdtItems) {
       const treatmentItems = await SdtItem.find({ patientId: patient._id }).populate('treatmentId', 'status').sort({ createdAt: -1 });
-      treatmentItems.forEach(item => {
-        if (billedSourceIds.has(item._id.toString())) return;
+      for (const item of treatmentItems) {
+        if (billedSourceIds.has(item._id.toString())) continue;
         const itemStatus = item.treatmentId?.status;
-        if (itemStatus && itemStatus !== 'Completed') return;
-        if (billType === 'Lab' && item.itemType !== 'Lab Test') return;
+        if (itemStatus && itemStatus !== 'Completed') continue;
+        if (billType === 'Lab' && item.itemType !== 'Lab Test') continue;
         
         const category = item.itemType === 'Lab Test' ? 'Lab' : item.itemType;
+        let price = item.price || 0;
+        if (category === 'Medicine' || category === 'Consumable') {
+          price = await getItemLatestPrice(req.user.hospitalId, item.name, category, price, adminSettings);
+        }
         items.push({
           category,
           date: item.date || fmtDate(item.createdAt),
           description: `${item.name} (${item.itemType})`,
-          price: item.price || 0,
+          price,
           quantity: item.quantity || 1,
-          total: item.totalAmount || (item.price * item.quantity) || 0,
+          total: price * (item.quantity || 1),
           sourceId: item._id,
           sourceModel: 'SdtItem'
         });
-      });
+      }
     }
 
     // 3. Laboratory Charges
@@ -416,13 +505,54 @@ const generateBillItems = async (req, res) => {
       const admissions = await IpdAdmission.find(tenantFilter(req, { patientId: patient._id }))
         .populate('roomId', 'roomType')
         .populate('bedId', 'bedNumber pricePerDay bedType')
+        .populate('bedHistory.roomId', 'roomType')
+        .populate('bedHistory.bedId', 'bedNumber pricePerDay bedType')
         .sort({ createdAt: -1 });
+
+      const pharmacyBillsAll = await PharmacyBill.find(tenantFilter(req, { patientId: patient._id }));
+      const paidMedicinesQty = {}; // medicineName.toLowerCase() -> { quantity: number, paymentTimes: Date[] }
+      pharmacyBillsAll.forEach(pBill => {
+        if (pBill.paymentStatus === 'Paid' && pBill.status !== 'Cancelled') {
+          pBill.items.forEach(pItem => {
+            const nameKey = pItem.itemName.toLowerCase().trim();
+            const qty = pItem.quantity - pItem.returnedQty;
+            if (qty > 0) {
+              if (!paidMedicinesQty[nameKey]) {
+                paidMedicinesQty[nameKey] = {
+                  quantity: 0,
+                  paymentTimes: []
+                };
+              }
+              paidMedicinesQty[nameKey].quantity += qty;
+              paidMedicinesQty[nameKey].paymentTimes.push(pBill.updatedAt || pBill.createdAt);
+            }
+          });
+        }
+      });
 
       for (const admission of admissions) {
         if (billedSourceIds.has(admission._id.toString())) continue;
         
         // Bed charges
-        if (admission.bedId?.pricePerDay) {
+        if (admission.bedHistory && admission.bedHistory.length > 0) {
+          admission.bedHistory.forEach((hist) => {
+            if (!hist.bedId) return;
+            const startDate = new Date(hist.startDate);
+            const endDate = hist.endDate ? new Date(hist.endDate) : new Date();
+            const days = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) || 1;
+            const charge = (hist.pricePerDay || 0) * days;
+            items.push({
+              category: 'BedCharge',
+              date: fmtDate(startDate),
+              description: `Room Stay: ${hist.roomId?.roomType || 'N/A'} (Bed: ${hist.bedId?.bedNumber || 'N/A'}) - ${days} day(s) @ ₹${hist.pricePerDay || 0}/day`,
+              price: hist.pricePerDay || 0,
+              quantity: days,
+              total: charge,
+              sourceId: admission._id,
+              sourceModel: 'IpdAdmission'
+            });
+          });
+        } else if (admission.bedId?.pricePerDay) {
           const daysAdmitted = Math.ceil((new Date(admission.dischargeDate || new Date()) - new Date(admission.admissionDate)) / (1000 * 60 * 60 * 24)) || 1;
           const roomCharge = admission.bedId.pricePerDay * daysAdmitted;
           items.push({
@@ -435,40 +565,87 @@ const generateBillItems = async (req, res) => {
             sourceId: admission._id,
             sourceModel: 'IpdAdmission'
           });
-
         }
 
         // IPD Consumables
         const consumables = await IpdConsumable.find({ admissionId: admission._id });
-        consumables.forEach(c => {
-          if (billedSourceIds.has(c._id.toString())) return;
+        for (const c of consumables) {
+          if (billedSourceIds.has(c._id.toString())) continue;
+          const price = await getItemLatestPrice(req.user.hospitalId, c.serviceName, 'Consumable', c.price, adminSettings);
           items.push({
             category: 'Consumable',
             date: c.date || fmtDate(c.createdAt),
             description: `${c.serviceName}${c.gst ? ` (GST: ${c.gst}%)` : ''}`,
-            price: c.price || 0,
+            price,
             quantity: c.quantity || 1,
-            total: c.totalAmount || 0,
+            total: price * (c.quantity || 1),
             sourceId: c._id,
             sourceModel: 'IpdConsumable'
           });
-        });
+        }
 
         // IPD Medicines
         const medicines = await IpdMedicine.find({ admissionId: admission._id });
-        medicines.forEach(m => {
-          if (billedSourceIds.has(m._id.toString())) return;
-          items.push({
-            category: 'Medicine',
-            date: m.date || fmtDate(m.createdAt),
-            description: m.medicineName,
-            price: m.unitPrice || 0,
-            quantity: m.quantity || 1,
-            total: m.totalAmount || 0,
-            sourceId: m._id,
-            sourceModel: 'IpdMedicine'
-          });
-        });
+        for (const m of medicines) {
+          if (billedSourceIds.has(m._id.toString())) continue;
+          const nameKey = m.medicineName.toLowerCase().trim();
+          const price = await getItemLatestPrice(req.user.hospitalId, m.medicineName, 'Medicine', m.unitPrice, adminSettings);
+          
+          let isPaid = false;
+          let paidTimeStr = '';
+          
+          if (paidMedicinesQty[nameKey] && paidMedicinesQty[nameKey].quantity > 0) {
+            const mQty = m.quantity;
+            const paidQty = paidMedicinesQty[nameKey].quantity;
+            
+            if (paidQty >= mQty) {
+              isPaid = true;
+              paidMedicinesQty[nameKey].quantity -= mQty;
+            } else {
+              isPaid = true;
+              paidMedicinesQty[nameKey].quantity = 0;
+              m.quantity = mQty - paidQty;
+            }
+            
+            const pTime = paidMedicinesQty[nameKey].paymentTimes[0] || new Date();
+            paidTimeStr = new Date(pTime).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+          }
+
+          if (isPaid && m.quantity === 0) {
+            items.push({
+              category: 'Medicine',
+              date: m.date || fmtDate(m.createdAt),
+              description: `${m.medicineName} (Paid at Pharmacy on ${paidTimeStr})`,
+              price: 0,
+              quantity: m.quantity || 1,
+              total: 0,
+              sourceId: m._id,
+              sourceModel: 'IpdMedicine'
+            });
+          } else if (isPaid && m.quantity > 0) {
+            items.push({
+              category: 'Medicine',
+              date: m.date || fmtDate(m.createdAt),
+              description: `${m.medicineName} (${m.quantity} unpaid, others paid at Pharmacy on ${paidTimeStr})`,
+              price,
+              quantity: m.quantity,
+              total: price * m.quantity,
+              sourceId: m._id,
+              sourceModel: 'IpdMedicine'
+            });
+          } else {
+            items.push({
+              category: 'Medicine',
+              date: m.date || fmtDate(m.createdAt),
+              description: m.medicineName,
+              price,
+              quantity: m.quantity || 1,
+              total: price * (m.quantity || 1),
+              sourceId: m._id,
+              sourceModel: 'IpdMedicine'
+            });
+          }
+        }
       }
     }
 
@@ -496,27 +673,44 @@ const generateBillItems = async (req, res) => {
       });
     }
 
-    // 6. Pharmacy Charges (from unpaid Pharmacy Bills)
+    // 6. Pharmacy Charges
     if (!billType || billType === 'All' || billType === 'Pharmacy') {
-      const pharmacyBills = await PharmacyBill.find(tenantFilter(req, { patientId: patient._id, paymentStatus: { $ne: 'Paid' } })).sort({ createdAt: -1 });
-      pharmacyBills.forEach(pBill => {
-        if (billedSourceIds.has(pBill._id.toString())) return;
-        pBill.items.forEach((pItem, pIdx) => {
+      const pharmacyBills = await PharmacyBill.find(tenantFilter(req, { patientId: patient._id })).sort({ createdAt: -1 });
+      for (const pBill of pharmacyBills) {
+        if (billedSourceIds.has(pBill._id.toString())) continue;
+        const isPaid = pBill.paymentStatus === 'Paid';
+        for (const pItem of pBill.items) {
           const remainingQty = pItem.quantity - pItem.returnedQty;
           if (remainingQty > 0) {
+            let itemCategory = 'Medicine';
+            // Check if item is configured as a consumable in IpdAdminSettings
+            if (adminSettings && adminSettings.consumableServices) {
+              const isConsumable = adminSettings.consumableServices.some(
+                c => c.name.trim().toLowerCase() === pItem.itemName.trim().toLowerCase()
+              );
+              if (isConsumable) {
+                itemCategory = 'Consumable';
+              }
+            }
+
+            const price = isPaid ? 0 : await getItemLatestPrice(req.user.hospitalId, pItem.itemName, itemCategory, pItem.unitPrice, adminSettings);
+            const paidTimeStr = isPaid ? new Date(pBill.updatedAt || pBill.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+
             items.push({
-              category: 'Medicine',
+              category: itemCategory,
               date: fmtDate(pBill.billDate || pBill.createdAt),
-              description: `Pharmacy Bill ${pBill.billNumber}: ${pItem.itemName}`,
-              price: pItem.unitPrice || 0,
+              description: isPaid 
+                ? `Pharmacy Bill ${pBill.billNumber}: ${pItem.itemName} (Paid at Pharmacy on ${paidTimeStr})`
+                : `Pharmacy Bill ${pBill.billNumber}: ${pItem.itemName}`,
+              price,
               quantity: remainingQty,
-              total: pItem.amount || (pItem.unitPrice * remainingQty) || 0,
+              total: price * remainingQty,
               sourceId: pBill._id,
               sourceModel: 'PharmacyBill'
             });
           }
-        });
-      });
+        }
+      }
     }
 
     // Filter items based on whether their source IDs have already been finalized
@@ -553,7 +747,8 @@ const generateBillItems = async (req, res) => {
         discountFixedAmount: settings ? settings.discountFixedAmount : 0,
         patientSpecificDiscounts: settings ? settings.patientSpecificDiscounts : '',
         discountReasons,
-        sdtPricingInBilling: settings ? settings.sdtPricingInBilling : true
+        sdtPricingInBilling: settings ? settings.sdtPricingInBilling : true,
+        accessDiscount: settings ? settings.accessDiscount : false
       }
     });
   } catch (error) {
@@ -584,15 +779,31 @@ const createBill = async (req, res) => {
 
     const activeItems = items.filter(i => !i.isRemoved);
     const removedItems = items.filter(i => i.isRemoved);
-    const subtotal = activeItems.reduce((sum, i) => sum + i.total, 0);
+    
+    let computedSubtotal = 0;
+    let computedGstAmount = 0;
+    
+    activeItems.forEach(i => {
+      const baseAmount = (parseFloat(i.price) - parseFloat(i.discountAmount || 0)) * parseInt(i.quantity || 1);
+      const gstAmt = baseAmount * (parseFloat(i.gstPercentage || 0) / 100);
+      i.gstAmount = Number(gstAmt.toFixed(2));
+      i.total = Number((baseAmount + gstAmt).toFixed(2));
+      
+      computedSubtotal += baseAmount;
+      computedGstAmount += gstAmt;
+    });
 
-    // Use the GST rate sent in request directly
     const finalGstPercentage = parseFloat(gstPercentage || 0);
-
-    const discountAmt = subtotal * (parseFloat(discountPercentage || 0) / 100);
-    const discountedSubtotal = Math.max(0, subtotal - discountAmt);
-    const gstAmt = discountedSubtotal * (finalGstPercentage / 100);
+    const percentDiscountAmt = computedSubtotal * (parseFloat(discountPercentage || 0) / 100);
+    const discountedSubtotal = Math.max(0, computedSubtotal - percentDiscountAmt);
+    const invoiceGstAmt = discountedSubtotal * (finalGstPercentage / 100);
+    
+    const gstAmt = computedGstAmount + invoiceGstAmt;
     const grandTotal = discountedSubtotal + gstAmt;
+    const itemDiscountTotal = activeItems.reduce((sum, i) => sum + ((parseFloat(i.discountAmount || 0)) * parseInt(i.quantity || 1)), 0);
+    const discountAmt = itemDiscountTotal + percentDiscountAmt;
+
+    const subtotal = computedSubtotal;
 
     let invoiceNo = undefined;
     if (status === 'Final') {
@@ -771,16 +982,30 @@ const updateBill = async (req, res) => {
     if (discountRequestStatus !== undefined) bill.discountRequestStatus = discountRequestStatus;
     if (status) bill.status = status;
 
-    const subtotal = bill.items.reduce((sum, i) => sum + i.total, 0);
-    bill.subtotal = subtotal;
+    let computedSubtotal = 0;
+    let computedGstAmount = 0;
+    
+    bill.items.forEach(i => {
+      const baseAmount = (parseFloat(i.price) - parseFloat(i.discountAmount || 0)) * parseInt(i.quantity || 1);
+      const gstAmt = baseAmount * (parseFloat(i.gstPercentage || 0) / 100);
+      i.gstAmount = Number(gstAmt.toFixed(2));
+      i.total = Number((baseAmount + gstAmt).toFixed(2));
+      
+      computedSubtotal += baseAmount;
+      computedGstAmount += gstAmt;
+    });
 
-    // Use the GST rate sent in request directly
+    bill.subtotal = computedSubtotal;
     let finalGstPercentage = parseFloat(bill.gstPercentage || 0);
     bill.gstPercentage = finalGstPercentage;
 
-    bill.discountAmount = subtotal * (bill.discountPercentage / 100);
-    const discountedSubtotal = Math.max(0, subtotal - bill.discountAmount);
-    bill.gstAmount = discountedSubtotal * (bill.gstPercentage / 100);
+    const itemDiscountTotal = bill.items.reduce((sum, i) => sum + ((parseFloat(i.discountAmount || 0)) * parseInt(i.quantity || 1)), 0);
+    const percentDiscountAmt = computedSubtotal * (bill.discountPercentage / 100);
+    bill.discountAmount = itemDiscountTotal + percentDiscountAmt;
+    const discountedSubtotal = Math.max(0, computedSubtotal - percentDiscountAmt);
+    const invoiceGstAmt = discountedSubtotal * (finalGstPercentage / 100);
+    
+    bill.gstAmount = computedGstAmount + invoiceGstAmt;
     bill.grandTotal = discountedSubtotal + bill.gstAmount;
     bill.updatedBy = req.user._id;
 

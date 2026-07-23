@@ -1,22 +1,27 @@
 const Patient = require('../models/Patient');
 
 /**
- * Generate UHID using the last 6 digits of the Aadhaar number.
+ * Generate UHID using the last 6 digits of the Aadhaar number if provided.
  * Format: UHID + last 6 digits of Aadhaar (e.g., UHID123456)
- * If a collision occurs (same Aadhaar already registered), the existing UHID is reused.
+ * If Aadhaar is not provided or collision occurs, generate unique random 6 digits.
  */
 const generateUhid = async (aadhaar) => {
-  if (!aadhaar || aadhaar.length < 6) {
-    // Fallback: random 6 digits if Aadhaar is not provided
-    const randomSuffix = String(Math.floor(100000 + Math.random() * 900000));
-    return `UHID${randomSuffix}`;
+  if (aadhaar && typeof aadhaar === 'string' && aadhaar.trim().length >= 6) {
+    const lastSix = aadhaar.replace(/\D/g, '').slice(-6);
+    if (lastSix.length === 6) {
+      const candidate = `UHID${lastSix}`;
+      const existing = await Patient.findOne({ uhid: candidate });
+      if (!existing) return candidate;
+    }
   }
 
-  // Extract last 6 digits of Aadhaar
-  const lastSix = aadhaar.replace(/\D/g, '').slice(-6);
-  const uhid = `UHID${lastSix}`;
-
-  return uhid;
+  // Fallback / random 6 digits if Aadhaar is missing or candidate UHID is taken
+  while (true) {
+    const randomSuffix = String(Math.floor(100000 + Math.random() * 900000));
+    const candidate = `UHID${randomSuffix}`;
+    const existing = await Patient.findOne({ uhid: candidate });
+    if (!existing) return candidate;
+  }
 };
 
 module.exports = generateUhid;

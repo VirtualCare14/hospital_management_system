@@ -7,9 +7,14 @@ const {
   stopMedicationOrder,
   getAdministrationsByAdmission,
   createAdministrationRecord,
-  updateAdministrationRecord
+  updateAdministrationRecord,
+  getMissedAlerts,
+  dismissMissedAlert
 } = require('../controllers/ipdMedicationController');
 const authMiddleware = require('../middleware/authMiddleware');
+
+router.get('/medication-orders/missed-alerts', authMiddleware, getMissedAlerts);
+router.post('/medication-administrations/:adminId/dismiss-missed-alert', authMiddleware, dismissMissedAlert);
 
 router.get('/medication-orders/:admissionId', authMiddleware, getMedicationOrders);
 router.post('/medication-orders', authMiddleware, createMedicationOrder);

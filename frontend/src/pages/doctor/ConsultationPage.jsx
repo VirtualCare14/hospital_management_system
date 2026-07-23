@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { FlaskConical, Plus, Save, Send, Scissors } from 'lucide-react';
+import { FlaskConical, Plus, Save, Send, Scissors, X } from 'lucide-react';
 import client from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { durationUnits } from '../../utils/options';
@@ -15,6 +15,7 @@ const ConsultationPage = () => {
   const [patient, setPatient] = useState(null);
   const [loading, setLoading] = useState(true);
   const [symptoms, setSymptoms] = useState([{ symptom: '', durationDays: '', durationUnit: 'Days', pastHistory: '', remarks: '' }]);
+  const [isVitalsEditable, setIsVitalsEditable] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
   const [activeSymptomIndex, setActiveSymptomIndex] = useState(null);
   const [selectedTests, setSelectedTests] = useState([]);
@@ -27,9 +28,32 @@ const ConsultationPage = () => {
   const [generalPastHistory, setGeneralPastHistory] = useState('');
   const [diagnosisRemark, setDiagnosisRemark] = useState('');
   const [followUpDate, setFollowUpDate] = useState('');
+  const [followUpRemarks, setFollowUpRemarks] = useState('');
   const [visitId, setVisitId] = useState(null);
   const [previousConsultation, setPreviousConsultation] = useState(null);
+  const [subServices, setSubServices] = useState([]);
+  const [showSameDayModal, setShowSameDayModal] = useState(false);
+  const [sdCareType, setSdCareType] = useState('Minor Injury');
+  const [sdSelectedDocId, setSdSelectedDocId] = useState('');
+  const [sdRemarks, setSdRemarks] = useState('');
+  const [sdDoctors, setSdDoctors] = useState([]);
+  const [loadingSdDoctors, setLoadingSdDoctors] = useState(false);
   const { register, handleSubmit, reset } = useForm();
+
+  useEffect(() => {
+    if (showSameDayModal) {
+      setLoadingSdDoctors(true);
+      client.get('/admin/doctors')
+        .then(({ data }) => {
+          setSdDoctors(data || []);
+        })
+        .catch(err => {
+          console.error(err);
+          toast.error("Failed to load Same Day Care providers list");
+        })
+        .finally(() => setLoadingSdDoctors(false));
+    }
+  }, [showSameDayModal]);
 
   // Load patient AND visit information
   useEffect(() => {
@@ -40,9 +64,10 @@ const ConsultationPage = () => {
         const patientRes = await client.get(`/patients/${patientId}`);
         setPatient(patientRes.data);
         reset({
-          weight: patientRes.data.demographics?.weight,
-          height: patientRes.data.demographics?.height,
-          temperature: patientRes.data.demographics?.temperature
+          weight: patientRes.data.demographics?.weight || '',
+          height: patientRes.data.demographics?.height || '',
+          temperature: patientRes.data.demographics?.temperature || '',
+          bloodPressure: patientRes.data.demographics?.bloodPressure || ''
         });
 
         // Load previous consultations to find latest completed one
@@ -82,6 +107,22 @@ const ConsultationPage = () => {
       const testNames = data.map((test) => test.test || test.title).filter(Boolean);
       setAvailableTests([...new Set(testNames)]);
     }).catch(() => setAvailableTests([]));
+
+    client.get('/ipd/settings').then(({ data }) => {
+      const list = [];
+      if (data?.sameDayCareCategories) {
+        data.sameDayCareCategories.forEach(cat => {
+          if (cat.isActive !== false) {
+            cat.subServices.forEach(sub => {
+              if (sub.isActive !== false) list.push(sub.name);
+            });
+          }
+        });
+      }
+      setSubServices(list.length > 0 ? list : ['Fracture', 'Minor Injury', 'Minor Stitches', 'Small Burns', 'Mild Allergic Reactions', 'Dialysis']);
+    }).catch(() => {
+      setSubServices(['Fracture', 'Minor Injury', 'Minor Stitches', 'Small Burns', 'Mild Allergic Reactions', 'Dialysis']);
+    });
   }, []);
 
   const updateSymptom = async (index, field, value) => {
@@ -166,7 +207,8 @@ const ConsultationPage = () => {
       height: data.height || previousConsultation?.vitals?.height,
       temperature: data.temperature || previousConsultation?.vitals?.temperature,
       bmi: data.bmi || previousConsultation?.vitals?.bmi,
-      drugAllergy: data.drugAllergy || previousConsultation?.vitals?.drugAllergy
+      drugAllergy: data.drugAllergy || previousConsultation?.vitals?.drugAllergy,
+      bloodPressure: data.bloodPressure || previousConsultation?.vitals?.bloodPressure
     };
 
     // Merge tests
@@ -184,7 +226,8 @@ const ConsultationPage = () => {
       vitals: mergedVitals,
       tests: mergedTests,
       sendToLab: data.sendToLab,
-      followUpDate: followUpDate || previousConsultation?.followUpDate
+      followUpDate: followUpDate || previousConsultation?.followUpDate,
+      followUpRemarks: followUpRemarks || previousConsultation?.followUpRemarks
     };
 
     try {
@@ -202,11 +245,15 @@ const ConsultationPage = () => {
 
   const handleSendToIpd = async () => {
     if (!patient) return;
+    const defaultNotes = `Referred from OPD by Dr. ${user?.doctorName || user?.username || 'Doctor'}. Diagnosis: ${diagnosisRemark || 'N/A'}`;
+    const customRemarks = window.prompt("Enter remarks for IPD Referral:", defaultNotes);
+    if (customRemarks === null) return;
+
     setSendingToIpd(true);
     try {
       await client.post('/ipd/referrals', {
         patientId: patient._id,
-        notes: `Referred from OPD by Dr. ${user?.doctorName || user?.username || 'Doctor'}. Diagnosis: ${diagnosisRemark || 'N/A'}`
+        notes: customRemarks
       });
       toast.success(`${patient.patientName} has been referred to IPD successfully!`);
       setReferralSent(true);
@@ -217,18 +264,21 @@ const ConsultationPage = () => {
     }
   };
 
-  const handleSendToSameDay = async () => {
+  const handleSendToSameDayOpen = () => {
     if (!patient) return;
-    const types = ['Fracture', 'Minor Injury', 'Minor Stitches', 'Small Burns', 'Mild Allergic Reactions', 'Dialysis'];
-    const chosenType = window.prompt(
-      `Send ${patient.patientName} to Same Day Care?\nEnter one of: ${types.join(', ')}`,
-      'Minor Injury'
-    );
-    if (chosenType === null) return;
-    if (!types.includes(chosenType)) {
-      toast.error(`Invalid care type! Must be one of: ${types.join(', ')}`);
+    setSdCareType(subServices.includes('Minor Injury') ? 'Minor Injury' : subServices[0] || 'Dialysis');
+    setSdSelectedDocId('');
+    setSdRemarks(`Referred to Same Day Care by Dr. ${user?.doctorName || user?.username || 'Doctor'}.`);
+    setShowSameDayModal(true);
+  };
+
+  const handleSendToSameDaySubmit = async (e) => {
+    e.preventDefault();
+    if (!sdCareType) {
+      toast.error('Please select care type');
       return;
     }
+    const chosenDoc = sdDoctors.find(d => d._id === sdSelectedDocId);
     try {
       const dob = patient.dob;
       const age = dob ? Math.floor((new Date() - new Date(dob)) / (365.25 * 24 * 60 * 60 * 1000)) : null;
@@ -239,10 +289,14 @@ const ConsultationPage = () => {
         mobile: patient.mobile,
         gender: patient.gender,
         age,
-        treatmentType: chosenType,
+        treatmentType: sdCareType,
+        referredByDoctorRemarks: sdRemarks,
+        assignedStaffId: sdSelectedDocId || null,
+        assignedStaffName: chosenDoc ? (chosenDoc.doctorName || chosenDoc.username) : '',
         status: 'Draft'
       });
-      toast.success(`${patient.patientName} referred to Same Day Care (${chosenType})!`);
+      toast.success(`${patient.patientName} referred to Same Day Care (${sdCareType})!`);
+      setShowSameDayModal(false);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to refer patient');
     }
@@ -253,8 +307,25 @@ const ConsultationPage = () => {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" autoComplete="off">
+      {patient.isDischarged && (
+        <div className="card p-4 border border-gray-255 bg-gray-50 flex items-center gap-3">
+          <ShieldAlert className="text-gray-500 h-6 w-6 shrink-0" />
+          <div>
+            <h4 className="font-extrabold text-gray-800 text-sm uppercase tracking-wider">Patient is Discharged</h4>
+            <p className="text-xs text-gray-650 mt-0.5 font-semibold">
+              This patient has been discharged from the hospital. The OPD case record is read-only. No new consultations, referrals, or prescriptions can be saved.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="card p-5">
-        <p className="text-sm font-bold text-orange-600">{patient.uhid}</p>
+        <p className="text-sm font-bold text-orange-600">
+          <span>{patient.uhid}</span>
+          {patient.registeredBy && patient.registeredBy !== 'N/A' && (
+            <span className="text-gray-500 font-bold"> • Registered by: <span className="capitalize text-orange-650">{patient.registeredBy}</span></span>
+          )}
+        </p>
         <h1 className="text-2xl font-extrabold text-gray-900">{patient.patientName}</h1>
         <p className="text-sm text-gray-500">{patient.gender} • {patient.mobile} • {formatDate(patient.appointmentDate)} {patient.slot}</p>
       </div>
@@ -364,9 +435,16 @@ const ConsultationPage = () => {
               <button 
                 type="button" 
                 className="btn-ghost text-red-600 text-xs py-1" 
-                onClick={() => setSymptoms(symptoms.filter((_, i) => i !== index))}
+                onClick={() => {
+                  const next = symptoms.map((item, idx) => 
+                    idx === index 
+                      ? { symptom: '', durationDays: '', durationUnit: 'Days', pastHistory: '', remarks: '' } 
+                      : item
+                  );
+                  setSymptoms(next);
+                }}
               >
-                Delete
+                Clear
               </button>
             </div>
           </div>
@@ -408,37 +486,55 @@ const ConsultationPage = () => {
       </section>
 
       <section className="card space-y-4 p-5 rounded-2xl shadow-sm bg-white">
-        <h2 className="font-bold text-gray-800">Vitals</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="font-bold text-gray-800">Vitals</h2>
+          <button
+            type="button"
+            className={`btn-secondary text-xs px-3 py-1.5 rounded-lg border transition-all ${
+              isVitalsEditable 
+                ? 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100' 
+                : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+            }`}
+            onClick={() => setIsVitalsEditable(!isVitalsEditable)}
+          >
+            {isVitalsEditable ? 'Lock Vitals (Read-Only)' : 'Edit Vitals'}
+          </button>
+        </div>
         {previousConsultation?.vitals && (
-          <div className="grid gap-4 md:grid-cols-5 p-3 bg-gray-100 rounded-xl border border-gray-200 text-gray-600 text-sm mb-4">
-            <div className="col-span-5"><p className="text-xs font-bold text-gray-500 uppercase">Previous Vitals (Read-Only)</p></div>
+          <div className="grid gap-4 md:grid-cols-6 p-3 bg-gray-100 rounded-xl border border-gray-200 text-gray-600 text-sm mb-4">
+            <div className="col-span-6"><p className="text-xs font-bold text-gray-500 uppercase">Previous Vitals (Read-Only)</p></div>
             <div><strong>Weight:</strong> {previousConsultation.vitals.weight ? `${previousConsultation.vitals.weight} kg` : '-'}</div>
             <div><strong>Height:</strong> {previousConsultation.vitals.height ? `${previousConsultation.vitals.height} cm` : '-'}</div>
             <div><strong>Temp:</strong> {previousConsultation.vitals.temperature ? `${previousConsultation.vitals.temperature} °C` : '-'}</div>
+            <div><strong>BP:</strong> {previousConsultation.vitals.bloodPressure || '-'}</div>
             <div><strong>BMI:</strong> {previousConsultation.vitals.bmi || '-'}</div>
             <div><strong>Drug Allergy:</strong> {previousConsultation.vitals.drugAllergy || '-'}</div>
           </div>
         )}
-        <div className="grid gap-4 md:grid-cols-5">
+        <div className="grid gap-4 md:grid-cols-6">
           <div>
             <label className="text-sm text-gray-600">Weight (kg)</label>
-            <input className="input" placeholder="Weight" {...register('weight')} />
+            <input className="input" placeholder="Weight" disabled={!isVitalsEditable} {...register('weight')} />
           </div>
           <div>
             <label className="text-sm text-gray-600">Height (cm)</label>
-            <input className="input" placeholder="Height" {...register('height')} />
+            <input className="input" placeholder="Height" disabled={!isVitalsEditable} {...register('height')} />
           </div>
           <div>
             <label className="text-sm text-gray-600">Temperature (°C)</label>
-            <input className="input" placeholder="Temperature °C" {...register('temperature')} />
+            <input className="input" placeholder="Temperature °C" disabled={!isVitalsEditable} {...register('temperature')} />
+          </div>
+          <div>
+            <label className="text-sm text-gray-600">Blood Pressure</label>
+            <input className="input" placeholder="e.g. 120/80" disabled={!isVitalsEditable} {...register('bloodPressure')} />
           </div>
           <div>
             <label className="text-sm text-gray-600">BMI</label>
-            <input className="input" placeholder="BMI optional" {...register('bmi')} />
+            <input className="input" placeholder="BMI optional" disabled={!isVitalsEditable} {...register('bmi')} />
           </div>
           <div>
             <label className="text-sm text-gray-600">Drug Allergy</label>
-            <input className="input" placeholder="Drug Allergy" {...register('drugAllergy')} />
+            <input className="input" placeholder="Drug Allergy" disabled={!isVitalsEditable} {...register('drugAllergy')} />
           </div>
         </div>
       </section>
@@ -521,59 +617,161 @@ const ConsultationPage = () => {
       <section className="card space-y-4 p-5">
         <h2 className="font-bold text-gray-800">Follow-up Scheduling</h2>
         <div className="grid gap-4 md:grid-cols-2">
-          <input 
-            className="input" 
-            type="date" 
-            value={followUpDate}
-            onChange={(e) => setFollowUpDate(e.target.value)}
-          />
+          <div>
+            <label className="text-xs font-bold text-gray-500 mb-1 block">Follow-up Date</label>
+            <input 
+              className="input py-2 text-xs" 
+              type="date" 
+              value={followUpDate}
+              onChange={(e) => setFollowUpDate(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-gray-500 mb-1 block">Follow-up Remarks / Instructions</label>
+            <input 
+              className="input py-2 text-xs" 
+              type="text" 
+              placeholder="e.g. Check BP, review lab reports, etc."
+              value={followUpRemarks}
+              onChange={(e) => setFollowUpRemarks(e.target.value)}
+            />
+          </div>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          <button className="btn" type="submit" disabled={saving}>
-            <Save className="h-4 w-4" /> {saving ? 'Saving...' : 'Save Consultation'}
-          </button>
-          <Link className="btn-secondary" to={`/doctor/prescription/${patientId}`}>Create Prescription</Link>
-          {referralSent ? (
-            <span className="btn-secondary bg-green-50 text-green-700 border-green-200 cursor-default">
-              ✓ Referred to IPD
-            </span>
-          ) : (
+        {patient.isDischarged && (
+          <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200 font-medium">
+            This patient has been discharged and the consultation cannot be updated.
+          </div>
+        )}
+        {!patient.isDischarged && (
+          <div className="flex gap-2 flex-wrap">
+            <button className="btn" type="submit" disabled={saving}>
+              <Save className="h-4 w-4" /> {saving ? 'Saving...' : 'Save Consultation'}
+            </button>
+            <Link className="btn-secondary" to={`/doctor/prescription/${patientId}`}>Create Prescription</Link>
+            {referralSent ? (
+              <span className="btn-secondary bg-green-50 text-green-700 border-green-200 cursor-default">
+                ✓ Referred to IPD
+              </span>
+            ) : (
+              <button
+                type="button"
+                className="btn bg-indigo-600 hover:bg-indigo-700 text-white"
+                onClick={handleSendToIpd}
+                disabled={sendingToIpd}
+              >
+                <Send className="h-4 w-4" /> {sendingToIpd ? 'Sending...' : 'Send to IPD'}
+              </button>
+            )}
             <button
               type="button"
-              className="btn bg-indigo-600 hover:bg-indigo-700 text-white"
-              onClick={handleSendToIpd}
-              disabled={sendingToIpd}
+              className="btn bg-orange-600 hover:bg-orange-700 text-white"
+              onClick={handleSendToSameDayOpen}
             >
-              <Send className="h-4 w-4" /> {sendingToIpd ? 'Sending...' : 'Send to IPD'}
+              <Send className="h-4 w-4" /> Send to Same Day Care
             </button>
-          )}
-          <button
-            type="button"
-            className="btn bg-orange-600 hover:bg-orange-700 text-white"
-            onClick={handleSendToSameDay}
-          >
-            <Send className="h-4 w-4" /> Send to Same Day Care
-          </button>
-          <button
-            type="button"
-            className="btn bg-rose-600 hover:bg-rose-700 text-white"
-            onClick={async () => {
-              if (!window.confirm(`Send ${patient?.patientName} to OT (Operation Theatre)?`)) return;
-              try {
-                await client.post('/ipd/referrals', {
-                  patientId: patient._id,
-                  notes: `Referred to OT. Diagnosis: ${diagnosisRemark || 'N/A'}`
-                });
-                toast.success(`${patient.patientName} referred to OT successfully!`);
-              } catch (err) {
-                toast.error(err.response?.data?.message || 'Failed to send to OT');
-              }
-            }}
-          >
-            <Scissors className="h-4 w-4" /> Send to OT
-          </button>
-        </div>
+            <button
+              type="button"
+              className="btn bg-rose-600 hover:bg-rose-700 text-white"
+              onClick={async () => {
+                const defaultNotes = `Referred to OT by Dr. ${user?.doctorName || user?.username || 'Doctor'}. Diagnosis: ${diagnosisRemark || 'N/A'}`;
+                const customRemarks = window.prompt("Enter remarks for OT Referral:", defaultNotes);
+                if (customRemarks === null) return;
+                try {
+                  await client.post('/ipd/referrals', {
+                    patientId: patient._id,
+                    notes: customRemarks
+                  });
+                  toast.success(`${patient.patientName} referred to OT successfully!`);
+                } catch (err) {
+                  toast.error(err.response?.data?.message || 'Failed to send to OT');
+                }
+              }}
+            >
+              <Scissors className="h-4 w-4" /> Send to OT
+            </button>
+          </div>
+        )}
       </section>
+
+      {showSameDayModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="card w-full max-w-md p-6 relative bg-white border border-gray-100 shadow-2xl rounded-2xl animate-in fade-in zoom-in duration-200">
+            <button
+              type="button"
+              onClick={() => setShowSameDayModal(false)}
+              className="absolute top-4 right-4 p-1 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <h3 className="text-lg font-black text-gray-900 mb-4 flex items-center gap-2">
+              <Send className="h-5 w-5 text-orange-500" />
+              Refer to Same Day Care
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Select Care Type</label>
+                <select
+                  className="input w-full text-sm"
+                  value={sdCareType}
+                  onChange={(e) => setSdCareType(e.target.value)}
+                  required
+                >
+                  {subServices.map(type => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Assign to Provider / Doctor (Optional)</label>
+                {loadingSdDoctors ? (
+                  <p className="text-xs text-gray-400">Loading providers...</p>
+                ) : (
+                  <select
+                    className="input w-full text-sm"
+                    value={sdSelectedDocId}
+                    onChange={(e) => setSdSelectedDocId(e.target.value)}
+                  >
+                    <option value="">-- Select Provider --</option>
+                    {sdDoctors.map(doc => (
+                      <option key={doc._id} value={doc._id}>
+                        {doc.doctorName || doc.username} ({doc.role === 'nursing' ? 'same day care' : doc.role})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Referral Remarks</label>
+                <textarea
+                  className="input w-full text-sm h-24 p-2.5 resize-none border border-gray-200 rounded-xl"
+                  placeholder="Enter custom remarks for the patient..."
+                  value={sdRemarks}
+                  onChange={(e) => setSdRemarks(e.target.value)}
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowSameDayModal(false)}
+                  className="btn-secondary text-xs px-4 py-2"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSendToSameDaySubmit}
+                  className="btn text-xs px-4 py-2"
+                >
+                  Send Referral
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </form>
   );
 };

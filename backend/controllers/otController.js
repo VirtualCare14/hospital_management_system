@@ -195,8 +195,38 @@ const updateOtRecord = async (req, res) => {
       // Create PharmacyRequest document
       try {
         const PharmacyRequest = require('../models/PharmacyRequest');
-        const count = await PharmacyRequest.countDocuments({ hospitalId: record.hospitalId });
-        const requestNumber = `PR-${10001 + count}`;
+        // Generate unique Request Number (finding the highest number + collision safeguard)
+        let nextNum = 10001;
+        const latestRequest = await PharmacyRequest.findOne({ hospitalId: record.hospitalId })
+          .sort({ requestNumber: -1 })
+          .select('requestNumber');
+
+        if (latestRequest && latestRequest.requestNumber) {
+          const match = latestRequest.requestNumber.match(/PR-(\d+)/);
+          if (match) {
+            nextNum = parseInt(match[1]) + 1;
+          }
+        } else {
+          const count = await PharmacyRequest.countDocuments({ hospitalId: record.hospitalId });
+          nextNum = 10001 + count;
+        }
+
+        let requestNumber;
+        let isUnique = false;
+        let attempts = 0;
+        while (!isUnique && attempts < 50) {
+          requestNumber = `PR-${nextNum + attempts}`;
+          const existing = await PharmacyRequest.findOne({ hospitalId: record.hospitalId, requestNumber });
+          if (!existing) {
+            isUnique = true;
+          } else {
+            attempts++;
+          }
+        }
+
+        if (!isUnique) {
+          requestNumber = `PR-${nextNum}-${Date.now()}`;
+        }
 
         const items = [];
         if (record.otMedicines && record.otMedicines.length > 0) {

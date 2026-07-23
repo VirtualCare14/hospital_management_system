@@ -48,7 +48,7 @@ export const moduleCards = [
   },
   {
     id: 5,
-    title: 'IPD',
+    title: 'IPD/Emergency',
     subtitle: 'Beds configuration, pricing, patient admission, tracking, discharge',
     icon: Bed,
     path: '/ipd/admission'

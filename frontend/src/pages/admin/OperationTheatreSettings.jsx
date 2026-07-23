@@ -5,6 +5,7 @@ import {
   CheckCircle, RefreshCw, IndianRupee, Save, Eye, FileText
 } from 'lucide-react';
 import client from '../../api/client';
+import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 import TemplateEditor from '../../components/TemplateEditor';
 
 const OperationTheatreSettings = () => {
@@ -362,7 +363,11 @@ const OperationTheatreSettings = () => {
                 </thead>
                 <tbody className="divide-y divide-orange-50">
                   {loading ? (
-                    <tr><td colSpan="7" className="p-8 text-center"><Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading...</td></tr>
+                    <tr>
+                      <td colSpan="7" className="p-8">
+                        <SkeletonTable rows={4} columns={7} className="w-full" />
+                      </td>
+                    </tr>
                   ) : ots.length === 0 ? (
                     <tr><td colSpan="7" className="p-8 text-center text-gray-400"><Building2 className="h-8 w-8 mx-auto mb-2 opacity-50" /><p className="font-bold">No operation theatres found</p></td></tr>
                   ) : (
@@ -408,7 +413,11 @@ const OperationTheatreSettings = () => {
               </thead>
               <tbody className="divide-y divide-orange-50">
                 {loadingTemplates ? (
-                  <tr><td colSpan="5" className="p-8 text-center"><Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading templates...</td></tr>
+                  <tr>
+                    <td colSpan="5" className="p-8">
+                      <SkeletonTable rows={4} columns={5} className="w-full" />
+                    </td>
+                  </tr>
                 ) : templates.length === 0 ? (
                   <tr>
                     <td colSpan="5" className="p-8 text-center text-gray-400">

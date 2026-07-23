@@ -15,6 +15,93 @@ const pharmacyInventorySchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  description: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  dosageForm: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  packType: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  unitsPerPack: {
+    type: Number,
+    default: 1
+  },
+  quantityPacks: {
+    type: Number,
+    default: 0
+  },
+  quantityUnits: {
+    type: Number,
+    default: 0
+  },
+  batch: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  expiry: {
+    type: Date,
+    required: true
+  },
+  rateExGst: {
+    type: Number,
+    default: 0
+  },
+  perUnitRate: {
+    type: Number,
+    default: 0
+  },
+  sgst: {
+    type: Number,
+    default: 0
+  },
+  cgst: {
+    type: Number,
+    default: 0
+  },
+  mrp: {
+    type: Number,
+    default: 0
+  },
+  perUnitRateWithGst: {
+    type: Number,
+    default: 0
+  },
+  purchaseRateExGst: {
+    type: Number,
+    default: 0
+  },
+  purchaseRateIncGst: {
+    type: Number,
+    default: 0
+  },
+  mrpExGst: {
+    type: Number,
+    default: 0
+  },
+  purchaseInvoiceNumber: {
+    type: String,
+    default: '',
+    trim: true
+  },
+  hsn: {
+    type: String,
+    default: '0',
+    trim: true
+  },
+  thresholdMedicineNumber: {
+    type: Number,
+    default: 10
+  },
+  // Backward compatibility fields:
   oldMrp: {
     type: Number,
     default: 0
@@ -23,10 +110,6 @@ const pharmacyInventorySchema = new mongoose.Schema({
     type: String,
     default: '0',
     trim: true
-  },
-  mrp: {
-    type: Number,
-    default: 0
   },
   quantity: {
     type: Number,
@@ -44,25 +127,7 @@ const pharmacyInventorySchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
-  batch: {
-    type: String,
-    required: true,
-    trim: true
-  },
-  expiry: {
-    type: Date,
-    required: true
-  },
   nRate: {
-    type: Number,
-    default: 0
-  },
-  hsn: {
-    type: String,
-    default: '0',
-    trim: true
-  },
-  sgst: {
     type: Number,
     default: 0
   },
@@ -73,8 +138,90 @@ const pharmacyInventorySchema = new mongoose.Schema({
   amount: {
     type: Number,
     default: 0
+  },
+  amountExGst: {
+    type: Number,
+    default: 0
+  },
+  amountIncGst: {
+    type: Number,
+    default: 0
+  },
+  supplierId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Supplier',
+    default: null
+  },
+  supplierName: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  lastPurchaseDate: {
+    type: Date,
+    default: null
   }
 }, { timestamps: true });
+
+// Pre-save middleware to keep quantity, quantityUnits, quantityPacks, rates, and amounts automatically synchronized
+pharmacyInventorySchema.pre('save', function() {
+  const up = this.unitsPerPack > 0 ? this.unitsPerPack : 1;
+
+  // 1. If quantityPacks is explicitly modified but quantityUnits/quantity are not
+  if (this.isModified('quantityPacks') && !this.isModified('quantityUnits') && !this.isModified('quantity')) {
+    this.quantityUnits = Math.round(this.quantityPacks * up);
+    this.quantity = this.quantityUnits;
+  }
+  // 2. If quantity is explicitly modified but quantityUnits is not
+  else if (this.isModified('quantity') && !this.isModified('quantityUnits')) {
+    this.quantityUnits = this.quantity;
+    this.quantityPacks = Math.round((this.quantityUnits / up) * 10000) / 10000;
+  }
+  // 3. If quantityUnits is explicitly modified but quantity is not
+  else if (this.isModified('quantityUnits') && !this.isModified('quantity')) {
+    this.quantity = this.quantityUnits;
+    this.quantityPacks = Math.round((this.quantityUnits / up) * 10000) / 10000;
+  }
+  // 4. Default fallback: when both/neither is modified or document is new
+  else {
+    if (this.isModified('quantity')) {
+      this.quantityUnits = this.quantity;
+    } else if (this.isModified('quantityUnits')) {
+      this.quantity = this.quantityUnits;
+    }
+    this.quantityPacks = Math.round((this.quantityUnits / up) * 10000) / 10000;
+  }
+
+  // Recalculate MRP if 0 or empty
+  if (!this.mrp) {
+    this.mrp = this.rateExGst * (1 + ((this.sgst + this.cgst) / 100));
+  }
+
+  // Recalculate rates
+  this.perUnitRate = this.rateExGst / up;
+  this.perUnitRateWithGst = this.mrp / up;
+
+  // Sync backward compatibility fields
+  this.rate = this.rateExGst;
+  this.cst = this.cgst;
+  this.pack = this.packType || '0';
+
+  // Sync amount fields
+  this.amount = this.quantityPacks * this.rateExGst;
+  this.amountExGst = this.rateExGst * this.quantityPacks;
+  this.amountIncGst = this.mrp * this.quantityPacks;
+
+  // Set defaults for purchase rates and mrpExGst if they are not set
+  if (!this.purchaseRateExGst) {
+    this.purchaseRateExGst = this.rateExGst;
+  }
+  if (!this.purchaseRateIncGst) {
+    this.purchaseRateIncGst = this.purchaseRateExGst * (1 + ((this.sgst + this.cgst) / 100));
+  }
+  if (!this.mrpExGst) {
+    this.mrpExGst = this.mrp / (1 + ((this.sgst + this.cgst) / 100)) || this.rateExGst;
+  }
+});
 
 // Compound index for unique check per hospital, medicine name and batch number
 pharmacyInventorySchema.index({ hospitalId: 1, itemName: 1, batch: 1 }, { unique: true, name: 'hospital_medicine_batch_unique' });

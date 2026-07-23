@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import client from '../../api/client';
+import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 import { formatUhid } from '../../utils/uhid';
 import IpdMedicationChartContent from './IpdMedicationChartContent.jsx';
 
@@ -65,8 +66,11 @@ const IpdServices = () => {
   const [medicines, setMedicines] = useState([]);
   const [medicinesLoading, setMedicinesLoading] = useState(false);
   const [showAddMedicine, setShowAddMedicine] = useState(false);
+  const [receivedMedicines, setReceivedMedicines] = useState([]);
+  const [selectedReceivedMed, setSelectedReceivedMed] = useState(null);
   const [medicineForm, setMedicineForm] = useState({ medicineName: '', quantity: '1', unitPrice: '', gst: '', baseUnitPrice: '' });
-  const [medicineSettingsList, setMedicineSettingsList] = useState([]);
+
+
 
   // Lab Test states
   const [labTests, setLabTests] = useState([]);
@@ -85,8 +89,9 @@ const IpdServices = () => {
       const params = new URLSearchParams();
       if (searchQuery) params.append('search', searchQuery);
       const { data } = await client.get(`/ipd/patients?${params.toString()}`);
-      setAdmissions(data);
-      setFilteredAdmissions(data);
+      const activeAdmissions = data.filter(a => a.status !== 'Discharged');
+      setAdmissions(activeAdmissions);
+      setFilteredAdmissions(activeAdmissions);
     } catch (err) {
       toast.error('Failed to load IPD patient list');
     } finally {
@@ -99,7 +104,6 @@ const IpdServices = () => {
     try {
       const { data } = await client.get('/ipd/settings');
       if (data?.consumableServices) setConsumableServicesList(data.consumableServices.filter(s => s.isActive));
-      if (data?.medicines) setMedicineSettingsList(data.medicines.filter(m => m.isActive));
     } catch (err) { console.warn(err); }
   }, []);
 
@@ -124,6 +128,7 @@ const IpdServices = () => {
     if (!selectedAdmission) return;
     loadConsumables();
     loadMedicines();
+    loadReceivedMedicines();
     loadLabTests();
   }, [selectedAdmission]);
 
@@ -145,9 +150,24 @@ const IpdServices = () => {
     try {
       const { data } = await client.get(`/ipd/services/medicines/${selectedAdmission._id}`);
       setMedicines(data);
-    } catch (err) { console.error(err); }
-    finally { setMedicinesLoading(false); }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setMedicinesLoading(false);
+    }
   }, [selectedAdmission]);
+
+  const loadReceivedMedicines = useCallback(async () => {
+    if (!selectedAdmission) return;
+    try {
+      const { data } = await client.get(`/ipd/services/received-medicines/${selectedAdmission._id}`);
+      setReceivedMedicines(data);
+    } catch (err) {
+      console.error('Failed to load received medicines', err);
+    }
+  }, [selectedAdmission]);
+
+
 
   // Load lab tests
   const loadLabTests = useCallback(async () => {
@@ -186,7 +206,24 @@ const IpdServices = () => {
     const { serviceName, price, gst, quantity } = consumableForm;
     if (!serviceName || !price || !quantity) { toast.error('Service name, price, and quantity are required'); return; }
     try {
-      const payload = { admissionId: selectedAdmission._id, serviceName, price: parseFloat(price), gst: parseFloat(gst || '0'), quantity: parseInt(quantity) };
+      const now = new Date();
+      const day = String(now.getDate()).padStart(2, '0');
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const year = now.getFullYear();
+      const dateStr = `${day}/${month}/${year}`;
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const timeStr = `${hours}:${minutes}`;
+
+      const payload = { 
+        admissionId: selectedAdmission._id, 
+        serviceName, 
+        price: parseFloat(price), 
+        gst: parseFloat(gst || '0'), 
+        quantity: parseInt(quantity),
+        date: dateStr,
+        time: timeStr
+      };
       const { data } = await client.post('/ipd/services/consumables', payload);
       toast.success(data.message);
       setShowAddConsumable(false);
@@ -205,29 +242,67 @@ const IpdServices = () => {
   };
 
   // Medicine handlers
+  const handleReceivedMedicineSelect = (itemName) => {
+    const med = receivedMedicines.find(m => m.itemName === itemName);
+    setSelectedReceivedMed(med);
+    if (med) {
+      setMedicineForm({
+        medicineName: med.itemName,
+        quantity: '1',
+        unitPrice: String(med.unitPrice),
+        gst: String(med.gst),
+        baseUnitPrice: String(med.baseUnitPrice)
+      });
+    } else {
+      setMedicineForm({
+        medicineName: '',
+        quantity: '1',
+        unitPrice: '',
+        gst: '',
+        baseUnitPrice: ''
+      });
+    }
+  };
+
   const handleAddMedicine = async (e) => {
     e.preventDefault();
     const { medicineName, quantity, unitPrice, gst, baseUnitPrice } = medicineForm;
-    if (!medicineName || !quantity || !unitPrice) { toast.error('Medicine name, quantity, and unit price are required'); return; }
+    if (!medicineName || !quantity || !unitPrice) {
+      toast.error('Medicine name, quantity, and unit price are required');
+      return;
+    }
     try {
-      // Ensure unitPrice sent to server includes GST if gst provided (unitPrice field already reflects GST-inclusive value)
-      const payload = { admissionId: selectedAdmission._id, medicineName, quantity: parseInt(quantity), unitPrice: parseFloat(unitPrice), gst: parseFloat(gst || '0'), baseUnitPrice: parseFloat(baseUnitPrice || unitPrice) };
+      const payload = {
+        admissionId: selectedAdmission._id,
+        medicineName,
+        quantity: parseInt(quantity),
+        unitPrice: parseFloat(unitPrice),
+        gst: parseFloat(gst || '0'),
+        baseUnitPrice: parseFloat(baseUnitPrice || unitPrice)
+      };
       const { data } = await client.post('/ipd/services/medicines', payload);
       toast.success(data.message);
       setShowAddMedicine(false);
       setMedicineForm({ medicineName: '', quantity: '1', unitPrice: '', gst: '', baseUnitPrice: '' });
-      loadMedicines();
-    } catch (err) { toast.error(err.response?.data?.message || 'Failed to add medicine'); }
+      setSelectedReceivedMed(null);
+      loadMedicines(); loadReceivedMedicines();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to add medicine');
+    }
   };
 
-  const handleDeleteMedicine = async (medicineId) => {
+  const handleDeleteMedicine = async (medId) => {
     if (!window.confirm('Delete this medicine record?')) return;
     try {
-      await client.delete(`/ipd/services/medicines/${medicineId}`);
+      await client.delete(`/ipd/services/medicines/${medId}`);
       toast.success('Medicine record deleted');
-      loadMedicines();
-    } catch (err) { toast.error('Failed to delete medicine'); }
+      loadMedicines(); loadReceivedMedicines();
+    } catch (err) {
+      toast.error('Failed to delete medicine');
+    }
   };
+
+
 
   // Lab Test handlers
   const handleAddLabTest = async (e) => {
@@ -273,8 +348,7 @@ const IpdServices = () => {
     ? filteredLabTests.filter(t => t.category === labTestCategoryFilter)
     : filteredLabTests;
 
-  const medicineTotal = medicineForm.quantity && medicineForm.unitPrice
-    ? (parseInt(medicineForm.quantity) * parseFloat(medicineForm.unitPrice)).toFixed(2) : '0.00';
+
 
   // Helper to update unit price when GST changes or unit price is edited
   const applyGstToUnitPrice = (base, gstPct) => {
@@ -459,7 +533,16 @@ const IpdServices = () => {
                                 };
                               });
                             }} />
-                          <datalist id="consumable-services-ipd">{consumableServicesList.map((s, i) => <option key={i} value={s.name} />)}</datalist>
+                          <datalist id="consumable-services-ipd">
+                            {consumableServicesList
+                              .filter(s => {
+                                const query = (consumableForm.serviceName || '').trim().toLowerCase();
+                                if (!query) return false;
+                                return s.name.toLowerCase().includes(query);
+                              })
+                              .map((s, i) => <option key={i} value={s.name} />)
+                            }
+                          </datalist>
                         </div>
                         <div><label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">Qty</label><input type="number" min="1" className="input py-2 text-xs" value={consumableForm.quantity} onChange={(e) => setConsumableForm(p => ({ ...p, quantity: e.target.value }))} /></div>
                         <div className="col-span-full flex justify-end gap-2"><button type="button" onClick={() => { setShowAddConsumable(false); setConsumableForm({ serviceName: '', price: '', gst: '', quantity: '1' }); }} className="btn-secondary text-xs py-2 px-4">Cancel</button><button type="submit" className="btn text-xs py-2 px-4"><Plus className="h-3.5 w-3.5" /> Add</button></div>
@@ -470,8 +553,13 @@ const IpdServices = () => {
                     <table className="w-full text-left text-sm">
                       <thead><tr className="bg-gray-50 text-xs font-bold uppercase text-gray-500 border-b border-orange-100"><th className="p-3 pl-4">Date</th><th className="p-3">Time</th><th className="p-3">Service Name</th><th className="p-3">Qty</th><th className="p-3">Added By</th><th className="p-3 pr-4 text-center">Action</th></tr></thead>
                       <tbody className="divide-y divide-orange-50">
-                        {consumablesLoading ? <tr><td colSpan="6" className="p-8 text-center"><Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading...</td></tr>
-                        : consumables.length === 0 ? <tr><td colSpan="6" className="p-8 text-center text-gray-400"><Activity className="h-8 w-8 mx-auto mb-2 opacity-50" /><p className="font-bold">No consumable services added yet</p></td></tr>
+                        {consumablesLoading ? (
+                          <tr>
+                            <td colSpan="6" className="p-8">
+                              <SkeletonTable rows={4} columns={6} className="w-full" />
+                            </td>
+                          </tr>
+                        ) : consumables.length === 0 ? <tr><td colSpan="6" className="p-8 text-center text-gray-400"><Activity className="h-8 w-8 mx-auto mb-2 opacity-50" /><p className="font-bold">No consumable services added yet</p></td></tr>
                         : consumables.map(c => (
                           <tr key={c._id} className="hover:bg-orange-50/20">
                             <td className="p-3 pl-4 text-xs">{c.date}</td><td className="p-3 text-xs">{c.time}</td>
@@ -486,56 +574,111 @@ const IpdServices = () => {
                 </div>
               )}
 
+
+
               {/* MEDICINES SECTION */}
               {serviceCategory === 'medicines' && (
                 <div className="card overflow-hidden">
                   <div className="p-4 border-b border-orange-100 flex items-center justify-between bg-orange-50/30">
-                    <h3 className="font-extrabold text-gray-900 flex items-center gap-2"><Pill className="h-5 w-5 text-orange-500" /> Medicines</h3>
-                    <button onClick={() => setShowAddMedicine(!showAddMedicine)} className="btn text-xs py-2 px-3"><Plus className="h-3.5 w-3.5" /> Add Medicine</button>
+                    <h3 className="font-extrabold text-gray-900 flex items-center gap-2"><Pill className="h-5 w-5 text-orange-500" /> Administered Medicines</h3>
+                    <button onClick={() => setShowAddMedicine(!showAddMedicine)} className="btn text-xs py-2 px-3"><Plus className="h-3.5 w-3.5" /> Administer Medicine</button>
                   </div>
                   {showAddMedicine && (
                     <div className="p-4 border-b border-orange-100 bg-orange-50/20">
                       <form onSubmit={handleAddMedicine} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div className="sm:col-span-2">
                           <label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">Medicine Name</label>
-                          <input list="medicine-list-ipd" className="input py-2 text-xs" placeholder="Search or select medicine" value={medicineForm.medicineName}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setMedicineForm(p => {
-                                const m = medicineSettingsList.find(med => med.name === val);
-                                return {
-                                  ...p,
-                                  medicineName: val,
-                                  unitPrice: m ? String(m.price || '0') : '',
-                                  gst: m ? String(m.gst || '0') : '',
-                                  baseUnitPrice: m ? String(m.price || '0') : ''
-                                };
-                              });
-                            }} />
-                          <datalist id="medicine-list-ipd">{medicineSettingsList.map((m, i) => <option key={i} value={m.name} />)}</datalist>
+                          <input 
+                            type="text"
+                            list="ipd-services-medicines-datalist"
+                            className="input py-2 text-xs" 
+                            placeholder="Type or search medicine"
+                            value={medicineForm.medicineName}
+                            onChange={(e) => handleReceivedMedicineSelect(e.target.value)}
+                          />
+                          <datalist id="ipd-services-medicines-datalist">
+                            {receivedMedicines
+                              .filter(m => {
+                                const query = (medicineForm.medicineName || '').trim().toLowerCase();
+                                if (!query) return false;
+                                return m.itemName.toLowerCase().includes(query);
+                              })
+                              .map((m, i) => (
+                                <option key={i} value={m.itemName} />
+                              ))
+                            }
+                          </datalist>
                         </div>
-                        <div><label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">Quantity</label><input type="number" min="1" className="input py-2 text-xs" value={medicineForm.quantity} onChange={(e) => setMedicineForm(p => ({ ...p, quantity: e.target.value }))} /></div>
-                        <div className="col-span-full flex items-center justify-between">
-                          <div className="text-sm"><span className="text-gray-500">Total: </span><span className="font-extrabold text-green-700">₹{medicineTotal}</span></div>
-                          <div className="flex gap-2"><button type="button" onClick={() => { setShowAddMedicine(false); setMedicineForm({ medicineName: '', quantity: '1', unitPrice: '' }); }} className="btn-secondary text-xs py-2 px-4">Cancel</button><button type="submit" className="btn text-xs py-2 px-4"><Plus className="h-3.5 w-3.5" /> Add</button></div>
+                        <div>
+                          <label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">
+                            Qty {selectedReceivedMed && `(Max: ${selectedReceivedMed.availableQty})`}
+                          </label>
+                          <input 
+                            type="number" 
+                            min="1" 
+                            max={selectedReceivedMed?.availableQty || undefined} 
+                            className="input py-2 text-xs" 
+                            value={medicineForm.quantity} 
+                            onChange={(e) => setMedicineForm(p => ({ ...p, quantity: e.target.value }))} 
+                          />
+                        </div>
+                        <div className="col-span-full flex justify-end gap-2">
+                          <button 
+                            type="button" 
+                            onClick={() => { setShowAddMedicine(false); setMedicineForm({ medicineName: '', quantity: '1', unitPrice: '', gst: '', baseUnitPrice: '' }); setSelectedReceivedMed(null); }} 
+                            className="btn-secondary text-xs py-2 px-4"
+                          >
+                            Cancel
+                          </button>
+                          <button type="submit" className="btn text-xs py-2 px-4">
+                            <Plus className="h-3.5 w-3.5" /> Add
+                          </button>
                         </div>
                       </form>
                     </div>
                   )}
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm">
-                      <thead><tr className="bg-gray-50 text-xs font-bold uppercase text-gray-500 border-b border-orange-100"><th className="p-3 pl-4">Date</th><th className="p-3">Time</th><th className="p-3">Medicine Name</th><th className="p-3">Qty</th><th className="p-3">Added By</th><th className="p-3 pr-4 text-center">Action</th></tr></thead>
+                      <thead>
+                        <tr className="bg-gray-50 text-xs font-bold uppercase text-gray-500 border-b border-orange-100">
+                          <th className="p-3 pl-4">Date</th>
+                          <th className="p-3">Time</th>
+                          <th className="p-3">Medicine Name</th>
+                          <th className="p-3">Qty</th>
+                          <th className="p-3">Added By</th>
+                          <th className="p-3 pr-4 text-center">Action</th>
+                        </tr>
+                      </thead>
                       <tbody className="divide-y divide-orange-50">
-                        {medicinesLoading ? <tr><td colSpan="6" className="p-8 text-center"><Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading...</td></tr>
-                        : medicines.length === 0 ? <tr><td colSpan="6" className="p-8 text-center text-gray-400"><Pill className="h-8 w-8 mx-auto mb-2 opacity-50" /><p className="font-bold">No medicines added yet</p></td></tr>
-                        : medicines.map(m => (
-                          <tr key={m._id} className="hover:bg-orange-50/20">
-                            <td className="p-3 pl-4 text-xs">{m.date}</td><td className="p-3 text-xs">{m.time}</td>
-                            <td className="p-3 font-bold text-gray-800">{m.medicineName}</td><td className="p-3">{m.quantity}</td>
-                            <td className="p-3 text-xs text-gray-500">{m.addedBy?.doctorName || m.addedBy?.username || 'N/A'}</td>
-                            <td className="p-3 pr-4 text-center"><button onClick={() => handleDeleteMedicine(m._id)} className="p-1 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="h-3.5 w-3.5" /></button></td>
+                        {medicinesLoading ? (
+                          <tr>
+                            <td colSpan="6" className="p-8">
+                              <SkeletonTable rows={4} columns={6} className="w-full" />
+                            </td>
                           </tr>
-                        ))}
+                        ) : medicines.length === 0 ? (
+                          <tr>
+                            <td colSpan="6" className="p-8 text-center text-gray-400">
+                              <Pill className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                              <p className="font-bold">No medicines administered yet</p>
+                            </td>
+                          </tr>
+                        ) : (
+                          medicines.map(m => (
+                            <tr key={m._id} className="hover:bg-orange-50/20">
+                              <td className="p-3 pl-4 text-xs">{m.date}</td>
+                              <td className="p-3 text-xs">{m.time}</td>
+                              <td className="p-3 font-bold text-gray-800">{m.medicineName}</td>
+                              <td className="p-3">{m.quantity}</td>
+                              <td className="p-3 text-xs text-gray-500">{m.addedBy?.doctorName || m.addedBy?.username || 'N/A'}</td>
+                              <td className="p-3 pr-4 text-center">
+                                <button onClick={() => handleDeleteMedicine(m._id)} className="p-1 text-red-500 hover:bg-red-50 rounded-lg">
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        )}
                       </tbody>
                     </table>
                   </div>
@@ -605,8 +748,13 @@ const IpdServices = () => {
                     <table className="w-full text-left text-sm">
                       <thead><tr className="bg-gray-50 text-xs font-bold uppercase text-gray-500 border-b border-orange-100"><th className="p-3 pl-4">Date</th><th className="p-3">Time</th><th className="p-3">Test Name</th><th className="p-3">Category</th><th className="p-3">Price</th><th className="p-3">Report Status</th><th className="p-3">Report Date</th><th className="p-3">Added By</th><th className="p-3 pr-4 text-center">Action</th></tr></thead>
                       <tbody className="divide-y divide-orange-50">
-                        {labTestsLoading ? <tr><td colSpan="9" className="p-8 text-center"><Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading...</td></tr>
-                        : labTests.length === 0 ? <tr><td colSpan="9" className="p-8 text-center text-gray-400"><FlaskConical className="h-8 w-8 mx-auto mb-2 opacity-50" /><p className="font-bold">No lab tests ordered yet</p></td></tr>
+                        {labTestsLoading ? (
+                          <tr>
+                            <td colSpan="9" className="p-8">
+                              <SkeletonTable rows={4} columns={9} className="w-full" />
+                            </td>
+                          </tr>
+                        ) : labTests.length === 0 ? <tr><td colSpan="9" className="p-8 text-center text-gray-400"><FlaskConical className="h-8 w-8 mx-auto mb-2 opacity-50" /><p className="font-bold">No lab tests ordered yet</p></td></tr>
                         : labTests.map(t => (
                           <tr key={t._id} className="hover:bg-orange-50/20">
                             <td className="p-3 pl-4 text-xs">{t.date}</td><td className="p-3 text-xs">{t.time}</td>
