@@ -40,6 +40,7 @@ app.use('/api/ipd', require('./routes/otManagementRoutes'));
 app.use('/api/ipd', require('./routes/ipdReferralRoutes'));
 app.use('/api/same-day-care', require('./routes/sameDayCareRoutes'));
 app.use('/api', require('./routes/billingRoutes'));
+app.use('/api/abha', require('./routes/abhaRoutes'));
 
 // Basic health check route
 app.get('/', (req, res) => {
