@@ -134,6 +134,9 @@ export const AuthProvider = ({ children }) => {
         console.error('Logout navigation failed:', e);
       }
 
+      // Dispatch event to clear ABHA session
+      window.dispatchEvent(new Event('abha_force_logout'));
+
       // Clean up local storage and state in the next tick
       setTimeout(() => {
         localStorage.removeItem('hms_token');

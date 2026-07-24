@@ -17,21 +17,31 @@ exports.health = (req, res) => {
 };
 
 // ======================================
+// Helper: Extract ABHA user token from request
+// Frontend sends it via x-abha-token header
+// ======================================
+const getAbhaToken = (req) => {
+    const abhaToken = req.headers["x-abha-token"];
+    if (abhaToken) return abhaToken;
+    // Fallback: try Authorization header (for backward compat during transition)
+    const auth = req.headers.authorization;
+    if (auth && auth.startsWith("Bearer ")) {
+        return auth.replace("Bearer ", "");
+    }
+    return null;
+};
+
+// ======================================
 // Verify Mobile OTP
 // ======================================
 exports.verifyMobileOtp = async (req, res) => {
-
     try {
-
-        const authorization = req.headers.authorization;
-
-        if (!authorization) {
-
+        const userToken = getAbhaToken(req);
+        if (!userToken) {
             return res.status(400).json({
                 success: false,
-                message: "Authorization header is required."
+                message: "ABHA user token is required (x-abha-token header)."
             });
-
         }
 
         const { txnId, otp } = req.body || {};
@@ -57,33 +67,20 @@ exports.verifyMobileOtp = async (req, res) => {
             });
         }
 
-        const token = authorization.replace("Bearer ", "");
-
         const response = await profileService.verifyMobileOtp(
-            token,
+            userToken,
             { txnId, otp }
         );
 
         return res.status(200).json({ success: true, data: response });
 
     } catch (error) {
-
-        console.error("========== VERIFY MOBILE OTP ERROR ==========");
-
-        if (error.response) {
-            console.error(error.response.status);
-            console.error(JSON.stringify(error.response.data, null, 2));
-        } else {
-            console.error(error.message);
-        }
-
+        console.error("Verify Mobile OTP error:", error.response?.status || error.message);
         res.status(error.response?.status || 500).json({
             success: false,
             error: error.response?.data || error.message
         });
-
     }
-
 };
 
 // ======================================
@@ -91,12 +88,11 @@ exports.verifyMobileOtp = async (req, res) => {
 // ======================================
 exports.requestEmailVerification = async (req, res) => {
     try {
-        const authorization = req.headers.authorization;
-
-        if (!authorization) {
+        const userToken = getAbhaToken(req);
+        if (!userToken) {
             return res.status(400).json({
                 success: false,
-                message: "Authorization header is required."
+                message: "ABHA user token is required (x-abha-token header)."
             });
         }
 
@@ -117,19 +113,12 @@ exports.requestEmailVerification = async (req, res) => {
             });
         }
 
-        const token = authorization.replace("Bearer ", "");
-        const response = await profileService.requestEmailVerification(token, email);
+        const response = await profileService.requestEmailVerification(userToken, email);
 
         return res.status(200).json({ success: true, data: response });
 
     } catch (error) {
-        console.error("========== REQUEST EMAIL VERIFICATION ERROR ==========");
-        if (error.response) {
-            console.error(error.response.status);
-            console.error(JSON.stringify(error.response.data, null, 2));
-        } else {
-            console.error(error.message);
-        }
+        console.error("Request Email Verification error:", error.response?.status || error.message);
         res.status(error.response?.status || 500).json({
             success: false,
             error: error.response?.data || error.message
@@ -142,12 +131,11 @@ exports.requestEmailVerification = async (req, res) => {
 // ======================================
 exports.verifyEmail = async (req, res) => {
     try {
-        const authorization = req.headers.authorization;
-
-        if (!authorization) {
+        const userToken = getAbhaToken(req);
+        if (!userToken) {
             return res.status(400).json({
                 success: false,
-                message: "Authorization header is required."
+                message: "ABHA user token is required (x-abha-token header)."
             });
         }
 
@@ -189,19 +177,12 @@ exports.verifyEmail = async (req, res) => {
             });
         }
 
-        const token = authorization.replace("Bearer ", "");
-        const response = await profileService.verifyEmail(token, { txnId, otp, email });
+        const response = await profileService.verifyEmail(userToken, { txnId, otp, email });
 
         return res.status(200).json({ success: true, data: response });
 
     } catch (error) {
-        console.error("========== VERIFY EMAIL ERROR ==========");
-        if (error.response) {
-            console.error(error.response.status);
-            console.error(JSON.stringify(error.response.data, null, 2));
-        } else {
-            console.error(error.message);
-        }
+        console.error("Verify Email error:", error.response?.status || error.message);
         res.status(error.response?.status || 500).json({
             success: false,
             error: error.response?.data || error.message
@@ -213,170 +194,109 @@ exports.verifyEmail = async (req, res) => {
 // Generate Gateway Token
 // ======================================
 exports.generateToken = async (req, res) => {
-
     try {
-
         const token = await abdmGatewayService.getAccessToken();
-
         res.status(200).json({
             success: true,
             token
         });
-
     } catch (error) {
-
-        console.error("Gateway Token Error:");
-        console.error(error.response?.data || error.message);
-
+        console.error("Gateway Token Error:", error.response?.status || error.message);
         res.status(500).json({
             success: false,
             error: error.response?.data || error.message
         });
-
     }
-
 };
 
 // ======================================
 // Get Public Certificate
 // ======================================
 exports.getCertificate = async (req, res) => {
-
     try {
-
-        const certificate =
-            await abdmCertificateService.getCertificate();
-
+        const certificate = await abdmCertificateService.getCertificate();
         res.status(200).json({
             success: true,
             certificate
         });
-
     } catch (error) {
-
-        console.error("Certificate Error:");
-        console.error(error.response?.data || error.message);
-
+        console.error("Certificate Error:", error.response?.status || error.message);
         res.status(500).json({
             success: false,
             error: error.response?.data || error.message
         });
-
     }
-
 };
 
 // ======================================
-// Encrypt Aadhaar
+// Encrypt Aadhaar (Development Only)
 // ======================================
 exports.encryptAadhaar = async (req, res) => {
-
     try {
-
         const { aadhaar } = req.body;
-
         if (!aadhaar) {
             return res.status(400).json({
                 success: false,
                 message: "Aadhaar number is required."
             });
         }
-
         if (!/^\d{12}$/.test(aadhaar)) {
             return res.status(400).json({
                 success: false,
                 message: "Invalid Aadhaar number."
             });
         }
-
-        const encrypted =
-            await abdmCryptoService.encryptAadhaar(aadhaar);
-
+        const encrypted = await abdmCryptoService.encryptAadhaar(aadhaar);
         res.status(200).json({
             success: true,
             encrypted
         });
-
     } catch (error) {
-
-        console.error("Encryption Error:");
-        console.error(error.response?.data || error.message);
-
+        console.error("Encryption Error:", error.response?.status || error.message);
         res.status(500).json({
             success: false,
             error: error.response?.data || error.message
         });
-
     }
-
 };
 
 // ======================================
 // Request Aadhaar OTP
 // ======================================
 exports.requestOtp = async (req, res) => {
-
     try {
-
         const { aadhaar } = req.body;
-
         if (!aadhaar) {
             return res.status(400).json({
                 success: false,
                 message: "Aadhaar number is required."
             });
         }
-
         if (!/^\d{12}$/.test(aadhaar)) {
             return res.status(400).json({
                 success: false,
                 message: "Invalid Aadhaar number."
             });
         }
-
-        const response =
-            await enrollmentService.requestOtp(aadhaar);
-
+        const response = await enrollmentService.requestOtp(aadhaar);
         res.status(200).json({
             success: true,
             data: response
         });
-
     } catch (error) {
-
-        console.error("========== REQUEST OTP ERROR ==========");
-
-        if (error.response) {
-            console.error(error.response.status);
-            console.error(error.response.data);
-        } else {
-            console.error(error.message);
-        }
-
+        console.error("Request OTP error:", error.response?.status || error.message);
         res.status(error.response?.status || 500).json({
             success: false,
             error: error.response?.data || error.message
         });
-
     }
-
 };
 
 // ======================================
 // Verify OTP & Create ABHA
 // ======================================
 exports.verifyOtp = async (req, res) => {
-
-    console.log("==================================");
-    console.log("VERIFY OTP API HIT");
-    console.log("Headers:");
-    console.log(req.headers);
-    console.log("Body:");
-    console.log(req.body);
-    console.log("==================================");
-
     try {
-
         const { txnId, otp, mobile } = req.body || {};
 
         if (!txnId) {
@@ -414,12 +334,11 @@ exports.verifyOtp = async (req, res) => {
             });
         }
 
-        const response =
-            await enrollmentService.verifyOtp({
-                txnId,
-                otp,
-                mobile
-            });
+        const response = await enrollmentService.verifyOtp({
+            txnId,
+            otp,
+            mobile
+        });
 
         res.status(200).json({
             success: true,
@@ -427,87 +346,51 @@ exports.verifyOtp = async (req, res) => {
         });
 
     } catch (error) {
-
-        console.error("========== VERIFY OTP ERROR ==========");
-
-        if (error.response) {
-            console.error(error.response.status);
-            console.error(
-                JSON.stringify(error.response.data, null, 2)
-            );
-        } else {
-            console.error(error.message);
-        }
-
+        console.error("Verify OTP error:", error.response?.status || error.message);
         res.status(error.response?.status || 500).json({
             success: false,
             error: error.response?.data || error.message
         });
-
     }
-
 };
 
 // ======================================
 // Request Login OTP
 // ======================================
 exports.requestLoginOtp = async (req, res) => {
-
     try {
-
         const { aadhaar } = req.body;
-
         if (!aadhaar) {
             return res.status(400).json({
                 success: false,
                 message: "Aadhaar number is required."
             });
         }
-
         if (!/^\d{12}$/.test(aadhaar)) {
             return res.status(400).json({
                 success: false,
                 message: "Invalid Aadhaar number."
             });
         }
-
-        const response =
-            await loginService.requestLoginOtp(aadhaar);
-
+        const response = await loginService.requestLoginOtp(aadhaar);
         res.status(200).json({
             success: true,
             data: response
         });
-
     } catch (error) {
-
-        console.error("========== LOGIN REQUEST OTP ERROR ==========");
-
-        if (error.response) {
-            console.error(error.response.status);
-            console.error(
-                JSON.stringify(error.response.data, null, 2)
-            );
-        } else {
-            console.error(error.message);
-        }
-
+        console.error("Login Request OTP error:", error.response?.status || error.message);
         res.status(error.response?.status || 500).json({
             success: false,
             error: error.response?.data || error.message
         });
-
     }
-
 };
 
 // ======================================
 // Verify Login OTP
 // ======================================
 exports.verifyLoginOtp = async (req, res) => {
-
     try {
-
         const { txnId, otp } = req.body;
 
         if (!txnId) {
@@ -531,502 +414,280 @@ exports.verifyLoginOtp = async (req, res) => {
             });
         }
 
-        const response =
-            await loginService.verifyLoginOtp({
-                txnId,
-                otp
-            });
+        const response = await loginService.verifyLoginOtp({
+            txnId,
+            otp
+        });
+
+        // ABDM returns the X-token in the response headers
+        // Extract it and include in the JSON response for the frontend
+        const xtoken = response?.headers?.['x-token'] || 
+                       response?.data?.token || 
+                       response?.token;
 
         res.status(200).json({
             success: true,
-            data: response
+            data: response.data || response,
+            xtoken: xtoken || null
         });
 
     } catch (error) {
-
-        console.error("========== LOGIN VERIFY OTP ERROR ==========");
-
-        if (error.response) {
-            console.error(error.response.status);
-            console.error(
-                JSON.stringify(error.response.data, null, 2)
-            );
-        } else {
-            console.error(error.message);
-        }
-
+        console.error("Login Verify OTP error:", error.response?.status || error.message);
         res.status(error.response?.status || 500).json({
             success: false,
             error: error.response?.data || error.message
         });
-
     }
-
 };
 
 // ======================================
 // Search ABHA By Mobile
 // ======================================
 exports.searchAbha = async (req, res) => {
-
     try {
-
         const { mobile } = req.body;
-
         if (!mobile) {
             return res.status(400).json({
                 success: false,
                 message: "Mobile number is required."
             });
         }
-
         if (!/^\d{10}$/.test(String(mobile))) {
             return res.status(400).json({
                 success: false,
                 message: "Invalid mobile number."
             });
         }
-
-        const response =
-            await accountService.searchAbha(mobile);
-
+        const response = await accountService.searchAbha(mobile);
         res.status(200).json({
             success: true,
             data: response
         });
-
     } catch (error) {
-
-        console.error("========== SEARCH ABHA ERROR ==========");
-
-        if (error.response) {
-            console.error(error.response.status);
-            console.error(JSON.stringify(error.response.data, null, 2));
-        } else {
-            console.error(error.message);
-        }
-
+        console.error("Search ABHA error:", error.response?.status || error.message);
         res.status(error.response?.status || 500).json({
             success: false,
             error: error.response?.data || error.message
         });
-
     }
-
 };
 
 // ======================================
 // Get ABHA Profile
 // ======================================
 exports.getProfile = async (req, res) => {
-
     try {
-
-        const authorization =
-            req.headers.authorization;
-
-        if (!authorization) {
-
+        const userToken = getAbhaToken(req);
+        if (!userToken) {
             return res.status(400).json({
                 success: false,
-                message: "Authorization header is required."
+                message: "ABHA user token is required (x-abha-token header)."
             });
-
         }
 
-        const token =
-            authorization.replace("Bearer ", "");
-
-        const profile =
-            await profileService.getProfile(token);
+        const profile = await profileService.getProfile(userToken);
 
         res.status(200).json({
-
             success: true,
-
             data: profile
-
         });
 
     } catch (error) {
-
-        console.error("========== GET PROFILE ERROR ==========");
-
-        if (error.response) {
-
-            console.error(error.response.status);
-
-            console.error(
-                JSON.stringify(error.response.data, null, 2)
-            );
-
-        } else {
-
-            console.error(error.message);
-
-        }
-
+        console.error("Get Profile error:", error.response?.status || error.message);
         res.status(error.response?.status || 500).json({
-
             success: false,
-
             error: error.response?.data || error.message
-
         });
-
     }
-
 };
 
 // ======================================
 // Get QR Code
 // ======================================
 exports.getQrCode = async (req, res) => {
-
     try {
-
-        const authorization = req.headers.authorization;
-
-        if (!authorization) {
+        const userToken = getAbhaToken(req);
+        if (!userToken) {
             return res.status(400).json({
                 success: false,
-                message: "Authorization header is required."
+                message: "ABHA user token is required (x-abha-token header)."
             });
         }
 
-        const token = authorization.replace("Bearer ", "");
-
-        const qrImage =
-            await accountService.getQrCode(token);
+        const qrImage = await accountService.getQrCode(userToken);
 
         res.setHeader("Content-Type", "image/png");
-
         return res.send(qrImage);
 
     } catch (error) {
-
-        console.error(error.response?.data || error.message);
-
+        console.error("Get QR Code error:", error.response?.status || error.message);
         res.status(error.response?.status || 500).json({
             success: false,
             error: error.response?.data || error.message
         });
-
     }
-
 };
 
 // ======================================
 // Get ABHA Card
 // ======================================
 exports.getAbhaCard = async (req, res) => {
-
     try {
-
-        const authorization = req.headers.authorization;
-
-        if (!authorization) {
-
+        const userToken = getAbhaToken(req);
+        if (!userToken) {
             return res.status(400).json({
                 success: false,
-                message: "Authorization header is required."
+                message: "ABHA user token is required (x-abha-token header)."
             });
-
         }
 
-        const token = authorization.replace("Bearer ", "");
+        const response = await accountService.getAbhaCard(userToken);
 
-        const response =
-            await accountService.getAbhaCard(token);
-
-        res.setHeader(
-            "Content-Type",
-            response.contentType
-        );
-
-        res.setHeader(
-            "Content-Disposition",
-            "inline"
-        );
-
+        res.setHeader("Content-Type", response.contentType);
+        res.setHeader("Content-Disposition", "inline");
         return res.send(response.data);
 
     } catch (error) {
-
-        console.error("========== GET ABHA CARD ERROR ==========");
-
-        if (error.response) {
-            console.error(error.response.status);
-            console.error(JSON.stringify(error.response.data, null, 2));
-        } else {
-            console.error(error.message);
-        }
-
+        console.error("Get ABHA Card error:", error.response?.status || error.message);
         res.status(error.response?.status || 500).json({
             success: false,
             error: error.response?.data || error.message
         });
-
     }
-
 };
 
 // ======================================
 // Request Mobile OTP
 // ======================================
 exports.requestMobileOtp = async (req, res) => {
-
     try {
-
-        const authorization =
-            req.headers.authorization;
-
-        if (!authorization) {
-
+        const userToken = getAbhaToken(req);
+        if (!userToken) {
             return res.status(400).json({
                 success: false,
-                message: "Authorization header is required."
+                message: "ABHA user token is required (x-abha-token header)."
             });
-
         }
 
         const { mobile } = req.body;
-
         if (!mobile) {
-
             return res.status(400).json({
                 success: false,
                 message: "Mobile number is required."
             });
-
         }
-
         if (!/^\d{10}$/.test(String(mobile))) {
-
             return res.status(400).json({
                 success: false,
                 message: "Invalid mobile number. Must be 10 digits."
             });
-
         }
 
-        const token =
-            authorization.replace("Bearer ", "");
-
-        const response =
-            await profileService.requestMobileOtp(
-                token,
-                mobile
-            );
+        const response = await profileService.requestMobileOtp(userToken, mobile);
 
         res.status(200).json({
-
             success: true,
-
             data: response
-
         });
 
     } catch (error) {
-
-        console.error("========== REQUEST MOBILE OTP ERROR ==========");
-
-        if (error.response) {
-
-            console.error(error.response.status);
-
-            console.error(
-                JSON.stringify(error.response.data, null, 2)
-            );
-
-        } else {
-
-            console.error(error.message);
-
-        }
-
+        console.error("Request Mobile OTP error:", error.response?.status || error.message);
         res.status(error.response?.status || 500).json({
-
             success: false,
-
             error: error.response?.data || error.message
-
         });
-
     }
-
 };
 
 // ======================================
 // Request Deactivate OTP
 // ======================================
 exports.requestDeactivateOtp = async (req, res) => {
-
     try {
-
-        const authorization = req.headers.authorization;
-
-        if (!authorization) {
-
+        const userToken = getAbhaToken(req);
+        if (!userToken) {
             return res.status(400).json({
                 success: false,
-                message: "Authorization header is required."
+                message: "ABHA user token is required (x-abha-token header)."
             });
-
         }
 
         const { abhaNumber } = req.body || {};
-
         if (!abhaNumber) {
-
             return res.status(400).json({
                 success: false,
                 message: "ABHA Number is required."
             });
-
         }
 
-        const token =
-            authorization.replace("Bearer ", "");
-
-        const response =
-            await profileService.requestDeactivateOtp(
-                token,
-                abhaNumber
-            );
+        const response = await profileService.requestDeactivateOtp(userToken, abhaNumber);
 
         return res.status(200).json({
-
             success: true,
-
             data: response
-
         });
 
     } catch (error) {
-
-        console.error("========== REQUEST DEACTIVATE OTP ERROR ==========");
-
-        if (error.response) {
-
-            console.error(error.response.status);
-
-            console.error(
-                JSON.stringify(error.response.data, null, 2)
-            );
-
-        } else {
-
-            console.error(error.message);
-
-        }
-
+        console.error("Request Deactivate OTP error:", error.response?.status || error.message);
         return res.status(error.response?.status || 500).json({
-
             success: false,
-
             error: error.response?.data || error.message
-
         });
-
     }
-
 };
 
 // ======================================
 // Verify Deactivate OTP
 // ======================================
 exports.verifyDeactivateOtp = async (req, res) => {
-
     try {
-
-        const authorization = req.headers.authorization;
-
-        if (!authorization) {
-
+        const userToken = getAbhaToken(req);
+        if (!userToken) {
             return res.status(400).json({
                 success: false,
-                message: "Authorization header is required."
+                message: "ABHA user token is required (x-abha-token header)."
             });
-
         }
 
         const { txnId, otp, reason } = req.body || {};
 
         if (!txnId) {
-
             return res.status(400).json({
                 success: false,
                 message: "txnId is required."
             });
-
         }
 
         if (!otp) {
-
             return res.status(400).json({
                 success: false,
                 message: "OTP is required."
             });
-
         }
 
         if (!/^\d{6}$/.test(String(otp))) {
-
             return res.status(400).json({
                 success: false,
                 message: "Invalid OTP. Must be 6 digits."
             });
-
         }
 
-        const token =
-            authorization.replace("Bearer ", "");
-
-        const response =
-            await profileService.verifyDeactivateOtp(
-                token,
-                {
-                    txnId,
-                    otp,
-                    reason
-                }
-            );
+        const response = await profileService.verifyDeactivateOtp(userToken, {
+            txnId,
+            otp,
+            reason
+        });
 
         return res.status(200).json({
-
             success: true,
-
             data: response
-
         });
 
     } catch (error) {
-
-        console.error("========== VERIFY DEACTIVATE OTP ERROR ==========");
-
-        if (error.response) {
-
-            console.error(error.response.status);
-
-            console.error(
-                JSON.stringify(error.response.data, null, 2)
-            );
-
-        } else {
-
-            console.error(error.message);
-
-        }
-
+        console.error("Verify Deactivate OTP error:", error.response?.status || error.message);
         return res.status(error.response?.status || 500).json({
-
             success: false,
-
             error: error.response?.data || error.message
-
         });
-
     }
-
 };

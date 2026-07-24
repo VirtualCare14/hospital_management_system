@@ -37,7 +37,8 @@ import {
   ChevronDown,
   ChevronRight,
   CreditCard,
-  CalendarCheck
+  CalendarCheck,
+  Fingerprint
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -68,6 +69,7 @@ const Sidebar = () => {
     { to: '/reception/register', label: 'Register Patient', icon: ClipboardList },
     { to: '/reception/patients', label: 'Patient List', icon: Users },
     { to: '/reception/follow-ups', label: 'Patient Follow-Ups Tracking', icon: CalendarCheck },
+    { to: '/reception/abha', label: 'ABHA Services', icon: Fingerprint },
   ];
 
   const doctorLinks = [

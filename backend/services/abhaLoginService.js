@@ -70,9 +70,6 @@ const verifyLoginOtp = async ({ txnId, otp }) => {
         }
     };
 
-    console.log("========== LOGIN VERIFY PAYLOAD ==========");
-    console.log(JSON.stringify(payload, null, 2));
-
     const response = await axios.post(
 
         `${process.env.ABDM_ABHA_BASE_URL}/abha/api/v3/profile/login/verify`,
@@ -92,7 +89,11 @@ const verifyLoginOtp = async ({ txnId, otp }) => {
 
     );
 
-    return response.data;
+    // Return both data and headers so controller can extract X-token
+    return {
+        data: response.data,
+        headers: response.headers
+    };
 };
 
 module.exports = {
