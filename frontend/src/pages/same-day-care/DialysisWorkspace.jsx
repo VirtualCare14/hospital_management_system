@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import client from '../../api/client';
+import { useHeader } from '../../context/HeaderContext';
 import { formatUhid } from '../../utils/uhid';
 
 const DialysisWorkspace = () => {
@@ -112,36 +113,19 @@ const DialysisWorkspace = () => {
     }
   };
 
+  useHeader({ 
+    onRefresh: () => { loadRecords(); loadPatients(); } 
+  });
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="bg-sky-500 text-white p-2.5 rounded-2xl shadow-md shadow-sky-500/20">
-            <Droplets className="h-6 w-6" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">Dialysis Management</h1>
-            <p className="text-sm text-gray-500">Individual Dialysis Records & Clinical Tracking</p>
-          </div>
+      {canCreate && activeTab !== 'patients' && (
+        <div className="flex justify-end">
+          <button onClick={() => setActiveTab('patients')} className="btn text-sm py-2 px-4 font-bold flex items-center gap-2">
+            <Plus className="h-4 w-4" /> New Dialysis Record
+          </button>
         </div>
-        <div className="flex gap-2">
-          {activeTab === 'records' ? (
-            <button onClick={loadRecords} className="btn-secondary text-sm py-2 px-4 font-bold flex items-center gap-2">
-              <RefreshCw className="h-4 w-4" /> Refresh List
-            </button>
-          ) : (
-            <button onClick={loadPatients} className="btn-secondary text-sm py-2 px-4 font-bold flex items-center gap-2">
-              <RefreshCw className="h-4 w-4" /> Refresh Patients
-            </button>
-          )}
-          {canCreate && activeTab !== 'patients' && (
-            <button onClick={() => setActiveTab('patients')} className="btn text-sm py-2 px-4 font-bold flex items-center gap-2">
-              <Plus className="h-4 w-4" /> New Dialysis Record
-            </button>
-          )}
-        </div>
-      </div>
+      )}
 
       {/* Tabs Menu */}
       <div className="flex bg-orange-50/50 p-1 rounded-xl border border-orange-100 w-fit">

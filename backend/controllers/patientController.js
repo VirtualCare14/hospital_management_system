@@ -248,11 +248,11 @@ const createPatient = async (req, res) => {
         mobile: patient.mobile,
         gender: patient.gender,
         age,
-        treatmentType: 'Minor Injury', // Default, can be updated by nursing
+        treatmentType: '', // Empty, no longer default to 'Minor Injury'
         treatmentDate: new Date(),
         diagnosis: '',
         status: 'Draft',
-        price: defaultPrice,
+        price: 0,
         isFixedPrice: true,
         createdBy: req.user._id,
         updatedBy: req.user._id,
@@ -320,7 +320,7 @@ const createPatient = async (req, res) => {
 // @access  Private
 const getPatients = async (req, res) => {
   try {
-    const { search, excludeCompleted, sameDayCareOnly } = req.query;
+    const { search, excludeCompleted, sameDayCareOnly, page = 1, limit = 20 } = req.query;
     let query = tenantQuery(req);
 
     // Role-based filtering
@@ -407,6 +407,24 @@ const getPatients = async (req, res) => {
       result = patientsWithVisits.filter(pat => pat.consultationStatus !== 'completed');
     }
 
+    if (req.query.page || req.query.limit) {
+      const currentPage = Math.max(1, parseInt(page) || 1);
+      const limitVal = Math.max(1, parseInt(limit) || 20);
+      const totalRecords = result.length;
+      const totalPages = Math.ceil(totalRecords / limitVal) || 1;
+      const paginated = result.slice((currentPage - 1) * limitVal, currentPage * limitVal);
+
+      return res.status(200).json({
+        patients: paginated,
+        page: currentPage,
+        pageSize: limitVal,
+        totalRecords,
+        totalPages,
+        hasNextPage: currentPage < totalPages,
+        hasPreviousPage: currentPage > 1
+      });
+    }
+
     res.status(200).json(result);
   } catch (error) {
     console.error('Get Patients Error:', error);
@@ -487,7 +505,7 @@ const getPatientVisits = async (req, res) => {
 // @access  Private
 const getRegistrations = async (req, res) => {
   try {
-    const { fromDate, toDate, uhid, registrationNumber, patientName, department, search, page = 1, limit = 50 } = req.query;
+    const { fromDate, toDate, uhid, registrationNumber, patientName, department, search, page = 1, limit = 20 } = req.query;
     let query = tenantQuery(req);
 
     if (fromDate || toDate) {
@@ -537,13 +555,15 @@ const getRegistrations = async (req, res) => {
       filteredTotal = await Visit.countDocuments(query);
     }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const currentPage = Math.max(1, parseInt(page) || 1);
+    const limitVal = Math.max(1, parseInt(limit) || 20);
+    const skip = (currentPage - 1) * limitVal;
     const visits = await Visit.find(query)
       .populate('patientId', 'patientName mobile gender aadhaar')
       .populate('doctorId', 'doctorName username')
       .sort({ registrationDate: -1 })
       .skip(skip)
-      .limit(parseInt(limit));
+      .limit(limitVal);
 
     // Fetch linked consultation follow-up dates for doctor-assigned follow-ups
     const Consultation = require('../models/Consultation');
@@ -620,6 +640,8 @@ const getRegistrations = async (req, res) => {
       };
     });
 
+    const totalPages = Math.ceil(filteredTotal / limitVal) || 1;
+
     res.json({
       registrations: enriched,
       stats: {
@@ -627,8 +649,14 @@ const getRegistrations = async (req, res) => {
         totalMonth,
         totalFiltered: filteredTotal
       },
-      page: parseInt(page),
-      total: filteredTotal
+      page: currentPage,
+      pageSize: limitVal,
+      limit: limitVal,
+      totalRecords: filteredTotal,
+      total: filteredTotal,
+      totalPages,
+      hasNextPage: currentPage < totalPages,
+      hasPreviousPage: currentPage > 1
     });
   } catch (error) {
     console.error('Get Registrations Error:', error);
@@ -982,7 +1010,7 @@ const updateFollowUpDate = async (req, res) => {
 // @access  Private
 const getFollowUpPatients = async (req, res) => {
   try {
-    const { filter = 'today', fromDate, toDate, search, department } = req.query;
+    const { filter = 'today', fromDate, toDate, search, department, page = 1, limit = 20 } = req.query;
 
     const todayStr = new Date().toISOString().split('T')[0];
 
@@ -1126,13 +1154,25 @@ const getFollowUpPatients = async (req, res) => {
 
     result.sort((a, b) => new Date(a.followUpDate) - new Date(b.followUpDate));
 
+    const currentPage = Math.max(1, parseInt(page) || 1);
+    const limitVal = Math.max(1, parseInt(limit) || 20);
+    const totalRecords = result.length;
+    const totalPages = Math.ceil(totalRecords / limitVal) || 1;
+    const paginated = result.slice((currentPage - 1) * limitVal, currentPage * limitVal);
+
     res.json({
-      followUps: result,
+      followUps: paginated,
       stats: {
         todayCount,
         upcomingCount,
         totalCount
-      }
+      },
+      page: currentPage,
+      pageSize: limitVal,
+      totalRecords,
+      totalPages,
+      hasNextPage: currentPage < totalPages,
+      hasPreviousPage: currentPage > 1
     });
   } catch (error) {
     console.error('Get Follow Up Patients Error:', error);

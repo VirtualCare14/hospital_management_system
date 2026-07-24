@@ -169,7 +169,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
                 lineHeight: '1.5',
                 whiteSpace: 'pre-line'
               }}>
-                {prescription.diagnosisRemark}
+                {translateClinicalText(prescription.diagnosisRemark, activeLang)}
               </p>
             </div>
           )}
@@ -188,27 +188,46 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
               }}>
                 <thead>
                   <tr style={{ backgroundColor: '#e8e8e8' }}>
-                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'left', fontWeight: 'bold' }}>#</th>
-                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'left', fontWeight: 'bold' }}>{t(activeLang, 'medicine')}</th>
-                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold' }}>{t(activeLang, 'morning')}</th>
-                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold' }}>{t(activeLang, 'afternoon')}</th>
-                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold' }}>{t(activeLang, 'night')}</th>
-                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'left', fontWeight: 'bold' }}>{t(activeLang, 'duration')}</th>
-                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'left', fontWeight: 'bold' }}>{t(activeLang, 'remarks')}</th>
+                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'left', fontWeight: 'bold', width: '4%' }}>#</th>
+                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'left', fontWeight: 'bold', width: '25%' }}>{t(activeLang, 'medicine')}</th>
+                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '12%' }}>Dosage Form</th>
+                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '10%' }}>Strength</th>
+                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '8%' }}>Dose</th>
+                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '13%' }}>Frequency</th>
+                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '10%' }}>Duration</th>
+                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'left', fontWeight: 'bold', width: '10%' }}>Remarks</th>
+                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '8%' }}>Qty</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {prescription.medicines.filter((m) => m.medicine).map((item, index) => (
-                    <tr key={index} style={{ backgroundColor: index % 2 === 0 ? '#ffffff' : '#f7f7f7' }}>
-                      <td style={{ padding: '5px 8px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle' }}>{index + 1}</td>
-                      <td style={{ padding: '5px 8px', border: '1px solid #000', verticalAlign: 'middle', fontWeight: '500' }}>{item.medicine}</td>
-                      <td style={{ padding: '5px 8px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle' }}>{item.morning ? '✓' : '-'}</td>
-                      <td style={{ padding: '5px 8px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle' }}>{item.afternoon ? '✓' : '-'}</td>
-                      <td style={{ padding: '5px 8px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle' }}>{item.night ? '✓' : '-'}</td>
-                      <td style={{ padding: '5px 8px', border: '1px solid #000', verticalAlign: 'middle' }}>{translateClinicalText(item.duration, activeLang)}</td>
-                      <td style={{ padding: '5px 8px', border: '1px solid #000', verticalAlign: 'middle' }}>{translateClinicalText(item.remarks, activeLang) || '-'}</td>
-                    </tr>
-                  ))}
+                  {prescription.medicines.filter((m) => m.medicine).map((item, index) => {
+                    const doseNum = parseFloat(item.dose) || 0;
+                    const freqCount = (item.morning ? 1 : 0) + (item.afternoon ? 1 : 0) + (item.night ? 1 : 0);
+                    const durDays = parseFloat(item.duration) || 0;
+                    const calculatedQty = parseFloat((doseNum * freqCount * durDays).toFixed(2));
+                    const displayQty = item.qty !== undefined ? item.qty : calculatedQty;
+                    const frequencyStr = [
+                      item.morning ? '1' : '0',
+                      item.afternoon ? '1' : '0',
+                      item.night ? '1' : '0'
+                    ].join(' - ');
+
+                    return (
+                      <tr key={index} style={{ backgroundColor: index % 2 === 0 ? '#ffffff' : '#f7f7f7' }}>
+                        <td style={{ padding: '5px 8px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle' }}>{index + 1}</td>
+                        <td style={{ padding: '5px 8px', border: '1px solid #000', verticalAlign: 'middle', fontWeight: '500' }}>{item.medicine}</td>
+                        <td style={{ padding: '5px 8px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle', fontWeight: '500', color: '#4a5568' }}>{item.dosageForm || 'Tablet'}</td>
+                        <td style={{ padding: '5px 8px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle' }}>{item.strength || '-'}</td>
+                        <td style={{ padding: '5px 8px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle' }}>{item.dose !== undefined ? item.dose : '1'}</td>
+                        <td style={{ padding: '5px 8px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle', fontFamily: 'monospace' }}>{frequencyStr}</td>
+                        <td style={{ padding: '5px 8px', border: '1px solid #000', verticalAlign: 'middle', textAlign: 'center' }}>
+                          {item.duration ? `${translateClinicalText(item.duration, activeLang)} days` : '-'}
+                        </td>
+                        <td style={{ padding: '5px 8px', border: '1px solid #000', verticalAlign: 'middle' }}>{translateClinicalText(item.remarks, activeLang) || '-'}</td>
+                        <td style={{ padding: '5px 8px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle', fontWeight: 'bold' }}>{displayQty}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

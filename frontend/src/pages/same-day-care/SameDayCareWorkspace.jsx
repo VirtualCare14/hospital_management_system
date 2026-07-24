@@ -6,10 +6,11 @@ import {
   Activity, Search, User, Loader2, Eye,
   Plus, Stethoscope, CalendarDays, Phone, Clock,
   RefreshCw, Bandage, Bone, Flame, Droplets, Wind, Syringe,
-  X, FolderHeart, CheckCircle, Printer, Download, PlusCircle, Trash2, ListPlus, Pill, ClipboardCheck
+  X, FolderHeart, CheckCircle, Printer, Download, PlusCircle, Trash2, ListPlus, Pill, ClipboardCheck, ShieldAlert
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import client from '../../api/client';
+import { useHeader } from '../../context/HeaderContext';
 import { formatUhid } from '../../utils/uhid';
 
 const TREATMENT_ICONS = {
@@ -396,11 +397,15 @@ const SameDayCareWorkspace = () => {
   };
 
   const handleNewTreatment = (treatmentType) => {
+    const draftRecord = patientTreatments.find(t => t.status === 'Draft');
+    const recordParam = draftRecord ? `&recordId=${draftRecord._id}` : '';
+
     if (treatmentType === 'Dialysis') {
-      navigate(`/same-day-care/dialysis/treatment/${selectedPatient._id}`);
+      const dialRecordParam = draftRecord ? `?recordId=${draftRecord._id}` : '';
+      navigate(`/same-day-care/dialysis/treatment/${selectedPatient._id}${dialRecordParam}`);
       return;
     }
-    navigate(`/same-day-care/treatment/${selectedPatient._id}?type=${treatmentType}`);
+    navigate(`/same-day-care/treatment/${selectedPatient._id}?type=${treatmentType}${recordParam}`);
   };
 
   const handleViewTreatment = (record) => {
@@ -413,6 +418,9 @@ const SameDayCareWorkspace = () => {
 
   const getFilteredQueue = () => {
     return queue.filter(item => {
+      // Filter out records without a selected care/treatment type
+      if (!item.treatmentType || item.treatmentType.trim() === '') return false;
+
       // 1. Filter by search
       if (queueSearch.trim()) {
         const term = queueSearch.toLowerCase();
@@ -434,13 +442,24 @@ const SameDayCareWorkspace = () => {
 
   const filteredQueue = getFilteredQueue();
 
+  const activeDraftPatientIds = new Set(queue.map(q => q.patientId?._id || q.patientId));
+  const completedPatientIds = new Set(completedList.map(c => c.patientId?._id || c.patientId));
+
   const getPatientDateCounts = () => {
     const todayStr = new Date().toISOString().split('T')[0];
     let previous = 0;
     let todays = 0;
     let upcoming = 0;
+    let all = 0;
 
     patients.forEach(p => {
+      const hasCompleted = completedPatientIds.has(p._id);
+      const hasActiveDraft = activeDraftPatientIds.has(p._id);
+      if (hasCompleted && !hasActiveDraft) {
+        return;
+      }
+
+      all++;
       if (!p.appointmentDate) return;
       const appDateStr = p.appointmentDate;
       if (appDateStr === todayStr) {
@@ -452,13 +471,19 @@ const SameDayCareWorkspace = () => {
       }
     });
 
-    return { previous, todays, upcoming, all: patients.length };
+    return { previous, todays, upcoming, all };
   };
 
   const getFilteredPatients = () => {
     const todayStr = new Date().toISOString().split('T')[0];
     
     return patients.filter(p => {
+      const hasCompleted = completedPatientIds.has(p._id);
+      const hasActiveDraft = activeDraftPatientIds.has(p._id);
+      if (hasCompleted && !hasActiveDraft) {
+        return false;
+      }
+
       // Apply search term filter first if exists
       if (search.trim()) {
         const term = search.toLowerCase();
@@ -486,20 +511,12 @@ const SameDayCareWorkspace = () => {
 
   const filteredPatients = getFilteredPatients();
 
-  return (
-    <div className="space-y-6 text-sm sm:text-base">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">Same Day Care Module</h1>
-          <p className="text-sm text-gray-500">Same Day Care Dashboard & Workspace</p>
-        </div>
-        <button onClick={loadAllData} className="btn-secondary text-sm py-2 px-4 font-bold">
-          <RefreshCw className="h-4 w-4" /> Refresh
-        </button>
-      </div>
+  useHeader({ onRefresh: loadAllData });
 
-      {!showTreatmentList ? (
+  return (
+    <div className="text-sm sm:text-base">
+      <div className="no-print space-y-6">
+        {!showTreatmentList ? (
         <>
           {/* Tabs Menu */}
           <div className="flex bg-orange-50/50 p-1 rounded-xl border border-orange-100 w-fit mb-4 mb-4 select-none">
@@ -509,7 +526,7 @@ const SameDayCareWorkspace = () => {
                 activeTab === 'pending' || activeTab === 'queue' ? 'bg-orange-500 text-white shadow-sm' : 'text-orange-950 hover:bg-orange-100/50'
               }`}
             >
-              <Clock className="h-4 w-4" /> Treatment Pending ({queue.length})
+              <Clock className="h-4 w-4" /> Treatment Pending ({filteredQueue.length})
             </button>
             <button
               onClick={() => { setActiveTab('completed'); setSearchParams({ tab: 'completed' }); }}
@@ -576,7 +593,7 @@ const SameDayCareWorkspace = () => {
                       pendingSourceFilter === 'All' ? 'bg-orange-500 text-white shadow-sm' : 'text-orange-950 hover:bg-orange-100/30'
                     }`}
                   >
-                    All Pending ({queue.length})
+                    All Pending ({filteredQueue.length})
                   </button>
                   <button
                     onClick={() => setPendingSourceFilter('Doctor')}
@@ -584,7 +601,7 @@ const SameDayCareWorkspace = () => {
                       pendingSourceFilter === 'Doctor' ? 'bg-orange-500 text-white shadow-sm' : 'text-orange-950 hover:bg-orange-100/30'
                     }`}
                   >
-                    Doctor Referrals ({queue.filter(q => q.source === 'Doctor Referral').length})
+                    Doctor Referrals ({filteredQueue.filter(q => q.source === 'Doctor Referral').length})
                   </button>
                   <button
                     onClick={() => setPendingSourceFilter('Reception')}
@@ -592,7 +609,7 @@ const SameDayCareWorkspace = () => {
                       pendingSourceFilter === 'Reception' ? 'bg-orange-500 text-white shadow-sm' : 'text-orange-950 hover:bg-orange-100/30'
                     }`}
                   >
-                    Reception ({queue.filter(q => q.source === 'Registration').length})
+                    Reception ({filteredQueue.filter(q => q.source === 'Registration').length})
                   </button>
                 </div>
               </div>
@@ -936,11 +953,12 @@ const SameDayCareWorkspace = () => {
                             <td className="p-3 text-xs font-medium text-orange-700">{item.nextProcedurePlanned || 'Routine Checkup'}</td>
                             <td className="p-3 text-xs truncate max-w-[200px]" title={item.reviewNotes}>{item.reviewNotes || '-'}</td>
                             <td className="p-3 pr-4 text-center">
-                              <button onClick={() => {
-                                if (item.treatmentType === 'Dialysis') {
-                                  navigate(`/same-day-care/dialysis/treatment/${item.patientId}?recordId=${item._id}`);
-                                } else {
-                                  navigate(`/same-day-care/treatment/${item.patientId}?type=${item.treatmentType}&recordId=${item._id}`);
+                              <button onClick={async () => {
+                                try {
+                                  const { data: pat } = await client.get(`/patients/${item.patientId?._id || item.patientId}`);
+                                  loadPatientTreatments(pat);
+                                } catch (err) {
+                                  toast.error("Failed to load patient details");
                                 }
                               }} className="btn text-xs py-1.5 px-3">
                                 <Activity className="h-3.5 w-3.5" /> Start Care
@@ -1243,38 +1261,61 @@ const SameDayCareWorkspace = () => {
           </div>
 
           {/* Treatment Selection Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
-            {categories.map((cat, catIdx) => {
-              const Icon = TREATMENT_ICONS[cat.name] || FolderHeart;
-              const isDialysis = cat.name.toLowerCase() === 'dialysis';
-              
-              return (
-                <button
-                  key={catIdx}
-                  onClick={() => {
-                    if (isDialysis) {
-                      handleNewTreatment('Dialysis');
-                    } else if (cat.subServices?.length === 1) {
-                      handleNewTreatment(cat.subServices[0].name);
-                    } else {
-                      setActiveCategoryIndex(catIdx);
-                    }
-                  }}
-                  className="card p-4 text-center hover:shadow-md transition-all border-2 border-transparent hover:border-orange-300 hover:bg-orange-50 cursor-pointer flex flex-col justify-center items-center gap-1.5"
-                >
-                  <Icon className="h-8 w-8 text-orange-500" />
-                  <span className="block text-[10px] font-bold uppercase text-gray-700 leading-tight">
-                    {cat.name}
-                  </span>
-                  {cat.subServices?.length > 1 && (
-                    <span className="block text-[8px] font-bold text-orange-600 bg-orange-100/50 px-1.5 py-0.5 rounded-full uppercase">
-                      {cat.subServices.length} options
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+          {(() => {
+            const selectedPatientHasCompletedWithoutDraft = patientTreatments.some(t => t.status === 'Completed') && 
+                                                           !patientTreatments.some(t => t.status === 'Draft');
+            return (
+              <>
+                {selectedPatientHasCompletedWithoutDraft && (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-center gap-2.5 text-amber-900 font-bold text-xs select-none mb-4 animate-in fade-in duration-200">
+                    <ShieldAlert className="h-5 w-5 text-amber-600 shrink-0" />
+                    <div>
+                      <p>Start Care is disabled: This patient has already completed their previous treatment.</p>
+                      <p className="text-[10px] text-amber-700 font-medium mt-0.5">Please register the patient again at the reception desk to initiate a new session.</p>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mb-6">
+                  {categories.map((cat, catIdx) => {
+                    const Icon = TREATMENT_ICONS[cat.name] || FolderHeart;
+                    const isDialysis = cat.name.toLowerCase() === 'dialysis';
+                    
+                    return (
+                      <button
+                        key={catIdx}
+                        disabled={selectedPatientHasCompletedWithoutDraft}
+                        onClick={() => {
+                          if (isDialysis) {
+                            handleNewTreatment('Dialysis');
+                          } else if (cat.subServices?.length === 1) {
+                            handleNewTreatment(cat.subServices[0].name);
+                          } else {
+                            setActiveCategoryIndex(catIdx);
+                          }
+                        }}
+                        className={`card p-4 text-center border-2 border-transparent transition-all flex flex-col justify-center items-center gap-1.5 ${
+                          selectedPatientHasCompletedWithoutDraft 
+                            ? 'opacity-50 cursor-not-allowed bg-gray-50 border-gray-100' 
+                            : 'hover:shadow-md hover:border-orange-300 hover:bg-orange-50 cursor-pointer'
+                        }`}
+                      >
+                        <Icon className="h-8 w-8 text-orange-500" />
+                        <span className="block text-[10px] font-bold uppercase text-gray-700 leading-tight">
+                          {cat.name}
+                        </span>
+                        {cat.subServices?.length > 1 && (
+                          <span className="block text-[8px] font-bold text-orange-600 bg-orange-100/50 px-1.5 py-0.5 rounded-full uppercase">
+                            {cat.subServices.length} options
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            );
+          })()}
 
           {/* Existing Treatment Records */}
           <div className="card overflow-hidden">
@@ -1334,10 +1375,25 @@ const SameDayCareWorkspace = () => {
                           </span>
                         </td>
                         <td className="p-3 text-xs text-gray-500">{r.createdBy?.doctorName || r.createdBy?.username || '-'}</td>
-                        <td className="p-3 pr-4 text-center">
+                        <td className="p-3 pr-4 text-center flex items-center justify-center gap-2">
                           <button onClick={() => handleViewTreatment(r)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="View">
                             <Eye className="h-3.5 w-3.5" />
                           </button>
+                          {r.status === 'Draft' && (
+                            <button
+                              onClick={() => {
+                                if (r.treatmentType === 'Dialysis') {
+                                  navigate(`/same-day-care/dialysis/treatment/${r.patientId?._id || r.patientId}?recordId=${r._id}`);
+                                } else {
+                                  navigate(`/same-day-care/treatment/${r.patientId?._id || r.patientId}?type=${r.treatmentType}&recordId=${r._id}`);
+                                }
+                              }}
+                              className="p-1.5 text-orange-600 hover:bg-orange-50 rounded-lg"
+                              title="Resume / Start Care"
+                            >
+                              <Activity className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -1384,24 +1440,50 @@ const SameDayCareWorkspace = () => {
           </div>
         </div>
       )}
+    </div>
 
       {/* Dynamic Report Print Area (Only visible during print) */}
       {selectedRecord && (
         <div id="sdt-print-area" className="hidden print:block bg-white text-black p-8 font-sans text-xs max-w-[210mm] mx-auto min-h-[297mm]">
           <style>{`
             @media print {
-              body * {
-                visibility: hidden !important;
+              @page {
+                size: A4 portrait;
+                margin: 0 !important;
               }
-              #sdt-print-area, #sdt-print-area * {
-                visibility: visible !important;
+              aside, header, nav, .no-print {
+                display: none !important;
+              }
+              html, body {
+                background: white !important;
+                background-color: white !important;
+                margin: 0 !important;
+                padding: 0 !important;
+              }
+              div:not(#sdt-print-area):not(#sdt-print-area *):not(.no-print),
+              main:not(#sdt-print-area):not(#sdt-print-area *):not(.no-print),
+              section:not(#sdt-print-area):not(#sdt-print-area *):not(.no-print) {
+                display: block !important;
+                position: static !important;
+                overflow: visible !important;
+                height: auto !important;
+                min-height: 0 !important;
+                max-height: none !important;
+                width: auto !important;
+                min-width: 0 !important;
+                max-width: none !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                box-shadow: none !important;
+                background: transparent !important;
               }
               #sdt-print-area {
-                position: absolute !important;
-                left: 0 !important;
-                top: 0 !important;
-                width: 100% !important;
                 display: block !important;
+                width: 100% !important;
+                margin: 0 !important;
+                padding: 20mm !important;
+                box-sizing: border-box !important;
+                background: white !important;
               }
             }
           `}</style>
@@ -1477,11 +1559,13 @@ const SameDayCareWorkspace = () => {
                   <thead>
                     <tr className="bg-gray-100 border-b border-gray-300 font-bold text-[10px]">
                       <th className="p-1.5 border-r border-gray-300">{TRANSLATIONS[printLanguage]?.medicineName || 'Medicine Name'}</th>
-                      <th className="p-1.5 border-r border-gray-300">{TRANSLATIONS[printLanguage]?.dosage || 'Dosage'}</th>
+                      <th className="p-1.5 border-r border-gray-300">Dosage Form</th>
+                      <th className="p-1.5 border-r border-gray-300">Strength</th>
+                      <th className="p-1.5 border-r border-gray-300">Dose</th>
                       <th className="p-1.5 border-r border-gray-300">{TRANSLATIONS[printLanguage]?.frequency || 'Frequency'}</th>
                       <th className="p-1.5 border-r border-gray-300">{TRANSLATIONS[printLanguage]?.duration || 'Duration'}</th>
-                      <th className="p-1.5 border-r border-gray-300">Route</th>
-                      <th className="p-1.5">{TRANSLATIONS[printLanguage]?.instructions || 'Instructions'}</th>
+                      <th className="p-1.5 border-r border-gray-300">Remarks</th>
+                      <th className="p-1.5 text-center">Qty</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-300 text-[10px]">
@@ -1490,11 +1574,15 @@ const SameDayCareWorkspace = () => {
                       .map((item, idx) => (
                         <tr key={idx}>
                           <td className="p-1.5 border-r border-gray-300 font-bold">{item.medicineName}</td>
-                          <td className="p-1.5 border-r border-gray-300">{item.dosage || '-'}</td>
-                          <td className="p-1.5 border-r border-gray-300">{item.frequency || '-'}</td>
-                          <td className="p-1.5 border-r border-gray-300">{item.duration || '-'}</td>
-                          <td className="p-1.5 border-r border-gray-300">{item.route || '-'}</td>
-                          <td className="p-1.5 italic">{item.instructions || '-'}</td>
+                          <td className="p-1.5 border-r border-gray-300">{item.dosageForm || 'Tablet'}</td>
+                          <td className="p-1.5 border-r border-gray-300">{item.strength || '-'}</td>
+                          <td className="p-1.5 border-r border-gray-300">{item.dose !== undefined ? item.dose : '1'}</td>
+                          <td className="p-1.5 border-r border-gray-300 font-mono">
+                            {item.frequency || [item.morning ? '1' : '0', item.afternoon ? '1' : '0', item.night ? '1' : '0'].join(' - ')}
+                          </td>
+                          <td className="p-1.5 border-r border-gray-300">{item.duration ? `${item.duration} Days` : '-'}</td>
+                          <td className="p-1.5 border-r border-gray-300 italic">{item.remarks || item.instructions || '-'}</td>
+                          <td className="p-1.5 text-center font-bold">{item.qty !== undefined ? item.qty : '-'}</td>
                         </tr>
                       ))}
                   </tbody>

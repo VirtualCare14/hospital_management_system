@@ -1,22 +1,42 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, Stethoscope, FileText, Send, History, X } from 'lucide-react';
+import { Search, Stethoscope, FileText, Send, History, X, Scissors, MoreVertical } from 'lucide-react';
 import toast from 'react-hot-toast';
 import client from '../../api/client';
 import { formatDate } from '../../utils/dateFormat';
 import { useAuth } from '../../context/AuthContext';
+import SkeletonTable from '../../components/Skeleton/SkeletonTable';
+import PaginationFooter from '../../components/PaginationFooter';
 
 const DoctorPatientList = () => {
   const { user } = useAuth();
   const [patients, setPatients] = useState([]);
   const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(false);
   const [subServices, setSubServices] = useState([]);
   const [sameDayModalPatient, setSameDayModalPatient] = useState(null);
-  const [sdCareType, setSdCareType] = useState('Minor Injury');
+  const [sdCareType, setSdCareType] = useState('');
   const [sdSelectedDocId, setSdSelectedDocId] = useState('');
   const [sdRemarks, setSdRemarks] = useState('');
   const [sdDoctors, setSdDoctors] = useState([]);
   const [loadingSdDoctors, setLoadingSdDoctors] = useState(false);
+  const [activeMenuId, setActiveMenuId] = useState(null);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.action-menu-container')) {
+        setActiveMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (sameDayModalPatient) {
@@ -53,7 +73,7 @@ const DoctorPatientList = () => {
 
   const handleSendToSameDayOpen = (patient) => {
     setSameDayModalPatient(patient);
-    setSdCareType(subServices.includes('Minor Injury') ? 'Minor Injury' : subServices[0] || 'Dialysis');
+    setSdCareType('');
     setSdSelectedDocId('');
     setSdRemarks(`Referred to Same Day Care by Dr. ${user?.doctorName || user?.username || 'Doctor'}.`);
   };
@@ -68,19 +88,22 @@ const DoctorPatientList = () => {
     try {
       const dob = sameDayModalPatient.dob;
       const age = dob ? Math.floor((new Date() - new Date(dob)) / (365.25 * 24 * 60 * 60 * 1000)) : null;
-      await client.post('/same-day-care/treatment', {
-        patientId: sameDayModalPatient._id,
+
+      const payload = {
+        patientId: sameDayModalPatient.patientId || sameDayModalPatient._id,
         patientName: sameDayModalPatient.patientName,
         uhid: sameDayModalPatient.uhid,
         mobile: sameDayModalPatient.mobile,
         gender: sameDayModalPatient.gender,
         age,
         treatmentType: sdCareType,
-        referredByDoctorRemarks: sdRemarks,
-        assignedStaffId: sdSelectedDocId || null,
-        assignedStaffName: chosenDoc ? (chosenDoc.doctorName || chosenDoc.username) : '',
-        status: 'Draft'
-      });
+        remarks: sdRemarks,
+        treatmentDate: new Date(),
+        assignedStaffId: sdSelectedDocId || undefined,
+        assignedStaffName: chosenDoc ? (chosenDoc.doctorName || chosenDoc.username) : undefined
+      };
+
+      await client.post('/ipd/same-day-care', payload);
       toast.success(`${sameDayModalPatient.patientName} referred to Same Day Care (${sdCareType})!`);
       setSameDayModalPatient(null);
     } catch (err) {
@@ -88,16 +111,37 @@ const DoctorPatientList = () => {
     }
   };
 
+  // Reset page when search changes
   useEffect(() => {
+    setCurrentPage(1);
+  }, [search]);
+
+  useEffect(() => {
+    setLoading(true);
     const timeout = setTimeout(() => {
       client
-        .get(`/patients?excludeCompleted=true&search=${encodeURIComponent(search)}`)
-        .then(({ data }) => setPatients(data))
-        .catch(() => setPatients([]));
+        .get(`/patients?excludeCompleted=true&search=${encodeURIComponent(search)}&page=${currentPage}&limit=${pageSize}`)
+        .then(({ data }) => {
+          if (Array.isArray(data)) {
+            setPatients(data);
+            setTotalRecords(data.length);
+            setTotalPages(1);
+          } else {
+            setPatients(data.patients || []);
+            setTotalRecords(data.totalRecords || 0);
+            setTotalPages(data.totalPages || 1);
+          }
+        })
+        .catch(() => {
+          setPatients([]);
+          setTotalRecords(0);
+          setTotalPages(1);
+        })
+        .finally(() => setLoading(false));
     }, 250);
 
     return () => clearTimeout(timeout);
-  }, [search]);
+  }, [search, currentPage, pageSize]);
 
   return (
     <div className="space-y-5">
@@ -133,9 +177,15 @@ const DoctorPatientList = () => {
               </tr>
             </thead>
             <tbody>
-              {patients.length === 0 ? (
+              {loading ? (
                 <tr>
-                  <td colSpan={6} className="p-4 text-sm text-gray-500">
+                  <td colSpan={6} className="p-8">
+                    <SkeletonTable rows={pageSize > 10 ? 10 : pageSize} columns={6} className="w-full" />
+                  </td>
+                </tr>
+              ) : patients.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="p-8 text-center text-sm text-gray-500">
                     No patients found.
                   </td>
                 </tr>
@@ -156,50 +206,76 @@ const DoctorPatientList = () => {
                       Dr. {patient.doctorId?.doctorName || patient.doctorId?.username || 'N/A'}
                     </td>
                     <td className="p-3">{formatDate(patient.appointmentDate)} {patient.slot}</td>
-                    <td className="p-3">
-                      <div className="flex flex-wrap gap-2">
-                        <Link 
-                          className={`text-xs inline-flex items-center gap-1 px-3 py-1.5 rounded-lg font-bold transition duration-150 cursor-pointer text-white ${
-                            patient.consultationStatus === 'completed' 
-                              ? 'bg-green-600 hover:bg-green-700' 
-                              : 'bg-orange-500 hover:bg-orange-600'
-                          }`} 
-                          to={`/doctor/consultation/${patient._id}`}
-                        >
-                          <Stethoscope className="h-3 w-3" /> Consult
-                        </Link>
-                        <Link 
-                          className={`text-xs inline-flex items-center gap-1 px-3 py-1.5 rounded-lg font-bold transition duration-150 cursor-pointer ${
-                            patient.consultationStatus === 'completed' 
-                              ? (patient.hasPrescription 
-                                ? 'bg-green-600 text-white hover:bg-green-700' 
-                                : 'bg-orange-500 text-white hover:bg-orange-600') 
-                              : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
-                          }`} 
-                          to={`/doctor/prescription/${patient._id}`}
-                        >
-                          <FileText className="h-3 w-3" /> Rx
-                        </Link>
-                         <button className="btn-secondary text-xs inline-flex items-center gap-1 text-indigo-600"
-                          onClick={async () => {
-                            const defaultNotes = `Referred to OT from Doctor Patient List by Dr. ${user?.doctorName || user?.username || 'Doctor'}`;
-                            const customRemarks = window.prompt("Enter remarks for OT Referral:", defaultNotes);
-                            if (customRemarks === null) return;
-                            try {
-                              await client.post('/ipd/referrals', { patientId: patient._id, notes: customRemarks });
-                              toast.success(`${patient.patientName} sent to OT!`);
-                            } catch (err) { toast.error(err.response?.data?.message || 'Failed to send to OT'); }
-                          }}>
-                          <Send className="h-3 w-3" /> OT
-                        </button>
-                        <Link className="btn-secondary text-xs inline-flex items-center gap-1 text-green-600" to={`/doctor/consultation-track/${patient._id}`}>
-                          <History className="h-3 w-3" /> Track
-                        </Link>
-                        <button className="btn-secondary text-xs inline-flex items-center gap-1 text-orange-600 font-bold"
-                          onClick={() => handleSendToSameDayOpen(patient)}>
-                          <Send className="h-3 w-3" /> Same Day Care
-                        </button>
-                      </div>
+                    <td className="p-3 pr-4 text-center relative action-menu-container">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveMenuId(activeMenuId === patient._id ? null : patient._id);
+                        }}
+                        className="p-1.5 hover:bg-orange-100/70 text-gray-700 hover:text-orange-700 rounded-lg transition-colors border border-orange-200/80 bg-white shadow-sm inline-flex items-center justify-center cursor-pointer"
+                        title="Actions"
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </button>
+
+                      {activeMenuId === patient._id && (
+                        <div className="absolute right-3 top-10 z-30 w-48 bg-white rounded-2xl shadow-xl border border-orange-100 py-1.5 space-y-0.5 animate-in fade-in zoom-in-95 duration-100 text-left">
+                          <Link 
+                            to={`/doctor/consultation/${patient._id}`}
+                            onClick={() => setActiveMenuId(null)}
+                            className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                          >
+                            <Stethoscope className="h-3.5 w-3.5 text-orange-500" /> Consult
+                          </Link>
+
+                          <Link 
+                            to={`/doctor/prescription/${patient._id}`}
+                            onClick={() => setActiveMenuId(null)}
+                            className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                          >
+                            <FileText className="h-3.5 w-3.5 text-blue-600" /> Digital Rx
+                          </Link>
+
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              setActiveMenuId(null);
+                              const defaultNotes = `Referred to OT from Doctor Patient List by Dr. ${user?.doctorName || user?.username || 'Doctor'}`;
+                              const customRemarks = window.prompt("Enter remarks for OT Referral:", defaultNotes);
+                              if (customRemarks === null) return;
+                              try {
+                                await client.post('/ipd/referrals', { patientId: patient._id, notes: customRemarks });
+                                toast.success(`${patient.patientName} sent to OT!`);
+                              } catch (err) { toast.error(err.response?.data?.message || 'Failed to send to OT'); }
+                            }}
+                            className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                          >
+                            <Scissors className="h-3.5 w-3.5 text-indigo-600" /> Refer to OT
+                          </button>
+
+                          <Link 
+                            to={`/doctor/consultation-track/${patient._id}`}
+                            onClick={() => setActiveMenuId(null)}
+                            className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                          >
+                            <History className="h-3.5 w-3.5 text-green-600" /> Clinical Track
+                          </Link>
+
+                          <div className="border-t border-orange-50 my-1"></div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveMenuId(null);
+                              handleSendToSameDayOpen(patient);
+                            }}
+                            className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                          >
+                            <Send className="h-3.5 w-3.5 text-orange-600" /> Refer Same Day Care
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -207,6 +283,20 @@ const DoctorPatientList = () => {
             </tbody>
           </table>
         </div>
+
+        <PaginationFooter
+          currentPage={currentPage}
+          pageSize={pageSize}
+          totalRecords={totalRecords}
+          totalPages={totalPages}
+          onPageChange={(p) => setCurrentPage(p)}
+          onPageSizeChange={(s) => {
+            setPageSize(s);
+            setCurrentPage(1);
+          }}
+          loading={loading}
+          itemLabel="patients"
+        />
       </div>
 
       {sameDayModalPatient && (
@@ -232,6 +322,7 @@ const DoctorPatientList = () => {
                   onChange={(e) => setSdCareType(e.target.value)}
                   required
                 >
+                  <option value="">-- Select Care Type --</option>
                   {subServices.map(type => (
                     <option key={type} value={type}>{type}</option>
                   ))}

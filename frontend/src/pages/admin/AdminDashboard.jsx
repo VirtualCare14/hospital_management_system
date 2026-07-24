@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   Building2,
   Stethoscope,
@@ -24,6 +24,7 @@ import {
   Loader2
 } from 'lucide-react';
 import client from '../../api/client';
+import { useHeader } from '../../context/HeaderContext';
 import SkeletonCard from '../../components/Skeleton/SkeletonCard';
 import StatCard from '../../components/StatCard.jsx';
 import toast from 'react-hot-toast';
@@ -348,7 +349,7 @@ const AdminDashboard = () => {
   }, []);
 
   // Fetch initial staff & department data
-  useEffect(() => {
+  const loadDashboardData = useCallback(() => {
     setLoading(true);
     Promise.all([client.get('/admin/users'), client.get('/admin/departments')])
       .then(([u, d]) => {
@@ -360,10 +361,7 @@ const AdminDashboard = () => {
         toast.error('Failed to load dashboard data');
       })
       .finally(() => setLoading(false));
-  }, []);
 
-  // Fetch tracking data when tracking tab is opened
-  useEffect(() => {
     if (activeTab === 'tracking') {
       setTrackingLoading(true);
       client.get('/admin/hospital-tracking')
@@ -377,6 +375,10 @@ const AdminDashboard = () => {
         .finally(() => setTrackingLoading(false));
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
 
   // Search patients as search input changes
   useEffect(() => {
@@ -424,15 +426,13 @@ const AdminDashboard = () => {
     p.mobile?.includes(patientSearch)
   );
 
+  useHeader({ onRefresh: loadDashboardData });
+
   return (
     <div className="space-y-6">
-      {/* Top Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-orange-100 pb-5">
-        <div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Admin Control Center</h1>
-          <p className="text-sm text-gray-500 mt-1">Hospital tracking, departments, staff access management, and clinical summaries.</p>
-        </div>
-        <div className="flex bg-orange-50 p-1.5 rounded-xl border border-orange-100 self-start">
+      {/* Top Header Controls */}
+      <div className="flex justify-end border-b border-orange-100 pb-4">
+        <div className="flex bg-orange-50 p-1.5 rounded-xl border border-orange-100">
           <button
             onClick={() => setActiveTab('staff')}
             className={`px-4 py-2 text-xs font-bold rounded-lg transition duration-200 ${activeTab === 'staff' ? 'bg-orange-500 text-white shadow-sm' : 'text-orange-950 hover:bg-orange-100/50'}`}

@@ -1,75 +1,80 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, Bed, RefreshCw, Eye } from 'lucide-react';
+import { Search, Bed, RefreshCw, Eye, MoreVertical } from 'lucide-react';
 import toast from 'react-hot-toast';
 import client from '../../api/client';
+import { useHeader } from '../../context/HeaderContext';
 import SkeletonTable from '../../components/Skeleton/SkeletonTable';
+import PaginationFooter from '../../components/PaginationFooter';
 import { formatUhid } from '../../utils/uhid';
 
 const DoctorIpdPatients = () => {
   const [admissions, setAdmissions] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
+  const [activeMenuId, setActiveMenuId] = useState(null);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.action-menu-container')) {
+        setActiveMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const fetchAdmissions = useCallback(async () => {
     setLoading(true);
     try {
-      // Fetch only active admissions (e.g. Admitted, Under Observation, Shifted)
-      const { data } = await client.get('/ipd/patients?status=Admitted');
-      // Sort and filter active ones
-      const activeAdmissions = data.filter(a => a.status !== 'Discharged');
-      setAdmissions(activeAdmissions);
+      const { data } = await client.get(`/ipd/patients?status=Admitted&search=${encodeURIComponent(search)}&page=${currentPage}&limit=${pageSize}`);
+      if (Array.isArray(data)) {
+        setAdmissions(data);
+        setTotalRecords(data.length);
+        setTotalPages(1);
+      } else {
+        setAdmissions(data.admissions || []);
+        setTotalRecords(data.totalRecords || 0);
+        setTotalPages(data.totalPages || 1);
+      }
     } catch (err) {
       toast.error('Failed to load active IPD patients');
       setAdmissions([]);
+      setTotalRecords(0);
+      setTotalPages(1);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [search, currentPage, pageSize]);
+
+  // Reset page when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search]);
 
   useEffect(() => {
     fetchAdmissions();
   }, [fetchAdmissions]);
 
-  // Filter based on search query
-  const filteredAdmissions = admissions.filter((adm) => {
-    const term = search.toLowerCase();
-    const patientName = adm.patientId?.patientName?.toLowerCase() || '';
-    const uhid = adm.patientId?.uhid?.toLowerCase() || '';
-    const ipd = adm.ipdNumber?.toLowerCase() || '';
-    const room = adm.roomId?.roomType?.toLowerCase() || '';
-    const bed = adm.bedId?.bedNumber?.toLowerCase() || '';
-
-    return (
-      patientName.includes(term) ||
-      uhid.includes(term) ||
-      ipd.includes(term) ||
-      room.includes(term) ||
-      bed.includes(term)
-    );
-  });
+  useHeader({ onRefresh: fetchAdmissions });
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">IPD Inpatient Records</h1>
-          <p className="text-sm text-gray-500">View and manage drug charts / medication orders for active admitted patients.</p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button onClick={fetchAdmissions} className="btn-secondary py-2 px-3 text-xs" title="Refresh List">
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-          <div className="relative w-full md:w-80">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            <input
-              className="input pl-9 py-2 text-sm"
-              placeholder="Search by name, UHID, IPD, Bed..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
+      <div className="flex justify-end">
+        <div className="relative w-full md:w-80">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            className="input pl-9 py-2 text-sm"
+            placeholder="Search by name, UHID, IPD, Bed..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
       </div>
 
@@ -92,17 +97,17 @@ const DoctorIpdPatients = () => {
               {loading ? (
                 <tr>
                   <td colSpan={8} className="p-8">
-                    <SkeletonTable rows={4} columns={8} className="w-full" />
+                    <SkeletonTable rows={pageSize > 10 ? 10 : pageSize} columns={8} className="w-full" />
                   </td>
                 </tr>
-              ) : filteredAdmissions.length === 0 ? (
+              ) : admissions.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="p-12 text-center text-gray-500">
                     No active IPD patients found.
                   </td>
                 </tr>
               ) : (
-                filteredAdmissions.map((adm) => {
+                admissions.map((adm) => {
                   const patient = adm.patientId || {};
                   const age = patient.dob
                     ? Math.floor((new Date() - new Date(patient.dob)) / (365.25 * 24 * 60 * 60 * 1000))
@@ -121,13 +126,30 @@ const DoctorIpdPatients = () => {
                       <td className="p-3 text-xs font-medium">
                         Dr. {adm.doctorInCharge?.doctorName || adm.doctorInCharge?.username || 'N/A'}
                       </td>
-                      <td className="p-3 pr-4 text-center">
-                        <Link 
-                          to={`/doctor/ipd-chart/${adm._id}`} 
-                          className="btn py-1.5 px-3 text-xs inline-flex items-center gap-1 cursor-pointer"
+                      <td className="p-3 pr-4 text-center relative action-menu-container">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveMenuId(activeMenuId === adm._id ? null : adm._id);
+                          }}
+                          className="p-1.5 hover:bg-orange-100/70 text-gray-700 hover:text-orange-700 rounded-lg transition-colors border border-orange-200/80 bg-white shadow-sm inline-flex items-center justify-center cursor-pointer"
+                          title="Actions"
                         >
-                          <Eye className="h-3.5 w-3.5" /> Medication Chart
-                        </Link>
+                          <MoreVertical className="h-4 w-4" />
+                        </button>
+
+                        {activeMenuId === adm._id && (
+                          <div className="absolute right-3 top-10 z-30 w-44 bg-white rounded-2xl shadow-xl border border-orange-100 py-1.5 space-y-0.5 animate-in fade-in zoom-in-95 duration-100 text-left">
+                            <Link 
+                              to={`/doctor/ipd-chart/${adm._id}`}
+                              onClick={() => setActiveMenuId(null)}
+                              className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                            >
+                              <Eye className="h-3.5 w-3.5 text-orange-500" /> Medication Chart
+                            </Link>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -136,6 +158,20 @@ const DoctorIpdPatients = () => {
             </tbody>
           </table>
         </div>
+
+        <PaginationFooter
+          currentPage={currentPage}
+          pageSize={pageSize}
+          totalRecords={totalRecords}
+          totalPages={totalPages}
+          onPageChange={(p) => setCurrentPage(p)}
+          onPageSizeChange={(s) => {
+            setPageSize(s);
+            setCurrentPage(1);
+          }}
+          loading={loading}
+          itemLabel="patients"
+        />
       </div>
     </div>
   );

@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, Bed, RefreshCw, Eye } from 'lucide-react';
+import { Search, Bed, RefreshCw, Eye, MoreVertical } from 'lucide-react';
 import toast from 'react-hot-toast';
 import client from '../../api/client';
+import { useHeader } from '../../context/HeaderContext';
 import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 import { formatUhid } from '../../utils/uhid';
 
@@ -10,6 +11,17 @@ const SameDayCareIpdPatients = () => {
   const [admissions, setAdmissions] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
+  const [activeMenuId, setActiveMenuId] = useState(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.action-menu-container')) {
+        setActiveMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const fetchAdmissions = useCallback(async () => {
     setLoading(true);
@@ -47,27 +59,19 @@ const SameDayCareIpdPatients = () => {
     );
   });
 
+  useHeader({ onRefresh: fetchAdmissions });
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">IPD Inpatient Drug Charts</h1>
-          <p className="text-sm text-gray-500">Select a patient below to view doctor medication orders and log drug administrations.</p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button onClick={fetchAdmissions} className="btn-secondary py-2 px-3 text-xs" title="Refresh List">
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-          <div className="relative w-full md:w-80">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            <input
-              className="input pl-9 py-2 text-sm"
-              placeholder="Search by name, UHID, IPD, Bed..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
+      <div className="flex justify-end">
+        <div className="relative w-full md:w-80">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            className="input pl-9 py-2 text-sm"
+            placeholder="Search by name, UHID, IPD, Bed..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
       </div>
 
@@ -119,13 +123,30 @@ const SameDayCareIpdPatients = () => {
                       <td className="p-3 text-xs font-medium">
                         Dr. {adm.doctorInCharge?.doctorName || adm.doctorInCharge?.username || 'N/A'}
                       </td>
-                      <td className="p-3 pr-4 text-center">
-                        <Link
-                          to={`/same-day-care/ipd-chart/${adm._id}`}
-                          className="btn py-1.5 px-3 text-xs inline-flex items-center gap-1 cursor-pointer"
+                      <td className="p-3 pr-4 text-center relative action-menu-container">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveMenuId(activeMenuId === adm._id ? null : adm._id);
+                          }}
+                          className="p-1.5 hover:bg-orange-100/70 text-gray-700 hover:text-orange-700 rounded-lg transition-colors border border-orange-200/80 bg-white shadow-sm inline-flex items-center justify-center cursor-pointer"
+                          title="Actions"
                         >
-                          <Eye className="h-3.5 w-3.5" /> View Drug Chart
-                        </Link>
+                          <MoreVertical className="h-4 w-4" />
+                        </button>
+
+                        {activeMenuId === adm._id && (
+                          <div className="absolute right-3 top-10 z-30 w-44 bg-white rounded-2xl shadow-xl border border-orange-100 py-1.5 space-y-0.5 animate-in fade-in zoom-in-95 duration-100 text-left">
+                            <Link 
+                              to={`/same-day-care/ipd-chart/${adm._id}`}
+                              onClick={() => setActiveMenuId(null)}
+                              className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                            >
+                              <Eye className="h-3.5 w-3.5 text-orange-500" /> View Drug Chart
+                            </Link>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );

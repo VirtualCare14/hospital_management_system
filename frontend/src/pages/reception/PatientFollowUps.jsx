@@ -3,6 +3,7 @@ import { Calendar, CalendarCheck, Clock, Copy, Filter, MoreVertical, Printer, Sa
 import toast from 'react-hot-toast';
 import client from '../../api/client';
 import SkeletonTable from '../../components/Skeleton/SkeletonTable';
+import PaginationFooter from '../../components/PaginationFooter';
 import { formatUhid } from '../../utils/uhid';
 
 const PatientFollowUps = () => {
@@ -13,6 +14,12 @@ const PatientFollowUps = () => {
   const [toDate, setToDate] = useState('');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   // Active Action Menu
   const [activeMenuId, setActiveMenuId] = useState(null);
@@ -41,7 +48,11 @@ const PatientFollowUps = () => {
   const fetchFollowUpPatients = async () => {
     setLoading(true);
     try {
-      const params = { filter: filterTab };
+      const params = {
+        filter: filterTab,
+        page: currentPage,
+        limit: pageSize
+      };
       if (filterTab === 'range') {
         if (fromDate) params.fromDate = fromDate;
         if (toDate) params.toDate = toDate;
@@ -51,6 +62,8 @@ const PatientFollowUps = () => {
       const { data } = await client.get('/patients/registrations/follow-ups', { params });
       setFollowUpList(data.followUps || []);
       setFollowUpStats(data.stats || { todayCount: 0, upcomingCount: 0, totalCount: 0 });
+      setTotalRecords(data.totalRecords ?? data.totalCount ?? 0);
+      setTotalPages(data.totalPages || 1);
     } catch (err) {
       console.error('Fetch follow ups error:', err);
       toast.error('Failed to load follow-up records');
@@ -60,12 +73,17 @@ const PatientFollowUps = () => {
     }
   };
 
+  // Reset page when filter or search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterTab, fromDate, toDate, search]);
+
   useEffect(() => {
     const timeout = setTimeout(() => {
       fetchFollowUpPatients();
     }, 300);
     return () => clearTimeout(timeout);
-  }, [filterTab, fromDate, toDate, search]);
+  }, [currentPage, pageSize, filterTab, fromDate, toDate, search]);
 
   const handleOpenFollowUpModal = (item) => {
     setFollowUpModal(item);
@@ -388,6 +406,20 @@ const PatientFollowUps = () => {
             </tbody>
           </table>
         </div>
+
+        <PaginationFooter
+          currentPage={currentPage}
+          pageSize={pageSize}
+          totalRecords={totalRecords}
+          totalPages={totalPages}
+          onPageChange={(p) => setCurrentPage(p)}
+          onPageSizeChange={(s) => {
+            setPageSize(s);
+            setCurrentPage(1);
+          }}
+          loading={loading}
+          itemLabel="follow-ups"
+        />
       </div>
 
       {/* Follow Up Date & Remarks Modal */}

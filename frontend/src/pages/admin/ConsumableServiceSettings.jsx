@@ -19,6 +19,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import client from '../../api/client';
+import { useHeader } from '../../context/HeaderContext';
 import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 
 const ConsumableServiceSettings = () => {
@@ -159,13 +160,11 @@ const ConsumableServiceSettings = () => {
     }
   };
 
+  useHeader({ onRefresh: loadServices });
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Consumable Service Settings</h1>
-          <p className="text-sm text-gray-500">Manage consumable services used in IPD patient billing</p>
-        </div>
+      <div className="flex justify-end">
         <button onClick={handleAdd} className="btn">
           <Plus className="h-4 w-4" /> Add Service
         </button>

@@ -153,6 +153,8 @@ const clinicalTerms = {
     rest: 'आराम',
     'after food': 'भोजन के बाद',
     'before food': 'भोजन से पहले',
+    'without food': 'बिना भोजन के',
+    'take medicine in the morning without food': 'सुबह खाली पेट दवा ले',
     days: 'दिन',
     weeks: 'सप्ताह',
     months: 'महीने',
@@ -199,4 +201,60 @@ export const translateClinicalText = (text = '', language = 'English') => {
   return Object.entries(terms).reduce((value, [source, target]) => {
     return value.replace(new RegExp(`\\b${source}\\b`, 'gi'), target);
   }, text);
+};
+
+export const translateTextBidirectional = (text = '', fromLang = 'English', toLang = 'English') => {
+  if (!text || text === '-') return text;
+  if (fromLang === toLang) return text;
+
+  const termsFrom = {
+    ...(dictionary[fromLang] || {}),
+    ...(clinicalTerms[fromLang] || {})
+  };
+  const termsTo = {
+    ...(dictionary[toLang] || {}),
+    ...(clinicalTerms[toLang] || {})
+  };
+
+  const fromFallback = fallbackTerms[fromLang];
+  if (fromFallback) {
+    Object.assign(termsFrom, clinicalTerms[fromFallback] || {});
+  }
+  const toFallback = fallbackTerms[toLang];
+  if (toFallback) {
+    Object.assign(termsTo, clinicalTerms[toFallback] || {});
+  }
+
+  const allEnglishKeys = new Set([
+    ...Object.keys(dictionary.English || {}),
+    ...Object.keys(clinicalTerms.Hindi || {}),
+    ...Object.keys(clinicalTerms.Tamil || {})
+  ]);
+
+  const pairs = [];
+  allEnglishKeys.forEach(engKey => {
+    const valFrom = termsFrom[engKey] || engKey;
+    const valTo = termsTo[engKey] || engKey;
+    if (valFrom && valTo && valFrom.toLowerCase() !== valTo.toLowerCase()) {
+      pairs.push([valFrom, valTo]);
+    }
+  });
+
+  // Sort by length of fromVal descending to replace longer phrases first
+  pairs.sort((a, b) => b[0].length - a[0].length);
+
+  let translated = text;
+  pairs.forEach(([fromVal, toVal]) => {
+    const escaped = fromVal.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const isAscii = /^[\x00-\x7F]+$/.test(fromVal);
+    let regex;
+    if (isAscii) {
+      regex = new RegExp(`\\b${escaped}\\b`, 'gi');
+    } else {
+      regex = new RegExp(`(?<=^|[^a-zA-Z0-9_\\u0900-\\u097F\\u0B80-\\u0BFF])${escaped}(?=$|[^a-zA-Z0-9_\\u0900-\\u097F\\u0B80-\\u0BFF])`, 'gi');
+    }
+    translated = translated.replace(regex, toVal);
+  });
+
+  return translated;
 };
