@@ -38,7 +38,7 @@ import {
   ChevronRight,
   CreditCard,
   CalendarCheck,
-  Fingerprint
+  Fingerprint,
   PanelLeftClose,
   PanelLeftOpen
 } from 'lucide-react';
