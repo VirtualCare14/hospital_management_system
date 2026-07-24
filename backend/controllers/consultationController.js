@@ -571,6 +571,7 @@ const getDoctorStats = async (req, res) => {
 // @access  Private
 const getCompletedConsultations = async (req, res) => {
   try {
+    const { search, page = 1, limit = 20 } = req.query;
     const query = tenantQuery(req, { consultationStatus: 'completed' });
     if (req.user.role === 'doctor') query.doctorId = req.user._id;
 
@@ -587,7 +588,34 @@ const getCompletedConsultations = async (req, res) => {
       })
       .sort({ consultationCompletedDate: -1, updatedAt: -1 });
 
-    res.json(consultations);
+    let filtered = consultations;
+    if (search) {
+      const q = search.trim().toLowerCase();
+      filtered = consultations.filter(c =>
+        c.patientId?.patientName?.toLowerCase().includes(q) ||
+        c.patientId?.uhid?.toLowerCase().includes(q)
+      );
+    }
+
+    if (req.query.page || req.query.limit) {
+      const currentPage = Math.max(1, parseInt(page) || 1);
+      const limitVal = Math.max(1, parseInt(limit) || 20);
+      const totalRecords = filtered.length;
+      const totalPages = Math.ceil(totalRecords / limitVal) || 1;
+      const paginated = filtered.slice((currentPage - 1) * limitVal, currentPage * limitVal);
+
+      return res.json({
+        consultations: paginated,
+        page: currentPage,
+        pageSize: limitVal,
+        totalRecords,
+        totalPages,
+        hasNextPage: currentPage < totalPages,
+        hasPreviousPage: currentPage > 1
+      });
+    }
+
+    res.json(filtered);
   } catch (error) {
     console.error('Get Completed Consultations Error:', error);
     res.status(500).json({ message: 'Server error' });

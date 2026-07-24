@@ -1,4 +1,5 @@
 const PharmacyBill = require('../models/PharmacyBill');
+const Billing = require('../models/Billing');
 const PharmacySetting = require('../models/PharmacySetting');
 const PharmacyStockMovement = require('../models/PharmacyStockMovement');
 const PharmacyInventory = require('../models/PharmacyInventory');
@@ -48,7 +49,35 @@ const searchPrescriptions = async (req, res) => {
       .populate('doctorId', 'doctorName username department')
       .sort({ updatedAt: -1 });
 
-    const formatted = await Promise.all(prescriptions.map(async (p) => {
+    // Fetch all billed prescription IDs from PharmacyBill and Billing
+    const billedPharmacyBills = await PharmacyBill.find(tenantFilter(req, {
+      status: { $ne: 'Cancelled' },
+      prescriptionId: { $ne: null }
+    }), 'prescriptionId');
+
+    const billedInvoices = await Billing.find(tenantFilter(req, {
+      status: { $ne: 'Cancelled' },
+      'items.sourceModel': 'Prescription'
+    }), 'items');
+
+    const billedPrescriptionIdSet = new Set();
+    billedPharmacyBills.forEach(b => {
+      if (b.prescriptionId) billedPrescriptionIdSet.add(b.prescriptionId.toString());
+    });
+    billedInvoices.forEach(b => {
+      if (b.items) {
+        b.items.forEach(item => {
+          if (item.sourceModel === 'Prescription' && item.sourceId) {
+            billedPrescriptionIdSet.add(item.sourceId.toString());
+          }
+        });
+      }
+    });
+
+    // Exclude prescriptions that have already been billed
+    const unbilledPrescriptions = prescriptions.filter(p => !billedPrescriptionIdSet.has(p._id.toString()));
+
+    const formatted = await Promise.all(unbilledPrescriptions.map(async (p) => {
       // Find latest OPD visit to fetch OPD Registration Number and Consultation Date
       const latestVisit = await Visit.findOne(tenantFilter(req, {
         patientId: p.patientId?._id,

@@ -24,6 +24,7 @@ import {
   UserCheck
 } from 'lucide-react';
 import client from '../../api/client';
+import { useHeader } from '../../context/HeaderContext';
 
 const DEFAULT_BED_TYPES = [
   'Single Bed',
@@ -518,19 +519,10 @@ const IpdAdminWorkspace = () => {
     }
   }, [activeTab, reportStartDate, reportEndDate]);
 
+  useHeader({ onRefresh: loadData });
+
   return (
     <div className="space-y-6">
-      {/* Top Title Banner */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">IPD Master Administration</h1>
-          <p className="text-sm text-gray-500">Configure rooms, beds, sequential codes, doctor assignments, and track utilization reports.</p>
-        </div>
-        <button onClick={loadData} className="btn-secondary" title="Sync dashboard data">
-          <RefreshCw className="h-4 w-4" /> Refresh System
-        </button>
-      </div>
-
       {/* Workspace Tabs Header */}
       <div className="flex flex-wrap border-b border-orange-100 gap-1 text-sm bg-white p-2 rounded-2xl shadow-sm border border-orange-50">
         {[

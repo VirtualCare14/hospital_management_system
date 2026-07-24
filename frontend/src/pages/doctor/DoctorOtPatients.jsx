@@ -6,6 +6,7 @@ import {
   Building2, ArrowRight, RefreshCw, CheckCircle, Clock3
 } from 'lucide-react';
 import client from '../../api/client';
+import { useHeader } from '../../context/HeaderContext';
 import { formatUhid } from '../../utils/uhid';
 
 const DoctorOtPatients = () => {
@@ -40,22 +41,10 @@ const DoctorOtPatients = () => {
     return patientName.includes(term) || uhid.includes(term) || ipd.includes(term);
   });
 
+  useHeader({ onRefresh: loadOtBookings });
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight flex items-center gap-2">
-            <Scissors className="h-6 w-6 text-orange-500" />
-            OT Patients Tracking
-          </h1>
-          <p className="text-sm text-gray-500">Track scheduled surgeries, view consent forms, fill operative reports, and request medicines.</p>
-        </div>
-        <button onClick={loadOtBookings} className="btn-secondary text-sm py-2 px-3 flex items-center gap-2 self-start sm:self-auto">
-          <RefreshCw className="h-4 w-4" /> Refresh
-        </button>
-      </div>
-
       {/* Filters Bar */}
       <div className="flex flex-col md:flex-row gap-3 items-center justify-between bg-white p-4 rounded-2xl border border-orange-100 shadow-sm">
         <div className="relative w-full md:max-w-md">

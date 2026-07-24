@@ -6,6 +6,7 @@ import {
   User, RefreshCw, AlertCircle, X, ClipboardCheck
 } from 'lucide-react';
 import client from '../../api/client';
+import { useHeader } from '../../context/HeaderContext';
 
 const IpdSameDayDashboard = () => {
   const navigate = useNavigate();
@@ -111,29 +112,10 @@ const IpdSameDayDashboard = () => {
     return Math.abs(new Date(diff).getUTCFullYear() - 1970);
   };
 
+  useHeader({ onRefresh: fetchAdmissions });
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300 font-sans">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-orange-50 pb-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <Activity className="h-6 w-6 text-orange-500" />
-            <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">IPD Same Day Care</h1>
-          </div>
-          <p className="text-xs text-gray-500 mt-1">Manage rapid surgical inpatient admissions, short-term ward stays, and fast-track recovery tracking.</p>
-        </div>
-        <div className="flex gap-2 font-bold">
-          <button 
-            onClick={fetchAdmissions}
-            className="btn-secondary py-2.5 px-4 text-xs font-bold flex items-center gap-1.5"
-            title="Refresh List"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
-        </div>
-      </div>
-
       {/* Warning/Status Alerts */}
       <div className="flex items-start gap-3 p-4 bg-orange-50/50 border border-orange-200 rounded-2xl animate-in slide-in-from-top-1">
         <Sparkles className="h-5 w-5 text-orange-600 mt-0.5 animate-pulse flex-shrink-0" />

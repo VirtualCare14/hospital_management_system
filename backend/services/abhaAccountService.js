@@ -5,6 +5,28 @@ const abdmGatewayService = require("./abdmGatewayService");
 const abdmCryptoService = require("./abdmCryptoService");
 
 // ======================================
+// Retry helper for transient ABDM failures
+// ======================================
+const withRetry = async (fn, retries = 2, delayMs = 1000) => {
+    let attempt = 0;
+    while (true) {
+        try {
+            return await fn();
+        } catch (error) {
+            const status = error.response?.status;
+            const isTransient = status === 504 || status === 502 || status === 503 || status === 429;
+            if (!isTransient || attempt >= retries) {
+                throw error;
+            }
+            attempt += 1;
+            const delay = delayMs * attempt;
+            console.warn(`ABDM transient error ${status}, retrying in ${delay}ms...`);
+            await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+    }
+};
+
+// ======================================
 // Search ABHA By Mobile
 // ======================================
 const searchAbha = async (mobile) => {
@@ -132,21 +154,20 @@ const getAbhaAddressSuggestions = async () => {
     console.log("Transaction ID:", transactionId);
     console.log("================================================");
 
-    const response = await axios.get(
-
-        `${process.env.ABDM_ABHA_BASE_URL}/abha/api/v3/enrollment/enrol/suggestion`,
-
-        {
-            headers: {
-                Authorization: `Bearer ${token}`,
-                "Transaction_Id": transactionId,
-                "REQUEST-ID": crypto.randomUUID(),
-                TIMESTAMP: new Date().toISOString(),
-                Accept: "application/json"
-            },
-            timeout: Number(process.env.ABDM_TIMEOUT || 30000)
-        }
-
+    const response = await withRetry(() =>
+        axios.get(
+            `${process.env.ABDM_ABHA_BASE_URL}/abha/api/v3/enrollment/enrol/suggestion`,
+            {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Transaction_Id": transactionId,
+                    "REQUEST-ID": crypto.randomUUID(),
+                    TIMESTAMP: new Date().toISOString(),
+                    Accept: "application/json"
+                },
+                timeout: Number(process.env.ABDM_TIMEOUT || 60000)
+            }
+        )
     );
 
     console.log("Suggestions response:", JSON.stringify(response.data, null, 2));
@@ -170,27 +191,25 @@ const createAbhaAddress = async (txnId, abhaAddress, preferred = 1) => {
     console.log("Preferred:", preferred);
     console.log("==========================================");
 
-    const response = await axios.post(
-
-        `${process.env.ABDM_ABHA_BASE_URL}/abha/api/v3/enrollment/enrol/abha-address`,
-
-        {
-            txnId,
-            abhaAddress,
-            preferred: Number(preferred)
-        },
-
-        {
-            headers: {
-                Authorization: `Bearer ${token}`,
-                "REQUEST-ID": crypto.randomUUID(),
-                TIMESTAMP: new Date().toISOString(),
-                "Content-Type": "application/json",
-                Accept: "application/json"
+    const response = await withRetry(() =>
+        axios.post(
+            `${process.env.ABDM_ABHA_BASE_URL}/abha/api/v3/enrollment/enrol/abha-address`,
+            {
+                txnId,
+                abhaAddress,
+                preferred: Number(preferred)
             },
-            timeout: Number(process.env.ABDM_TIMEOUT || 30000)
-        }
-
+            {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "REQUEST-ID": crypto.randomUUID(),
+                    TIMESTAMP: new Date().toISOString(),
+                    "Content-Type": "application/json",
+                    Accept: "application/json"
+                },
+                timeout: Number(process.env.ABDM_TIMEOUT || 60000)
+            }
+        )
     );
 
     console.log("Create address response:", JSON.stringify(response.data, null, 2));

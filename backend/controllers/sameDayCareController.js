@@ -27,7 +27,8 @@ const createTreatment = async (req, res) => {
       procedureNotes, anaesthesiaUsed, anaesthesiaType,
       complications, prescriptionMedicines,
       reviewNotes, nextProcedurePlanned,
-      referredByDoctorRemarks, assignedStaffId, assignedStaffName
+      referredByDoctorRemarks, assignedStaffId, assignedStaffName,
+      printNotes, printAdvice
     } = req.body;
 
     if (!patientId || !treatmentType) {
@@ -112,6 +113,8 @@ const createTreatment = async (req, res) => {
       anaesthesiaType: anaesthesiaType || '',
       complications: complications || '',
       prescriptionMedicines: prescriptionMedicines || [],
+      printNotes: printNotes || [],
+      printAdvice: printAdvice || [],
       reviewNotes: reviewNotes || '',
       nextProcedurePlanned: nextProcedurePlanned || '',
       auditTrail: [{
@@ -127,6 +130,29 @@ const createTreatment = async (req, res) => {
     });
 
     await record.save();
+
+    // Sync SdtItem records for completed treatments to make them billable
+    if (record.status === 'Completed') {
+      await SdtItem.deleteMany({ treatmentId: record._id });
+      if (record.prescriptionMedicines && record.prescriptionMedicines.length > 0) {
+        for (const item of record.prescriptionMedicines) {
+          const sdtItem = new SdtItem({
+            hospitalId: record.hospitalId,
+            patientId: record.patientId,
+            treatmentId: record._id,
+            itemType: item.itemType === 'Consumable' ? 'Consumable' : 'Medicine',
+            name: item.medicineName,
+            price: 0,
+            quantity: item.qty || 1,
+            totalAmount: 0,
+            addedBy: req.user._id,
+            date: record.treatmentDate ? new Date(record.treatmentDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+          });
+          await sdtItem.save();
+        }
+      }
+    }
+
     res.status(201).json({ message: 'Same day care record saved', record });
   } catch (error) {
     console.error('Create Care Record Error:', error);
@@ -146,12 +172,13 @@ const updateTreatment = async (req, res) => {
     if (!record) return res.status(404).json({ message: 'Care record not found' });
 
     const fields = [
-      'diagnosis', 'treatmentNotes', 'prescription', 'followUpRequired', 'followUpDate',
+      'treatmentType', 'diagnosis', 'treatmentNotes', 'prescription', 'followUpRequired', 'followUpDate',
       'treatmentDate', 'price', 'isFixedPrice', 'status', 'patientName', 'uhid', 'mobile', 'gender', 'age',
       'chiefComplaint', 'presentIllness', 'clinicalFindings', 'medicalHistory', 'surgicalHistory', 'drugAllergies',
       'vitals', 'selectedInvestigations', 'attachments', 'treatmentPlan', 'procedure', 'productsMedicinesUsed',
       'procedureNotes', 'anaesthesiaUsed', 'anaesthesiaType', 'complications', 'prescriptionMedicines',
-      'reviewNotes', 'nextProcedurePlanned', 'source', 'referredByDoctorName'
+      'reviewNotes', 'nextProcedurePlanned', 'source', 'referredByDoctorName',
+      'printNotes', 'printAdvice'
     ];
 
     // Compute diffs
@@ -179,7 +206,7 @@ const updateTreatment = async (req, res) => {
         return;
       }
 
-      if (f === 'selectedInvestigations') {
+      if (f === 'selectedInvestigations' || f === 'printNotes' || f === 'printAdvice') {
         strOld = Array.isArray(oldVal) ? oldVal.join(', ') : '';
         strNew = Array.isArray(newVal) ? newVal.join(', ') : '';
       } else if (f === 'prescriptionMedicines') {
@@ -208,6 +235,41 @@ const updateTreatment = async (req, res) => {
     // Apply updates
     fields.forEach(f => { if (updateData[f] !== undefined) record[f] = updateData[f]; });
 
+    // Look up default price from settings if treatmentType is newly set and price is 0
+    if (updateData.treatmentType && (!record.price || record.price === 0)) {
+      try {
+        const settings = await IpdAdminSettings.findOne(tenantFilter(req));
+        let foundPrice = null;
+
+        if (settings?.sameDayCareCategories) {
+          for (const cat of settings.sameDayCareCategories) {
+            const sub = cat.subServices.find(s => s.name.toLowerCase() === updateData.treatmentType.toLowerCase());
+            if (sub) {
+              foundPrice = sub.price;
+              break;
+            }
+          }
+        }
+
+        if (foundPrice === null && settings?.sameDayTreatmentPrices) {
+          const service = settings.sameDayTreatmentPrices.find(s => s.name.toLowerCase() === updateData.treatmentType.toLowerCase());
+          if (service) foundPrice = service.price;
+        }
+
+        if (foundPrice !== null) {
+          record.price = foundPrice;
+        } else {
+          const defaultPrices = {
+            'Fracture': 500, 'Minor Injury': 300, 'Minor Stitches': 400,
+            'Small Burns': 350, 'Mild Allergic Reactions': 250, 'Dialysis': 2000
+          };
+          record.price = defaultPrices[updateData.treatmentType] || 0;
+        }
+      } catch (err) {
+        console.warn("Failed to update care price from settings", err);
+      }
+    }
+
     // Determine action type & remarks
     let actionType = 'Edit';
     let remarks = 'Record edited and updated';
@@ -233,6 +295,27 @@ const updateTreatment = async (req, res) => {
 
     record.updatedBy = req.user._id;
     await record.save();
+
+    // Sync SdtItem records for completed treatments to make them billable
+    await SdtItem.deleteMany({ treatmentId: record._id });
+    if (record.status === 'Completed' && record.prescriptionMedicines && record.prescriptionMedicines.length > 0) {
+      for (const item of record.prescriptionMedicines) {
+        const sdtItem = new SdtItem({
+          hospitalId: record.hospitalId,
+          patientId: record.patientId,
+          treatmentId: record._id,
+          itemType: item.itemType === 'Consumable' ? 'Consumable' : 'Medicine',
+          name: item.medicineName,
+          price: 0,
+          quantity: item.qty || 1,
+          totalAmount: 0,
+          addedBy: req.user._id,
+          date: record.treatmentDate ? new Date(record.treatmentDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+        });
+        await sdtItem.save();
+      }
+    }
+
     res.json({ message: 'Care record updated', record });
   } catch (error) {
     console.error('Update Care Record Error:', error);

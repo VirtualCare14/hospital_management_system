@@ -18,7 +18,7 @@ const sameDayTreatmentSchema = new mongoose.Schema({
   age: { type: Number },
   treatmentType: {
     type: String,
-    required: true
+    default: ''
   },
   source: {
     type: String,
@@ -66,8 +66,18 @@ const sameDayTreatmentSchema = new mongoose.Schema({
     duration: { type: String, default: '' },
     route: { type: String, default: '' },
     instructions: { type: String, default: '' },
-    itemType: { type: String, enum: ['Medicine', 'Consumable'], default: 'Medicine' }
+    itemType: { type: String, enum: ['Medicine', 'Consumable'], default: 'Medicine' },
+    dosageForm: { type: String, default: 'Tablet' },
+    strength: { type: String, default: '' },
+    dose: { type: String, default: '' },
+    morning: { type: Boolean, default: false },
+    afternoon: { type: Boolean, default: false },
+    night: { type: Boolean, default: false },
+    qty: { type: Number, default: 0 },
+    remarks: { type: String, default: '' }
   }],
+  printNotes: [{ type: String }],
+  printAdvice: [{ type: String }],
   // Follow Up
   followUpRequired: { type: String, enum: ['Yes', 'No', ''], default: '' },
   followUpDate: { type: Date },

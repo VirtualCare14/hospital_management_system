@@ -527,7 +527,7 @@ const reviewDischarge = async (req, res) => {
         admission.dischargeDate = record.dischargeDate || new Date();
         await admission.save();
 
-        // 3. Free the bed stay
+        // 3. Free the bed assignment
         if (admission.bedId) {
           const bed = await Bed.findById(admission.bedId);
           if (bed) {

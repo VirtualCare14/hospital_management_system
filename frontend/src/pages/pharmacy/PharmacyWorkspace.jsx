@@ -47,6 +47,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import client from '../../api/client';
+import { useHeader } from '../../context/HeaderContext';
 import * as XLSX from 'xlsx';
 import { createPortal } from 'react-dom';
 import './PharmacyInvoicePrint.css';
@@ -167,32 +168,12 @@ const PharmacyWorkspace = () => {
     setSearchParams({ section: sectionName });
   };
 
+  useHeader({ 
+    onRefresh: () => { loadStats(); loadBillingStats(); } 
+  });
+
   return (
     <div className="space-y-6">
-      {/* Module Title Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight flex items-center gap-2">
-            <Pill className="text-orange-500 h-8 w-8" />
-            Pharmacy Manager
-          </h1>
-          <p className="text-sm text-gray-500">
-            OPD Prescriptions, Walk-in Billing, GST Invoicing, Sales Return, Inventory Control, and Reporting Dashboards
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="inline-block bg-orange-100 border border-orange-200 text-orange-700 px-3 py-1.5 rounded-xl text-xs font-bold shadow-sm">
-            Hospital: {user?.hospitalName || 'HMS'}
-          </span>
-          <button 
-            onClick={() => { loadStats(); loadBillingStats(); }} 
-            className="p-2.5 bg-white border border-orange-200 hover:bg-orange-50 text-orange-600 rounded-xl transition shadow-sm"
-            title="Refresh statistics"
-          >
-            <RefreshCw className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
 
       {/* Render selected view */}
       {currentSection === 'dashboard' && (
@@ -2115,9 +2096,11 @@ const OpdPrescriptionsView = ({ changeSection, setSelectedPrescription }) => {
                   <div className="max-h-[140px] overflow-y-auto space-y-1.5 pr-1 divide-y divide-orange-50/30">
                     {pres.prescriptionDetails.medicines.map((med, idx) => (
                       <div key={idx} className="text-xs pt-1.5 first:pt-0">
-                        <div className="font-bold text-gray-855">{med.medicineName}</div>
+                        <div className="font-bold text-gray-855">
+                          {med.medicine || med.medicineName} {med.strength && `(${med.strength})`}
+                        </div>
                         <div className="text-[10px] text-gray-500">
-                          {med.dosage} | {med.duration} | {med.frequency}
+                          Form: {med.dosageForm || 'Tablet'} | Dose: {med.dose || med.dosage || '1'} | Dur: {med.duration || '-'} | Freq: {med.morning !== undefined ? `${med.morning ? '1' : '0'}-${med.afternoon ? '1' : '0'}-${med.night ? '1' : '0'}` : (med.frequency || '-')} | Qty: {med.qty !== undefined ? med.qty : '-'}
                         </div>
                       </div>
                     ))}
@@ -2221,24 +2204,37 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
     };
 
     for (const med of medList) {
+      const medName = med.medicine || med.medicineName;
+      if (!medName) continue;
+
       try {
-        const { data } = await client.get(`/pharmacy/inventory?limit=5&search=${encodeURIComponent(med.medicineName)}`);
+        const { data } = await client.get(`/pharmacy/inventory?limit=5&search=${encodeURIComponent(medName)}`);
         const stockItems = data.items.filter(it => 
-          it.itemName.toLowerCase() === med.medicineName.toLowerCase() && 
+          it.itemName.toLowerCase() === medName.toLowerCase() && 
           (it.quantityUnits || it.quantity) > 0 &&
           !isExpired(it.expiry)
         );
+
+        const presQty = parseFloat(med.qty) !== undefined && !isNaN(parseFloat(med.qty)) ? parseFloat(med.qty) : 1;
+
         if (stockItems.length > 0) {
           const stock = stockItems[0];
           const unitsPerPack = stock.unitsPerPack || 1;
           const availableQtyUnits = stock.quantityUnits || stock.quantity || 0;
+          
+          // Calculate packs required for the prescription quantity (med.qty)
+          // Billed item.quantity is in packs
+          const billQty = unitsPerPack > 0 ? (presQty / unitsPerPack) : presQty;
+          const maxAvailablePacks = unitsPerPack > 0 ? (availableQtyUnits / unitsPerPack) : availableQtyUnits;
+          const finalQty = Math.max(0.001, parseFloat(Math.min(billQty, maxAvailablePacks).toFixed(3)));
+
           loadedItems.push({
             itemName: stock.itemName,
             batch: stock.batch,
             expiry: stock.expiry,
             packType: stock.packType || '',
             unitsPerPack: unitsPerPack,
-            quantity: 1,
+            quantity: finalQty,
             mrp: stock.mrp || 0,
             discount: 0,
             sgst: stock.sgst || 0,
@@ -2251,12 +2247,12 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
           });
         } else {
           loadedItems.push({
-            itemName: med.medicineName,
+            itemName: medName,
             batch: 'NO_STOCK',
             expiry: '',
             packType: '',
             unitsPerPack: 1,
-            quantity: 1,
+            quantity: presQty,
             mrp: 0,
             discount: 0,
             sgst: 0,
@@ -2267,7 +2263,7 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
             availableQtyUnits: 0,
             pack: 'N/A'
           });
-          toast.error(`No available unexpired stock for prescribed medicine: ${med.medicineName}`);
+          toast.error(`No available unexpired stock for prescribed medicine: ${medName}`);
         }
       } catch (err) {
         console.error(err);
@@ -2362,12 +2358,6 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
 
   const handleQtyChange = (idx, val) => {
     const qty = Math.max(0, parseFloat(val) || 0);
-    const item = billItems[idx];
-    const unitsSold = Math.round(qty * (item.unitsPerPack || 1));
-    if (unitsSold > item.availableQtyUnits) {
-      toast.error(`Cannot exceed available stock of ${item.availableQtyUnits} units (${(item.availableQtyUnits / item.unitsPerPack).toFixed(1)} packs)`);
-      return;
-    }
     const updated = [...billItems];
     updated[idx].quantity = qty;
     updated[idx].customRateExGst = undefined;

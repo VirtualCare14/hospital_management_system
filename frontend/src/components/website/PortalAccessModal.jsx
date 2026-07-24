@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { KeyRound, ArrowRight, X, Building, ShieldCheck, Lock } from 'lucide-react';
+import { KeyRound, ArrowRight, X, Building } from 'lucide-react';
 import client from '../../api/client';
 import toast from 'react-hot-toast';
 
@@ -113,16 +113,6 @@ export default function PortalAccessModal({ isOpen, onClose }) {
                 )}
               </button>
             </form>
-
-            {/* Footer Information */}
-            <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
-              <span className="flex items-center gap-1">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> Case-insensitive
-              </span>
-              <span className="flex items-center gap-1">
-                <Lock className="w-3.5 h-3.5 text-amber-500" /> Secure Portal Session
-              </span>
-            </div>
           </motion.div>
         </div>
       )}

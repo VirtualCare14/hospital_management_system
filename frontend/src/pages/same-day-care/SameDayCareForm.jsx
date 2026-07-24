@@ -232,12 +232,36 @@ const SameDayCareForm = () => {
   const [prescItem, setPrescItem] = useState({
     itemType: 'Medicine',
     medicineName: '',
+    dosageForm: 'Tablet',
+    strength: '',
+    dose: '1',
+    morning: true,
+    afternoon: false,
+    night: true,
+    duration: '',
+    remarks: '',
+    qty: 0,
     dosage: '',
     frequency: '',
-    duration: '',
     route: '',
     instructions: ''
   });
+
+  // Helper to update prescItem with quantity auto-calculation
+  const updatePrescItem = (field, value) => {
+    setPrescItem(prev => {
+      const next = { ...prev, [field]: value };
+      if (next.itemType === 'Medicine') {
+        if (next.dosageForm === 'Tablet') {
+          const doseNum = parseFloat(next.dose) || 0;
+          const freqCount = (next.morning ? 1 : 0) + (next.afternoon ? 1 : 0) + (next.night ? 1 : 0);
+          const durDays = parseFloat(next.duration) || 0;
+          next.qty = parseFloat((doseNum * freqCount * durDays).toFixed(2));
+        }
+      }
+      return next;
+    });
+  };
 
   const calculateBmi = (w, h) => {
     const weightVal = parseFloat(w);
@@ -328,16 +352,49 @@ const SameDayCareForm = () => {
       toast.error('Please enter or select a medicine/consumable name');
       return;
     }
+
+    let finalItem = { ...prescItem };
+    if (finalItem.itemType === 'Medicine') {
+      finalItem.dosage = `${finalItem.dosageForm || 'Tablet'}${finalItem.strength ? ` (${finalItem.strength})` : ''} - Dose: ${finalItem.dose || '1'}`;
+      finalItem.frequency = `${finalItem.morning ? '1' : '0'}-${finalItem.afternoon ? '1' : '0'}-${finalItem.night ? '1' : '0'}`;
+      finalItem.instructions = finalItem.remarks || '';
+      finalItem.route = '';
+    } else {
+      // Consumable - don't ask or save any prescription fields
+      finalItem.dosage = '';
+      finalItem.frequency = '';
+      finalItem.duration = '';
+      finalItem.route = '';
+      finalItem.instructions = '';
+      finalItem.dosageForm = 'Tablet';
+      finalItem.strength = '';
+      finalItem.dose = '';
+      finalItem.morning = false;
+      finalItem.afternoon = false;
+      finalItem.night = false;
+      finalItem.qty = 0;
+      finalItem.remarks = '';
+    }
+
     setForm(prev => ({
       ...prev,
-      prescriptionMedicines: [...prev.prescriptionMedicines, { ...prescItem }]
+      prescriptionMedicines: [...prev.prescriptionMedicines, finalItem]
     }));
+
     setPrescItem({
       itemType: 'Medicine',
       medicineName: '',
+      dosageForm: 'Tablet',
+      strength: '',
+      dose: '1',
+      morning: true,
+      afternoon: false,
+      night: true,
+      duration: '',
+      remarks: '',
+      qty: 0,
       dosage: '',
       frequency: '',
-      duration: '',
       route: '',
       instructions: ''
     });
@@ -400,11 +457,11 @@ const SameDayCareForm = () => {
         if (recordId) {
           const { data: recData } = await client.get(`/same-day-care/treatment/${recordId}`);
           setRecord(recData);
-          currentType = recData.treatmentType;
+          currentType = recData.treatmentType || treatmentType;
           
           setForm({
             patientId: patientId,
-            treatmentType: recData.treatmentType,
+            treatmentType: recData.treatmentType || treatmentType,
             treatmentDate: recData.treatmentDate ? new Date(recData.treatmentDate).toISOString().split('T')[0] : '',
             diagnosis: recData.diagnosis || '',
             treatmentNotes: recData.treatmentNotes || '',
@@ -441,8 +498,28 @@ const SameDayCareForm = () => {
             complications: recData.complications || '',
             prescriptionMedicines: recData.prescriptionMedicines || []
           });
+
+          if (recData.printNotes && recData.printNotes.length > 0) {
+            setPrintNotes(recData.printNotes);
+          } else {
+            setPrintNotes(['']);
+          }
+          if (recData.printAdvice && recData.printAdvice.length > 0) {
+            setPrintAdvice(recData.printAdvice);
+          } else {
+            setPrintAdvice(['']);
+          }
+
           if (searchParams.get('print') === 'true') {
-            setShowPrintModal(true);
+            const hasNotes = (recData.printNotes && recData.printNotes.some(n => n.trim() !== '')) || 
+                             (recData.printAdvice && recData.printAdvice.some(a => a.trim() !== ''));
+            if (hasNotes) {
+              setTimeout(() => {
+                window.print();
+              }, 500);
+            } else {
+              setShowPrintModal(true);
+            }
           }
         }
 
@@ -525,14 +602,26 @@ const SameDayCareForm = () => {
 
     setSaving(true);
     try {
-      const payload = { ...form, status: statusToSave };
+      const payload = { 
+        ...form, 
+        status: statusToSave,
+        printNotes: printNotes.filter(n => n.trim() !== ''),
+        printAdvice: printAdvice.filter(a => a.trim() !== '')
+      };
       if (recordId) {
         await client.put(`/same-day-care/treatment/${recordId}`, payload);
         toast.success(`Care record updated as ${statusToSave}`);
         setIsLocked(true);
         setIsUnlocked(false);
         if (statusToSave === 'Completed') {
-          setShowPrintModal(true);
+          const hasNotes = printNotes.some(n => n.trim() !== '') || printAdvice.some(a => a.trim() !== '');
+          if (hasNotes) {
+            setTimeout(() => {
+              window.print();
+            }, 500);
+          } else {
+            setShowPrintModal(true);
+          }
         }
       } else {
         const { data } = await client.post('/same-day-care/treatment', payload);
@@ -596,6 +685,15 @@ const SameDayCareForm = () => {
 
   const handlePrint = () => { window.print(); };
 
+  const handlePrintClick = () => {
+    const hasNotes = printNotes.some(n => n.trim() !== '') || printAdvice.some(a => a.trim() !== '');
+    if (hasNotes) {
+      window.print();
+    } else {
+      setShowPrintModal(true);
+    }
+  };
+
   const ageFromDob = (dob) => {
     if (!dob) return '-';
     const diff = Date.now() - new Date(dob).getTime();
@@ -622,8 +720,9 @@ const SameDayCareForm = () => {
     : [];
 
   return (
-    <div className="space-y-6 print:space-y-4 max-w-7xl mx-auto pb-12">
-      {/* Top Navigation */}
+    <div className="max-w-7xl mx-auto pb-12">
+      <div className="no-print space-y-6">
+        {/* Top Navigation */}
       <div className="no-print flex items-center justify-between border-b border-orange-50 pb-4">
         <div className="flex items-center gap-4">
           <button onClick={() => navigate('/same-day-care')} className="p-2 rounded-xl hover:bg-orange-100 transition-colors">
@@ -842,7 +941,7 @@ const SameDayCareForm = () => {
           </div>
 
           {/* Vitals Form Block */}
-          <div className="card p-6 space-y-4 rounded-2xl">
+          <div className="card p-6 space-y-4 rounded-2xl sdt-vitals-block">
             <div className="flex items-center gap-2 border-b border-orange-100 pb-3">
               <Activity className="h-5 w-5 text-orange-500" />
               <h3 className="font-extrabold text-gray-900">Vitals & Anthropometry</h3>
@@ -1220,151 +1319,200 @@ const SameDayCareForm = () => {
 
         {/* Entry Drawer */}
         {!(viewMode || isLocked) && (
-          <div className="p-4 bg-orange-50/20 border border-orange-100/50 rounded-2xl grid gap-4 md:grid-cols-7 items-end relative z-10">
-            <div className="md:col-span-2">
-              <label className="mb-1 block text-[9px] font-bold uppercase text-gray-500">Item Selection Type</label>
-              <div className="flex items-center gap-4 py-1.5">
-                <label className="flex items-center gap-1 text-xs font-bold text-gray-700 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="itemSelectionType"
-                    checked={prescItem.itemType === 'Medicine'}
-                    onChange={() => {
-                      setPrescItem(prev => ({ ...prev, itemType: 'Medicine', medicineName: '' }));
-                      setMedQuery('');
-                    }}
-                  /> Medicine
-                </label>
-                <label className="flex items-center gap-1 text-xs font-bold text-gray-700 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="itemSelectionType"
-                    checked={prescItem.itemType === 'Consumable'}
-                    onChange={() => {
-                      setPrescItem(prev => ({ ...prev, itemType: 'Consumable', medicineName: '' }));
-                    }}
-                  /> Consumable
-                </label>
+          <div className="p-4 bg-orange-50/20 border border-orange-100/50 rounded-2xl relative z-10">
+            <div className="grid gap-4 grid-cols-1 md:grid-cols-12 items-end">
+              <div className="md:col-span-3">
+                <label className="mb-1 block text-[9px] font-bold uppercase text-gray-500">Item Selection Type</label>
+                <div className="flex items-center gap-4 py-1.5">
+                  <label className="flex items-center gap-1 text-xs font-bold text-gray-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="itemSelectionType"
+                      checked={prescItem.itemType === 'Medicine'}
+                      onChange={() => {
+                        setPrescItem(prev => ({ ...prev, itemType: 'Medicine', medicineName: '' }));
+                        setMedQuery('');
+                      }}
+                    /> Medicine
+                  </label>
+                  <label className="flex items-center gap-1 text-xs font-bold text-gray-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="itemSelectionType"
+                      checked={prescItem.itemType === 'Consumable'}
+                      onChange={() => {
+                        setPrescItem(prev => ({ ...prev, itemType: 'Consumable', medicineName: '' }));
+                      }}
+                    /> Consumable
+                  </label>
+                </div>
               </div>
-            </div>
 
-            <div className="md:col-span-2 relative">
-              <label className="mb-1 block text-[9px] font-bold uppercase text-gray-500">Name</label>
+              <div className="md:col-span-5 relative">
+                <label className="mb-1 block text-[9px] font-bold uppercase text-gray-500">Name</label>
+                {prescItem.itemType === 'Medicine' ? (
+                  <>
+                    <input
+                      type="text"
+                      placeholder="Search Pharmacy stock..."
+                      className="input py-2 text-xs"
+                      value={medQuery}
+                      onChange={(e) => {
+                        setMedQuery(e.target.value);
+                        setPrescItem(prev => ({ ...prev, medicineName: e.target.value }));
+                        setShowMedSuggestions(true);
+                      }}
+                      onFocus={() => setShowMedSuggestions(true)}
+                    />
+                    {showMedSuggestions && filteredMeds.length > 0 && (
+                      <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-100 shadow-xl rounded-xl z-50 overflow-hidden divide-y divide-gray-50 animate-in fade-in slide-in-from-top-1 duration-100">
+                        {filteredMeds.map((med, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => {
+                              setPrescItem(prev => ({ ...prev, medicineName: med.itemName }));
+                              setMedQuery(med.itemName);
+                              setShowMedSuggestions(false);
+                            }}
+                            className="w-full text-left p-2.5 hover:bg-orange-50/30 text-xs font-semibold text-gray-700 flex justify-between"
+                          >
+                            <span>{med.itemName}</span>
+                            <span className="text-[10px] text-gray-400 font-medium">Qty: {med.quantity}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {showMedSuggestions && medQuery.trim() && filteredMeds.length === 0 && (
+                      <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-100 shadow-xl rounded-xl z-50 p-3 text-center text-xs italic text-gray-400">
+                        No stock matches found
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <select
+                    className="input py-2 text-xs bg-white"
+                    value={prescItem.medicineName}
+                    onChange={(e) => setPrescItem(prev => ({ ...prev, medicineName: e.target.value }))}
+                  >
+                    <option value="">Select consumable...</option>
+                    {consumablesList.map((cons, idx) => (
+                      <option key={idx} value={cons.name}>{cons.name} (₹{cons.price})</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
               {prescItem.itemType === 'Medicine' ? (
                 <>
-                  <input
-                    type="text"
-                    placeholder="Search Pharmacy stock..."
-                    className="input py-2 text-xs"
-                    value={medQuery}
-                    onChange={(e) => {
-                      setMedQuery(e.target.value);
-                      setPrescItem(prev => ({ ...prev, medicineName: e.target.value }));
-                      setShowMedSuggestions(true);
-                    }}
-                    onFocus={() => setShowMedSuggestions(true)}
-                  />
-                  {showMedSuggestions && filteredMeds.length > 0 && (
-                    <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-100 shadow-xl rounded-xl z-50 overflow-hidden divide-y divide-gray-50 animate-in fade-in slide-in-from-top-1 duration-100">
-                      {filteredMeds.map((med, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => {
-                            setPrescItem(prev => ({ ...prev, medicineName: med.itemName }));
-                            setMedQuery(med.itemName);
-                            setShowMedSuggestions(false);
-                          }}
-                          className="w-full text-left p-2.5 hover:bg-orange-50/30 text-xs font-semibold text-gray-700 flex justify-between"
-                        >
-                          <span>{med.itemName}</span>
-                          <span className="text-[10px] text-gray-400 font-medium">Qty: {med.quantity}</span>
-                        </button>
+                  <div className="md:col-span-2">
+                    <label className="mb-1 block text-[9px] font-bold uppercase text-gray-500">Dosage Form</label>
+                    <select
+                      className="input py-2 text-xs bg-white"
+                      value={prescItem.dosageForm || 'Tablet'}
+                      onChange={(e) => updatePrescItem('dosageForm', e.target.value)}
+                    >
+                      <option value="Tablet">Tablet</option>
+                      <option value="Liquid">Liquid</option>
+                      <option value="Tube">Tube</option>
+                    </select>
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="mb-1 block text-[9px] font-bold uppercase text-gray-500">Strength (optional)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 500mg"
+                      className="input py-2 text-xs"
+                      value={prescItem.strength || ''}
+                      onChange={(e) => updatePrescItem('strength', e.target.value)}
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="mb-1 block text-[9px] font-bold uppercase text-gray-500">Dose</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 1"
+                      className="input py-2 text-xs text-center"
+                      value={prescItem.dose !== undefined ? prescItem.dose : '1'}
+                      onChange={(e) => updatePrescItem('dose', e.target.value)}
+                    />
+                  </div>
+
+                  <div className="md:col-span-4">
+                    <label className="mb-1 block text-[9px] font-bold uppercase text-gray-500">Frequency</label>
+                    <div className="grid grid-cols-3 gap-1 bg-white p-1.5 rounded-xl border border-gray-150">
+                      {['morning', 'afternoon', 'night'].map((time) => (
+                        <label key={time} className="flex items-center justify-center gap-1 cursor-pointer select-none py-1 px-0.5 rounded-lg hover:bg-orange-50/50 transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={prescItem[time]}
+                            onChange={(e) => updatePrescItem(time, e.target.checked)}
+                            className="rounded border-gray-300 text-orange-600 focus:ring-orange-600"
+                          />
+                          <span className="text-[10px] font-bold text-gray-700 capitalize">{time}</span>
+                        </label>
                       ))}
                     </div>
-                  )}
-                  {showMedSuggestions && medQuery.trim() && filteredMeds.length === 0 && (
-                    <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-100 shadow-xl rounded-xl z-50 p-3 text-center text-xs italic text-gray-400">
-                      No stock matches found
-                    </div>
-                  )}
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="mb-1 block text-[9px] font-bold uppercase text-gray-500">Duration (Days)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="Days"
+                      className="input py-2 text-xs text-center"
+                      value={prescItem.duration || ''}
+                      onChange={(e) => updatePrescItem('duration', e.target.value)}
+                    />
+                  </div>
+
+                  <div className="md:col-span-5">
+                    <label className="mb-1 block text-[9px] font-bold uppercase text-gray-500">Remarks</label>
+                    <input
+                      type="text"
+                      placeholder="Remarks"
+                      className="input py-2 text-xs"
+                      value={prescItem.remarks || ''}
+                      onChange={(e) => updatePrescItem('remarks', e.target.value)}
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="mb-1 block text-[9px] font-bold uppercase text-gray-500">Qty</label>
+                    <input
+                      type="number"
+                      min="0"
+                      className={`input py-2 text-xs text-center font-bold ${
+                        prescItem.dosageForm === 'Tablet'
+                          ? 'text-[#FF6A00] bg-orange-50/40 border-orange-200/50 cursor-not-allowed'
+                          : 'text-gray-800 bg-white border-slate-200'
+                      }`}
+                      value={prescItem.qty || 0}
+                      onChange={(e) => {
+                        if (prescItem.dosageForm !== 'Tablet') {
+                          updatePrescItem('qty', parseFloat(e.target.value) || 0);
+                        }
+                      }}
+                      readOnly={prescItem.dosageForm === 'Tablet'}
+                      disabled={prescItem.dosageForm === 'Tablet'}
+                    />
+                  </div>
                 </>
-              ) : (
-                <select
-                  className="input py-2 text-xs bg-white"
-                  value={prescItem.medicineName}
-                  onChange={(e) => setPrescItem(prev => ({ ...prev, medicineName: e.target.value }))}
+              ) : null}
+
+              <div className={prescItem.itemType === 'Medicine' ? 'md:col-span-3' : 'md:col-span-4'}>
+                <button
+                  type="button"
+                  onClick={addPrescriptionItem}
+                  className="btn py-2.5 text-xs font-bold w-full flex items-center justify-center gap-1 bg-orange-600 hover:bg-orange-700 text-white font-extrabold"
                 >
-                  <option value="">Select consumable...</option>
-                  {consumablesList.map((cons, idx) => (
-                    <option key={idx} value={cons.name}>{cons.name} (₹{cons.price})</option>
-                  ))}
-                </select>
-              )}
+                  <Plus className="h-4 w-4" /> Add Item
+                </button>
+              </div>
             </div>
-
-            <div>
-              <label className="mb-1 block text-[9px] font-bold uppercase text-gray-500">Dosage</label>
-              <input
-                type="text"
-                placeholder="e.g. 500mg"
-                className="input py-2 text-xs"
-                value={prescItem.dosage}
-                onChange={(e) => setPrescItem(prev => ({ ...prev, dosage: e.target.value }))}
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-[9px] font-bold uppercase text-gray-500">Frequency</label>
-              <input
-                type="text"
-                placeholder="e.g. 1-0-1"
-                className="input py-2 text-xs"
-                value={prescItem.frequency}
-                onChange={(e) => setPrescItem(prev => ({ ...prev, frequency: e.target.value }))}
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-[9px] font-bold uppercase text-gray-500">Duration</label>
-              <input
-                type="text"
-                placeholder="e.g. 5 Days"
-                className="input py-2 text-xs"
-                value={prescItem.duration}
-                onChange={(e) => setPrescItem(prev => ({ ...prev, duration: e.target.value }))}
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-[9px] font-bold uppercase text-gray-500">Route</label>
-              <input
-                type="text"
-                placeholder="e.g. Oral"
-                className="input py-2 text-xs"
-                value={prescItem.route}
-                onChange={(e) => setPrescItem(prev => ({ ...prev, route: e.target.value }))}
-              />
-            </div>
-
-            <div className="md:col-span-6">
-              <label className="mb-1 block text-[9px] font-bold uppercase text-gray-500">Instructions</label>
-              <input
-                type="text"
-                placeholder="e.g. Take after food"
-                className="input py-2 text-xs"
-                value={prescItem.instructions}
-                onChange={(e) => setPrescItem(prev => ({ ...prev, instructions: e.target.value }))}
-              />
-            </div>
-
-            <button
-              type="button"
-              onClick={addPrescriptionItem}
-              className="btn py-2 text-xs font-bold w-full flex items-center justify-center gap-1 bg-orange-600 hover:bg-orange-700"
-            >
-              <Plus className="h-4 w-4" /> Add Item
-            </button>
           </div>
         )}
 
@@ -1373,45 +1521,61 @@ const SameDayCareForm = () => {
           <div className="overflow-x-auto border border-gray-100 rounded-xl mt-4">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="bg-orange-50/50 border-b border-orange-100 text-gray-600 font-bold uppercase tracking-wider">
+                <tr className="bg-orange-50/50 border-b border-orange-100 text-gray-600 font-bold uppercase tracking-wider text-[10px]">
                   <th className="p-3 pl-4">Type</th>
                   <th className="p-3">Medicine / Consumable Name</th>
-                  <th className="p-3">Dosage</th>
+                  <th className="p-3">Dosage Form</th>
+                  <th className="p-3">Strength</th>
+                  <th className="p-3">Dose</th>
                   <th className="p-3">Frequency</th>
                   <th className="p-3">Duration</th>
-                  <th className="p-3">Route</th>
-                  <th className="p-3">Instructions</th>
+                  <th className="p-3">Remarks / Instructions</th>
+                  <th className="p-3 text-center">Qty</th>
                   {!(viewMode || isLocked) && <th className="p-3 w-16 text-center">Action</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 font-medium">
-                {form.prescriptionMedicines.map((item, idx) => (
-                  <tr key={idx} className="hover:bg-orange-50/10">
-                    <td className="p-3 pl-4 text-[10px]">
-                      <span className={`inline-flex px-1.5 py-0.5 rounded font-black text-[9px] uppercase tracking-wide ${
-                        item.itemType === 'Consumable' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
-                      }`}>
-                        {item.itemType}
-                      </span>
-                    </td>
-                    <td className="p-3 text-gray-900 font-extrabold">{item.medicineName}</td>
-                    <td className="p-3 text-gray-600">{item.dosage || '-'}</td>
-                    <td className="p-3 text-gray-600">{item.frequency || '-'}</td>
-                    <td className="p-3 text-gray-600">{item.duration || '-'}</td>
-                    <td className="p-3 text-gray-600">{item.route || '-'}</td>
-                    <td className="p-3 text-gray-500 font-normal italic">{item.instructions || '-'}</td>
-                    {!(viewMode || isLocked) && (
-                      <td className="p-3 text-center">
-                        <button
-                          onClick={() => removePrescriptionItem(idx)}
-                          className="p-1 rounded-lg text-red-500 hover:bg-red-50 hover:text-red-700 transition-all"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                {form.prescriptionMedicines.map((item, idx) => {
+                  const isConsumable = item.itemType === 'Consumable';
+                  const frequencyStr = isConsumable
+                    ? '-'
+                    : item.frequency || [
+                        item.morning ? '1' : '0',
+                        item.afternoon ? '1' : '0',
+                        item.night ? '1' : '0'
+                      ].join(' - ');
+
+                  return (
+                    <tr key={idx} className="hover:bg-orange-50/10">
+                      <td className="p-3 pl-4 text-[10px]">
+                        <span className={`inline-flex px-1.5 py-0.5 rounded font-black text-[9px] uppercase tracking-wide ${
+                          isConsumable ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
+                        }`}>
+                          {item.itemType}
+                        </span>
                       </td>
-                    )}
-                  </tr>
-                ))}
+                      <td className="p-3 text-gray-900 font-extrabold">{item.medicineName}</td>
+                      <td className="p-3 text-gray-650">{isConsumable ? '-' : item.dosageForm || 'Tablet'}</td>
+                      <td className="p-3 text-gray-650">{isConsumable ? '-' : item.strength || '-'}</td>
+                      <td className="p-3 text-gray-650">{isConsumable ? '-' : item.dose !== undefined ? item.dose : '1'}</td>
+                      <td className="p-3 text-gray-650 font-mono">{frequencyStr}</td>
+                      <td className="p-3 text-gray-650">{isConsumable ? '-' : item.duration ? `${item.duration} Days` : '-'}</td>
+                      <td className="p-3 text-gray-500 font-normal italic">{isConsumable ? '-' : item.remarks || item.instructions || '-'}</td>
+                      <td className="p-3 text-center font-bold text-[#FF6A00]">{isConsumable ? '-' : item.qty !== undefined ? item.qty : '-'}</td>
+                      {!(viewMode || isLocked) && (
+                        <td className="p-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => removePrescriptionItem(idx)}
+                            className="p-1 rounded-lg text-red-500 hover:bg-red-50 hover:text-red-700 transition-all"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1426,7 +1590,7 @@ const SameDayCareForm = () => {
           {isCompleted && (
             <button
               type="button"
-              onClick={() => setShowPrintModal(true)}
+              onClick={handlePrintClick}
               className="btn py-2.5 px-6 text-sm flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold"
             >
               <Printer className="h-4.5 w-4.5" />
@@ -1753,8 +1917,20 @@ const SameDayCareForm = () => {
                 Cancel
               </button>
               <button
-                onClick={() => {
+                onClick={async () => {
                   setShowPrintModal(false);
+                  try {
+                    if (recordId) {
+                      const payload = {
+                        ...form,
+                        printNotes: printNotes.filter(n => n.trim() !== ''),
+                        printAdvice: printAdvice.filter(a => a.trim() !== '')
+                      };
+                      await client.put(`/same-day-care/treatment/${recordId}`, payload);
+                    }
+                  } catch (err) {
+                    console.warn("Failed to auto-save print notes", err);
+                  }
                   setTimeout(() => {
                     window.print();
                   }, 300);
@@ -1767,23 +1943,91 @@ const SameDayCareForm = () => {
           </div>
         </div>
       )}
+    </div>
 
       {/* Dynamic Report Print Area (Only visible during print) */}
       <div id="sdt-print-area" className="hidden print:block bg-white text-black p-8 font-sans text-xs max-w-[210mm] mx-auto min-h-[297mm]">
         <style>{`
           @media print {
-            body * {
-              visibility: hidden !important;
+            @page {
+              size: A4 portrait;
+              margin: 0 !important;
             }
-            #sdt-print-area, #sdt-print-area * {
-              visibility: visible !important;
+            aside, header, nav, .no-print {
+              display: none !important;
+            }
+            html, body {
+              background: white !important;
+              background-color: white !important;
+              margin: 0 !important;
+              padding: 0 !important;
+            }
+            div:not(#sdt-print-area):not(#sdt-print-area *):not(.no-print),
+            main:not(#sdt-print-area):not(#sdt-print-area *):not(.no-print),
+            section:not(#sdt-print-area):not(#sdt-print-area *):not(.no-print) {
+              display: block !important;
+              position: static !important;
+              overflow: visible !important;
+              height: auto !important;
+              min-height: 0 !important;
+              max-height: none !important;
+              width: auto !important;
+              min-width: 0 !important;
+              max-width: none !important;
+              padding: 0 !important;
+              margin: 0 !important;
+              box-shadow: none !important;
+              background: transparent !important;
             }
             #sdt-print-area {
-              position: absolute !important;
-              left: 0 !important;
-              top: 0 !important;
-              width: 100% !important;
               display: block !important;
+              width: 100% !important;
+              margin: 0 !important;
+              padding: 20mm !important;
+              box-sizing: border-box !important;
+              background: white !important;
+            }
+          }
+          @media screen {
+            .no-print input, 
+            .no-print textarea, 
+            .no-print select,
+            .no-print button {
+              font-size: 0.9375rem !important; /* 15px - easily readable */
+            }
+            .no-print label {
+              font-size: 0.8125rem !important; /* 13px - standard label size */
+              letter-spacing: 0.05em !important;
+            }
+            .no-print p,
+            .no-print span,
+            .no-print td,
+            .no-print th {
+              font-size: 0.9375rem !important; /* 15px */
+            }
+            .no-print h1 {
+              font-size: 1.75rem !important;
+            }
+            .no-print h2 {
+              font-size: 1.5rem !important;
+            }
+            .no-print h3 {
+              font-size: 1.25rem !important;
+            }
+            .no-print .text-\[10px\],
+            .no-print .text-\[9px\] {
+              font-size: 0.8125rem !important; /* 13px */
+            }
+            
+            /* Compact styling for Vitals & Anthropometry section */
+            .sdt-vitals-block input,
+            .sdt-vitals-block p,
+            .sdt-vitals-block span {
+              font-size: 0.75rem !important; /* 12px / text-xs */
+            }
+            .sdt-vitals-block label {
+              font-size: 0.6875rem !important; /* 11px */
+              letter-spacing: 0.02em !important;
             }
           }
         `}</style>
@@ -1859,11 +2103,13 @@ const SameDayCareForm = () => {
                 <thead>
                   <tr className="bg-gray-100 border-b border-gray-300 font-bold text-[10px]">
                     <th className="p-1.5 border-r border-gray-300">{TRANSLATIONS[printLanguage]?.medicineName || 'Medicine Name'}</th>
-                    <th className="p-1.5 border-r border-gray-300">{TRANSLATIONS[printLanguage]?.dosage || 'Dosage'}</th>
+                    <th className="p-1.5 border-r border-gray-300">Dosage Form</th>
+                    <th className="p-1.5 border-r border-gray-300">Strength</th>
+                    <th className="p-1.5 border-r border-gray-300">Dose</th>
                     <th className="p-1.5 border-r border-gray-300">{TRANSLATIONS[printLanguage]?.frequency || 'Frequency'}</th>
                     <th className="p-1.5 border-r border-gray-300">{TRANSLATIONS[printLanguage]?.duration || 'Duration'}</th>
-                    <th className="p-1.5 border-r border-gray-300">Route</th>
-                    <th className="p-1.5">{TRANSLATIONS[printLanguage]?.instructions || 'Instructions'}</th>
+                    <th className="p-1.5 border-r border-gray-300">Remarks</th>
+                    <th className="p-1.5 text-center">Qty</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-300 text-[10px]">
@@ -1872,11 +2118,15 @@ const SameDayCareForm = () => {
                     .map((item, idx) => (
                       <tr key={idx}>
                         <td className="p-1.5 border-r border-gray-300 font-bold">{item.medicineName}</td>
-                        <td className="p-1.5 border-r border-gray-300">{item.dosage || '-'}</td>
-                        <td className="p-1.5 border-r border-gray-300">{item.frequency || '-'}</td>
-                        <td className="p-1.5 border-r border-gray-300">{item.duration || '-'}</td>
-                        <td className="p-1.5 border-r border-gray-300">{item.route || '-'}</td>
-                        <td className="p-1.5 italic">{item.instructions || '-'}</td>
+                        <td className="p-1.5 border-r border-gray-300">{item.dosageForm || 'Tablet'}</td>
+                        <td className="p-1.5 border-r border-gray-300">{item.strength || '-'}</td>
+                        <td className="p-1.5 border-r border-gray-300">{item.dose !== undefined ? item.dose : '1'}</td>
+                        <td className="p-1.5 border-r border-gray-300 font-mono">
+                          {item.frequency || [item.morning ? '1' : '0', item.afternoon ? '1' : '0', item.night ? '1' : '0'].join(' - ')}
+                        </td>
+                        <td className="p-1.5 border-r border-gray-300">{item.duration ? `${item.duration} Days` : '-'}</td>
+                        <td className="p-1.5 border-r border-gray-300 italic">{item.remarks || item.instructions || '-'}</td>
+                        <td className="p-1.5 text-center font-bold">{item.qty !== undefined ? item.qty : '-'}</td>
                       </tr>
                     ))}
                 </tbody>

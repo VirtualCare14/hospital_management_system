@@ -81,15 +81,7 @@ export default function Hero() {
             initial="hidden"
             animate="show"
           >
-            {/* Badge */}
-            <motion.div variants={fadeUp}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-orange-100 bg-gradient-to-r from-orange-50/50 via-white to-orange-50/30 mb-4 shadow-sm backdrop-blur-md"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-[#FF6A00]" />
-              <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#FF6A00]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                ALL-IN-ONE HEALTHCARE MANAGEMENT SYSTEM
-              </span>
-            </motion.div>
+
 
             {/* Headline */}
             <motion.h1

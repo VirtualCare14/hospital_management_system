@@ -48,7 +48,7 @@ const billingSchema = new mongoose.Schema({
   doctorName: { type: String, default: '' },
   billType: {
     type: String,
-    enum: ['OPD', 'SameDayTreatment', 'Lab', 'IPD', 'All'],
+    enum: ['OPD', 'SameDayTreatment', 'Lab', 'IPD', 'OT', 'Pharmacy', 'All'],
     required: true
   },
   items: [billingItemSchema],

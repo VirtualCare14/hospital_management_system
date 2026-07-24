@@ -16,6 +16,7 @@ import {
   AlertTriangle 
 } from 'lucide-react';
 import client from '../../api/client';
+import { useHeader } from '../../context/HeaderContext';
 
 const DEFAULT_BED_TYPES = [
   'Single Bed',
@@ -267,25 +268,18 @@ const HospitalRoomSettings = () => {
     return matchesSearch && matchesStatus;
   });
 
+  useHeader({ onRefresh: loadRooms });
+
   return (
     <div className="space-y-6">
-      {/* Header Banner */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Hospital Room Settings</h1>
-          <p className="text-sm text-gray-500">Configure room categories, beds, and pricing details for the IPD Admission module.</p>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={loadRooms} className="btn-secondary" title="Reload data">
-            <RefreshCw className="h-4 w-4" />
+      {/* Top Action Bar */}
+      {mode !== 'add' && (
+        <div className="flex justify-end">
+          <button onClick={handleAddMode} className="btn">
+            <Plus className="h-4 w-4" /> Add Room Config
           </button>
-          {mode !== 'add' && (
-            <button onClick={handleAddMode} className="btn">
-              <Plus className="h-4 w-4" /> Add Room Config
-            </button>
-          )}
         </div>
-      </div>
+      )}
 
       {/* Main Work Area */}
       <div className="grid gap-6 lg:grid-cols-[1fr_450px]">

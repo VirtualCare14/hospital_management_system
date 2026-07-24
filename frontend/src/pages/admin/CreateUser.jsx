@@ -20,6 +20,7 @@ const CreateUser = () => {
     DAYS.map((day) => ({ day, startTime: '09:00', endTime: '17:00', isAvailable: day !== 'Sunday' }))
   );
   const [showPassword, setShowPassword] = useState(false);
+  const [userToDelete, setUserToDelete] = useState(null);
   const { register, handleSubmit, reset, watch, formState: { errors } } = useForm({
     defaultValues: { role: 'reception', moduleAccess: ['1'] }
   });
@@ -148,11 +149,22 @@ const CreateUser = () => {
     );
   }
 
-  const deleteUser = async (user) => {
-    if (!window.confirm(`Delete user ${user.username}?`)) return;
-    await client.delete(`/admin/users/${user._id}`);
-    toast.success('User deleted');
-    load();
+  const confirmDeleteUser = (user) => {
+    setUserToDelete(user);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!userToDelete) return;
+    try {
+      const name = userToDelete.doctorName || userToDelete.username;
+      await client.delete(`/admin/users/${userToDelete._id}`);
+      toast.success(`User ${name} deleted successfully`);
+      setUserToDelete(null);
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete user');
+      setUserToDelete(null);
+    }
   };
 
   const openAvailability = async (user) => {
@@ -336,7 +348,7 @@ const CreateUser = () => {
                         <button className="btn-secondary text-xs" onClick={() => openAvailability(user)}><Clock className="h-3 w-3" /> Slots</button>
                       )}
                       <button className="btn-secondary text-xs" onClick={() => updateUser(user, { password: 'password123' })}><RefreshCcw className="h-3 w-3" /> Reset</button>
-                      <button className="btn-ghost text-xs text-red-600" onClick={() => deleteUser(user)}><Trash2 className="h-3 w-3" /> Delete</button>
+                      <button className="btn-ghost text-xs text-red-600 cursor-pointer" onClick={() => confirmDeleteUser(user)}><Trash2 className="h-3 w-3" /> Delete</button>
                     </td>
                   </tr>
                 ))}
@@ -393,6 +405,41 @@ const CreateUser = () => {
               ))}
             </div>
             <button className="btn mt-4 w-full" onClick={saveAvailability}><Save className="h-4 w-4" /> Save Availability</button>
+          </div>
+        )}
+
+        {/* Delete User Popup Modal */}
+        {userToDelete && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-orange-100 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200 text-center">
+              <div className="mx-auto w-14 h-14 rounded-full bg-red-50 text-red-600 flex items-center justify-center border border-red-100 shadow-sm">
+                <Trash2 className="h-7 w-7" />
+              </div>
+
+              <div>
+                <h3 className="text-base font-black text-gray-900">Delete User Account</h3>
+                <p className="text-sm text-gray-600 mt-2 font-medium">
+                  Are you sure you want to delete this <span className="font-bold text-gray-900 bg-orange-100/70 px-2 py-0.5 rounded-lg border border-orange-200">{userToDelete.doctorName || userToDelete.username}</span> user?
+                </p>
+              </div>
+
+              <div className="flex gap-3 justify-center pt-2">
+                <button
+                  type="button"
+                  onClick={() => setUserToDelete(null)}
+                  className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl transition-all w-full cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDelete}
+                  className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-red-200/50 w-full cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Trash2 className="h-4 w-4" /> OK
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

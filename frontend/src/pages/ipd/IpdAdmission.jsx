@@ -19,6 +19,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useHeader } from '../../context/HeaderContext';
 import client from '../../api/client';
 import { formatUhid } from '../../utils/uhid';
 
@@ -389,28 +390,14 @@ const IpdAdmission = () => {
     window.print();
   };
 
+  useHeader({ onRefresh: loadConfigData });
+
   const filteredBeds = bedsList.filter(b => b.status === 'Available');
   const selectedBedDetails = bedsList.find(b => b._id === selectedBedId);
 
   return (
     <div className="space-y-6 max-w-8xl mx-auto p-4 font-sans text-gray-800">
       <div className="space-y-6 no-print">
-        {/* Header */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-orange-100/50 pb-4">
-          <div>
-            <h1 className="text-[36px] font-black text-gray-900 tracking-tight leading-tight">IPD Inpatient Admissions</h1>
-            <p className="text-[14px] text-gray-500 mt-1">Admit patient cases to available beds, assign clinical consultants, and print admission summary cards.</p>
-          </div>
-          <button 
-            type="button"
-            onClick={loadAdmissions} 
-            className="btn-secondary h-11 px-5 rounded-lg text-sm font-bold flex items-center gap-2 shadow-sm border border-gray-250 cursor-pointer" 
-            title="Reload list"
-          >
-            <RefreshCw className="h-4 w-4" /> Reload Admissions
-          </button>
-        </div>
-
         {/* Grid Layout: Form on Left, List on Right */}
         <div className="grid gap-6 lg:grid-cols-[550px_1fr] items-start">
 

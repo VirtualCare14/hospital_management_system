@@ -28,11 +28,15 @@ const prescriptionSchema = new mongoose.Schema({
   },
   medicines: [{
     medicine: { type: String, required: true },
-    duration: { type: String, default: '' },
+    dosageForm: { type: String, default: 'Tablet' },
+    strength: { type: String, default: '' },
+    dose: { type: String, default: '' },
     morning: { type: Boolean, default: false },
     afternoon: { type: Boolean, default: false },
     night: { type: Boolean, default: false },
-    remarks: { type: String }
+    duration: { type: String, default: '' },
+    remarks: { type: String },
+    qty: { type: Number, default: 0 }
   }],
   diagnosisRemark: {
     type: String
