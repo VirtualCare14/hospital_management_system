@@ -458,13 +458,48 @@ exports.searchAbha = async (req, res) => {
                 message: "Invalid mobile number."
             });
         }
+        // Safe debug logging - no secrets
+        console.log("========== SEARCH ABHA CONTROLLER DEBUG ==========");
+        console.log("Received mobile:", mobile);
+        console.log("Mobile length:", String(mobile).length);
+        console.log("Calling accountService.searchAbha...");
+        console.log("==================================================");
         const response = await accountService.searchAbha(mobile);
+        
+        // Normalize ABDM response structure
+        // ABDM returns: [{ txnId, ABHA: [{ ABHANumber, name, ... }] }]
+        // We extract the ABHA array and return it cleanly
+        let normalizedResults = [];
+        let txnId = null;
+        
+        if (Array.isArray(response) && response.length > 0) {
+          txnId = response[0].txnId;
+          const abhaData = response[0].ABHA;
+          if (Array.isArray(abhaData)) {
+            normalizedResults = abhaData;
+          } else if (abhaData) {
+            normalizedResults = [abhaData];
+          }
+        }
+        
+        console.log("========== SEARCH ABHA NORMALIZED RESPONSE ==========");
+        console.log("txnId:", txnId);
+        console.log("Results count:", normalizedResults.length);
+        if (normalizedResults.length > 0) {
+          console.log("First result:", JSON.stringify(normalizedResults[0], null, 2));
+        }
+        console.log("==================================================");
+        
         res.status(200).json({
             success: true,
-            data: response
+            txnId: txnId,
+            results: normalizedResults
         });
     } catch (error) {
-        console.error("Search ABHA error:", error.response?.status || error.message);
+        console.error("========== SEARCH ABHA ERROR DEBUG ==========");
+        console.error("Status:", error.response?.status);
+        console.error("Error data:", JSON.stringify(error.response?.data));
+        console.error("==============================================");
         res.status(error.response?.status || 500).json({
             success: false,
             error: error.response?.data || error.message
@@ -628,7 +663,12 @@ exports.requestDeactivateOtp = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Request Deactivate OTP error:", error.response?.status || error.message);
+        console.error("========== REQUEST DEACTIVATE OTP ERROR ==========");
+        console.error("HTTP Status:", error.response?.status);
+        console.error("Request Payload:", JSON.stringify(req.body, null, 2));
+        console.error("ABDM Response:", JSON.stringify(error.response?.data, null, 2));
+        console.error("==================================================");
+        
         return res.status(error.response?.status || 500).json({
             success: false,
             error: error.response?.data || error.message
@@ -685,6 +725,265 @@ exports.verifyDeactivateOtp = async (req, res) => {
 
     } catch (error) {
         console.error("Verify Deactivate OTP error:", error.response?.status || error.message);
+        return res.status(error.response?.status || 500).json({
+            success: false,
+            error: error.response?.data || error.message
+        });
+    }
+};
+
+// ======================================
+// Request Reactivate OTP
+// ======================================
+exports.requestReactivateOtp = async (req, res) => {
+    try {
+        const userToken = getAbhaToken(req);
+        if (!userToken) {
+            return res.status(400).json({
+                success: false,
+                message: "ABHA user token is required (x-abha-token header)."
+            });
+        }
+
+        const { abhaNumber } = req.body || {};
+        if (!abhaNumber) {
+            return res.status(400).json({
+                success: false,
+                message: "ABHA Number is required."
+            });
+        }
+
+        const response = await profileService.requestReactivateOtp(userToken, abhaNumber);
+
+        return res.status(200).json({
+            success: true,
+            data: response
+        });
+
+    } catch (error) {
+        console.error("Request Reactivate OTP error:", error.response?.status || error.message);
+        return res.status(error.response?.status || 500).json({
+            success: false,
+            error: error.response?.data || error.message
+        });
+    }
+};
+
+// ======================================
+// Verify Reactivate OTP
+// ======================================
+exports.verifyReactivateOtp = async (req, res) => {
+    try {
+        const userToken = getAbhaToken(req);
+        if (!userToken) {
+            return res.status(400).json({
+                success: false,
+                message: "ABHA user token is required (x-abha-token header)."
+            });
+        }
+
+        const { txnId, otp } = req.body || {};
+
+        if (!txnId) {
+            return res.status(400).json({
+                success: false,
+                message: "txnId is required."
+            });
+        }
+
+        if (!otp) {
+            return res.status(400).json({
+                success: false,
+                message: "OTP is required."
+            });
+        }
+
+        if (!/^\d{6}$/.test(String(otp))) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid OTP. Must be 6 digits."
+            });
+        }
+
+        const response = await profileService.verifyReactivateOtp(userToken, {
+            txnId,
+            otp
+        });
+
+        return res.status(200).json({
+            success: true,
+            data: response
+        });
+
+    } catch (error) {
+        console.error("Verify Reactivate OTP error:", error.response?.status || error.message);
+        return res.status(error.response?.status || 500).json({
+            success: false,
+            error: error.response?.data || error.message
+        });
+    }
+};
+
+// ======================================
+// Request Delete OTP
+// ======================================
+exports.requestDeleteOtp = async (req, res) => {
+    try {
+        const userToken = getAbhaToken(req);
+        if (!userToken) {
+            return res.status(400).json({
+                success: false,
+                message: "ABHA user token is required (x-abha-token header)."
+            });
+        }
+
+        const { abhaNumber } = req.body || {};
+        if (!abhaNumber) {
+            return res.status(400).json({
+                success: false,
+                message: "ABHA Number is required."
+            });
+        }
+
+        const response = await profileService.requestDeleteOtp(userToken, abhaNumber);
+
+        return res.status(200).json({
+            success: true,
+            data: response
+        });
+
+    } catch (error) {
+        console.error("Request Delete OTP error:", error.response?.status || error.message);
+        return res.status(error.response?.status || 500).json({
+            success: false,
+            error: error.response?.data || error.message
+        });
+    }
+};
+
+// ======================================
+// Verify Delete OTP
+// ======================================
+exports.verifyDeleteOtp = async (req, res) => {
+    try {
+        const userToken = getAbhaToken(req);
+        if (!userToken) {
+            return res.status(400).json({
+                success: false,
+                message: "ABHA user token is required (x-abha-token header)."
+            });
+        }
+
+        const { txnId, otp, reason } = req.body || {};
+
+        if (!txnId) {
+            return res.status(400).json({
+                success: false,
+                message: "txnId is required."
+            });
+        }
+
+        if (!otp) {
+            return res.status(400).json({
+                success: false,
+                message: "OTP is required."
+            });
+        }
+
+        if (!/^\d{6}$/.test(String(otp))) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid OTP. Must be 6 digits."
+            });
+        }
+
+        const response = await profileService.verifyDeleteOtp(userToken, {
+            txnId,
+            otp,
+            reason
+        });
+
+        return res.status(200).json({
+            success: true,
+            data: response
+        });
+
+    } catch (error) {
+        console.error("Verify Delete OTP error:", error.response?.status || error.message);
+        return res.status(error.response?.status || 500).json({
+            success: false,
+            error: error.response?.data || error.message
+        });
+    }
+};
+
+// ======================================
+// Get ABHA Address Suggestions
+// ======================================
+exports.getAbhaAddressSuggestions = async (req, res) => {
+    try {
+        const response = await accountService.getAbhaAddressSuggestions();
+
+        return res.status(200).json({
+            success: true,
+            data: response
+        });
+
+    } catch (error) {
+        console.error("========== GET ABHA ADDRESS SUGGESTIONS ERROR ==========");
+        console.error("HTTP Status:", error.response?.status);
+        console.error("ABDM Response:", JSON.stringify(error.response?.data, null, 2));
+        console.error("========================================================");
+        
+        return res.status(error.response?.status || 500).json({
+            success: false,
+            error: error.response?.data || error.message
+        });
+    }
+};
+
+// ======================================
+// Create ABHA Address
+// ======================================
+exports.createAbhaAddress = async (req, res) => {
+    try {
+        const { txnId, abhaAddress, preferred } = req.body || {};
+
+        if (!txnId) {
+            return res.status(400).json({
+                success: false,
+                message: "Transaction ID is required."
+            });
+        }
+
+        if (!abhaAddress) {
+            return res.status(400).json({
+                success: false,
+                message: "ABHA Address is required."
+            });
+        }
+
+        if (preferred === undefined || preferred === null) {
+            return res.status(400).json({
+                success: false,
+                message: "Preferred flag is required."
+            });
+        }
+
+        const response = await accountService.createAbhaAddress(txnId, abhaAddress, preferred);
+
+        return res.status(200).json({
+            success: true,
+            data: response
+        });
+
+    } catch (error) {
+        console.error("========== CREATE ABHA ADDRESS ERROR ==========");
+        console.error("HTTP Status:", error.response?.status);
+        console.error("Request Body:", JSON.stringify(req.body, null, 2));
+        console.error("ABDM Response:", JSON.stringify(error.response?.data, null, 2));
+        console.error("================================================");
+        
         return res.status(error.response?.status || 500).json({
             success: false,
             error: error.response?.data || error.message

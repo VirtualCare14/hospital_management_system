@@ -3,15 +3,17 @@ import { createContext, useContext, useState, useCallback, useEffect } from 'rea
 const AbhaContext = createContext(null);
 
 export const AbhaProvider = ({ children }) => {
-  const [xtoken, setXtoken] = useState(null);
-  const [abhaNumber, setAbhaNumber] = useState(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [xtoken, setXtoken] = useState(() => localStorage.getItem('abha_xtoken'));
+  const [abhaNumber, setAbhaNumber] = useState(() => localStorage.getItem('abha_number'));
+  const [isAuthenticated, setIsAuthenticated] = useState(() => Boolean(localStorage.getItem('abha_xtoken')));
   const [profile, setProfile] = useState(null);
 
   const loginAbha = useCallback((token, abha) => {
     setXtoken(token);
     setAbhaNumber(abha || null);
     setIsAuthenticated(true);
+    localStorage.setItem('abha_xtoken', token);
+    if (abha) localStorage.setItem('abha_number', abha);
   }, []);
 
   const logoutAbha = useCallback(() => {
@@ -19,6 +21,8 @@ export const AbhaProvider = ({ children }) => {
     setAbhaNumber(null);
     setIsAuthenticated(false);
     setProfile(null);
+    localStorage.removeItem('abha_xtoken');
+    localStorage.removeItem('abha_number');
   }, []);
 
   const updateProfile = useCallback((data) => {
@@ -36,6 +40,8 @@ export const AbhaProvider = ({ children }) => {
       setAbhaNumber(null);
       setIsAuthenticated(false);
       setProfile(null);
+      localStorage.removeItem('abha_xtoken');
+      localStorage.removeItem('abha_number');
     };
 
     window.addEventListener('abha_force_logout', handleForceLogout);

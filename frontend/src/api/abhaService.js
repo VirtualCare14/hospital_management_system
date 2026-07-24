@@ -88,3 +88,38 @@ export const verifyDeactivateOtp = (xtoken, txnId, otp, reason) =>
   client.post('/abha/deactivate/verify', { txnId, otp, reason }, {
     headers: { 'x-abha-token': xtoken }
   });
+
+// ======================================
+// Reactivate ABHA
+// ======================================
+export const requestReactivateOtp = (xtoken, abhaNumber) =>
+  client.post('/abha/reactivate/request-otp', { abhaNumber }, {
+    headers: { 'x-abha-token': xtoken }
+  });
+
+export const verifyReactivateOtp = (xtoken, txnId, otp) =>
+  client.post('/abha/reactivate/verify', { txnId, otp }, {
+    headers: { 'x-abha-token': xtoken }
+  });
+
+// ======================================
+// Delete ABHA
+// ======================================
+export const requestDeleteOtp = (xtoken, abhaNumber) =>
+  client.post('/abha/delete/request-otp', { abhaNumber }, {
+    headers: { 'x-abha-token': xtoken }
+  });
+
+export const verifyDeleteOtp = (xtoken, txnId, otp, reason) =>
+  client.post('/abha/delete/verify', { txnId, otp, reason }, {
+    headers: { 'x-abha-token': xtoken }
+  });
+
+// ======================================
+// ABHA Address (Enrollment - no x-abha-token required)
+// ======================================
+export const getAbhaAddressSuggestions = () =>
+  client.get('/abha/address/suggestions');
+
+export const createAbhaAddress = (txnId, abhaAddress, preferred) =>
+  client.post('/abha/address', { txnId, abhaAddress, preferred });

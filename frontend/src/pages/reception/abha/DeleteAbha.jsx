@@ -1,13 +1,12 @@
 import { useState } from 'react';
 import toast from 'react-hot-toast';
-import { UserX, Send, KeyRound, Loader2, AlertTriangle, CheckCircle } from 'lucide-react';
-import { requestDeactivateOtp, verifyDeactivateOtp } from '../../../api/abhaService';
+import { Trash2, Send, KeyRound, Loader2, AlertTriangle, CheckCircle } from 'lucide-react';
+import { requestDeleteOtp, verifyDeleteOtp } from '../../../api/abhaService';
 import { useAbha } from '../../../context/AbhaContext';
 import OtpFlow from './OtpFlow';
 
-const DeactivateAbha = () => {
+const DeleteAbha = () => {
   const { xtoken, isAuthenticated, logoutAbha, abhaNumber } = useAbha();
-  const [showConfirm, setShowConfirm] = useState(true);
   const [step, setStep] = useState(0); // 0: confirm, 1: otp, 2: success
   const [otp, setOtp] = useState('');
   const [reason, setReason] = useState('');
@@ -35,12 +34,11 @@ const DeactivateAbha = () => {
     setError(null);
     setShowInputModal(false);
     try {
-      const res = await requestDeactivateOtp(xtoken, abha);
+      const res = await requestDeleteOtp(xtoken, abha);
       const txn = res.data?.data?.txnId || res.data?.txnId;
       setTxnId(txn);
-      setShowConfirm(false);
       setStep(1);
-      toast.success('Deactivation OTP sent to your registered mobile');
+      toast.success('Deletion OTP sent to your registered mobile');
     } catch (err) {
       const status = err.response?.status;
       const msg = err.response?.data?.error?.message || err.response?.data?.message || 'Failed to send OTP';
@@ -69,9 +67,9 @@ const DeactivateAbha = () => {
     setLoading(true);
     setError(null);
     try {
-      await verifyDeactivateOtp(xtoken, txnId, otp, reason || undefined);
+      await verifyDeleteOtp(xtoken, txnId, otp, reason || undefined);
       setStep(2);
-      toast.success('ABHA deactivated successfully');
+      toast.success('ABHA account deleted successfully');
       logoutAbha();
     } catch (err) {
       const status = err.response?.status;
@@ -87,8 +85,7 @@ const DeactivateAbha = () => {
     }
   };
 
-  const handleCancel = () => {
-    setShowConfirm(true);
+  const handleReset = () => {
     setStep(0);
     setOtp('');
     setReason('');
@@ -97,49 +94,52 @@ const DeactivateAbha = () => {
   };
 
   // Confirmation Dialog
-  if (showConfirm) {
+  if (step === 0) {
     return (
-    <div className="max-w-3xl w-full">
+      <div className="max-w-3xl w-full">
         <div className="bg-white border border-red-200 rounded-xl p-6 space-y-6">
           <div className="flex items-center gap-4">
             <div className="w-14 h-14 bg-red-100 rounded-xl flex items-center justify-center shrink-0">
-              <AlertTriangle className="h-7 w-7 text-red-600" />
+              <Trash2 className="h-7 w-7 text-red-600" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-gray-800">Deactivate ABHA Account</h2>
-              <p className="text-sm text-gray-500">This is a reversible action</p>
+              <h2 className="text-lg font-bold text-gray-800">Delete ABHA Account</h2>
+              <p className="text-sm text-gray-500">Permanently remove your ABHA account</p>
             </div>
           </div>
 
           <div className="bg-red-50 border border-red-200 rounded-xl p-4">
             <p className="text-sm text-red-700 font-medium">
-              By proceeding, your ABHA account will be deactivated. You will not be able to use
-              ABHA services until you reactivate your account.
+              <strong>Warning:</strong> This action is irreversible. Your ABHA account will be permanently deleted.
             </p>
             <ul className="mt-3 space-y-1.5 text-sm text-red-600">
               <li className="flex items-center gap-2">
                 <span className="w-1.5 h-1.5 bg-red-400 rounded-full" />
-                Profile operations will be disabled
+                All ABHA data will be permanently removed
               </li>
               <li className="flex items-center gap-2">
                 <span className="w-1.5 h-1.5 bg-red-400 rounded-full" />
-                You can reactivate your ABHA at any time
+                This action cannot be undone
               </li>
               <li className="flex items-center gap-2">
                 <span className="w-1.5 h-1.5 bg-red-400 rounded-full" />
-                An OTP will be sent to your registered mobile
+                You will need to create a new ABHA if you want to use the service again
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 bg-red-400 rounded-full" />
+                An OTP will be sent to your registered mobile for verification
               </li>
             </ul>
           </div>
 
           <div>
             <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-gray-500">
-              Reason for deactivation (optional)
+              Reason for deletion (optional)
             </label>
             <textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="Enter reason..."
+              placeholder="Enter reason for account deletion..."
               className="input min-h-[80px] resize-none"
               rows={3}
             />
@@ -148,7 +148,7 @@ const DeactivateAbha = () => {
           <div className="flex gap-3">
             <button
               type="button"
-              onClick={handleCancel}
+              onClick={() => window.history.back()}
               className="btn-secondary flex-1 justify-center"
             >
               Cancel
@@ -159,8 +159,8 @@ const DeactivateAbha = () => {
               disabled={loading}
               className="flex-1 justify-center inline-flex items-center gap-2 rounded-xl bg-red-500 hover:bg-red-600 px-4 py-2.5 font-bold text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserX className="h-4 w-4" />}
-              {loading ? 'Sending OTP...' : 'Proceed to Deactivate'}
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              {loading ? 'Sending OTP...' : 'Proceed to Delete'}
             </button>
           </div>
 
@@ -169,44 +169,44 @@ const DeactivateAbha = () => {
               {error}
             </div>
           )}
-        </div>
 
-        {/* Custom ABHA Number Input Modal */}
-        {showInputModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl p-6 max-w-md w-full space-y-4">
-              <h3 className="text-lg font-bold text-gray-800">Enter ABHA Number</h3>
-              <p className="text-sm text-gray-600">Please enter your ABHA number to proceed with deactivation</p>
-              <input
-                type="text"
-                inputMode="numeric"
-                maxLength={14}
-                value={inputAbha}
-                onChange={(e) => setInputAbha(e.target.value.replace(/\D/g, ''))}
-                placeholder="Enter ABHA number"
-                className="input"
-                autoFocus
-              />
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => { setShowInputModal(false); setInputAbha(''); }}
-                  className="btn-secondary flex-1 justify-center"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleInputSubmit(inputAbha)}
-                  disabled={loading || inputAbha.length < 10}
-                  className="btn flex-1 justify-center disabled:opacity-50"
-                >
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Continue'}
-                </button>
+          {/* Custom ABHA Number Input Modal */}
+          {showInputModal && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-xl p-6 max-w-md w-full space-y-4">
+                <h3 className="text-lg font-bold text-gray-800">Enter ABHA Number</h3>
+                <p className="text-sm text-gray-600">Please enter your ABHA number to proceed with deletion</p>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={14}
+                  value={inputAbha}
+                  onChange={(e) => setInputAbha(e.target.value.replace(/\D/g, ''))}
+                  placeholder="Enter ABHA number"
+                  className="input"
+                  autoFocus
+                />
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => { setShowInputModal(false); setInputAbha(''); }}
+                    className="btn-secondary flex-1 justify-center"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleInputSubmit(inputAbha)}
+                    disabled={loading || inputAbha.length < 10}
+                    className="btn flex-1 justify-center disabled:opacity-50"
+                  >
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Continue'}
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     );
   }
@@ -214,7 +214,7 @@ const DeactivateAbha = () => {
   return (
     <div className="max-w-3xl w-full">
       <OtpFlow
-        steps={['Confirm Deactivation', 'Verify OTP', 'Success']}
+        steps={['Confirm Deletion', 'Verify OTP', 'Success']}
         currentStep={step}
         error={error}
       >
@@ -222,7 +222,7 @@ const DeactivateAbha = () => {
           <form onSubmit={handleVerifyOtp} className="space-y-5">
             <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2 text-sm text-red-700">
               <AlertTriangle className="h-4 w-4 shrink-0" />
-              Deactivation OTP sent to your registered mobile
+              Deletion OTP sent to your registered mobile. Please verify to permanently delete your account.
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-gray-500">
@@ -243,7 +243,7 @@ const DeactivateAbha = () => {
             <div className="flex gap-3">
               <button
                 type="button"
-                onClick={() => { setShowConfirm(true); setStep(0); setOtp(''); setError(null); }}
+                onClick={() => { setStep(0); setOtp(''); setError(null); }}
                 className="btn-secondary flex-1 justify-center"
                 disabled={loading}
               >
@@ -255,7 +255,7 @@ const DeactivateAbha = () => {
                 className="flex-1 justify-center inline-flex items-center gap-2 rounded-xl bg-red-500 hover:bg-red-600 px-4 py-2.5 font-bold text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
-                {loading ? 'Deactivating...' : 'Confirm Deactivation'}
+                {loading ? 'Deleting...' : 'Confirm Deletion'}
               </button>
             </div>
           </form>
@@ -263,13 +263,13 @@ const DeactivateAbha = () => {
 
         {step === 2 && (
           <div className="text-center py-6">
-            <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <UserX className="h-8 w-8 text-yellow-600" />
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="h-8 w-8 text-red-600" />
             </div>
-            <h3 className="text-lg font-bold text-gray-800 mb-2">ABHA Deactivated</h3>
+            <h3 className="text-lg font-bold text-gray-800 mb-2">ABHA Account Deleted</h3>
             <p className="text-sm text-gray-600">
-              Your ABHA account has been deactivated. You have been logged out of the ABHA session.
-              You can reactivate your account later.
+              Your ABHA account has been permanently deleted. You have been logged out.
+              If you need to use ABHA services in the future, you will need to create a new account.
             </p>
           </div>
         )}
@@ -278,4 +278,4 @@ const DeactivateAbha = () => {
   );
 };
 
-export default DeactivateAbha;
+export default DeleteAbha;

@@ -19,7 +19,8 @@ import {
   LogOut,
   CheckCircle,
   IdCard,
-  AlertCircle
+  AlertCircle,
+  Hash
 } from 'lucide-react';
 import CreateAbha from './CreateAbha';
 import AbhaLogin from './AbhaLogin';
@@ -30,6 +31,9 @@ import AbhaQrCode from './AbhaQrCode';
 import UpdateMobile from './UpdateMobile';
 import UpdateEmail from './UpdateEmail';
 import DeactivateAbha from './DeactivateAbha';
+import ReactivateAbha from './ReactivateAbha';
+import DeleteAbha from './DeleteAbha';
+import AbhaAddress from './AbhaAddress';
 
 const FeatureCard = ({ icon: Icon, title, description, onClick, disabled, badge }) => (
   <button
@@ -110,6 +114,9 @@ const AbhaDashboard = () => {
     mobile: { title: 'Update Mobile', component: UpdateMobile },
     email: { title: 'Update Email', component: UpdateEmail },
     deactivate: { title: 'Deactivate ABHA', component: DeactivateAbha },
+    reactivate: { title: 'Reactivate ABHA', component: ReactivateAbha },
+    delete: { title: 'Delete ABHA', component: DeleteAbha },
+    abhaAddress: { title: 'ABHA Address', component: AbhaAddress },
   };
 
   const ActiveComponent = activeView ? views[activeView]?.component : null;
@@ -271,6 +278,12 @@ const AbhaDashboard = () => {
                 description="Change registered email address"
                 onClick={() => setActiveView('email')}
               />
+              <FeatureCard
+                icon={Hash}
+                title="ABHA Address"
+                description="Create or update preferred ABHA address"
+                onClick={() => setActiveView('abhaAddress')}
+              />
             </div>
           </SectionCard>
 
@@ -287,17 +300,13 @@ const AbhaDashboard = () => {
                 icon={RefreshCw}
                 title="Reactivate ABHA"
                 description="Reactivate a deactivated ABHA account"
-                onClick={() => {}}
-                disabled={true}
-                badge="Coming Soon"
+                onClick={() => setActiveView('reactivate')}
               />
               <FeatureCard
                 icon={Trash2}
                 title="Delete ABHA"
                 description="Permanently delete ABHA account"
-                onClick={() => {}}
-                disabled={true}
-                badge="Coming Soon"
+                onClick={() => setActiveView('delete')}
               />
             </div>
           </SectionCard>

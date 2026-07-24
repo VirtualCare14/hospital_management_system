@@ -47,6 +47,35 @@ const AbhaProfile = () => {
     }
   }, [isAuthenticated]);
 
+  // Format date of birth
+  const formatDateOfBirth = (data) => {
+    const dateValue = data.dateOfBirth || data.dob || data.yearOfBirth;
+    if (!dateValue) return null;
+    
+    // If it's just a year (4 digits)
+    if (/^\d{4}$/.test(String(dateValue))) {
+      return `Year: ${dateValue}`;
+    }
+    
+    // If it's a full date, try to format it
+    try {
+      const date = new Date(dateValue);
+      if (!isNaN(date.getTime())) {
+        return date.toLocaleDateString('en-IN', { 
+          day: '2-digit', 
+          month: 'long', 
+          year: 'numeric' 
+        });
+      }
+    } catch (e) {
+      // If parsing fails, return as is
+    }
+    
+    return dateValue;
+  };
+
+  const dobValue = formatDateOfBirth(profileData);
+
   // Build a clean key-value display
   const fields = profileData ? [
     { label: 'ABHA Number', value: profileData.abhaNumber || profileData.abha || profileData.id, icon: IdCard },
@@ -54,7 +83,7 @@ const AbhaProfile = () => {
     { label: 'Mobile', value: profileData.mobile || profileData.phoneNumber, icon: Phone },
     { label: 'Email', value: profileData.email, icon: Mail },
     { label: 'Gender', value: profileData.gender, icon: Hash },
-    { label: 'Date of Birth', value: profileData.dateOfBirth || profileData.dob || profileData.yearOfBirth, icon: Calendar },
+    { label: 'Date of Birth', value: dobValue, icon: Calendar },
     { label: 'Address', value: profileData.address, icon: MapPin },
     { label: 'State', value: profileData.state, icon: MapPin },
     { label: 'District', value: profileData.district, icon: MapPin },

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import toast from 'react-hot-toast';
-import { Search, Loader2, User, Phone, Mail, Hash } from 'lucide-react';
+import { Search, Loader2, User, Hash, CheckCircle, XCircle, Shield } from 'lucide-react';
 import { searchAbha } from '../../../api/abhaService';
 
 const SearchAbha = () => {
@@ -24,24 +24,20 @@ const SearchAbha = () => {
     setNotFound(false);
     try {
       const res = await searchAbha(mobile);
-      // Backend returns: { success: true, data: <ABDM response> }
-      // ABDM may return: { accounts: [...] } or a single account object
-      const data = res.data?.data || res.data;
+      // Backend returns normalized response: { success: true, txnId: "...", results: [...] }
+      const data = res.data?.results || res.data?.data || res.data;
       setResult(data);
       setSearched(true);
     } catch (err) {
       const resp = err.response?.data;
-      // Check for ABDM-1114: User not found (404 from ABDM)
       const errorCode = resp?.error?.code || resp?.error?.error?.code;
       const errorMessage = resp?.error?.message || resp?.error?.error?.message || resp?.message || '';
 
       if (errorCode === 'ABDM-1114' || errorMessage?.toLowerCase().includes('user not found') || errorMessage?.toLowerCase().includes('no account found')) {
-        // User not found — this is a clean "no results" case, not an error
         setNotFound(true);
         setSearched(true);
         setResult(null);
       } else {
-        // Real error
         setError(typeof errorMessage === 'string' ? errorMessage : JSON.stringify(errorMessage || 'Search failed'));
         setSearched(true);
       }
@@ -50,26 +46,24 @@ const SearchAbha = () => {
     }
   };
 
-  // Helper: check if response has any valid account data
   const hasValidAccounts = (data) => {
     if (!data) return false;
-    // ABDM may return { accounts: [...] }
-    if (data.accounts && Array.isArray(data.accounts)) {
-      return data.accounts.length > 0;
-    }
-    // Or a single account with abhaNumber or healthId
-    if (data.abhaNumber || data.healthId || data.id) {
-      return true;
+    if (Array.isArray(data)) {
+      return data.length > 0;
     }
     return false;
   };
 
-  // Render a single account card
   const renderAccount = (account, idx) => {
-    // Skip if no identifying field exists
-    if (!account.abhaNumber && !account.healthId && !account.id && !account.name) {
+    if (!account.ABHANumber && !account.abhaNumber && !account.healthId && !account.id && !account.name) {
       return null;
     }
+    const abhaNumber = account.ABHANumber || account.abhaNumber || account.healthId || account.id || '';
+    const name = account.name || account.fullName || 'ABHA Account';
+    const gender = account.gender || '';
+    const kycVerified = account.kycVerified || '';
+    const authMethods = account.authMethods || [];
+
     return (
       <div key={idx} className="bg-gradient-to-r from-orange-50 to-amber-50 rounded-xl p-4 border border-orange-100">
         <div className="flex items-center gap-3 mb-2">
@@ -77,41 +71,53 @@ const SearchAbha = () => {
             <User className="h-5 w-5 text-orange-600" />
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-bold text-gray-800 truncate">
-              {account.name || account.fullName || 'ABHA Account'}
-            </p>
-            <p className="text-xs text-gray-500 font-mono">
-              {account.abhaNumber || account.healthId || account.id || ''}
-            </p>
+            <p className="text-sm font-bold text-gray-800 truncate">{name}</p>
+            <p className="text-xs text-gray-500 font-mono">{abhaNumber}</p>
           </div>
         </div>
-        {(account.mobile || account.phoneNumber) && (
-          <div className="flex items-center gap-2 text-xs text-gray-600 mt-1.5">
-            <Phone className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-            <span>{account.mobile || account.phoneNumber}</span>
-          </div>
-        )}
-        {account.email && (
-          <div className="flex items-center gap-2 text-xs text-gray-600 mt-1">
-            <Mail className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-            <span>{account.email}</span>
-          </div>
-        )}
-        {account.gender && (
-          <div className="flex items-center gap-2 text-xs text-gray-600 mt-1">
-            <Hash className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-            <span>{account.gender}{account.yearOfBirth ? ` · ${account.yearOfBirth}` : ''}</span>
-          </div>
-        )}
+
+        <div className="space-y-2">
+          {gender && (
+            <div className="flex items-center gap-2 text-xs text-gray-600">
+              <Hash className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+              <span>Gender: {gender}</span>
+            </div>
+          )}
+
+          {kycVerified && (
+            <div className={`flex items-center gap-2 text-xs font-medium ${kycVerified === 'true' || kycVerified === true ? 'text-green-700' : 'text-red-700'}`}>
+              {kycVerified === 'true' || kycVerified === true ? (
+                <>
+                  <CheckCircle className="h-3.5 w-3.5 shrink-0" />
+                  <span>KYC Verified</span>
+                </>
+              ) : (
+                <>
+                  <XCircle className="h-3.5 w-3.5 shrink-0" />
+                  <span>KYC Not Verified</span>
+                </>
+              )}
+            </div>
+          )}
+
+          {authMethods.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              <Shield className="h-3.5 w-3.5 text-gray-400 shrink-0 mt-1" />
+              <div className="flex flex-wrap gap-1.5">
+                {authMethods.map((method, idx) => (
+                  <span
+                    key={idx}
+                    className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border border-orange-200 bg-orange-50 text-orange-700"
+                  >
+                    {method.replace(/_/g, ' ')}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     );
-  };
-
-  // Get accounts array from response
-  const getAccounts = (data) => {
-    if (data.accounts && Array.isArray(data.accounts)) return data.accounts;
-    if (Array.isArray(data)) return data;
-    return [data];
   };
 
   return (
@@ -122,7 +128,6 @@ const SearchAbha = () => {
           <p className="text-sm text-gray-500">Search for an ABHA account by mobile number</p>
         </div>
 
-        {/* Real errors (network, validation, etc.) */}
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm font-medium">
             {error}
@@ -135,7 +140,7 @@ const SearchAbha = () => {
               Mobile Number
             </label>
             <div className="relative">
-              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input
                 type="text"
                 inputMode="numeric"
@@ -159,24 +164,21 @@ const SearchAbha = () => {
           </button>
         </form>
 
-        {/* Not found (ABDM-1114) — clean message, no red error, no N/A cards */}
         {notFound && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm font-medium text-amber-700">
             No ABHA account found for this mobile number.
           </div>
         )}
 
-        {/* Valid results */}
         {searched && !error && !notFound && result && hasValidAccounts(result) && (
           <div className="border-t border-orange-100 pt-5">
             <h3 className="text-sm font-bold text-gray-700 mb-3">Search Results</h3>
             <div className="space-y-3">
-              {getAccounts(result).map((account, idx) => renderAccount(account, idx)).filter(Boolean)}
+              {Array.isArray(result) ? result.map((account, idx) => renderAccount(account, idx)).filter(Boolean) : renderAccount(result, 0)}
             </div>
           </div>
         )}
 
-        {/* Empty result object with no valid accounts */}
         {searched && !error && !notFound && result && !hasValidAccounts(result) && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm font-medium text-amber-700">
             No ABHA account found for this mobile number.
