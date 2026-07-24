@@ -75,7 +75,7 @@ const addTimeline = async (req, admissionId, patientId, activity, description, m
 // @access  Private
 const getIpdPatientList = async (req, res) => {
   try {
-    const { search, roomType, bedType, status, fromDate, toDate } = req.query;
+    const { search, roomType, bedType, status, fromDate, toDate, page = 1, limit = 20 } = req.query;
 
     let query = tenantFilter(req);
 
@@ -139,6 +139,24 @@ const getIpdPatientList = async (req, res) => {
         };
       })
     );
+
+    if (req.query.page || req.query.limit) {
+      const currentPage = Math.max(1, parseInt(page) || 1);
+      const limitVal = Math.max(1, parseInt(limit) || 20);
+      const totalRecords = admissionsWithOt.length;
+      const totalPages = Math.ceil(totalRecords / limitVal) || 1;
+      const paginated = admissionsWithOt.slice((currentPage - 1) * limitVal, currentPage * limitVal);
+
+      return res.status(200).json({
+        admissions: paginated,
+        page: currentPage,
+        pageSize: limitVal,
+        totalRecords,
+        totalPages,
+        hasNextPage: currentPage < totalPages,
+        hasPreviousPage: currentPage > 1
+      });
+    }
 
     res.status(200).json(admissionsWithOt);
   } catch (error) {

@@ -13,7 +13,7 @@ export default function Footer() {
     },
     {
       title: 'Legal',
-      links: ['Privacy Policy', 'Terms of Use', 'HIPAA Compliance', 'Data Security', 'Cookie Policy'],
+      links: ['Privacy Policy', 'Terms of Use', 'Data Security', 'Cookie Policy'],
     },
   ];
 
@@ -76,7 +76,7 @@ export default function Footer() {
             &copy; {currentYear} Medora360. All rights reserved.
           </p>
           <div className="flex gap-6">
-            {['Privacy', 'Terms', 'HIPAA'].map((item) => (
+            {['Privacy', 'Terms'].map((item) => (
               <a key={item} href="#" className="font-sans text-xs text-white/28 hover:text-[#FF6A00] transition-colors duration-200">
                 {item}
               </a>

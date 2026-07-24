@@ -7,6 +7,7 @@ import {
   ArrowRight, Edit
 } from 'lucide-react';
 import client from '../../api/client';
+import { useHeader } from '../../context/HeaderContext';
 import OtSchedulingModal from './OtSchedulingModal';
 
 const IpdOtDashboard = () => {
@@ -138,20 +139,15 @@ const IpdOtDashboard = () => {
     return <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${colors[status] || 'bg-gray-100'}`}>{status}</span>;
   };
 
+  useHeader({ onRefresh: loadDashboard });
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">OT Management Dashboard</h1>
-          <p className="text-sm text-gray-500">Monitor and manage operation theatres</p>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={() => navigate('/ipd/ot-management/calendar')} className="btn-secondary text-sm py-2 px-4 flex items-center gap-2">
-            <CalendarDays className="h-4 w-4" /> Calendar View
-          </button>
-          <button onClick={loadDashboard} className="btn-secondary text-sm py-2 px-4"><RefreshCw className="h-4 w-4" /></button>
-        </div>
+      {/* Calendar View Button bar */}
+      <div className="flex justify-end">
+        <button onClick={() => navigate('/ipd/ot-management/calendar')} className="btn-secondary text-sm py-2 px-4 flex items-center gap-2">
+          <CalendarDays className="h-4 w-4" /> Calendar View
+        </button>
       </div>
 
       {/* Dashboard Cards */}

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Mail, Phone, CheckCircle2, User, Building2, MessageSquare, 
-  ArrowRight, Shield, Users, Zap, Clock 
+  ArrowRight, Users, Zap, Clock 
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import client from '../../api/client';
@@ -183,7 +183,7 @@ export default function Contact() {
                 </div>
                 <div className="flex-grow text-left">
                   <h4 className="font-sans font-bold text-base text-[#101828] mb-0.5">Email Us</h4>
-                  <p className="font-sans text-sm text-[#667085] font-medium break-all group-hover:text-[#FF6A00] transition-colors">
+                  <p className="font-sans text-xs sm:text-sm text-[#667085] font-medium whitespace-nowrap group-hover:text-[#FF6A00] transition-colors">
                     orangevirtualconnect@gmail.com
                   </p>
                 </div>
@@ -339,17 +339,6 @@ export default function Contact() {
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap gap-3.5 mt-2 justify-start">
-                      {['✓ HIPAA Ready', '✓ GDPR Compliant', '✓ ISO 27001 Security', '✓ Secure & Encrypted', '✓ 24 Hour Response'].map((badge, idx) => (
-                        <motion.span 
-                          key={idx}
-                          whileHover={{ scale: 1.05 }}
-                          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold text-[#FF6A00] bg-[#FFF8F2] border border-[#FF6A00]/20 backdrop-blur-md cursor-default transition-all duration-200"
-                        >
-                          <Shield className="w-3.5 h-3.5 text-[#FF6A00]" /> {badge}
-                        </motion.span>
-                      ))}
-                    </div>
 
                     <button
                       type="submit"

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { KeyRound, ArrowRight, ShieldCheck, Building, Lock } from 'lucide-react';
+import { KeyRound, ArrowRight, Building } from 'lucide-react';
 import client from '../../api/client';
 import toast from 'react-hot-toast';
 
@@ -112,16 +112,6 @@ export default function PortalAccess() {
               )}
             </button>
           </form>
-
-          {/* Helper Badges */}
-          <div className="mt-8 pt-6 border-t border-slate-100 flex flex-wrap items-center justify-center gap-6 text-xs font-medium text-slate-500">
-            <span className="flex items-center gap-1.5 text-slate-600">
-              <ShieldCheck className="w-4 h-4 text-emerald-600" /> Case-Insensitive Code Lookup
-            </span>
-            <span className="flex items-center gap-1.5 text-slate-600">
-              <Lock className="w-4 h-4 text-amber-500" /> Enterprise Role Isolation
-            </span>
-          </div>
         </motion.div>
       </div>
     </section>

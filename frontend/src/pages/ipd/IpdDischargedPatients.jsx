@@ -17,11 +17,14 @@ import {
   Users,
   Syringe,
   CheckCircle,
-  DoorOpen
+  DoorOpen,
+  MoreVertical
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useHeader } from '../../context/HeaderContext';
 import client from '../../api/client';
 import SkeletonTable from '../../components/Skeleton/SkeletonTable';
+import PaginationFooter from '../../components/PaginationFooter';
 import { formatUhid } from '../../utils/uhid';
 
 const IpdDischargedPatients = () => {
@@ -31,6 +34,17 @@ const IpdDischargedPatients = () => {
   const [filteredAdmissions, setFilteredAdmissions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [activeMenuId, setActiveMenuId] = useState(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.action-menu-container')) {
+        setActiveMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -43,9 +57,11 @@ const IpdDischargedPatients = () => {
     toDate: ''
   });
 
-  // Pagination
+  // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage] = useState(15);
+  const [pageSize, setPageSize] = useState(20);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   // Room types and bed types for filters
   const [roomTypes, setRoomTypes] = useState([]);
@@ -61,16 +77,31 @@ const IpdDischargedPatients = () => {
       if (filters.bedType) params.append('bedType', filters.bedType);
       if (filters.fromDate) params.append('fromDate', filters.fromDate);
       if (filters.toDate) params.append('toDate', filters.toDate);
+      params.append('page', currentPage);
+      params.append('limit', pageSize);
 
       const { data } = await client.get(`/ipd/patients?${params.toString()}`);
-      setAdmissions(data);
-      setFilteredAdmissions(data);
+      if (Array.isArray(data)) {
+        setAdmissions(data);
+        setFilteredAdmissions(data);
+        setTotalRecords(data.length);
+        setTotalPages(1);
+      } else {
+        setAdmissions(data.admissions || []);
+        setFilteredAdmissions(data.admissions || []);
+        setTotalRecords(data.totalRecords || 0);
+        setTotalPages(data.totalPages || 1);
+      }
     } catch (err) {
       toast.error('Failed to load discharged patient list');
+      setAdmissions([]);
+      setFilteredAdmissions([]);
+      setTotalRecords(0);
+      setTotalPages(1);
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, filters]);
+  }, [searchQuery, filters, currentPage, pageSize]);
 
   const loadFilterOptions = async () => {
     try {
@@ -146,13 +177,6 @@ const IpdDischargedPatients = () => {
     setFilters(prev => ({ ...prev, [key]: value }));
   };
 
-  // Pagination
-  const totalPages = Math.ceil(filteredAdmissions.length / rowsPerPage);
-  const paginatedData = filteredAdmissions.slice(
-    (currentPage - 1) * rowsPerPage,
-    currentPage * rowsPerPage
-  );
-
   const handleViewPatient = (admission) => {
     navigate(`/ipd/patient/${admission._id}`);
   };
@@ -165,19 +189,10 @@ const IpdDischargedPatients = () => {
     navigate(`/ipd/discharge/${admission._id}?view=true`);
   };
 
+  useHeader({ onRefresh: loadAdmissions });
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Discharged Patients</h1>
-          <p className="text-sm text-gray-500">View history and discharge summaries of all released IPD patients</p>
-        </div>
-        <button onClick={loadAdmissions} className="btn-secondary" disabled={loading}>
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
-        </button>
-      </div>
-
       {/* Search & Filters */}
       <div className="card p-4 space-y-4">
         <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-3">
@@ -315,7 +330,7 @@ const IpdDischargedPatients = () => {
                     <SkeletonTable rows={4} columns={10} className="w-full" />
                   </td>
                 </tr>
-              ) : paginatedData.length === 0 ? (
+              ) : filteredAdmissions.length === 0 ? (
                 <tr>
                   <td colSpan="10" className="p-12 text-center">
                     <div className="flex flex-col items-center gap-2 text-gray-400">
@@ -325,7 +340,7 @@ const IpdDischargedPatients = () => {
                   </td>
                 </tr>
               ) : (
-                paginatedData.map((admission) => {
+                filteredAdmissions.map((admission) => {
                   const patient = admission.patientId || {};
                   return (
                     <tr
@@ -333,14 +348,19 @@ const IpdDischargedPatients = () => {
                       className="hover:bg-orange-50/30 transition-all bg-gray-50/40 text-gray-500"
                     >
                       <td className="p-3 pl-4">
-                        <div className="flex items-center gap-2">
-                          <div className="p-1.5 rounded-lg bg-gray-100">
-                            <User className="h-4 w-4 text-gray-400" />
+                        <button
+                          type="button"
+                          onClick={() => handleViewPatient(admission)}
+                          className="flex items-center gap-2 text-left group bg-transparent border-none p-0 cursor-pointer focus:outline-none"
+                          title="Click to view full patient details"
+                        >
+                          <div className="p-1.5 rounded-lg bg-gray-100 group-hover:bg-orange-100 transition-colors">
+                            <User className="h-4 w-4 text-gray-400 group-hover:text-orange-600 transition-colors" />
                           </div>
-                          <span className="font-bold text-gray-600">
+                          <span className="font-bold text-gray-600 group-hover:text-orange-600 group-hover:underline transition-colors">
                             {patient.patientName || 'N/A'}
                           </span>
-                        </div>
+                        </button>
                       </td>
                       <td className="p-3">
                         <span className="font-mono text-orange-700 text-xs font-bold">
@@ -394,30 +414,57 @@ const IpdDischargedPatients = () => {
                           : '-'
                         }
                       </td>
-                      <td className="p-3 pr-4">
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            onClick={() => handleViewPatient(admission)}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="View Patient"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleViewServices(admission)}
-                            className="p-1.5 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
-                            title="Open Services"
-                          >
-                            <Syringe className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDischarge(admission)}
-                            className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                            title="View Discharge Summary"
-                          >
-                            <CheckCircle className="h-4 w-4" />
-                          </button>
-                        </div>
+                      <td className="p-3 pr-4 text-center relative action-menu-container">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveMenuId(activeMenuId === admission._id ? null : admission._id);
+                          }}
+                          className="p-1.5 hover:bg-orange-100/70 text-gray-700 hover:text-orange-700 rounded-lg transition-colors border border-orange-200/80 bg-white shadow-sm inline-flex items-center justify-center cursor-pointer"
+                          title="Actions"
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </button>
+
+                        {activeMenuId === admission._id && (
+                          <div className="absolute right-3 top-10 z-30 w-48 bg-white rounded-2xl shadow-xl border border-orange-100 py-1.5 space-y-0.5 animate-in fade-in zoom-in-95 duration-100 text-left">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveMenuId(null);
+                                handleViewPatient(admission);
+                              }}
+                              className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                            >
+                              <Eye className="h-3.5 w-3.5 text-blue-600" /> View Details
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveMenuId(null);
+                                handleViewServices(admission);
+                              }}
+                              className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                            >
+                              <Syringe className="h-3.5 w-3.5 text-purple-600" /> IPD Services
+                            </button>
+
+                            <div className="border-t border-orange-50 my-1"></div>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveMenuId(null);
+                                handleDischarge(admission);
+                              }}
+                              className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                            >
+                              <CheckCircle className="h-3.5 w-3.5 text-green-600" /> Discharge Summary
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -427,55 +474,19 @@ const IpdDischargedPatients = () => {
           </table>
         </div>
 
-        {/* Pagination */}
-        {totalPages > 1 && !loading && (
-          <div className="flex items-center justify-between p-4 border-t border-orange-100 bg-orange-50/20">
-            <span className="text-xs text-gray-500">
-              Showing {(currentPage - 1) * rowsPerPage + 1} to {Math.min(currentPage * rowsPerPage, filteredAdmissions.length)} of {filteredAdmissions.length}
-            </span>
-            <div className="flex gap-1">
-              <button
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="px-3 py-1 text-xs font-bold rounded-lg border border-orange-200 hover:bg-orange-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Prev
-              </button>
-              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                let pageNum;
-                if (totalPages <= 5) {
-                  pageNum = i + 1;
-                } else if (currentPage <= 3) {
-                  pageNum = i + 1;
-                } else if (currentPage >= totalPages - 2) {
-                  pageNum = totalPages - 4 + i;
-                } else {
-                  pageNum = currentPage - 2 + i;
-                }
-                return (
-                  <button
-                    key={pageNum}
-                    onClick={() => setCurrentPage(pageNum)}
-                    className={`px-3 py-1 text-xs font-bold rounded-lg border ${
-                      currentPage === pageNum
-                        ? 'bg-orange-500 text-white border-orange-500'
-                        : 'border-orange-200 hover:bg-orange-50'
-                    }`}
-                  >
-                    {pageNum}
-                  </button>
-                );
-              })}
-              <button
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                className="px-3 py-1 text-xs font-bold rounded-lg border border-orange-200 hover:bg-orange-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        )}
+        <PaginationFooter
+          currentPage={currentPage}
+          pageSize={pageSize}
+          totalRecords={totalRecords}
+          totalPages={totalPages}
+          onPageChange={(p) => setCurrentPage(p)}
+          onPageSizeChange={(s) => {
+            setPageSize(s);
+            setCurrentPage(1);
+          }}
+          loading={loading}
+          itemLabel="patients"
+        />
       </div>
     </div>
   );

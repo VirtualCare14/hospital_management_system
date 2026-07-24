@@ -26,6 +26,7 @@ import {
   ClipboardList
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useHeader } from '../../context/HeaderContext';
 import client from '../../api/client';
 import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 import { formatUhid } from '../../utils/uhid';
@@ -370,19 +371,12 @@ const IpdServices = () => {
     navigate(`/ipd/patient/${admission._id}`);
   };
 
+  useHeader({ 
+    onRefresh: () => { loadAdmissions(); loadAdminSettings(); loadAvailableLabTests(); } 
+  });
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">IPD Services</h1>
-          <p className="text-sm text-gray-500">Add consumable services, medicines, and lab tests to admitted patients</p>
-        </div>
-        <button onClick={() => { loadAdmissions(); loadAdminSettings(); loadAvailableLabTests(); }} className="btn-secondary" disabled={loading}>
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
-        </button>
-      </div>
-
       {/* Patient Selection */}
       <div className="card p-4 space-y-4">
         <div className="relative">

@@ -10,17 +10,20 @@ import jsPDF from 'jspdf';
 import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 import html2canvas from 'html2canvas';
 import { useAuth } from '../../context/AuthContext';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useLocation } from 'react-router-dom';
 import client from '../../api/client';
+import { useHeader } from '../../context/HeaderContext';
 import { formatUhid } from '../../utils/uhid';
+import PaginationFooter from '../../components/PaginationFooter';
 
 const BILL_TYPES = [
   { id: 'All', label: 'All Connected Modules', icon: FileText },
   { id: 'OPD', label: 'OPD Charges Only', icon: User },
   { id: 'Lab', label: 'Laboratory Only', icon: TestTube },
-  { id: 'IPD', label: 'IPD/Bed Stay Only', icon: BedDouble },
+  { id: 'IPD', label: 'IPD/Bed Assignment Only', icon: BedDouble },
   { id: 'OT', label: 'OT Surgery Only', icon: CreditCard },
-  { id: 'Pharmacy', label: 'Pharmacy Only', icon: Pill }
+  { id: 'Pharmacy', label: 'Pharmacy Only', icon: Pill },
+  { id: 'SameDayTreatment', label: 'Same Day Only', icon: Package }
 ];
 
 const CATEGORY_COLORS = {
@@ -41,6 +44,8 @@ const BillingPage = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const isSameDayCare = location.pathname.startsWith('/same-day-care/billing');
   const queryTab = searchParams.get('tab') || 'billing';
 
   // Navigation tab state: 'billing' = billing desk, 'registry' = invoice search, 'dashboard' = dashboard analysis
@@ -61,7 +66,7 @@ const BillingPage = () => {
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [items, setItems] = useState([]);
   const [selectedItemIndexes, setSelectedItemIndexes] = useState([]);
-  const [billType, setBillType] = useState('All');
+  const [billType, setBillType] = useState(isSameDayCare ? 'SameDayTreatment' : 'All');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -115,7 +120,13 @@ const BillingPage = () => {
   });
   const [loadingStats, setLoadingStats] = useState(false);
 
-  // Registry / Search Invoices
+  // Desk Pagination state
+  const [deskPage, setDeskPage] = useState(1);
+  const [deskPageSize, setDeskPageSize] = useState(20);
+  const [deskTotalRecords, setDeskTotalRecords] = useState(0);
+  const [deskTotalPages, setDeskTotalPages] = useState(1);
+
+  // Registry / Search Invoices Pagination state
   const [invoices, setInvoices] = useState([]);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [registryFilterQuery, setRegistryFilterQuery] = useState('');
@@ -123,6 +134,10 @@ const BillingPage = () => {
   const [registryFilterMode, setRegistryFilterMode] = useState('');
   const [registryFromDate, setRegistryFromDate] = useState('');
   const [registryToDate, setRegistryToDate] = useState('');
+  const [registryPage, setRegistryPage] = useState(1);
+  const [registryPageSize, setRegistryPageSize] = useState(20);
+  const [registryTotalRecords, setRegistryTotalRecords] = useState(0);
+  const [registryTotalPages, setRegistryTotalPages] = useState(1);
 
   // Print Preview Dialog Modals
   const [showPrintModal, setShowPrintModal] = useState(false);
@@ -158,10 +173,13 @@ const BillingPage = () => {
   };
 
   // Fetch Invoices Registry
-  const loadInvoicesRegistry = async () => {
+  const loadInvoicesRegistry = useCallback(async () => {
     setLoadingInvoices(true);
     try {
-      const params = {};
+      const params = {
+        page: registryPage,
+        limit: registryPageSize
+      };
       if (registryFilterQuery) params.searchQuery = registryFilterQuery;
       if (registryFilterStatus) params.status = registryFilterStatus;
       if (registryFilterMode) params.paymentMode = registryFilterMode;
@@ -169,14 +187,30 @@ const BillingPage = () => {
       if (registryToDate) params.toDate = registryToDate;
 
       const { data } = await client.get('/billing', { params });
-      setInvoices(data || []);
+      if (Array.isArray(data)) {
+        setInvoices(data);
+        setRegistryTotalRecords(data.length);
+        setRegistryTotalPages(1);
+      } else {
+        setInvoices(data.bills || []);
+        setRegistryTotalRecords(data.totalRecords || 0);
+        setRegistryTotalPages(data.totalPages || 1);
+      }
     } catch (err) {
       console.error(err);
       toast.error('Failed to retrieve invoices');
+      setInvoices([]);
+      setRegistryTotalRecords(0);
+      setRegistryTotalPages(1);
     } finally {
       setLoadingInvoices(false);
     }
-  };
+  }, [registryPage, registryPageSize, registryFilterQuery, registryFilterStatus, registryFilterMode, registryFromDate, registryToDate]);
+
+  // Reset registry page on filter changes
+  useEffect(() => {
+    setRegistryPage(1);
+  }, [registryFilterQuery, registryFilterStatus, registryFilterMode, registryFromDate, registryToDate]);
 
   useEffect(() => {
     if (activeTab === 'dashboard') {
@@ -184,22 +218,61 @@ const BillingPage = () => {
     } else if (activeTab === 'registry') {
       loadInvoicesRegistry();
     }
-  }, [activeTab, registryFilterStatus, registryFilterMode, registryFromDate, registryToDate]);
+  }, [activeTab, loadInvoicesRegistry]);
+
+  // Reset desk page on search query change
+  useEffect(() => {
+    setDeskPage(1);
+  }, [searchQuery]);
 
   // Load eligible patients (debounced)
   const loadEligiblePatients = useCallback(async (search = '') => {
     setLoadingList(true);
     try {
-      const params = search ? { search } : {};
+      const params = {
+        page: deskPage,
+        limit: deskPageSize
+      };
+      if (search) params.search = search;
+      if (isSameDayCare) {
+        params.module = 'SameDayCare';
+      }
       const { data } = await client.get('/billing/eligible-patients', { params });
-      setEligiblePatients(data || []);
+      let rawList = [];
+      let totRec = 0;
+      let totPag = 1;
+
+      if (Array.isArray(data)) {
+        rawList = data;
+        totRec = data.length;
+        totPag = 1;
+      } else {
+        rawList = data.patients || [];
+        totRec = data.totalRecords || 0;
+        totPag = data.totalPages || 1;
+      }
+
+      const filtered = isSameDayCare
+        ? rawList.filter(p => p.categories && p.categories.includes('SameDayTreatment'))
+        : rawList.filter(p => {
+            if (!p.categories || p.categories.length === 0) return false;
+            const isPureSameDay = p.categories.length === 1 && p.categories[0] === 'SameDayTreatment';
+            return !isPureSameDay;
+          });
+
+      setEligiblePatients(filtered);
+      setDeskTotalRecords(totRec);
+      setDeskTotalPages(totPag);
     } catch (err) {
       toast.error('Failed to load patients');
       console.error(err);
+      setEligiblePatients([]);
+      setDeskTotalRecords(0);
+      setDeskTotalPages(1);
     } finally {
       setLoadingList(false);
     }
-  }, []);
+  }, [isSameDayCare, deskPage, deskPageSize]);
 
   useEffect(() => {
     if (view !== 'list') return;
@@ -212,35 +285,90 @@ const BillingPage = () => {
 
 
   // Handle Create Bill - fetch all billable items for patient
-  const handleCreateBill = async (patient) => {
-    setSelectedPatient(patient);
-    setView('bill');
+  const mapLoadedItems = (rawItems) => {
+    return (rawItems || []).map(i => {
+      const mrpIncGst = i.mrpIncGst || i.price || 0;
+      const totalGstPct = i.gstPercentage || ((i.cgst || 0) + (i.sgst || 0)) || 0;
+      let mrpExGst = i.mrpExGst || 0;
+      if (!mrpExGst && mrpIncGst > 0) {
+        mrpExGst = totalGstPct > 0 ? Number((mrpIncGst / (1 + totalGstPct / 100)).toFixed(2)) : mrpIncGst;
+      }
+      if (!mrpExGst) mrpExGst = mrpIncGst;
+
+      const addGst = true; // Inc GST by default (MRP)
+      const activePrice = addGst ? mrpIncGst : mrpExGst;
+      const gstPct = addGst ? totalGstPct : 0;
+      const gstAmt = addGst ? ((mrpIncGst - mrpExGst) * i.quantity) : 0;
+      const totalAmt = addGst
+        ? ((mrpIncGst - (i.discountAmount || 0)) * i.quantity)
+        : ((mrpExGst - (i.discountAmount || 0)) * i.quantity);
+
+      return {
+        ...i,
+        addGst,
+        mrpIncGst,
+        mrpExGst,
+        price: activePrice,
+        defaultGstPercentage: totalGstPct,
+        discountAmount: i.discountAmount || 0,
+        gstPercentage: gstPct,
+        gstAmount: Number(gstAmt.toFixed(2)),
+        total: Number(totalAmt.toFixed(2))
+      };
+    });
+  };
+
+  const handleToggleItemGst = (idx, isChecked) => {
+    setItems(prev => prev.map((itemVal, valIdx) => {
+      if (valIdx === idx) {
+        const mrpIncGst = itemVal.mrpIncGst || itemVal.price || 0;
+        const totalGstPct = itemVal.defaultGstPercentage || (itemVal.cgst || 0) + (itemVal.sgst || 0) || 0;
+        let mrpExGst = itemVal.mrpExGst || 0;
+        if (!mrpExGst && mrpIncGst > 0) {
+          mrpExGst = totalGstPct > 0 ? Number((mrpIncGst / (1 + totalGstPct / 100)).toFixed(2)) : mrpIncGst;
+        }
+        if (!mrpExGst) mrpExGst = mrpIncGst;
+
+        const activePrice = isChecked ? mrpIncGst : mrpExGst;
+        const newGstPct = isChecked ? totalGstPct : 0;
+        const gstAmt = isChecked ? ((mrpIncGst - mrpExGst) * itemVal.quantity) : 0;
+        const totalAmt = isChecked
+          ? ((mrpIncGst - (itemVal.discountAmount || 0)) * itemVal.quantity)
+          : ((mrpExGst - (itemVal.discountAmount || 0)) * itemVal.quantity);
+
+        return {
+          ...itemVal,
+          addGst: isChecked,
+          price: activePrice,
+          gstPercentage: newGstPct,
+          gstAmount: Number(gstAmt.toFixed(2)),
+          total: Number(totalAmt.toFixed(2))
+        };
+      }
+      return itemVal;
+    }));
+  };
+
+  const handleSelectPatientForBilling = async (patient) => {
     setLoading(true);
+    setView('bill');
+    setSelectedPatient(null);
     setItems([]);
     setSelectedItemIndexes([]);
-    setCurrentBill(null);
-    setGstEnabled(false);
-    setGstPercentage(0);
-    setRemarks('');
+    setAdvanceToAdjust(0);
     setPaymentMode('');
     setTransactionRef('');
-    setAdvanceToAdjust(0);
     setCashSplit(0);
     setUpiSplit(0);
     setCardSplit(0);
-    setBillType('All');
+    setBillType(isSameDayCare ? 'SameDayTreatment' : 'All');
     setRequestAdminDiscount(false);
 
+    const effectiveBillType = isSameDayCare ? 'SameDayTreatment' : 'All';
     try {
-      const { data } = await client.get(`/billing/generate/${patient.uhid}?billType=All`);
+      const { data } = await client.get(`/billing/generate/${patient.uhid}?billType=${effectiveBillType}`);
       setSelectedPatient(data.patient);
-      const mappedItems = (data.items || []).map(i => ({
-        ...i,
-        discountAmount: i.discountAmount || 0,
-        gstPercentage: i.gstPercentage || 0,
-        gstAmount: i.gstAmount || 0,
-        total: i.total || (((i.price - (i.discountAmount || 0)) * i.quantity) * (1 + (i.gstPercentage || 0) / 100)) || 0
-      }));
+      const mappedItems = mapLoadedItems(data.items);
       setItems(mappedItems);
       
       // Auto-check all items by default
@@ -274,6 +402,8 @@ const BillingPage = () => {
     }
   };
 
+  const handleCreateBill = handleSelectPatientForBilling;
+
   // Reload items when bill type changes
   const handleBillTypeChange = async (newType) => {
     if (!selectedPatient) return;
@@ -285,13 +415,7 @@ const BillingPage = () => {
 
     try {
       const { data } = await client.get(`/billing/generate/${selectedPatient.uhid}?billType=${newType}`);
-      const mappedItems = (data.items || []).map(i => ({
-        ...i,
-        discountAmount: i.discountAmount || 0,
-        gstPercentage: i.gstPercentage || 0,
-        gstAmount: i.gstAmount || 0,
-        total: i.total || (((i.price - (i.discountAmount || 0)) * i.quantity) * (1 + (i.gstPercentage || 0) / 100)) || 0
-      }));
+      const mappedItems = mapLoadedItems(data.items);
       setItems(mappedItems);
       setSelectedItemIndexes(mappedItems.map((_, i) => i));
     } catch (err) {
@@ -697,20 +821,12 @@ const BillingPage = () => {
 
   // ===================== RENDER VIEWS =====================
 
+  useHeader({ onRefresh: loadEligiblePatients });
+
   return (
-    <div className="space-y-6 print:hidden">
-      
-      {/* Navigation & Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-orange-100 pb-4">
-        <div>
-          <h1 className="text-2xl font-black text-gray-900 tracking-tight flex items-center gap-2">
-            <Receipt className="h-7 w-7 text-orange-500" /> Hospital Billing Desk
-          </h1>
-          <p className="text-sm text-gray-500">Generate consolidated invoices, patient ledgers, and manage payments</p>
-        </div>
-        
-        {/* Workspace views selector */}
-        {view === 'list' && (
+    <div className="space-y-6">
+      {/* Workspace views selector */}
+      {view === 'list' && (
           <div className="flex bg-orange-50/50 p-1 rounded-xl border border-orange-100 w-fit">
             <button
               onClick={() => setActiveTab('billing')}
@@ -738,7 +854,6 @@ const BillingPage = () => {
             </button>
           </div>
         )}
-      </div>
 
       {/* ===================== VIEW 1: BILLING WORKSPACE ===================== */}
       {activeTab === 'billing' && (
@@ -779,7 +894,7 @@ const BillingPage = () => {
                   <div>
                     <h3 className="font-extrabold text-gray-900 text-lg">No Pending Patients Found</h3>
                     <p className="text-sm text-gray-400 max-w-md mx-auto mt-1">
-                      Search above for any patient. Patients will list here automatically when they have billable services (OPD, IPD stay, OT records, Lab test charges, or Pharmacy bills).
+                      Search above for any patient. Patients will list here automatically when they have billable services (OPD, IPD Bed Assignment, OT records, Lab test charges, or Pharmacy bills).
                     </p>
                   </div>
                 </div>
@@ -852,6 +967,19 @@ const BillingPage = () => {
                       </tbody>
                     </table>
                   </div>
+                  <PaginationFooter
+                    currentPage={deskPage}
+                    pageSize={deskPageSize}
+                    totalRecords={deskTotalRecords}
+                    totalPages={deskTotalPages}
+                    onPageChange={(p) => setDeskPage(p)}
+                    onPageSizeChange={(s) => {
+                      setDeskPageSize(s);
+                      setDeskPage(1);
+                    }}
+                    loading={loadingList}
+                    itemLabel="patients"
+                  />
                 </div>
               )}
             </div>
@@ -868,7 +996,7 @@ const BillingPage = () => {
                 </div>
               </div>
 
-              {/* Patient Card & IPD stay info */}
+              {/* Patient Card & IPD Bed Assignment info */}
               {selectedPatient && (
                 <div className="card p-5 bg-gradient-to-br from-orange-50/30 to-white border border-orange-100 grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="md:col-span-2 border-r border-orange-100/50 pr-4">
@@ -890,7 +1018,7 @@ const BillingPage = () => {
                     </div>
                   </div>
                   <div>
-                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">IPD Bed Stay Details</span>
+                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">IPD Bed Assignment Details</span>
                     {selectedPatient.admissionDetails ? (
                       <div className="text-xs text-gray-700 space-y-0.5 mt-1 font-semibold">
                         <p className="text-orange-700">IPD ID: {selectedPatient.admissionDetails.ipdNumber}</p>
@@ -933,6 +1061,18 @@ const BillingPage = () => {
                         <h4 className="font-extrabold text-gray-900 text-sm flex items-center gap-2">
                           <Receipt className="h-4.5 w-4.5 text-orange-500" /> Select Charges to Invoice ({selectedItemIndexes.length} selected)
                         </h4>
+                        {billType === 'Pharmacy' && items.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const anyUnchecked = items.some(i => i.addGst === false);
+                              items.forEach((_, idx) => handleToggleItemGst(idx, anyUnchecked));
+                            }}
+                            className="text-[11px] font-bold text-orange-700 bg-white hover:bg-orange-50 border border-orange-200 px-2.5 py-1 rounded-lg shadow-sm transition-colors flex items-center gap-1 cursor-pointer"
+                          >
+                            {items.some(i => i.addGst === false) ? 'Set All to Inc GST' : 'Set All to Ex GST'}
+                          </button>
+                        )}
                       </div>
                       <div className="overflow-x-auto">
                         <table className="w-full text-left text-xs">
@@ -950,7 +1090,7 @@ const BillingPage = () => {
                               <th className="p-3">Description</th>
                               <th className="p-3 text-right">Price</th>
                               {accessDiscount && <th className="p-3 text-right w-24">Discount (₹)</th>}
-                              <th className="p-3 text-right w-24">GST (%)</th>
+                              <th className="p-3 text-right w-36">{billType === 'Pharmacy' ? 'Add GST (CGST+SGST)' : 'GST (%)'}</th>
                               <th className="p-3 text-right">Qty</th>
                               <th className="p-3 text-right pr-4">Total</th>
                             </tr>
@@ -1019,34 +1159,51 @@ const BillingPage = () => {
                                       </td>
                                     )}
                                     <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
-                                      <div className="relative inline-block w-20">
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          max="100"
-                                          placeholder="0"
-                                          className="input text-xs py-0.5 pr-4 font-mono font-bold w-full text-right bg-white border border-orange-200 rounded-lg focus:ring-1 focus:ring-orange-500"
-                                          value={item.gstPercentage || ''}
-                                          onChange={(e) => {
-                                            const gstVal = Math.min(100, Math.max(0, parseFloat(e.target.value) || 0));
-                                            setItems(prev => prev.map((itemVal, valIdx) => {
-                                              if (valIdx === idx) {
-                                                const discAmt = itemVal.discountAmount || 0;
-                                                const baseAmt = (itemVal.price - discAmt) * itemVal.quantity;
-                                                const gstAmt = baseAmt * (gstVal / 100);
-                                                return {
-                                                  ...itemVal,
-                                                  gstPercentage: gstVal,
-                                                  gstAmount: gstAmt,
-                                                  total: baseAmt + gstAmt
-                                                };
-                                              }
-                                              return itemVal;
-                                            }));
-                                          }}
-                                        />
-                                        <span className="absolute right-1.5 top-1.5 text-gray-400 font-bold text-[10px] pointer-events-none">%</span>
-                                      </div>
+                                      {billType === 'Pharmacy' || item.category === 'Medicine' ? (
+                                        <label className="inline-flex items-center gap-1.5 cursor-pointer select-none bg-orange-50/50 px-2 py-1 rounded-lg border border-orange-200">
+                                          <input
+                                            type="checkbox"
+                                            className="rounded border-orange-300 text-orange-600 focus:ring-orange-500 h-3.5 w-3.5 cursor-pointer"
+                                            checked={item.addGst !== false}
+                                            onChange={(e) => handleToggleItemGst(idx, e.target.checked)}
+                                          />
+                                          <span className="text-[11px] font-bold text-gray-800">
+                                            {item.addGst !== false
+                                              ? `Price (Inc GST)`
+                                              : `Price (Ex GST)`}
+                                          </span>
+                                        </label>
+                                      ) : (
+                                        <div className="relative inline-block w-20">
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            max="100"
+                                            placeholder="0"
+                                            className="input text-xs py-0.5 pr-4 font-mono font-bold w-full text-right bg-white border border-orange-200 rounded-lg focus:ring-1 focus:ring-orange-500"
+                                            value={item.gstPercentage || ''}
+                                            onChange={(e) => {
+                                              const gstVal = Math.min(100, Math.max(0, parseFloat(e.target.value) || 0));
+                                              setItems(prev => prev.map((itemVal, valIdx) => {
+                                                if (valIdx === idx) {
+                                                  const discAmt = itemVal.discountAmount || 0;
+                                                  const baseAmt = (itemVal.price - discAmt) * itemVal.quantity;
+                                                  const gstAmt = baseAmt * (gstVal / 100);
+                                                  return {
+                                                    ...itemVal,
+                                                    addGst: gstVal > 0,
+                                                    gstPercentage: gstVal,
+                                                    gstAmount: Number(gstAmt.toFixed(2)),
+                                                    total: Number((baseAmt + gstAmt).toFixed(2))
+                                                  };
+                                                }
+                                                return itemVal;
+                                              }));
+                                            }}
+                                          />
+                                          <span className="absolute right-1.5 top-1.5 text-gray-400 font-bold text-[10px] pointer-events-none">%</span>
+                                        </div>
+                                      )}
                                     </td>
                                     <td className="p-3 text-right font-semibold text-gray-600">{item.quantity}</td>
                                     <td className="p-3 text-right font-black text-gray-900 pr-4">₹{(item.total || 0).toFixed(2)}</td>
@@ -1465,6 +1622,19 @@ const BillingPage = () => {
                   </tbody>
                 </table>
               </div>
+              <PaginationFooter
+                currentPage={registryPage}
+                pageSize={registryPageSize}
+                totalRecords={registryTotalRecords}
+                totalPages={registryTotalPages}
+                onPageChange={(p) => setRegistryPage(p)}
+                onPageSizeChange={(s) => {
+                  setRegistryPageSize(s);
+                  setRegistryPage(1);
+                }}
+                loading={loadingInvoices}
+                itemLabel="invoices"
+              />
             </div>
           )}
         </div>
@@ -1687,7 +1857,7 @@ const BillingPage = () => {
             <div className="bg-gray-100 rounded-2xl shadow-2xl max-w-4xl w-full flex flex-col h-[90vh]">
               
               {/* Modal Header */}
-              <div className="bg-white border-b border-gray-200 px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0 rounded-t-2xl">
+              <div className="bg-white border-b border-gray-200 px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0 rounded-t-2xl print:hidden">
                 <div className="flex items-center gap-2">
                   <Printer className="h-5 w-5 text-orange-500" />
                   <div>

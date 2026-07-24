@@ -142,6 +142,7 @@ function App() {
             <Route path="/same-day-care/dialysis" element={<DialysisWorkspace />} />
             <Route path="/same-day-care/dialysis/treatment/:patientId" element={<DialysisRecordForm />} />
             <Route path="/same-day-care/discharge-requests" element={<DischargeRequestsView />} />
+            <Route path="/same-day-care/billing" element={<BillingPage />} />
           </Route>
           <Route element={<ProtectedRoute allowedRoles={['admin', 'pharmacy']} requiredModule={7} />}>
             <Route path="/pharmacy" element={<PharmacyWorkspace />} />

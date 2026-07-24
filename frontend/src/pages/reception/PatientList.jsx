@@ -1,19 +1,58 @@
 import { useEffect, useRef, useState } from 'react';
-import { Eye, Printer, Search, Trash2, X, Calendar, Hash, Users, FileText, Clock, Filter, ChevronDown, Copy, Pencil, Save, MoreVertical, CalendarCheck } from 'lucide-react';
+import { Eye, Printer, Search, Trash2, X, Calendar, Hash, Users, FileText, Clock, Filter, ChevronDown, ChevronLeft, ChevronRight, Copy, Pencil, Save, MoreVertical, CalendarCheck } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import toast from 'react-hot-toast';
 import client from '../../api/client';
+import { useHeader } from '../../context/HeaderContext';
 import PatientReceipt from '../../components/PatientReceipt';
 import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 import { formatUhid } from '../../utils/uhid';
 
 const DEPARTMENTS = ['General', 'Cardiology', 'Orthopedics', 'Pediatrics', 'Neurology', 'Dermatology', 'ENT', 'Ophthalmology', 'Psychiatry'];
 
+// Helper to generate pagination page numbers with ellipsis
+const getPaginationRange = (currentPage, totalPages) => {
+  const delta = 1;
+  const range = [];
+  const rangeWithDots = [];
+
+  for (let i = 1; i <= totalPages; i++) {
+    if (
+      i === 1 ||
+      i === totalPages ||
+      (i >= currentPage - delta && i <= currentPage + delta)
+    ) {
+      range.push(i);
+    }
+  }
+
+  let l;
+  for (let i of range) {
+    if (l) {
+      if (i - l === 2) {
+        rangeWithDots.push(l + 1);
+      } else if (i - l !== 1) {
+        rangeWithDots.push('...');
+      }
+    }
+    rangeWithDots.push(i);
+    l = i;
+  }
+
+  return rangeWithDots;
+};
+
 const PatientList = () => {
   const [registrations, setRegistrations] = useState([]);
   const [stats, setStats] = useState({ totalToday: 0, totalMonth: 0, totalFiltered: 0 });
   const [loading, setLoading] = useState(false);
+
+  // Server-Side Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   // Active Action Menu
   const [activeMenuId, setActiveMenuId] = useState(null);
@@ -71,7 +110,10 @@ const PatientList = () => {
   const fetchRegistrations = async () => {
     setLoading(true);
     try {
-      const params = {};
+      const params = {
+        page: currentPage,
+        limit: pageSize
+      };
       if (fromDate) params.fromDate = fromDate;
       if (toDate) params.toDate = toDate;
       if (filterUhid) params.uhid = filterUhid;
@@ -82,6 +124,8 @@ const PatientList = () => {
       const { data } = await client.get('/patients/registrations/list', { params });
       setRegistrations(data.registrations || []);
       setStats(data.stats || { totalToday: 0, totalMonth: 0, totalFiltered: 0 });
+      setTotalRecords(data.totalRecords ?? data.total ?? 0);
+      setTotalPages(data.totalPages || 1);
     } catch (error) {
       console.error('Fetch registrations error:', error);
       setRegistrations([]);
@@ -90,12 +134,18 @@ const PatientList = () => {
     }
   };
 
+  // Reset to page 1 whenever search filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [fromDate, toDate, filterUhid, filterRegNo, filterPatientName, filterDepartment]);
+
+  // Fetch registrations on filter, page or page size change
   useEffect(() => {
     const timeout = setTimeout(() => {
       fetchRegistrations();
     }, 300);
     return () => clearTimeout(timeout);
-  }, [fromDate, toDate, filterUhid, filterRegNo, filterPatientName, filterDepartment]);
+  }, [currentPage, pageSize, fromDate, toDate, filterUhid, filterRegNo, filterPatientName, filterDepartment]);
 
   const clearFilters = () => {
     setFromDate('');
@@ -257,16 +307,10 @@ const PatientList = () => {
 
   const hasActiveFilters = fromDate || toDate || filterUhid || filterRegNo || filterPatientName || filterDepartment;
 
+  useHeader({ onRefresh: fetchRegistrations });
+
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="text-2xl font-extrabold text-gray-900">Patient Registrations</h1>
-          <p className="text-sm text-gray-500">All registrations with filters and visit history.</p>
-        </div>
-      </div>
-
       {/* Statistics Cards */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
         <div className="card p-4 flex items-center gap-3">
@@ -371,11 +415,19 @@ const PatientList = () => {
               {loading ? (
                 <tr>
                   <td colSpan="9" className="p-8">
-                    <SkeletonTable rows={4} columns={9} className="w-full" />
+                    <SkeletonTable rows={pageSize > 10 ? 10 : pageSize} columns={9} className="w-full" />
                   </td>
                 </tr>
               ) : registrations.length === 0 ? (
-                <tr><td colSpan="9" className="p-8 text-center text-gray-400">No registrations found.</td></tr>
+                <tr>
+                  <td colSpan="9" className="p-12 text-center">
+                    <div className="flex flex-col items-center justify-center gap-2 text-gray-400">
+                      <Users className="h-10 w-10 text-gray-300" />
+                      <p className="font-bold text-gray-600 text-sm">No patients found</p>
+                      <p className="text-xs text-gray-400">Try adjusting your search or filters.</p>
+                    </div>
+                  </td>
+                </tr>
               ) : (
                 registrations.map((reg) => (
                   <tr key={reg._id} className="border-t border-orange-50">
@@ -499,6 +551,94 @@ const PatientList = () => {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Enterprise Server-Side Pagination Footer */}
+        <div className="px-5 py-3.5 bg-white border-t border-orange-100 flex flex-col sm:flex-row items-center justify-between gap-4 select-none">
+          {/* Left: Rows Per Page Dropdown */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-gray-500">Rows per page:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="input py-1 px-2.5 text-xs font-bold w-auto border-orange-200 focus:ring-orange-500 bg-orange-50/30 rounded-lg cursor-pointer"
+            >
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
+
+          {/* Center: Showing X–Y of Z patients */}
+          <div className="text-xs font-bold text-gray-700 text-center">
+            {totalRecords === 0 ? (
+              <span>Showing 0 of 0 patients</span>
+            ) : (
+              <span>
+                Showing <span className="text-gray-900 font-extrabold">{((currentPage - 1) * pageSize + 1).toLocaleString()}</span>–
+                <span className="text-gray-900 font-extrabold">{Math.min(currentPage * pageSize, totalRecords).toLocaleString()}</span> of{' '}
+                <span className="text-orange-600 font-extrabold">{totalRecords.toLocaleString()}</span> patients
+              </span>
+            )}
+          </div>
+
+          {/* Right: Modern Pagination Controls */}
+          <div className="flex items-center gap-1.5">
+            {/* Previous Button */}
+            <button
+              type="button"
+              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+              disabled={currentPage === 1 || loading}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold border border-orange-200/80 bg-white text-gray-700 hover:bg-orange-50 hover:text-orange-600 hover:border-orange-300 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:text-gray-700 disabled:hover:border-orange-200/80 transition-all duration-200 shadow-xs cursor-pointer"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              <span className="hidden sm:inline">Previous</span>
+            </button>
+
+            {/* Page Numbers */}
+            <div className="flex items-center gap-1">
+              {getPaginationRange(currentPage, totalPages).map((p, idx) => {
+                if (p === '...') {
+                  return (
+                    <span key={`dots-${idx}`} className="px-2 py-1 text-xs font-bold text-gray-400 select-none">
+                      ...
+                    </span>
+                  );
+                }
+                const isActive = p === currentPage;
+                return (
+                  <button
+                    key={`page-${p}`}
+                    type="button"
+                    onClick={() => setCurrentPage(p)}
+                    disabled={loading}
+                    className={`min-w-[32px] h-8 px-2 rounded-lg text-xs font-bold transition-all duration-200 flex items-center justify-center cursor-pointer ${
+                      isActive
+                        ? 'bg-orange-500 text-white shadow-md shadow-orange-500/25 border border-orange-500'
+                        : 'bg-white text-gray-700 border border-orange-200/60 hover:bg-orange-50 hover:text-orange-600 hover:border-orange-300'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Next Button */}
+            <button
+              type="button"
+              onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+              disabled={currentPage >= totalPages || totalPages === 0 || loading}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold border border-orange-200/80 bg-white text-gray-700 hover:bg-orange-50 hover:text-orange-600 hover:border-orange-300 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:text-gray-700 disabled:hover:border-orange-200/80 transition-all duration-200 shadow-xs cursor-pointer"
+            >
+              <span className="hidden sm:inline">Next</span>
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </div>
 

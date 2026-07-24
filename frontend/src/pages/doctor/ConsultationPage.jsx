@@ -33,7 +33,7 @@ const ConsultationPage = () => {
   const [previousConsultation, setPreviousConsultation] = useState(null);
   const [subServices, setSubServices] = useState([]);
   const [showSameDayModal, setShowSameDayModal] = useState(false);
-  const [sdCareType, setSdCareType] = useState('Minor Injury');
+  const [sdCareType, setSdCareType] = useState('');
   const [sdSelectedDocId, setSdSelectedDocId] = useState('');
   const [sdRemarks, setSdRemarks] = useState('');
   const [sdDoctors, setSdDoctors] = useState([]);
@@ -266,7 +266,7 @@ const ConsultationPage = () => {
 
   const handleSendToSameDayOpen = () => {
     if (!patient) return;
-    setSdCareType(subServices.includes('Minor Injury') ? 'Minor Injury' : subServices[0] || 'Dialysis');
+    setSdCareType('');
     setSdSelectedDocId('');
     setSdRemarks(`Referred to Same Day Care by Dr. ${user?.doctorName || user?.username || 'Doctor'}.`);
     setShowSameDayModal(true);
@@ -428,7 +428,13 @@ const ConsultationPage = () => {
               <button 
                 type="button" 
                 className="btn-secondary text-xs py-1" 
-                onClick={() => setSymptoms([...symptoms, { symptom: '', durationDays: '', durationUnit: 'Days', pastHistory: '', remarks: '' }])}
+                onClick={() => {
+                  if (!item.symptom || !item.symptom.trim()) {
+                    toast.error('Please enter the symptom name before adding another row.');
+                    return;
+                  }
+                  setSymptoms([...symptoms, { symptom: '', durationDays: '', durationUnit: 'Days', pastHistory: '', remarks: '' }]);
+                }}
               >
                 <Plus className="h-3 w-3" />
               </button>
@@ -436,12 +442,17 @@ const ConsultationPage = () => {
                 type="button" 
                 className="btn-ghost text-red-600 text-xs py-1" 
                 onClick={() => {
-                  const next = symptoms.map((item, idx) => 
-                    idx === index 
-                      ? { symptom: '', durationDays: '', durationUnit: 'Days', pastHistory: '', remarks: '' } 
-                      : item
-                  );
-                  setSymptoms(next);
+                  const isBlank = !item.symptom || !item.symptom.trim();
+                  if (isBlank && symptoms.length > 1) {
+                    setSymptoms(symptoms.filter((_, idx) => idx !== index));
+                  } else {
+                    const next = symptoms.map((s, idx) => 
+                      idx === index 
+                        ? { symptom: '', durationDays: '', durationUnit: 'Days', pastHistory: '', remarks: '' } 
+                        : s
+                    );
+                    setSymptoms(next);
+                  }
                 }}
               >
                 Clear
@@ -716,6 +727,7 @@ const ConsultationPage = () => {
                   onChange={(e) => setSdCareType(e.target.value)}
                   required
                 >
+                  <option value="">-- Select Care Type --</option>
                   {subServices.map(type => (
                     <option key={type} value={type}>{type}</option>
                   ))}

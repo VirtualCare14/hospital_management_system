@@ -5,11 +5,11 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { sanitizePatientName, formatUhid } from '../../utils/uhid';
 import { sanitizeClonedDocumentForPdf } from '../../utils/pdfUtils';
-import { Download, MessageCircle, Plus, Printer, Save, Send } from 'lucide-react';
+import { Download, MessageCircle, Plus, Printer, Save, Send, ShieldAlert, Trash2 } from 'lucide-react';
 import client from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { languages } from '../../utils/options';
-import { t, translateClinicalText } from '../../utils/prescriptionI18n';
+import { t, translateClinicalText, translateTextBidirectional } from '../../utils/prescriptionI18n';
 import PatientReceipt from '../../components/PatientReceipt';
 
 const ageFromDob = (dob) => {
@@ -28,7 +28,7 @@ const PrescriptionPage = () => {
   const [prescription, setPrescription] = useState(null);
   const [language, setLanguage] = useState('English');
   const [translatedDiagnosisRemark, setTranslatedDiagnosisRemark] = useState('');
-  const [medicines, setMedicines] = useState([{ medicine: '', duration: '', morning: true, afternoon: false, night: true, remarks: '' }]);
+  const [medicines, setMedicines] = useState([{ medicine: '', dosageForm: 'Tablet', strength: '', dose: '1', morning: true, afternoon: false, night: true, duration: '', remarks: '', qty: 0 }]);
   const [showPreview, setShowPreview] = useState(false);
   const [sendingToIpd, setSendingToIpd] = useState(false);
   const [referralSent, setReferralSent] = useState(false);
@@ -89,8 +89,12 @@ const PrescriptionPage = () => {
   }, [patientId]);
 
   useEffect(() => {
-    setTranslatedDiagnosisRemark(translateClinicalText(consultation?.diagnosisRemark, language));
-  }, [consultation, language]);
+    if (consultation?.diagnosisRemark) {
+      setTranslatedDiagnosisRemark(translateClinicalText(consultation.diagnosisRemark, language));
+    } else {
+      setTranslatedDiagnosisRemark('');
+    }
+  }, [consultation]);
 
   useEffect(() => {
     if (!prescription) return;
@@ -101,7 +105,39 @@ const PrescriptionPage = () => {
   }, [prescription]);
 
   const updateMedicine = (index, field, value) => {
-    setMedicines((current) => current.map((item, idx) => idx === index ? { ...item, [field]: value } : item));
+    setMedicines((current) => current.map((item, idx) => {
+      if (idx === index) {
+        const newItem = { ...item, [field]: value };
+        // Recalculate quantity only if dosageForm is 'Tablet'
+        if (newItem.dosageForm === 'Tablet') {
+          const doseNum = parseFloat(newItem.dose) || 0;
+          const freqCount = (newItem.morning ? 1 : 0) + (newItem.afternoon ? 1 : 0) + (newItem.night ? 1 : 0);
+          const durDays = parseFloat(newItem.duration) || 0;
+          newItem.qty = parseFloat((doseNum * freqCount * durDays).toFixed(2));
+        }
+        return newItem;
+      }
+      return item;
+    }));
+  };
+
+  const handleLanguageChange = (newLang) => {
+    const oldLang = language;
+    setLanguage(newLang);
+
+    // 1. Translate Diagnosis / Remarks in the textarea
+    if (isAddMore) {
+      setNewDiagnosisRemark(prev => translateTextBidirectional(prev, oldLang, newLang));
+    } else {
+      setTranslatedDiagnosisRemark(prev => translateTextBidirectional(prev, oldLang, newLang));
+    }
+
+    // 2. Translate medicine remarks and durations in state
+    setMedicines(prevMeds => prevMeds.map(med => ({
+      ...med,
+      remarks: translateTextBidirectional(med.remarks, oldLang, newLang),
+      duration: translateTextBidirectional(med.duration, oldLang, newLang)
+    })));
   };
 
   const savePrescription = async (redirectAfterSave = true) => {
@@ -140,7 +176,7 @@ const PrescriptionPage = () => {
         setPrescription(prescriptionData[0]);
         setPreviousPrescription(prescriptionData[0]);
         if (isAddMore) {
-          setMedicines([{ medicine: '', duration: '', morning: true, afternoon: false, night: true, remarks: '' }]);
+          setMedicines([{ medicine: '', dosageForm: 'Tablet', strength: '', dose: '1', morning: true, afternoon: false, night: true, duration: '', remarks: '', qty: 0 }]);
           setNewDiagnosisRemark('');
         }
       }
@@ -334,7 +370,7 @@ const PrescriptionPage = () => {
           <h1 className="text-2xl font-extrabold text-gray-900">Digital Prescription</h1>
           <p className="text-sm text-gray-500">Save, download PDF, print, or share on WhatsApp.</p>
         </div>
-        <select className="input max-w-xs" value={language} onChange={(e) => setLanguage(e.target.value)}>
+        <select className="input max-w-xs" value={language} onChange={(e) => handleLanguageChange(e.target.value)}>
           {languages.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
         </select>
       </div>
@@ -370,44 +406,137 @@ const PrescriptionPage = () => {
             <table className="w-full text-left text-sm bg-white">
               <thead className="bg-orange-100/40 text-xs text-orange-900">
                 <tr>
-                  <th className="p-3">Medicine</th>
-                  <th className="p-3">Duration</th>
-                  <th className="p-3">Morning</th>
-                  <th className="p-3">Afternoon</th>
-                  <th className="p-3">Night</th>
+                  <th className="p-3">Medicine Name</th>
+                  <th className="p-3">Dosage Form</th>
+                  <th className="p-3">Strength</th>
+                  <th className="p-3">Dose</th>
+                  <th className="p-3 text-center">Frequency (M-A-N)</th>
+                  <th className="p-3">Duration (Days)</th>
                   <th className="p-3">Remarks</th>
+                  <th className="p-3 text-center">Qty</th>
                 </tr>
               </thead>
               <tbody>
-                {previousPrescription.medicines.map((med, idx) => (
-                  <tr key={idx} className="border-t border-orange-50/50 text-gray-600">
-                    <td className="p-3 font-semibold">{med.medicine}</td>
-                    <td className="p-3">{med.duration}</td>
-                    <td className="p-3">{med.morning ? '✓' : '-'}</td>
-                    <td className="p-3">{med.afternoon ? '✓' : '-'}</td>
-                    <td className="p-3">{med.night ? '✓' : '-'}</td>
-                    <td className="p-3 text-xs">{med.remarks || '-'}</td>
-                  </tr>
-                ))}
+                {previousPrescription.medicines.map((med, idx) => {
+                  const doseNum = parseFloat(med.dose) || 0;
+                  const freqCount = (med.morning ? 1 : 0) + (med.afternoon ? 1 : 0) + (med.night ? 1 : 0);
+                  const durDays = parseFloat(med.duration) || 0;
+                  const calculatedQty = parseFloat((doseNum * freqCount * durDays).toFixed(2));
+                  const displayQty = med.qty !== undefined ? med.qty : calculatedQty;
+
+                  return (
+                    <tr key={idx} className="border-t border-orange-50/50 text-gray-600">
+                      <td className="p-3 font-semibold">{med.medicine}</td>
+                      <td className="p-3 font-medium text-slate-500">{med.dosageForm || 'Tablet'}</td>
+                      <td className="p-3">{med.strength || '-'}</td>
+                      <td className="p-3">{med.dose !== undefined ? med.dose : '1'}</td>
+                      <td className="p-3 text-center font-mono">
+                        {[med.morning ? '1' : '0', med.afternoon ? '1' : '0', med.night ? '1' : '0'].join(' - ')}
+                      </td>
+                      <td className="p-3">{med.duration ? `${med.duration} days` : '-'}</td>
+                      <td className="p-3 text-xs">{med.remarks || '-'}</td>
+                      <td className="p-3 text-center font-bold text-[#FF6A00]">{displayQty}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
         
         {isAddMore && <h3 className="text-sm font-bold text-gray-700 uppercase">Add New Medicines</h3>}
+        <div className="hidden xl:grid xl:grid-cols-[1.8fr_1.2fr_1.1fr_0.9fr_2.2fr_1.1fr_1.8fr_0.9fr_40px] gap-3 text-xs font-bold text-gray-500 uppercase tracking-wider px-1">
+          <div>Medicine Name</div>
+          <div>Dosage Form</div>
+          <div>Strength <span className="text-gray-400 font-normal">(opt)</span></div>
+          <div>Dose <span className="text-gray-400 font-normal">(e.g. 1)</span></div>
+          <div className="text-center">Frequency</div>
+          <div>Duration <span className="text-gray-400 font-normal">(days)</span></div>
+          <div>Remarks</div>
+          <div className="text-center">Qty</div>
+          <div></div>
+        </div>
+
         {medicines.map((item, index) => (
-          <div key={index} className="grid gap-3 xl:grid-cols-[1fr_180px_repeat(3,130px)_1fr]">
-            <input className="input" placeholder="Medicine" list="pharmacy-medicines" value={item.medicine} onChange={(e) => updateMedicine(index, 'medicine', e.target.value)} />
-            <input className="input" placeholder="Duration" value={item.duration} onChange={(e) => updateMedicine(index, 'duration', e.target.value)} />
-            {['morning', 'afternoon', 'night'].map((time) => (
-              <label key={time} className="flex items-center justify-center gap-2 rounded-xl border border-orange-100 bg-white p-3 text-sm font-semibold capitalize">
-                <input type="checkbox" checked={item[time]} onChange={(e) => updateMedicine(index, time, e.target.checked)} /> {t(language, time)}
-              </label>
-            ))}
-            <input className="input" placeholder="Remarks" value={item.remarks} onChange={(e) => updateMedicine(index, 'remarks', e.target.value)} />
+          <div key={index} className="grid gap-3 grid-cols-1 xl:grid-cols-[1.8fr_1.2fr_1.1fr_0.9fr_2.2fr_1.1fr_1.8fr_0.9fr_40px] items-center bg-gray-50/30 xl:bg-transparent p-4 xl:p-0 rounded-xl border border-gray-150 xl:border-none">
+            <div>
+              <span className="block xl:hidden text-xs font-bold text-gray-500 uppercase mb-1">Medicine Name</span>
+              <input className="input w-full" placeholder="Medicine" list="pharmacy-medicines" value={item.medicine} onChange={(e) => updateMedicine(index, 'medicine', e.target.value)} />
+            </div>
+            <div>
+              <span className="block xl:hidden text-xs font-bold text-gray-500 uppercase mb-1">Dosage Form</span>
+              <select className="input w-full" value={item.dosageForm || 'Tablet'} onChange={(e) => updateMedicine(index, 'dosageForm', e.target.value)}>
+                <option value="Tablet">Tablet</option>
+                <option value="Liquid">Liquid</option>
+                <option value="Tube">Tube</option>
+              </select>
+            </div>
+            <div>
+              <span className="block xl:hidden text-xs font-bold text-gray-500 uppercase mb-1">Strength (optional)</span>
+              <input className="input w-full" placeholder="e.g. 500mg" value={item.strength || ''} onChange={(e) => updateMedicine(index, 'strength', e.target.value)} />
+            </div>
+            <div>
+              <span className="block xl:hidden text-xs font-bold text-gray-500 uppercase mb-1">Dose</span>
+              <input className="input w-full text-center" placeholder="e.g. 1" value={item.dose !== undefined ? item.dose : '1'} onChange={(e) => updateMedicine(index, 'dose', e.target.value)} />
+            </div>
+            <div>
+              <span className="block xl:hidden text-xs font-bold text-gray-500 uppercase mb-1 text-center">Frequency</span>
+              <div className="grid grid-cols-3 gap-1 bg-white xl:bg-gray-50 p-1.5 rounded-xl border border-orange-100/50 xl:border-gray-100">
+                {['morning', 'afternoon', 'night'].map((time) => (
+                  <label key={time} className="flex flex-col xl:flex-row items-center justify-center gap-1 cursor-pointer select-none py-1.5 px-1 rounded-lg hover:bg-orange-50/50 transition-colors">
+                    <input type="checkbox" checked={item[time]} onChange={(e) => updateMedicine(index, time, e.target.checked)} className="rounded border-gray-300 text-[#FF6A00] focus:ring-[#FF6A00]" /> 
+                    <span className="text-[10px] xl:text-xs font-bold text-gray-750 capitalize">{t(language, time)}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div>
+              <span className="block xl:hidden text-xs font-bold text-gray-500 uppercase mb-1">Duration (days)</span>
+              <input className="input w-full text-center" type="number" min="0" placeholder="Days" value={item.duration} onChange={(e) => updateMedicine(index, 'duration', e.target.value)} />
+            </div>
+            <div>
+              <span className="block xl:hidden text-xs font-bold text-gray-500 uppercase mb-1">Remarks</span>
+              <input className="input w-full" placeholder="Remarks" value={item.remarks} onChange={(e) => updateMedicine(index, 'remarks', e.target.value)} />
+            </div>
+            <div>
+              <span className="block xl:hidden text-xs font-bold text-gray-500 uppercase mb-1 text-center">Qty</span>
+              <input 
+                className={`input w-full text-center font-bold ${
+                  item.dosageForm === 'Tablet' 
+                    ? 'text-[#FF6A00] bg-orange-50/40 border-orange-200/50 cursor-not-allowed' 
+                    : 'text-gray-800 bg-white border-slate-200'
+                }`}
+                type="number"
+                min="0"
+                value={item.qty || 0} 
+                onChange={(e) => {
+                  if (item.dosageForm !== 'Tablet') {
+                    updateMedicine(index, 'qty', parseFloat(e.target.value) || 0);
+                  }
+                }}
+                readOnly={item.dosageForm === 'Tablet'} 
+                disabled={item.dosageForm === 'Tablet'}
+              />
+            </div>
+            <div className="flex justify-end xl:justify-center">
+              <button 
+                type="button" 
+                onClick={() => {
+                  if (medicines.length > 1) {
+                    setMedicines(medicines.filter((_, idx) => idx !== index));
+                  } else {
+                    setMedicines([{ medicine: '', dosageForm: 'Tablet', strength: '', dose: '1', morning: true, afternoon: false, night: true, duration: '', remarks: '', qty: 0 }]);
+                  }
+                }}
+                className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-xl transition-colors mt-2 xl:mt-0"
+                title="Remove"
+              >
+                <Trash2 className="w-5 h-5" />
+              </button>
+            </div>
           </div>
         ))}
-        <button className="btn-secondary" type="button" onClick={() => setMedicines([...medicines, { medicine: '', duration: '', morning: false, afternoon: false, night: false, remarks: '' }])}><Plus className="h-4 w-4" /> Add Medicine</button>
+        <button className="btn-secondary" type="button" onClick={() => setMedicines([...medicines, { medicine: '', dosageForm: 'Tablet', strength: '', dose: '1', morning: false, afternoon: false, night: false, duration: '', remarks: '', qty: 0 }])}><Plus className="h-4 w-4" /> Add Medicine</button>
         <datalist id="pharmacy-medicines">
           {pharmacyMedicines
             .filter(med => {
