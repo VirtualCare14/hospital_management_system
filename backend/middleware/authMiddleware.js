@@ -15,7 +15,11 @@ const authMiddleware = async (req, res, next) => {
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET || 'super_secret_hms_jwt_key_2026');
     } catch (jwtErr) {
-      console.warn(`[AuthMiddleware Warning] JWT verification failed on ${req.method} ${req.originalUrl}:`, jwtErr.message);
+      if (jwtErr.name === 'TokenExpiredError') {
+        console.debug(`[AuthMiddleware Debug] Expired token on ${req.method} ${req.originalUrl}`);
+      } else {
+        console.warn(`[AuthMiddleware Warning] JWT verification failed on ${req.method} ${req.originalUrl}:`, jwtErr.message);
+      }
       return res.status(401).json({ message: 'Token is invalid or expired' });
     }
     

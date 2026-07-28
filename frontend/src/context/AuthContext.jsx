@@ -3,6 +3,23 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import client from '../api/client';
 
+// Helper: decode JWT payload without verifying signature (client-side)
+const decodeJwtPayload = (token) => {
+  try {
+    const payload = token.split('.')[1];
+    return JSON.parse(atob(payload));
+  } catch {
+    return null;
+  }
+};
+
+// Helper: check if token is expired by comparing exp to current time
+const isTokenExpired = (token) => {
+  const decoded = decodeJwtPayload(token);
+  if (!decoded || !decoded.exp) return true;
+  return decoded.exp * 1000 < Date.now();
+};
+
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
@@ -27,6 +44,14 @@ export const AuthProvider = ({ children }) => {
 
           // Check session with backend (except for superadmin)
           if (parsedUser.role !== 'superadmin') {
+            // Skip API call if token is already expired client-side
+            if (isTokenExpired(storedToken)) {
+              localStorage.removeItem('hms_token');
+              localStorage.removeItem('hms_user');
+              setUser(null);
+              setLoading(false);
+              return;
+            }
             const response = await client.get('/auth/verify');
             if (response.data && response.data.user) {
               const normalizedUser = {
@@ -166,6 +191,14 @@ export const AuthProvider = ({ children }) => {
       try {
         const token = localStorage.getItem('hms_token');
         if (!token) return; // Do not check if token was cleared during logout
+        // Skip API call if token is already expired client-side
+        if (isTokenExpired(token)) {
+          localStorage.removeItem('hms_token');
+          localStorage.removeItem('hms_user');
+          setUser(null);
+          window.dispatchEvent(new Event('hms_unauthorized'));
+          return;
+        }
         await client.get('/auth/verify');
       } catch (error) {
         // Suppress warning if token was cleared during a logout transition
