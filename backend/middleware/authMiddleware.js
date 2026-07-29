@@ -33,8 +33,7 @@ const authMiddleware = async (req, res, next) => {
     if (user.hospitalId) {
       const hospital = await Hospital.findById(user.hospitalId).select('name isActive');
       if (!hospital || !hospital.isActive) {
-        user.currentSessionId = null;
-        await user.save();
+        await User.updateOne({ _id: user._id }, { $set: { currentSessionId: null } });
         console.warn(`[AuthMiddleware Warning] Hospital disabled or not found for user ${user.username}`);
         return res.status(403).json({ message: 'Hospital account is disabled. Please contact super admin.' });
       }

@@ -38,9 +38,9 @@ const login = async (req, res) => {
     }
 
     // Single-device login: generate a new unique session ID
-    const sessionId = crypto.randomUUID();
+    const sessionId = (crypto && typeof crypto.randomUUID === 'function') ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+    await User.updateOne({ _id: user._id }, { $set: { currentSessionId: sessionId } });
     user.currentSessionId = sessionId;
-    await user.save();
 
     // Sign token with sessionId
     const normalizedRole = user.role?.toLowerCase?.().trim?.();
@@ -90,13 +90,12 @@ const logout = async (req, res) => {
   try {
     // Invalidate the session ID in the database
     if (req.user) {
-      req.user.currentSessionId = null;
-      await req.user.save();
+      await User.updateOne({ _id: req.user._id }, { $set: { currentSessionId: null } });
     }
     res.status(200).json({ message: 'Logged out successfully' });
   } catch (error) {
     console.error('Logout Error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 };
 
