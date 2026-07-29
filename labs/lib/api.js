@@ -1,25 +1,24 @@
 // API Client configuration for Medora 360 Labs Portal
 
 const getBaseUrl = () => {
-  if (typeof window !== 'undefined') {
-    const origin = window.location.origin;
-    if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
-      return 'http://localhost:5000/api';
-    }
-    // In production browser, ALWAYS use relative '/api' to stay same-origin
-    return '/api';
-  }
-
   let url = process.env.NEXT_PUBLIC_API_URL;
   if (url) {
-    if (url === '/api' || url === '/api/') return '/api';
     if (!url.endsWith('/api') && !url.endsWith('/api/')) {
       url = `${url.replace(/\/$/, '')}/api`;
     }
     return url.replace(/\/$/, '');
   }
+
+  if (typeof window !== 'undefined') {
+    const origin = window.location.origin;
+    if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+      return 'http://localhost:5000/api';
+    }
+    // Production VPS Backend domain
+    return 'https://api.medora360.com/api';
+  }
   
-  return 'http://localhost:5000/api';
+  return 'https://api.medora360.com/api';
 };
 
 export const API_BASE_URL = getBaseUrl();
@@ -115,7 +114,7 @@ export async function apiRequest(endpoint, options = {}) {
   } catch (error) {
     // Catch network / server down errors and format clearly
     if (error.name === 'TypeError' && (error.message?.includes('fetch') || error.message?.includes('Failed'))) {
-      const customErr = new Error(`Cannot connect to backend API at ${url}. Please verify your backend server (pm2 status / node server.js) and Nginx /api proxy.`);
+      const customErr = new Error(`Cannot connect to backend API at ${url}. Please verify your backend server (pm2 status) on api.medora360.com.`);
       customErr.status = 0;
       customErr.data = { message: customErr.message };
       console.error(`API Connection Error [${endpoint}]:`, customErr.message);
