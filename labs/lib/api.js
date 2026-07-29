@@ -3,6 +3,7 @@
 const getBaseUrl = () => {
   let url = process.env.NEXT_PUBLIC_API_URL;
   if (url) {
+    if (url === '/api' || url === '/api/') return '/api';
     if (!url.endsWith('/api') && !url.endsWith('/api/')) {
       url = `${url.replace(/\/$/, '')}/api`;
     }
@@ -14,8 +15,8 @@ const getBaseUrl = () => {
     if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
       return 'http://localhost:5000/api';
     }
-    // Default fallback for VPS / production when relative API proxy is used
-    return `${origin}/api`;
+    // Default fallback for VPS / production
+    return '/api';
   }
   
   return 'http://localhost:5000/api';
@@ -114,7 +115,7 @@ export async function apiRequest(endpoint, options = {}) {
   } catch (error) {
     // Catch network / server down errors and format clearly
     if (error.name === 'TypeError' && (error.message?.includes('fetch') || error.message?.includes('Failed'))) {
-      const customErr = new Error(`Cannot connect to backend server at ${baseUrl}. Please verify your backend server (node server.js) is running on port 5000.`);
+      const customErr = new Error(`Cannot connect to backend API at ${url}. Please verify your backend server (pm2 status / node server.js) and Nginx /api proxy.`);
       customErr.status = 0;
       customErr.data = { message: customErr.message };
       console.error(`API Connection Error [${endpoint}]:`, customErr.message);
