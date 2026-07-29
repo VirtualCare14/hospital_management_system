@@ -475,7 +475,7 @@ const getDoctors = async (req, res) => {
 // @access  Private/Admin
 const updateDoctorAvailability = async (req, res) => {
   try {
-    const { availableSlots } = req.body;
+    const { availableSlots, slotGap } = req.body;
     const doctor = await User.findOne(hospitalFilter(req, { _id: req.params.id, role: { $in: ['doctor', 'nursing'] } }));
 
     if (!doctor) {
@@ -487,6 +487,9 @@ const updateDoctorAvailability = async (req, res) => {
     }
 
     doctor.availableSlots = availableSlots;
+    if (slotGap !== undefined) {
+      doctor.slotGap = Number(slotGap);
+    }
     await doctor.save();
 
     res.status(200).json({ message: 'Doctor availability updated successfully', doctor });
@@ -501,7 +504,7 @@ const updateDoctorAvailability = async (req, res) => {
 // @access  Private
 const getDoctorAvailability = async (req, res) => {
   try {
-    const doctor = await User.findOne(hospitalFilter(req, { _id: req.params.id, role: { $in: ['doctor', 'nursing'] } })).select('availableSlots doctorName username');
+    const doctor = await User.findOne(hospitalFilter(req, { _id: req.params.id, role: { $in: ['doctor', 'nursing'] } })).select('availableSlots slotGap doctorName username');
 
     if (!doctor) {
       return res.status(404).json({ message: 'Doctor not found' });

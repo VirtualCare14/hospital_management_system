@@ -8,7 +8,8 @@ const timeSlotSchema = new mongoose.Schema({
   },
   startTime: { type: String }, // e.g., "09:00"
   endTime: { type: String },   // e.g., "17:00"
-  isAvailable: { type: Boolean, default: true }
+  isAvailable: { type: Boolean, default: true },
+  slotGap: { type: Number, default: 10 }
 }, { _id: false });
 
 const userSchema = new mongoose.Schema({
@@ -57,6 +58,10 @@ const userSchema = new mongoose.Schema({
   availableSlots: {
     type: [timeSlotSchema],
     default: []
+  },
+  slotGap: {
+    type: Number,
+    default: 10
   },
   currentSessionId: {
     type: String,

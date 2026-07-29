@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
-import { Printer, Save, Search, UserCheck } from 'lucide-react';
+import { Printer, Save, Search, UserCheck, Clock } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import client from '../../api/client';
 import PatientReceipt from '../../components/PatientReceipt';
 import SkeletonInput from '../../components/Skeleton/SkeletonInput';
 import { formatUhid } from '../../utils/uhid';
+import { generateTimeSlots, filterSlotsForDate } from '../../utils/timeSlots';
 
 const PatientRegistration = () => {
   const [departments, setDepartments] = useState([]);
@@ -18,12 +19,11 @@ const PatientRegistration = () => {
   const [registeredPatient, setRegisteredPatient] = useState(null);
   const [showReceipt, setShowReceipt] = useState(false);
   const receiptRef = useRef(null);
+
   const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm();
   const department = watch('department');
   const doctorId = watch('doctorId');
   const appointmentDate = watch('appointmentDate');
-  const allSlots = ['09:00 AM', '09:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM', '12:00 PM', '12:30 PM', '02:00 PM', '02:30 PM', '03:00 PM', '03:30 PM', '04:00 PM', '04:30 PM', '05:00 PM'];
-  const freeSlots = allSlots.filter((slot) => !bookedSlots.includes(slot));
 
   const Field = ({ label, children, className = '' }) => (
     <label className={`block ${className}`}>
@@ -56,18 +56,63 @@ const PatientRegistration = () => {
     setDoctorsLoading(true);
     client
       .get(`/admin/doctors?department=${encodeURIComponent(department)}`)
-      .then(({ data }) => setDoctors(data))
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          setDoctors(data);
+        } else {
+          // If no doctors explicitly tied to this department, load all active doctors & same day care staff
+          client.get('/admin/doctors')
+            .then((allRes) => setDoctors(allRes.data))
+            .catch(() => setDoctors([]));
+        }
+      })
       .catch(() => setDoctors([]))
       .finally(() => setDoctorsLoading(false));
   }, [department, setValue]);
 
   useEffect(() => {
     if (doctorId && appointmentDate) {
-      client.get(`/patients/booked-slots?doctorId=${doctorId}&date=${appointmentDate}`).then(({ data }) => setBookedSlots(data));
+      client.get(`/patients/booked-slots?doctorId=${doctorId}&date=${appointmentDate}`)
+        .then(({ data }) => setBookedSlots(data))
+        .catch(() => setBookedSlots([]));
     } else {
       setBookedSlots([]);
     }
   }, [doctorId, appointmentDate]);
+
+  // Selected Doctor / Staff object
+  const selectedDoctorObj = doctors.find((d) => d._id === doctorId);
+
+  // Compute dynamic time slots based on selected doctor, weekly schedule, slot gap, appointment date, and current system time
+  let freeSlots = [];
+  let doctorAvailabilityStatus = '';
+
+  if (selectedDoctorObj && appointmentDate) {
+    const [year, month, day] = appointmentDate.split('-').map(Number);
+    const dateObj = new Date(year, month - 1, day);
+    const daysList = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const dayName = daysList[dateObj.getDay()];
+
+    const userSlots = selectedDoctorObj.availableSlots || [];
+    const gap = selectedDoctorObj.slotGap || 10;
+
+    let dayConfig = userSlots.find((s) => s.day?.toLowerCase() === dayName.toLowerCase());
+
+    if (dayConfig) {
+      if (!dayConfig.isAvailable) {
+        doctorAvailabilityStatus = `${selectedDoctorObj.doctorName || selectedDoctorObj.username} is unavailable on ${dayName}s`;
+      } else {
+        const generated = generateTimeSlots(dayConfig.startTime || '09:00', dayConfig.endTime || '18:00', gap);
+        const filteredForDate = filterSlotsForDate(generated, appointmentDate);
+        freeSlots = filteredForDate.filter((slot) => !bookedSlots.includes(slot));
+      }
+    } else {
+      // Default slots if schedule not explicitly configured for this day
+      const generated = generateTimeSlots('09:00', '18:00', gap);
+      const filteredForDate = filterSlotsForDate(generated, appointmentDate);
+      freeSlots = filteredForDate.filter((slot) => !bookedSlots.includes(slot));
+    }
+  }
 
   // Patient lookup state (Mobile or Aadhaar)
   const [existingPatientData, setExistingPatientData] = useState(null);
@@ -171,7 +216,7 @@ const PatientRegistration = () => {
       <form onSubmit={handleSubmit(onSubmit)} className="card space-y-5 p-5">
         <div>
           <h1 className="text-2xl font-extrabold text-gray-900">Patient Registration / EMR</h1>
-          <p className="text-sm text-gray-500">Register patients for OPD, IPD, or Same Day Care. Mobile or Aadhaar-based patient lookup with auto UHID generation.</p>
+          <p className="text-sm text-gray-500">Register patients for OPD, IPD, or Same Day Care. Dynamic available time slot allocation with AM/PM format.</p>
         </div>
 
         {/* Existing Patient Banner */}
@@ -192,7 +237,7 @@ const PatientRegistration = () => {
             </div>
             <button
               type="button"
-              className="text-xs font-bold text-green-700 hover:bg-green-100 px-2 py-1 rounded"
+              className="text-xs font-bold text-green-700 hover:bg-green-100 px-2 py-1 rounded cursor-pointer"
               onClick={() => {
                 setExistingPatientData(null);
                 setIsExistingPatient(false);
@@ -272,40 +317,60 @@ const PatientRegistration = () => {
           </Field>
 
           <Field label="Department">
-          {departmentsLoading ? (
-            <SkeletonInput />
-          ) : (
-            <select className="input" {...register('department', { required: true })}>
-              <option value="">Select department</option>
-              {departments.map((dept) => (
-                <option key={dept._id} value={dept.departmentName}>{dept.departmentName}</option>
-              ))}
-            </select>
-          )}
-        </Field>
+            {departmentsLoading ? (
+              <SkeletonInput />
+            ) : (
+              <select className="input" {...register('department', { required: true })}>
+                <option value="">Select department</option>
+                {departments.map((dept) => (
+                  <option key={dept._id} value={dept.departmentName}>{dept.departmentName}</option>
+                ))}
+              </select>
+            )}
+          </Field>
 
-        <Field label="Doctor">
-          {doctorsLoading ? (
-            <SkeletonInput />
-          ) : (
-            <select className="input" {...register('doctorId', { required: true })}>
-              <option value="">Select doctor</option>
-              {doctors.map((doctor) => (
-                <option key={doctor._id} value={doctor._id}>Dr. {doctor.doctorName || doctor.username}</option>
-              ))}
-            </select>
-          )}
-        </Field>
+          <Field label="Doctor / Same Day Care Staff">
+            {doctorsLoading ? (
+              <SkeletonInput />
+            ) : (
+              <select className="input font-medium" {...register('doctorId', { required: true })}>
+                <option value="">Select doctor / staff</option>
+                {doctors.map((doctor) => (
+                  <option key={doctor._id} value={doctor._id}>
+                    {doctor.role === 'nursing' ? '' : 'Dr. '}{doctor.doctorName || doctor.username} {doctor.role === 'nursing' ? '(Same Day Care)' : ''}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
 
           <Field label="Appointment Date">
             <input className="input" type="date" {...register('appointmentDate', { required: true })} />
           </Field>
-          <Field label="Free Slots">
-            <select className="input" {...register('slot', { required: true })}>
-              <option value="">Select free slot</option>
-              {freeSlots.map((slot) => <option key={slot} value={slot}>{slot}</option>)}
+
+          <Field label="Free Available Slots">
+            <select 
+              className={`input font-semibold ${doctorAvailabilityStatus ? 'border-red-400 text-red-600' : 'text-gray-900'}`} 
+              {...register('slot', { required: true })}
+            >
+              <option value="">
+                {!doctorId || !appointmentDate
+                  ? 'Select doctor & date first'
+                  : doctorAvailabilityStatus
+                    ? doctorAvailabilityStatus
+                    : freeSlots.length === 0
+                      ? 'No free slots available for this date/time'
+                      : `Select free slot (${freeSlots.length} available)`}
+              </option>
+              {freeSlots.map((slot) => (
+                <option key={slot} value={slot}>{slot}</option>
+              ))}
             </select>
+            {doctorAvailabilityStatus && (
+              <p className="mt-1 text-xs font-bold text-red-500">{doctorAvailabilityStatus}</p>
+            )}
           </Field>
+
           <Field label="Weight">
             <input className="input" placeholder="kg" type="number" step="0.1" {...register('weight')} />
           </Field>
@@ -324,7 +389,7 @@ const PatientRegistration = () => {
         </div>
 
         {Object.keys(errors).length > 0 && <p className="text-sm font-semibold text-red-500">Please complete all required fields.</p>}
-        <button className="btn" type="submit">
+        <button className="btn cursor-pointer" type="submit">
           <Save className="h-4 w-4" /> {isExistingPatient ? 'Register New Visit' : 'Register Patient'}
         </button>
       </form>
@@ -345,8 +410,8 @@ const PatientRegistration = () => {
               )}
             </div>
             <div className="flex gap-2">
-              <button className="btn" onClick={printReceipt}><Printer className="h-4 w-4" /> Print Receipt</button>
-              <button className="btn-secondary" onClick={closeReceipt}>Close</button>
+              <button className="btn cursor-pointer" onClick={printReceipt}><Printer className="h-4 w-4" /> Print Receipt</button>
+              <button className="btn-secondary cursor-pointer" onClick={closeReceipt}>Close</button>
             </div>
           </div>
 
