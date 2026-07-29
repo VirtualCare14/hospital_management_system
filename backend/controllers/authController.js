@@ -8,22 +8,24 @@ const crypto = require('crypto');
 // @access  Public
 const login = async (req, res) => {
   try {
-    const { username, password, hospitalId } = req.body;
+    const body = req.body || {};
+    const { username, password, hospitalId } = body;
 
     if (!username || !password) {
       return res.status(400).json({ message: 'Please provide both username and password' });
     }
 
-    const normalizedUsername = username.toLowerCase().trim();
+    const normalizedUsername = String(username).toLowerCase().trim();
     const userQuery = { username: normalizedUsername };
     if (hospitalId) userQuery.hospitalId = hospitalId;
+    
     let user = await User.findOne(userQuery).populate('hospitalId', 'name isActive');
 
     if (!user) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    if (user.hospitalId && !user.hospitalId.isActive) {
+    if (user.hospitalId && typeof user.hospitalId === 'object' && user.hospitalId.isActive === false) {
       return res.status(403).json({ message: 'Hospital account is disabled. Please contact super admin.' });
     }
 
@@ -31,8 +33,15 @@ const login = async (req, res) => {
       return res.status(403).json({ message: 'Account is disabled. Please contact the administrator.' });
     }
 
-    // Check password
-    const isMatch = await user.comparePassword(password);
+    // Check password safely
+    let isMatch = false;
+    try {
+      isMatch = await user.comparePassword(String(password));
+    } catch (passErr) {
+      console.error('Password comparison error:', passErr.message);
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
     if (!isMatch) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
@@ -40,7 +49,6 @@ const login = async (req, res) => {
     // Single-device login: generate a new unique session ID
     const sessionId = (crypto && typeof crypto.randomUUID === 'function') ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
     await User.updateOne({ _id: user._id }, { $set: { currentSessionId: sessionId } });
-    user.currentSessionId = sessionId;
 
     // Sign token with sessionId
     const normalizedRole = user.role?.toLowerCase?.().trim?.();
@@ -60,8 +68,8 @@ const login = async (req, res) => {
         doctorName: user.doctorName,
         department: user.department,
         mobile: user.mobile,
-        hospitalId: user.hospitalId?._id,
-        hospitalName: user.hospitalId?.name
+        hospitalId: user.hospitalId?._id || user.hospitalId,
+        hospitalName: user.hospitalId?.name || 'Hospital'
       }
     });
   } catch (error) {
