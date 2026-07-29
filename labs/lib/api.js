@@ -1,6 +1,15 @@
 // API Client configuration for Medora 360 Labs Portal
 
 const getBaseUrl = () => {
+  if (typeof window !== 'undefined') {
+    const origin = window.location.origin;
+    if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+      return 'http://localhost:5000/api';
+    }
+    // In production browser, ALWAYS use relative '/api' to stay same-origin
+    return '/api';
+  }
+
   let url = process.env.NEXT_PUBLIC_API_URL;
   if (url) {
     if (url === '/api' || url === '/api/') return '/api';
@@ -8,15 +17,6 @@ const getBaseUrl = () => {
       url = `${url.replace(/\/$/, '')}/api`;
     }
     return url.replace(/\/$/, '');
-  }
-  
-  if (typeof window !== 'undefined') {
-    const origin = window.location.origin;
-    if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
-      return 'http://localhost:5000/api';
-    }
-    // Default fallback for VPS / production
-    return '/api';
   }
   
   return 'http://localhost:5000/api';
