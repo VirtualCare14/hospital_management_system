@@ -48,12 +48,100 @@ const BillingPage = () => {
   const isSameDayCare = location.pathname.startsWith('/same-day-care/billing');
   const queryTab = searchParams.get('tab') || 'billing';
 
-  // Navigation tab state: 'billing' = billing desk, 'registry' = invoice search, 'dashboard' = dashboard analysis
+  // Navigation tab state: 'billing' = billing desk, 'registry' = invoice search, 'dashboard' = dashboard analysis, 'due-recovery' = due recovery
   const [activeTab, setActiveTab] = useState(queryTab);
 
   useEffect(() => {
     setActiveTab(queryTab);
   }, [queryTab]);
+
+  // ==========================================
+  // DUE AMOUNT RECOVERY STATE & HANDLERS
+  // ==========================================
+  const [duesList, setDuesList] = useState([]);
+  const [loadingDues, setLoadingDues] = useState(false);
+  const [duesSearch, setDuesSearch] = useState('');
+  const [duesStatusFilter, setDuesStatusFilter] = useState('');
+  const [dueMetrics, setDueMetrics] = useState({ totalOutstanding: 0, patientCount: 0 });
+
+  // Due Recovery Modal State
+  const [selectedBillForRecovery, setSelectedBillForRecovery] = useState(null);
+  const [recoveryPaymentAmount, setRecoveryPaymentAmount] = useState('');
+  const [recoveryPaymentMode, setRecoveryPaymentMode] = useState('Cash');
+  const [recoveryTransactionRef, setRecoveryTransactionRef] = useState('');
+  const [recoveryRemarks, setRecoveryRemarks] = useState('');
+  const [recordingRecoveryPayment, setRecordingRecoveryPayment] = useState(false);
+
+  const loadDuesList = async () => {
+    setLoadingDues(true);
+    try {
+      const q = new URLSearchParams();
+      if (duesSearch) q.set('search', duesSearch);
+      if (duesStatusFilter) q.set('status', duesStatusFilter);
+
+      const { data } = await client.get(`/billing/dues?${q.toString()}`);
+      setDuesList(data.bills || []);
+      setDueMetrics({
+        totalOutstanding: data.totalOutstanding || 0,
+        patientCount: data.patientCount || 0
+      });
+    } catch (err) {
+      toast.error('Failed to load pending due list');
+    } finally {
+      setLoadingDues(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'due-recovery') {
+      loadDuesList();
+    }
+  }, [activeTab, duesSearch, duesStatusFilter]);
+
+  const handleOpenRecoveryModal = (bill) => {
+    setSelectedBillForRecovery(bill);
+    setRecoveryPaymentAmount(String(bill.dueAmount || ''));
+    setRecoveryPaymentMode('Cash');
+    setRecoveryTransactionRef('');
+    setRecoveryRemarks('');
+  };
+
+  const handleRecordRecoveryPayment = async (e) => {
+    e.preventDefault();
+    if (!selectedBillForRecovery || !recoveryPaymentAmount) {
+      toast.error('Please enter a valid payment amount');
+      return;
+    }
+
+    const payAmt = parseFloat(recoveryPaymentAmount);
+    if (isNaN(payAmt) || payAmt <= 0) {
+      toast.error('Please enter a positive payment amount');
+      return;
+    }
+
+    if (payAmt > selectedBillForRecovery.dueAmount) {
+      toast.error(`Entered amount (₹${payAmt}) exceeds due left (₹${selectedBillForRecovery.dueAmount})`);
+      return;
+    }
+
+    setRecordingRecoveryPayment(true);
+    try {
+      const { data } = await client.post('/billing/dues/pay', {
+        billId: selectedBillForRecovery._id,
+        amountPaid: payAmt,
+        paymentMode: recoveryPaymentMode,
+        transactionRef: recoveryTransactionRef,
+        remarks: recoveryRemarks
+      });
+      toast.success(data.message || 'Due payment recorded successfully!');
+      setSelectedBillForRecovery(null);
+      loadDuesList();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to record due payment');
+    } finally {
+      setRecordingRecoveryPayment(false);
+    }
+  };
 
   const [view, setView] = useState('list'); // 'list' = search patient, 'bill' = invoice generation
 
@@ -371,8 +459,11 @@ const BillingPage = () => {
       const mappedItems = mapLoadedItems(data.items);
       setItems(mappedItems);
       
-      // Auto-check all items by default
-      setSelectedItemIndexes(mappedItems.map((_, i) => i));
+      // Auto-check unpaid items by default (exclude items paid at reception)
+      const initialSelectedIndices = mappedItems
+        .map((item, i) => (item.paidAtReception || (item.category === 'OPD' && item.paymentStatus === 'Paid') ? null : i))
+        .filter(i => i !== null);
+      setSelectedItemIndexes(initialSelectedIndices);
 
       // Pull active unadjusted advances
       setPatientAdvances(data.activeAdvances || []);
@@ -417,7 +508,10 @@ const BillingPage = () => {
       const { data } = await client.get(`/billing/generate/${selectedPatient.uhid}?billType=${newType}`);
       const mappedItems = mapLoadedItems(data.items);
       setItems(mappedItems);
-      setSelectedItemIndexes(mappedItems.map((_, i) => i));
+      const initialSelectedIndices = mappedItems
+        .map((item, i) => (item.paidAtReception || (item.category === 'OPD' && item.paymentStatus === 'Paid') ? null : i))
+        .filter(i => i !== null);
+      setSelectedItemIndexes(initialSelectedIndices);
     } catch (err) {
       toast.error('Failed to reload items');
     } finally {
@@ -427,16 +521,23 @@ const BillingPage = () => {
 
   // Checkbox multi-select helpers
   const handleToggleItemCheckbox = (index) => {
+    const targetItem = items[index];
+    if (targetItem && (targetItem.paidAtReception || (targetItem.category === 'OPD' && targetItem.paymentStatus === 'Paid'))) {
+      return; // Paid items cannot be selected for re-billing
+    }
     setSelectedItemIndexes(prev => 
       prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]
     );
   };
 
   const handleSelectAllCheckbox = () => {
-    if (selectedItemIndexes.length === items.length) {
+    const selectableIndices = items
+      .map((item, i) => (item.paidAtReception || (item.category === 'OPD' && item.paymentStatus === 'Paid') ? null : i))
+      .filter(i => i !== null);
+    if (selectableIndices.length > 0 && selectedItemIndexes.length === selectableIndices.length) {
       setSelectedItemIndexes([]);
     } else {
-      setSelectedItemIndexes(items.map((_, i) => i));
+      setSelectedItemIndexes(selectableIndices);
     }
   };
 
@@ -852,6 +953,14 @@ const BillingPage = () => {
             >
               <LayoutDashboard className="h-4 w-4" /> Dashboard
             </button>
+            <button
+              onClick={() => setActiveTab('due-recovery')}
+              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-all ${
+                activeTab === 'due-recovery' ? 'bg-orange-500 text-white shadow-sm' : 'text-orange-950 hover:bg-orange-100/50'
+              }`}
+            >
+              <Coins className="h-4 w-4" /> Due Amount Recovery
+            </button>
           </div>
         )}
 
@@ -1081,8 +1190,8 @@ const BillingPage = () => {
                               <th className="p-3 pl-4 text-center w-10">
                                 <input
                                   type="checkbox"
-                                  className="rounded border-orange-200 text-orange-600 focus:ring-orange-500"
-                                  checked={items.length > 0 && selectedItemIndexes.length === items.length}
+                                  className="rounded border-orange-200 text-orange-600 focus:ring-orange-500 cursor-pointer"
+                                  checked={items.length > 0 && selectedItemIndexes.length > 0 && selectedItemIndexes.length === items.filter(i => !i.paidAtReception && !(i.category === 'OPD' && i.paymentStatus === 'Paid')).length}
                                   onChange={handleSelectAllCheckbox}
                                 />
                               </th>
@@ -1105,18 +1214,20 @@ const BillingPage = () => {
                             ) : (
                               items.map((item, idx) => {
                                 const isChecked = selectedItemIndexes.includes(idx);
+                                const isPaidAtReception = item.paidAtReception || (item.category === 'OPD' && item.paymentStatus === 'Paid');
                                 return (
                                   <tr
                                     key={idx}
-                                    className={`hover:bg-orange-50/10 cursor-pointer ${isChecked ? 'bg-orange-50/20' : ''}`}
-                                    onClick={() => handleToggleItemCheckbox(idx)}
+                                    className={`hover:bg-orange-50/10 ${isPaidAtReception ? 'bg-emerald-50/30' : (isChecked ? 'bg-orange-50/20' : '')}`}
+                                    onClick={() => !isPaidAtReception && handleToggleItemCheckbox(idx)}
                                   >
                                     <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
                                       <input
                                         type="checkbox"
-                                        className="rounded border-orange-200 text-orange-600 focus:ring-orange-500"
+                                        className="rounded border-orange-200 text-orange-600 focus:ring-orange-500 disabled:opacity-30 cursor-pointer"
                                         checked={isChecked}
-                                        onChange={() => handleToggleItemCheckbox(idx)}
+                                        disabled={isPaidAtReception}
+                                        onChange={() => !isPaidAtReception && handleToggleItemCheckbox(idx)}
                                       />
                                     </td>
                                     <td className="p-3 font-mono">
@@ -1124,7 +1235,22 @@ const BillingPage = () => {
                                         {item.category}
                                       </span>
                                     </td>
-                                    <td className="p-3 font-bold text-gray-800 max-w-[280px] truncate">{item.description}</td>
+                                    <td className="p-3 font-bold text-gray-800 max-w-[320px]">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span>{item.description}</span>
+                                        {item.category === 'OPD' && (
+                                          isPaidAtReception ? (
+                                            <span className="text-[9px] font-black text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200">
+                                              Paid at Reception ({item.paymentMode || 'Cash'})
+                                            </span>
+                                          ) : (
+                                            <span className="text-[9px] font-black text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full border border-rose-200">
+                                              Unpaid (Pending)
+                                            </span>
+                                          )
+                                        )}
+                                      </div>
+                                    </td>
                                     <td className="p-3 text-right font-semibold text-gray-600">
                                       ₹{(item.price || 0).toFixed(2)}
                                     </td>
@@ -1698,6 +1824,340 @@ const BillingPage = () => {
                 </div>
               </div>
             </>
+          )}
+        </div>
+      )}
+
+      {/* ===================== VIEW 4: DUE AMOUNT RECOVERY WORKSPACE ===================== */}
+      {activeTab === 'due-recovery' && (
+        <div className="space-y-6 animate-fadeIn">
+          {/* Header Banner */}
+          <div className="card p-5 bg-gradient-to-r from-red-500/10 via-amber-500/5 to-transparent border border-red-200/60 rounded-2xl flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Coins className="h-5 w-5 text-red-600" />
+                <h2 className="text-base font-bold text-gray-900">Due Amount Recovery Desk</h2>
+              </div>
+              <p className="text-xs text-gray-600 max-w-2xl">
+                Search patients with pending or partial bill dues, record installment payments with automated date & time tracking, and view complete payment history timelines.
+              </p>
+            </div>
+            <button
+              onClick={loadDuesList}
+              disabled={loadingDues}
+              className="btn-secondary py-2 px-3 text-xs flex items-center gap-1.5 whitespace-nowrap shadow-sm"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${loadingDues ? 'animate-spin text-orange-600' : ''}`} />
+              Refresh Dues List
+            </button>
+          </div>
+
+          {/* Quick Metrics Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="card p-4 border-l-4 border-l-red-500">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Total Outstanding Dues</span>
+              <p className="text-2xl font-black text-red-600 mt-1">₹{dueMetrics.totalOutstanding.toFixed(2)}</p>
+            </div>
+            <div className="card p-4 border-l-4 border-l-amber-500">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Patients with Dues</span>
+              <p className="text-2xl font-black text-amber-600 mt-1">{dueMetrics.patientCount}</p>
+            </div>
+            <div className="card p-4 border-l-4 border-l-orange-500">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Total Due Invoices</span>
+              <p className="text-2xl font-black text-gray-900 mt-1">{duesList.length}</p>
+            </div>
+          </div>
+
+          {/* Search and Filters */}
+          <div className="card p-4 flex flex-col md:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search by Patient Name, UHID, Mobile, Invoice No, or Bill No..."
+                className="input pl-9"
+                value={duesSearch}
+                onChange={(e) => setDuesSearch(e.target.value)}
+              />
+              {duesSearch && (
+                <button onClick={() => setDuesSearch('')} className="absolute right-3 top-2.5 p-1 text-gray-400 hover:text-gray-600">
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+            <select
+              className="input py-2 md:w-[200px]"
+              value={duesStatusFilter}
+              onChange={(e) => setDuesStatusFilter(e.target.value)}
+            >
+              <option value="">All Payment Statuses</option>
+              <option value="Partially Paid">Partially Paid</option>
+              <option value="Unpaid">Unpaid</option>
+            </select>
+          </div>
+
+          {/* Dues List Table */}
+          <div className="card overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-sm">
+                <thead>
+                  <tr className="bg-orange-50/50 text-xs font-bold uppercase text-orange-800 border-b border-orange-100">
+                    <th className="p-4">Invoice / Bill No</th>
+                    <th className="p-4">Patient Name & UHID</th>
+                    <th className="p-4">Bill Date</th>
+                    <th className="p-4">Grand Total</th>
+                    <th className="p-4">Paid Amount</th>
+                    <th className="p-4">Due Balance Left</th>
+                    <th className="p-4">Payment History</th>
+                    <th className="p-4 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-orange-50">
+                  {loadingDues ? (
+                    <tr>
+                      <td colSpan="8" className="p-8 text-center text-gray-400">
+                        <RefreshCw className="h-6 w-6 animate-spin mx-auto text-orange-500 mb-2" />
+                        Loading pending due records...
+                      </td>
+                    </tr>
+                  ) : duesList.length === 0 ? (
+                    <tr>
+                      <td colSpan="8" className="p-8 text-center text-gray-400">
+                        No pending patient dues found.
+                      </td>
+                    </tr>
+                  ) : (
+                    duesList.map((bill) => (
+                      <tr key={bill._id} className="hover:bg-orange-50/10 transition-colors">
+                        <td className="p-4">
+                          <span className="font-mono font-bold text-gray-900 block text-xs">{bill.invoiceNo || bill.billNo}</span>
+                          <span className="text-[10px] text-gray-400 block">{bill.billType}</span>
+                        </td>
+                        <td className="p-4">
+                          <span className="font-bold text-gray-900 block">{bill.patientName || bill.patientId?.patientName || 'Patient'}</span>
+                          <span className="text-xs text-gray-500 block">
+                            UHID: {formatUhid(bill.uhid || bill.patientId?.uhid)} • {bill.patientMobile || bill.patientId?.mobile || ''}
+                          </span>
+                        </td>
+                        <td className="p-4 text-xs font-medium text-gray-700">
+                          {bill.createdAt ? new Date(bill.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
+                        </td>
+                        <td className="p-4 font-bold text-gray-900">₹{bill.grandTotal?.toFixed(2)}</td>
+                        <td className="p-4 font-bold text-emerald-600">₹{bill.amountPaid?.toFixed(2)}</td>
+                        <td className="p-4 font-extrabold text-red-600 text-base">
+                          ₹{bill.dueAmount?.toFixed(2)}
+                        </td>
+                        <td className="p-4 text-xs">
+                          {bill.payments && bill.payments.length > 0 ? (
+                            <span className="inline-flex items-center gap-1 text-gray-600 bg-gray-100 px-2.5 py-1 rounded-lg font-medium">
+                              <History className="h-3 w-3 text-orange-500" />
+                              {bill.payments.length} Installment{bill.payments.length > 1 ? 's' : ''}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 italic">No payments yet</span>
+                          )}
+                        </td>
+                        <td className="p-4 text-center">
+                          <button
+                            onClick={() => handleOpenRecoveryModal(bill)}
+                            className="btn py-1.5 px-3 text-xs flex items-center gap-1.5 mx-auto bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                          >
+                            <Coins className="h-3.5 w-3.5" /> Recover Due
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* RECOVER DUE PAYMENT MODAL */}
+          {selectedBillForRecovery && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+              <div className="card w-full max-w-lg p-6 space-y-5 bg-white shadow-2xl rounded-2xl animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+                <div className="flex items-center justify-between border-b border-orange-100 pb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 bg-emerald-100 text-emerald-600 rounded-xl">
+                      <Coins className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-extrabold text-gray-900 text-lg">Recover Patient Due Amount</h3>
+                      <p className="text-xs text-gray-500">Record installment/due recovery payment</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setSelectedBillForRecovery(null)}
+                    className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                {/* Patient & Invoice Summary Box */}
+                <div className="bg-gradient-to-br from-orange-50/60 to-white p-4 rounded-xl border border-orange-100 space-y-2 text-xs">
+                  <div className="flex justify-between font-bold text-gray-900 text-sm">
+                    <span>{selectedBillForRecovery.patientName || selectedBillForRecovery.patientId?.patientName}</span>
+                    <span className="font-mono text-orange-700">{selectedBillForRecovery.invoiceNo || selectedBillForRecovery.billNo}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-600 text-[11px]">
+                    <span>UHID: {formatUhid(selectedBillForRecovery.uhid || selectedBillForRecovery.patientId?.uhid)}</span>
+                    <span>Bill Type: {selectedBillForRecovery.billType}</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center pt-2 border-t border-orange-100/70">
+                    <div className="bg-white p-2 rounded-lg border border-orange-100">
+                      <span className="text-[10px] text-gray-400 uppercase font-bold block">Total Bill</span>
+                      <span className="font-bold text-gray-800 text-xs">₹{selectedBillForRecovery.grandTotal?.toFixed(2)}</span>
+                    </div>
+                    <div className="bg-white p-2 rounded-lg border border-orange-100">
+                      <span className="text-[10px] text-gray-400 uppercase font-bold block">Amount Paid</span>
+                      <span className="font-bold text-emerald-600 text-xs">₹{selectedBillForRecovery.amountPaid?.toFixed(2)}</span>
+                    </div>
+                    <div className="bg-red-50 p-2 rounded-lg border border-red-200">
+                      <span className="text-[10px] text-red-600 uppercase font-extrabold block">Due Left</span>
+                      <span className="font-extrabold text-red-700 text-sm">₹{selectedBillForRecovery.dueAmount?.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Payment Form */}
+                <form onSubmit={handleRecordRecoveryPayment} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-gray-700">
+                      Payment Amount to Recover (₹) *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      max={selectedBillForRecovery.dueAmount}
+                      className="input py-2.5 text-base font-extrabold text-gray-900 border-emerald-300 focus:border-emerald-500"
+                      value={recoveryPaymentAmount}
+                      onChange={(e) => setRecoveryPaymentAmount(e.target.value)}
+                      placeholder="e.g. 2500"
+                      required
+                    />
+                  </div>
+
+                  {/* Dynamic Calculation Live Box */}
+                  {recoveryPaymentAmount && !isNaN(parseFloat(recoveryPaymentAmount)) && (
+                    <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-200 text-xs space-y-1">
+                      <div className="flex justify-between text-gray-700">
+                        <span>Current Due Balance:</span>
+                        <span className="font-bold">₹{selectedBillForRecovery.dueAmount?.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-emerald-700 font-bold">
+                        <span>Payment Received Now:</span>
+                        <span>- ₹{parseFloat(recoveryPaymentAmount || 0).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-gray-900 font-extrabold border-t border-emerald-200 pt-1 mt-1">
+                        <span>Remaining Due After Payment:</span>
+                        <span className={Math.max(0, selectedBillForRecovery.dueAmount - parseFloat(recoveryPaymentAmount || 0)) === 0 ? 'text-green-600 font-black' : 'text-red-600'}>
+                          ₹{Math.max(0, selectedBillForRecovery.dueAmount - parseFloat(recoveryPaymentAmount || 0)).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1">
+                        Payment Mode *
+                      </label>
+                      <select
+                        className="input py-2 text-xs font-semibold"
+                        value={recoveryPaymentMode}
+                        onChange={(e) => setRecoveryPaymentMode(e.target.value)}
+                      >
+                        {['Cash', 'UPI', 'Card', 'Net Banking', 'Cheque', 'Insurance'].map(m => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1">
+                        Transaction Ref / UTR
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ref / Txn No."
+                        className="input py-2 text-xs"
+                        value={recoveryTransactionRef}
+                        onChange={(e) => setRecoveryTransactionRef(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1">
+                      Notes / Remarks
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Installment 2 paid at counter"
+                      className="input py-2 text-xs"
+                      value={recoveryRemarks}
+                      onChange={(e) => setRecoveryRemarks(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Payment History Timeline Section */}
+                  {selectedBillForRecovery.payments && selectedBillForRecovery.payments.length > 0 && (
+                    <div className="space-y-2 border-t border-orange-100 pt-3">
+                      <span className="text-[11px] font-extrabold text-gray-500 uppercase tracking-wider flex items-center gap-1">
+                        <History className="h-3.5 w-3.5 text-orange-500" /> Payment History Log ({selectedBillForRecovery.payments.length})
+                      </span>
+                      <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                        {selectedBillForRecovery.payments.map((p, pIdx) => (
+                          <div key={pIdx} className="p-2 bg-gray-50 rounded-lg border border-gray-200 text-[11px] flex justify-between items-center">
+                            <div>
+                              <span className="font-bold text-emerald-700">Paid ₹{p.amount.toFixed(2)}</span>
+                              <span className="text-gray-500 block text-[10px]">
+                                Via {p.paymentMode} {p.transactionRef ? `(${p.transactionRef})` : ''} • {p.paidAt ? new Date(p.paidAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
+                              </span>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-gray-400 block text-[10px]">Due Left: ₹{(p.dueAfterPayment || 0).toFixed(2)}</span>
+                              {p.receivedByName && <span className="text-gray-500 font-semibold block text-[10px]">By {p.receivedByName}</span>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Action buttons */}
+                  <div className="flex justify-end gap-2 border-t border-orange-50 pt-3">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedBillForRecovery(null)}
+                      className="btn-secondary py-2 px-4 text-xs"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={recordingRecoveryPayment || !recoveryPaymentAmount}
+                      className="btn py-2 px-5 text-xs flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                      {recordingRecoveryPayment ? (
+                        <>
+                          <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="h-3.5 w-3.5" />
+                          Confirm & Record Payment
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
           )}
         </div>
       )}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Eye, Printer, Search, Trash2, X, Calendar, Hash, Users, FileText, Clock, Filter, ChevronDown, ChevronLeft, ChevronRight, Copy, Pencil, Save, MoreVertical, CalendarCheck } from 'lucide-react';
+import { Eye, Printer, Search, Trash2, X, Calendar, Hash, Users, FileText, Clock, Filter, ChevronDown, ChevronLeft, ChevronRight, Copy, Pencil, Save, MoreVertical, CalendarCheck, CheckCircle, History } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import toast from 'react-hot-toast';
@@ -45,8 +45,9 @@ const getPaginationRange = (currentPage, totalPages) => {
 
 const PatientList = () => {
   const [registrations, setRegistrations] = useState([]);
-  const [stats, setStats] = useState({ totalToday: 0, totalMonth: 0, totalFiltered: 0 });
+  const [stats, setStats] = useState({ previousCount: 0, todayCount: 0, upcomingCount: 0, completedCount: 0, totalFiltered: 0 });
   const [loading, setLoading] = useState(false);
+  const [quickFilter, setQuickFilter] = useState('all'); // all | previous | today | upcoming | completed
 
   // Server-Side Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -75,6 +76,10 @@ const PatientList = () => {
   const [filterPatientName, setFilterPatientName] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+
+  const hasActiveFilters = Boolean(
+    fromDate || toDate || filterUhid || filterRegNo || filterPatientName || filterDepartment
+  );
 
   // Visit history modal
   const [historyModal, setHistoryModal] = useState(null); // null = closed, { uhid, patientName } = open
@@ -114,6 +119,9 @@ const PatientList = () => {
         page: currentPage,
         limit: pageSize
       };
+      if (quickFilter && quickFilter !== 'all') {
+        params.filter = quickFilter;
+      }
       if (fromDate) params.fromDate = fromDate;
       if (toDate) params.toDate = toDate;
       if (filterUhid) params.uhid = filterUhid;
@@ -123,7 +131,7 @@ const PatientList = () => {
 
       const { data } = await client.get('/patients/registrations/list', { params });
       setRegistrations(data.registrations || []);
-      setStats(data.stats || { totalToday: 0, totalMonth: 0, totalFiltered: 0 });
+      setStats(data.stats || { previousCount: 0, todayCount: 0, upcomingCount: 0, completedCount: 0, totalFiltered: 0 });
       setTotalRecords(data.totalRecords ?? data.total ?? 0);
       setTotalPages(data.totalPages || 1);
     } catch (error) {
@@ -134,10 +142,10 @@ const PatientList = () => {
     }
   };
 
-  // Reset to page 1 whenever search filters change
+  // Reset to page 1 whenever search filters or quickFilter change
   useEffect(() => {
     setCurrentPage(1);
-  }, [fromDate, toDate, filterUhid, filterRegNo, filterPatientName, filterDepartment]);
+  }, [quickFilter, fromDate, toDate, filterUhid, filterRegNo, filterPatientName, filterDepartment]);
 
   // Fetch registrations on filter, page or page size change
   useEffect(() => {
@@ -145,7 +153,7 @@ const PatientList = () => {
       fetchRegistrations();
     }, 300);
     return () => clearTimeout(timeout);
-  }, [currentPage, pageSize, fromDate, toDate, filterUhid, filterRegNo, filterPatientName, filterDepartment]);
+  }, [currentPage, pageSize, quickFilter, fromDate, toDate, filterUhid, filterRegNo, filterPatientName, filterDepartment]);
 
   const clearFilters = () => {
     setFromDate('');
@@ -272,20 +280,42 @@ const PatientList = () => {
     }
   };
 
-  const printPatientReceipt = async (reg) => {
+  const [printMode, setPrintMode] = useState('patient_slip');
+
+  const openPrintModal = async (reg) => {
     try {
       const { data } = await client.get(`/patients/${reg.patientId}`);
-      // Override doctor with the specific registration's doctor
-      setPatientDetails({
+      // Merge specific registration/visit details from reg onto patient object
+      const fullDetails = {
         ...data,
         doctorId: { doctorName: reg.doctorName, username: reg.doctorName },
-        department: reg.department,
-        registrationNumber: reg.registrationNumber,
-        appointmentNumber: reg.appointmentNumber
-      });
+        department: reg.department || data.department,
+        registrationNumber: reg.registrationNumber || data.registrationNumber,
+        appointmentNumber: reg.appointmentNumber || data.appointmentNumber,
+        appointmentDate: reg.appointmentDate || data.appointmentDate,
+        slot: reg.slot || data.slot,
+        opdFee: reg.opdFee !== undefined ? reg.opdFee : (data.opdFee || 0),
+        discountType: reg.discountType || data.discountType || 'none',
+        discountValue: reg.discountValue !== undefined ? reg.discountValue : (data.discountValue || 0),
+        discountAmount: reg.discountAmount !== undefined ? reg.discountAmount : (data.discountAmount || 0),
+        netOpdFee: reg.netOpdFee !== undefined ? reg.netOpdFee : (data.netOpdFee || 0),
+        paymentStatus: reg.paymentStatus || data.paymentStatus || 'Paid',
+        paymentMode: reg.paymentMode || data.paymentMode || 'Cash',
+        billNumber: reg.billNumber || data.billNumber || null
+      };
+      setPatientDetails(fullDetails);
+      setPrintMode('patient_slip');
       setShowReceipt(true);
-      setTimeout(async () => {
-        if (receiptRef.current) {
+    } catch (error) {
+      toast.error('Error loading patient documents');
+    }
+  };
+
+  const handlePrintDocument = async (modeToPrint) => {
+    setPrintMode(modeToPrint);
+    setTimeout(async () => {
+      if (receiptRef.current) {
+        try {
           const canvas = await html2canvas(receiptRef.current, {
             scale: 2, useCORS: true, backgroundColor: '#ffffff', imageTimeout: 20000
           });
@@ -296,50 +326,169 @@ const PatientList = () => {
           pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
           pdf.autoPrint();
           window.open(pdf.output('bloburl'), '_blank');
+        } catch (error) {
+          toast.error('Error printing document. Please try again.');
         }
-        setShowReceipt(false);
-        setPatientDetails(null);
-      }, 500);
-    } catch (error) {
-      toast.error('Error generating receipt');
-    }
+      }
+    }, 150);
   };
 
-  const hasActiveFilters = fromDate || toDate || filterUhid || filterRegNo || filterPatientName || filterDepartment;
+  const getTodayStr = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const getFirstDayOfMonthStr = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}-01`;
+  };
+
+  const filterByToday = () => {
+    const today = getTodayStr();
+    setFromDate(today);
+    setToDate(today);
+  };
+
+  const filterByMonth = () => {
+    const firstDay = getFirstDayOfMonthStr();
+    const today = getTodayStr();
+    setFromDate(firstDay);
+    setToDate(today);
+  };
+
+  const filterByAll = () => {
+    setFromDate('');
+    setToDate('');
+  };
+
+  const [hoveredBox, setHoveredBox] = useState(null);
+
+  const todayStr = getTodayStr();
+  const firstDayStr = getFirstDayOfMonthStr();
+
+  const isTodayActive = fromDate === todayStr && toDate === todayStr;
+  const isMonthActive = fromDate === firstDayStr && (toDate === todayStr || !toDate);
+  const isAllActive = !fromDate && !toDate;
 
   useHeader({ onRefresh: fetchRegistrations });
 
   return (
     <div className="space-y-5">
-      {/* Statistics Cards */}
+      {/* Statistics Cards with Interactive Quick Filters */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
-        <div className="card p-4 flex items-center gap-3">
-          <div className="bg-orange-100 text-orange-600 p-3 rounded-xl">
+        {/* Today's Patients Box */}
+        <div
+          onClick={filterByToday}
+          onMouseEnter={() => setHoveredBox('today')}
+          onMouseLeave={() => setHoveredBox(null)}
+          style={{
+            backgroundColor: (hoveredBox === 'today' || isTodayActive) ? '#f97316' : '#ffffff',
+            color: (hoveredBox === 'today' || isTodayActive) ? '#ffffff' : '#111827',
+            borderColor: (hoveredBox === 'today' || isTodayActive) ? '#ea580c' : '#e5e7eb'
+          }}
+          className="rounded-2xl p-4 flex items-center gap-3.5 cursor-pointer transition-all duration-200 shadow-2xs hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] border"
+        >
+          <div
+            style={{
+              backgroundColor: (hoveredBox === 'today' || isTodayActive) ? 'rgba(255,255,255,0.25)' : '#ffedd5',
+              color: (hoveredBox === 'today' || isTodayActive) ? '#ffffff' : '#ea580c'
+            }}
+            className="p-3 rounded-xl transition-colors"
+          >
             <Calendar className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-xs font-bold text-gray-500 uppercase">Today</p>
-            <p className="text-2xl font-extrabold text-gray-900">{stats.totalToday}</p>
+            <p
+              style={{ color: (hoveredBox === 'today' || isTodayActive) ? '#ffedd5' : '#6b7280' }}
+              className="text-xs font-extrabold uppercase tracking-wider transition-colors"
+            >
+              Today's Patients
+            </p>
+            <p
+              style={{ color: (hoveredBox === 'today' || isTodayActive) ? '#ffffff' : '#111827' }}
+              className="text-2xl font-black transition-colors"
+            >
+              {stats.totalToday || 0}
+            </p>
           </div>
         </div>
-        <div className="card p-4 flex items-center gap-3">
-          <div className="bg-blue-100 text-blue-600 p-3 rounded-xl">
+
+        {/* This Month's Patients Box */}
+        <div
+          onClick={filterByMonth}
+          onMouseEnter={() => setHoveredBox('month')}
+          onMouseLeave={() => setHoveredBox(null)}
+          style={{
+            backgroundColor: (hoveredBox === 'month' || isMonthActive) ? '#2563eb' : '#ffffff',
+            color: (hoveredBox === 'month' || isMonthActive) ? '#ffffff' : '#111827',
+            borderColor: (hoveredBox === 'month' || isMonthActive) ? '#1d4ed8' : '#e5e7eb'
+          }}
+          className="rounded-2xl p-4 flex items-center gap-3.5 cursor-pointer transition-all duration-200 shadow-2xs hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] border"
+        >
+          <div
+            style={{
+              backgroundColor: (hoveredBox === 'month' || isMonthActive) ? 'rgba(255,255,255,0.25)' : '#dbeafe',
+              color: (hoveredBox === 'month' || isMonthActive) ? '#ffffff' : '#2563eb'
+            }}
+            className="p-3 rounded-xl transition-colors"
+          >
             <FileText className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-xs font-bold text-gray-500 uppercase">This Month</p>
-            <p className="text-2xl font-extrabold text-gray-900">{stats.totalMonth}</p>
+            <p
+              style={{ color: (hoveredBox === 'month' || isMonthActive) ? '#dbeafe' : '#6b7280' }}
+              className="text-xs font-extrabold uppercase tracking-wider transition-colors"
+            >
+              This Month
+            </p>
+            <p
+              style={{ color: (hoveredBox === 'month' || isMonthActive) ? '#ffffff' : '#111827' }}
+              className="text-2xl font-black transition-colors"
+            >
+              {stats.totalMonth || 0}
+            </p>
           </div>
         </div>
-        <div className="card p-4 flex items-center gap-3">
-          <div className="bg-green-100 text-green-600 p-3 rounded-xl">
+
+        {/* Total Registrations Box */}
+        <div
+          onClick={filterByAll}
+          onMouseEnter={() => setHoveredBox('all')}
+          onMouseLeave={() => setHoveredBox(null)}
+          style={{
+            backgroundColor: (hoveredBox === 'all' || isAllActive) ? '#059669' : '#ffffff',
+            color: (hoveredBox === 'all' || isAllActive) ? '#ffffff' : '#111827',
+            borderColor: (hoveredBox === 'all' || isAllActive) ? '#047857' : '#e5e7eb'
+          }}
+          className="rounded-2xl p-4 flex items-center gap-3.5 cursor-pointer transition-all duration-200 shadow-2xs hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] border"
+        >
+          <div
+            style={{
+              backgroundColor: (hoveredBox === 'all' || isAllActive) ? 'rgba(255,255,255,0.25)' : '#d1fae5',
+              color: (hoveredBox === 'all' || isAllActive) ? '#ffffff' : '#059669'
+            }}
+            className="p-3 rounded-xl transition-colors"
+          >
             <Users className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-xs font-bold text-gray-500 uppercase">
-              {hasActiveFilters ? 'Filtered Total' : 'Total Registrations'}
+            <p
+              style={{ color: (hoveredBox === 'all' || isAllActive) ? '#d1fae5' : '#6b7280' }}
+              className="text-xs font-extrabold uppercase tracking-wider transition-colors"
+            >
+              Total Registrations
             </p>
-            <p className="text-2xl font-extrabold text-gray-900">{stats.totalFiltered}</p>
+            <p
+              style={{ color: (hoveredBox === 'all' || isAllActive) ? '#ffffff' : '#111827' }}
+              className="text-2xl font-black transition-colors"
+            >
+              {stats.totalFiltered || totalRecords || 0}
+            </p>
           </div>
         </div>
       </div>
@@ -527,11 +676,11 @@ const PatientList = () => {
                           <button
                             onClick={() => {
                               setActiveMenuId(null);
-                              printPatientReceipt(reg);
+                              openPrintModal(reg);
                             }}
-                            className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 text-left transition-colors"
+                            className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 text-left transition-colors cursor-pointer"
                           >
-                            <Printer className="h-3.5 w-3.5 text-green-600" /> Print
+                            <Printer className="h-3.5 w-3.5 text-green-600" /> Print Documents
                           </button>
                           <div className="border-t border-orange-50 my-1"></div>
                           <button
@@ -980,10 +1129,73 @@ const PatientList = () => {
         </div>
       )}
 
-      {/* Hidden receipt for printing */}
+      {/* Receipt & Patient Slip Print Modal */}
       {showReceipt && patientDetails && (
-        <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
-          <PatientReceipt ref={receiptRef} patient={patientDetails} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="card w-full max-w-4xl max-h-[90vh] flex flex-col bg-white overflow-hidden shadow-2xl rounded-2xl">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-orange-50 to-white">
+              <div>
+                <h3 className="font-extrabold text-gray-900 text-lg">Print Patient Documents</h3>
+                <p className="text-xs text-gray-500 font-medium">
+                  Patient: <strong className="text-orange-700">{patientDetails.patientName}</strong> | UHID: {formatUhid(patientDetails.uhid)} | Reg#: {patientDetails.registrationNumber || 'N/A'} {patientDetails.billNumber ? `| Bill #: ${patientDetails.billNumber}` : ''}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="btn-secondary cursor-pointer flex items-center gap-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 border-indigo-200 hover:bg-indigo-100 px-3 py-1.5"
+                  onClick={() => handlePrintDocument('patient_slip')}
+                >
+                  <Printer className="h-3.5 w-3.5 text-indigo-600" /> Print Patient Slip
+                </button>
+                <button
+                  type="button"
+                  className="btn cursor-pointer flex items-center gap-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5"
+                  onClick={() => handlePrintDocument('bill_receipt')}
+                >
+                  <Printer className="h-3.5 w-3.5" /> Print Bill Receipt
+                </button>
+                <button
+                  type="button"
+                  className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 cursor-pointer"
+                  onClick={() => { setShowReceipt(false); setPatientDetails(null); }}
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Document Preview Mode Tabs */}
+            <div className="flex items-center justify-between bg-gray-50 px-4 py-2 border-b border-gray-200">
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Document Preview Mode</span>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  onClick={() => setPrintMode('patient_slip')}
+                  className={`text-xs font-bold px-3 py-1 rounded-md transition-all cursor-pointer ${
+                    printMode === 'patient_slip' ? 'bg-white text-indigo-700 shadow-xs border border-indigo-200' : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Patient Slip Preview
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPrintMode('bill_receipt')}
+                  className={`text-xs font-bold px-3 py-1 rounded-md transition-all cursor-pointer ${
+                    printMode === 'bill_receipt' ? 'bg-white text-indigo-700 shadow-xs border border-indigo-200' : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Bill Receipt Preview
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable Document Container */}
+            <div className="flex-1 overflow-auto p-4 bg-gray-100">
+              <PatientReceipt ref={receiptRef} patient={patientDetails} mode={printMode} />
+            </div>
+          </div>
         </div>
       )}
     </div>

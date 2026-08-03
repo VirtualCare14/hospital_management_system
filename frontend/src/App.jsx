@@ -24,6 +24,7 @@ import PatientConsultationTrack from './pages/doctor/PatientConsultationTrack.js
 import DoctorOtPatients from './pages/doctor/DoctorOtPatients.jsx';
 import DoctorOtForm from './pages/doctor/DoctorOtForm.jsx';
 import DischargeRequestsView from './pages/doctor/DischargeRequestsView.jsx';
+import EditPrintRxSettings from './pages/doctor/EditPrintRxSettings.jsx';
 import SuperAdminLogin from './pages/superadmin/SuperAdminLogin.jsx';
 import SuperAdminDashboard from './pages/superadmin/SuperAdminDashboard.jsx';
 import LabWorkspace from './pages/lab/LabWorkspace.jsx';
@@ -111,6 +112,7 @@ function App() {
             <Route path="/doctor/ipd-patients" element={<DoctorIpdPatients />} />
             <Route path="/doctor/ipd-chart/:id" element={<IpdMedicationChart />} />
             <Route path="/doctor/discharge-requests" element={<DischargeRequestsView />} />
+            <Route path="/doctor/edit-print-rx" element={<EditPrintRxSettings />} />
           </Route>
           <Route path="/module/:moduleId" element={<ModulePlaceholder />} />
           <Route element={<ProtectedRoute allowedRoles={['admin', 'billing']} requiredModule={8} />}>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, Stethoscope, FileText, Send, History, X, Scissors, MoreVertical } from 'lucide-react';
+import { Search, Stethoscope, FileText, Send, History, X, Scissors, MoreVertical, ClipboardEdit } from 'lucide-react';
 import toast from 'react-hot-toast';
 import client from '../../api/client';
 import { formatDate } from '../../utils/dateFormat';
@@ -145,6 +145,45 @@ const DoctorPatientList = () => {
 
   return (
     <div className="space-y-5">
+      {/* Eye-Catching Color & Size Animation CSS */}
+      <style>{`
+        @keyframes eyeCatchPulse {
+          0% {
+            transform: scale(1) rotate(0deg);
+            color: #2563eb;
+            filter: drop-shadow(0 0 3px rgba(37, 99, 235, 0.7));
+          }
+          20% {
+            transform: scale(1.28) rotate(-6deg);
+            color: #ea580c;
+            filter: drop-shadow(0 0 10px rgba(234, 88, 12, 0.95));
+          }
+          40% {
+            transform: scale(0.92) rotate(0deg);
+            color: #dc2626;
+            filter: drop-shadow(0 0 8px rgba(220, 38, 38, 0.85));
+          }
+          60% {
+            transform: scale(1.24) rotate(6deg);
+            color: #059669;
+            filter: drop-shadow(0 0 10px rgba(5, 150, 105, 0.95));
+          }
+          80% {
+            transform: scale(0.95) rotate(-3deg);
+            color: #7c3aed;
+            filter: drop-shadow(0 0 8px rgba(124, 58, 237, 0.85));
+          }
+          100% {
+            transform: scale(1) rotate(0deg);
+            color: #2563eb;
+            filter: drop-shadow(0 0 3px rgba(37, 99, 235, 0.7));
+          }
+        }
+        .eye-catcher-icon {
+          animation: eyeCatchPulse 1.2s infinite ease-in-out;
+        }
+      `}</style>
+
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="text-2xl font-extrabold text-gray-900">All Patients</h1>
@@ -163,7 +202,7 @@ const DoctorPatientList = () => {
         </div>
       </div>
 
-      <div className="card overflow-hidden">
+      <div className="card overflow-visible">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="bg-orange-100/70 text-xs uppercase text-orange-900">
@@ -206,76 +245,72 @@ const DoctorPatientList = () => {
                       Dr. {patient.doctorId?.doctorName || patient.doctorId?.username || 'N/A'}
                     </td>
                     <td className="p-3">{formatDate(patient.appointmentDate)} {patient.slot}</td>
-                    <td className="p-3 pr-4 text-center relative action-menu-container">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setActiveMenuId(activeMenuId === patient._id ? null : patient._id);
-                        }}
-                        className="p-1.5 hover:bg-orange-100/70 text-gray-700 hover:text-orange-700 rounded-lg transition-colors border border-orange-200/80 bg-white shadow-sm inline-flex items-center justify-center cursor-pointer"
-                        title="Actions"
-                      >
-                        <MoreVertical className="h-4 w-4" />
-                      </button>
+                    <td className="p-3 pr-4 text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        <Link 
+                          to={`/doctor/consultation/${patient._id}`}
+                          className="relative inline-flex items-center justify-center p-1 rounded-xl cursor-pointer bg-transparent"
+                          title="Open Doctor Consultation Form"
+                        >
+                          <ClipboardEdit className={`h-10 w-10 ${patient.consultationStatus !== 'completed' ? 'eye-catcher-icon' : 'text-emerald-600'}`} />
+                        </Link>
 
-                      {activeMenuId === patient._id && (
-                        <div className="absolute right-3 top-10 z-30 w-48 bg-white rounded-2xl shadow-xl border border-orange-100 py-1.5 space-y-0.5 animate-in fade-in zoom-in-95 duration-100 text-left">
-                          <Link 
-                            to={`/doctor/consultation/${patient._id}`}
-                            onClick={() => setActiveMenuId(null)}
-                            className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 text-left transition-colors cursor-pointer"
-                          >
-                            <Stethoscope className="h-3.5 w-3.5 text-orange-500" /> Consult
-                          </Link>
-
-                          <Link 
-                            to={`/doctor/prescription/${patient._id}`}
-                            onClick={() => setActiveMenuId(null)}
-                            className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 text-left transition-colors cursor-pointer"
-                          >
-                            <FileText className="h-3.5 w-3.5 text-blue-600" /> Digital Rx
-                          </Link>
-
+                        <div className="relative action-menu-container">
                           <button
                             type="button"
-                            onClick={async () => {
-                              setActiveMenuId(null);
-                              const defaultNotes = `Referred to OT from Doctor Patient List by Dr. ${user?.doctorName || user?.username || 'Doctor'}`;
-                              const customRemarks = window.prompt("Enter remarks for OT Referral:", defaultNotes);
-                              if (customRemarks === null) return;
-                              try {
-                                await client.post('/ipd/referrals', { patientId: patient._id, notes: customRemarks });
-                                toast.success(`${patient.patientName} sent to OT!`);
-                              } catch (err) { toast.error(err.response?.data?.message || 'Failed to send to OT'); }
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveMenuId(activeMenuId === patient._id ? null : patient._id);
                             }}
-                            className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                            className="p-1.5 hover:bg-orange-100/70 text-gray-700 hover:text-orange-700 rounded-lg transition-colors border border-orange-200/80 bg-white shadow-sm inline-flex items-center justify-center cursor-pointer"
+                            title="More Actions"
                           >
-                            <Scissors className="h-3.5 w-3.5 text-indigo-600" /> Refer to OT
+                            <MoreVertical className="h-4 w-4" />
                           </button>
 
-                          <Link 
-                            to={`/doctor/consultation-track/${patient._id}`}
-                            onClick={() => setActiveMenuId(null)}
-                            className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 text-left transition-colors cursor-pointer"
-                          >
-                            <History className="h-3.5 w-3.5 text-green-600" /> Clinical Track
-                          </Link>
+                          {activeMenuId === patient._id && (
+                            <div className="absolute right-0 top-10 z-30 w-48 bg-white rounded-2xl shadow-xl border border-orange-100 py-1.5 space-y-0.5 animate-in fade-in zoom-in-95 duration-100 text-left">
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  setActiveMenuId(null);
+                                  const defaultNotes = `Referred to OT from Doctor Patient List by Dr. ${user?.doctorName || user?.username || 'Doctor'}`;
+                                  const customRemarks = window.prompt("Enter remarks for OT Referral:", defaultNotes);
+                                  if (customRemarks === null) return;
+                                  try {
+                                    await client.post('/ipd/referrals', { patientId: patient._id, notes: customRemarks });
+                                    toast.success(`${patient.patientName} sent to OT!`);
+                                  } catch (err) { toast.error(err.response?.data?.message || 'Failed to send to OT'); }
+                                }}
+                                className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                              >
+                                <Scissors className="h-3.5 w-3.5 text-indigo-600" /> Refer to OT
+                              </button>
 
-                          <div className="border-t border-orange-50 my-1"></div>
+                              <Link 
+                                to={`/doctor/consultation-track/${patient._id}`}
+                                onClick={() => setActiveMenuId(null)}
+                                className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                              >
+                                <History className="h-3.5 w-3.5 text-green-600" /> Clinical Track
+                              </Link>
 
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setActiveMenuId(null);
-                              handleSendToSameDayOpen(patient);
-                            }}
-                            className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 text-left transition-colors cursor-pointer"
-                          >
-                            <Send className="h-3.5 w-3.5 text-orange-600" /> Refer Same Day Care
-                          </button>
+                              <div className="border-t border-orange-50 my-1"></div>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveMenuId(null);
+                                  handleSendToSameDayOpen(patient);
+                                }}
+                                className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                              >
+                                <Send className="h-3.5 w-3.5 text-orange-600" /> Refer Same Day Care
+                              </button>
+                            </div>
+                          )}
                         </div>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 ))

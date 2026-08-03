@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Calendar, FileText, Printer } from 'lucide-react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Calendar, FileText, Printer, X } from 'lucide-react';
 import client from '../../api/client';
 import { formatDate } from '../../utils/dateFormat';
 import toast from 'react-hot-toast';
@@ -17,6 +17,7 @@ const ageFromDob = (dob) => {
 
 const CompletedConsultationDetails = () => {
   const { consultationId } = useParams();
+  const navigate = useNavigate();
   const receiptRef = useRef(null);
   const [consultation, setConsultation] = useState(null);
   const [patient, setPatient] = useState(null);
@@ -100,8 +101,11 @@ const CompletedConsultationDetails = () => {
       {/* Header */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3">
-          <Link to="/doctor/completed" className="btn-secondary">
-            <ArrowLeft className="h-4 w-4" />
+          <Link
+            to="/doctor/completed"
+            className="inline-flex items-center justify-center w-10 h-10 rounded-2xl bg-red-600 hover:bg-red-700 text-white shadow-lg ring-1 ring-red-700/20"
+          >
+            <X className="h-4 w-4" />
           </Link>
           <div>
             <h1 className="text-2xl font-extrabold text-gray-900">Consultation Details</h1>

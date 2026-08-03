@@ -94,7 +94,12 @@ const createPatient = async (req, res) => {
       weight,
       height,
       bloodPressure,
-      temperature
+      temperature,
+      opdFee: reqOpdFee,
+      discountType: reqDiscountType,
+      discountValue: reqDiscountValue,
+      paymentStatus: reqPaymentStatus,
+      paymentMode: reqPaymentMode
     } = req.body;
 
     if (!patientName || !mobile || !address || !dob || !gender || !department || !doctorId || !appointmentDate || !slot) {
@@ -186,6 +191,26 @@ const createPatient = async (req, res) => {
       finalVisitType = 'Same Day Treatment';
     }
 
+    // Process OPD Billing fields
+    const parsedGrossFee = reqOpdFee !== undefined && reqOpdFee !== null && reqOpdFee !== ''
+      ? Math.max(0, Number(reqOpdFee) || 0)
+      : (doctor?.opdFees || 0);
+
+    const discountType = ['amount', 'percent'].includes(reqDiscountType) ? reqDiscountType : 'none';
+    const discountValue = Math.max(0, Number(reqDiscountValue) || 0);
+
+    let calculatedDiscountAmount = 0;
+    if (discountType === 'percent') {
+      calculatedDiscountAmount = Number(((parsedGrossFee * Math.min(100, discountValue)) / 100).toFixed(2));
+    } else if (discountType === 'amount') {
+      calculatedDiscountAmount = Math.min(parsedGrossFee, discountValue);
+    }
+
+    const netOpdFee = Math.max(0, Number((parsedGrossFee - calculatedDiscountAmount).toFixed(2)));
+    const paymentStatus = reqPaymentStatus === 'Not Paid' ? 'Not Paid' : 'Paid';
+    const paymentMode = paymentStatus === 'Not Paid' ? 'Pending' : (reqPaymentMode || 'Cash');
+    const billNumber = `OPD-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
+
     // Create a Visit record
     const visit = new Visit({
       hospitalId: req.user.hospitalId,
@@ -209,6 +234,14 @@ const createPatient = async (req, res) => {
         bloodPressure: bloodPressure || undefined,
         temperature: temperature || undefined
       },
+      opdFee: parsedGrossFee,
+      discountType,
+      discountValue,
+      discountAmount: calculatedDiscountAmount,
+      netOpdFee,
+      paymentStatus,
+      paymentMode,
+      billNumber,
       createdBy: req.user._id
     });
 
@@ -296,7 +329,15 @@ const createPatient = async (req, res) => {
       patientId: patient._id,
       createdAt: visit.createdAt,
       isExistingPatient,
-      sameDayTreatmentId: sameDayTreatmentRecord?._id || null
+      sameDayTreatmentId: sameDayTreatmentRecord?._id || null,
+      opdFee: visit.opdFee,
+      discountType: visit.discountType,
+      discountValue: visit.discountValue,
+      discountAmount: visit.discountAmount,
+      netOpdFee: visit.netOpdFee,
+      paymentStatus: visit.paymentStatus,
+      paymentMode: visit.paymentMode,
+      billNumber: visit.billNumber
     };
 
     const message = isExistingPatient
@@ -397,7 +438,15 @@ const getPatients = async (req, res) => {
           visitType: latestVisit?.visitType || 'OPD',
           consultationStatus: latestVisit?.consultationStatus || 'pending',
           hasPrescription: !!hasPrescription,
-          registeredBy: latestVisit?.createdBy ? (latestVisit.createdBy.doctorName || latestVisit.createdBy.username) : 'N/A'
+          registeredBy: latestVisit?.createdBy ? (latestVisit.createdBy.doctorName || latestVisit.createdBy.username) : 'N/A',
+          opdFee: latestVisit?.opdFee !== undefined ? latestVisit.opdFee : (latestVisit?.doctorId?.opdFees || 0),
+          discountType: latestVisit?.discountType || 'none',
+          discountValue: latestVisit?.discountValue || 0,
+          discountAmount: latestVisit?.discountAmount || 0,
+          netOpdFee: latestVisit?.netOpdFee !== undefined ? latestVisit.netOpdFee : (latestVisit?.opdFee || 0),
+          paymentStatus: latestVisit?.paymentStatus || 'Paid',
+          paymentMode: latestVisit?.paymentMode || 'Cash',
+          billNumber: latestVisit?.billNumber || null
         };
       })
     );
@@ -474,7 +523,15 @@ const getPatientById = async (req, res) => {
       consultationStatus: latestVisit?.consultationStatus || 'pending',
       demographics: latestVisit?.demographics || null,
       isDischarged,
-      registeredBy: latestVisit?.createdBy ? (latestVisit.createdBy.doctorName || latestVisit.createdBy.username) : 'N/A'
+      registeredBy: latestVisit?.createdBy ? (latestVisit.createdBy.doctorName || latestVisit.createdBy.username) : 'N/A',
+      opdFee: latestVisit?.opdFee !== undefined ? latestVisit.opdFee : (latestVisit?.doctorId?.opdFees || 0),
+      discountType: latestVisit?.discountType || 'none',
+      discountValue: latestVisit?.discountValue || 0,
+      discountAmount: latestVisit?.discountAmount || 0,
+      netOpdFee: latestVisit?.netOpdFee !== undefined ? latestVisit.netOpdFee : (latestVisit?.opdFee || 0),
+      paymentStatus: latestVisit?.paymentStatus || 'Paid',
+      paymentMode: latestVisit?.paymentMode || 'Cash',
+      billNumber: latestVisit?.billNumber || null
     };
 
     res.status(200).json(responseData);
@@ -505,10 +562,23 @@ const getPatientVisits = async (req, res) => {
 // @access  Private
 const getRegistrations = async (req, res) => {
   try {
-    const { fromDate, toDate, uhid, registrationNumber, patientName, department, search, page = 1, limit = 20 } = req.query;
+    const { fromDate, toDate, uhid, registrationNumber, patientName, department, search, filter, page = 1, limit = 20 } = req.query;
     let query = tenantQuery(req);
 
-    if (fromDate || toDate) {
+    const d = new Date();
+    const todayStr = d.toISOString().slice(0, 10);
+    d.setDate(d.getDate() + 1);
+    const tomorrowStr = d.toISOString().slice(0, 10);
+
+    if (filter === 'previous') {
+      query.appointmentDate = { $lt: todayStr };
+    } else if (filter === 'today') {
+      query.appointmentDate = { $regex: `^${todayStr}` };
+    } else if (filter === 'upcoming') {
+      query.appointmentDate = { $gte: tomorrowStr };
+    } else if (filter === 'completed') {
+      query.consultationStatus = 'completed';
+    } else if (fromDate || toDate) {
       query.registrationDate = {};
       if (fromDate) query.registrationDate.$gte = new Date(fromDate);
       if (toDate) query.registrationDate.$lte = new Date(toDate + 'T23:59:59.999Z');
@@ -548,12 +618,6 @@ const getRegistrations = async (req, res) => {
       Visit.countDocuments({ ...tenantQ, registrationDate: { $gte: monthStart } }),
       Visit.countDocuments(query)
     ]);
-
-    // Date-range filtered total
-    let filteredTotal = totalCount;
-    if (fromDate || toDate) {
-      filteredTotal = await Visit.countDocuments(query);
-    }
 
     const currentPage = Math.max(1, parseInt(page) || 1);
     const limitVal = Math.max(1, parseInt(limit) || 20);
@@ -640,20 +704,20 @@ const getRegistrations = async (req, res) => {
       };
     });
 
-    const totalPages = Math.ceil(filteredTotal / limitVal) || 1;
+    const totalPages = Math.ceil(totalCount / limitVal) || 1;
 
     res.json({
       registrations: enriched,
       stats: {
         totalToday,
         totalMonth,
-        totalFiltered: filteredTotal
+        totalFiltered: totalCount
       },
       page: currentPage,
       pageSize: limitVal,
       limit: limitVal,
-      totalRecords: filteredTotal,
-      total: filteredTotal,
+      totalRecords: totalCount,
+      total: totalCount,
       totalPages,
       hasNextPage: currentPage < totalPages,
       hasPreviousPage: currentPage > 1

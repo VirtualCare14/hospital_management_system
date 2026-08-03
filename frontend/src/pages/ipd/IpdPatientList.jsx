@@ -75,6 +75,7 @@ const IpdPatientList = () => {
     status: '',
     roomType: '',
     bedType: '',
+    doctorId: '',
     fromDate: '',
     toDate: ''
   });
@@ -85,9 +86,10 @@ const IpdPatientList = () => {
   const [totalRecords, setTotalRecords] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
 
-  // Room types and bed types for filters
+  // Room types, bed types, and doctors for filters
   const [roomTypes, setRoomTypes] = useState([]);
   const [bedTypes, setBedTypes] = useState([]);
+  const [doctorsList, setDoctorsList] = useState([]);
 
   const loadAdmissions = useCallback(async () => {
     setLoading(true);
@@ -97,6 +99,7 @@ const IpdPatientList = () => {
       if (filters.status) params.append('status', filters.status);
       if (filters.roomType) params.append('roomType', filters.roomType);
       if (filters.bedType) params.append('bedType', filters.bedType);
+      if (filters.doctorId) params.append('doctorId', filters.doctorId);
       if (filters.fromDate) params.append('fromDate', filters.fromDate);
       if (filters.toDate) params.append('toDate', filters.toDate);
       params.append('page', currentPage);
@@ -140,8 +143,11 @@ const IpdPatientList = () => {
         });
       });
       setBedTypes(bTypes);
+
+      const { data: docs } = await client.get('/admin/doctors');
+      setDoctorsList(docs || []);
     } catch (err) {
-      console.warn('Could not load room types:', err.message);
+      console.warn('Could not load filter options:', err.message);
     }
   };
 
@@ -304,6 +310,21 @@ const IpdPatientList = () => {
                 <option value="">All Bed Types</option>
                 {bedTypes.map(type => (
                   <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-500">Consultant / Referring Doctor</label>
+              <select
+                className="input py-2 text-xs font-medium"
+                value={filters.doctorId}
+                onChange={(e) => handleFilterChange('doctorId', e.target.value)}
+              >
+                <option value="">All Doctors</option>
+                {doctorsList.map(doc => (
+                  <option key={doc._id} value={doc._id}>
+                    Dr. {doc.doctorName || doc.username} {doc.specialization ? `(${doc.specialization})` : ''}
+                  </option>
                 ))}
               </select>
             </div>

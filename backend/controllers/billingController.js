@@ -201,8 +201,12 @@ const checkBillableItems = async (patientId) => {
   const visits = await Visit.find({ patientId, visitType: 'OPD' }).populate('doctorId', 'opdFees');
   const pendingVisits = visits.filter(v => !billedSourceIds.has(v._id.toString()));
   if (pendingVisits.length > 0) {
-    categories.push('OPD');
-    totalPendingAmount += pendingVisits.reduce((sum, v) => sum + (v.doctorId?.opdFees || 0), 0);
+    if (!categories.includes('OPD')) categories.push('OPD');
+    const unpaidVisits = pendingVisits.filter(v => v.paymentStatus === 'Not Paid');
+    totalPendingAmount += unpaidVisits.reduce((sum, v) => {
+      const fee = v.netOpdFee !== undefined && v.netOpdFee !== null ? v.netOpdFee : (v.opdFee || v.doctorId?.opdFees || 0);
+      return sum + fee;
+    }, 0);
   }
 
   // Check Same Day Treatments (Completed)
@@ -576,20 +580,30 @@ const generateBillItems = async (req, res) => {
       visits.forEach(v => {
         if (billedSourceIds.has(v._id.toString())) return;
 
-        // Add OPD Consultation Fee
-        const fee = v.doctorId?.opdFees || 0;
-        if (fee > 0) {
-          items.push({
-            category: 'OPD',
-            date: fmtDate(v.createdAt),
-            description: `OPD Consultation - Dr. ${v.doctorId?.doctorName || 'Doctor'} (${v.registrationNumber})`,
-            price: fee,
-            quantity: 1,
-            total: fee,
-            sourceId: v._id,
-            sourceModel: 'Visit'
-          });
-        }
+        const grossFee = v.opdFee !== undefined && v.opdFee !== null ? v.opdFee : (v.doctorId?.opdFees || 0);
+        const discountAmt = v.discountAmount || 0;
+        const netFee = v.netOpdFee !== undefined && v.netOpdFee !== null ? v.netOpdFee : Math.max(0, grossFee - discountAmt);
+        const isPaidAtReception = (v.paymentStatus || 'Paid') === 'Paid';
+
+        items.push({
+          category: 'OPD',
+          date: fmtDate(v.createdAt),
+          description: `OPD Consultation - Dr. ${v.doctorId?.doctorName || 'Doctor'} (${v.registrationNumber})`,
+          price: grossFee,
+          discount: discountAmt,
+          discountType: v.discountType || 'none',
+          discountValue: v.discountValue || 0,
+          netFee: netFee,
+          quantity: 1,
+          total: isPaidAtReception ? 0 : netFee,
+          originalTotal: netFee,
+          paymentStatus: v.paymentStatus || 'Paid',
+          paymentMode: v.paymentMode || 'Cash',
+          paidAtReception: isPaidAtReception,
+          billNumber: v.billNumber || null,
+          sourceId: v._id,
+          sourceModel: 'Visit'
+        });
       });
     }
 
@@ -1842,10 +1856,176 @@ const rejectDiscountRequest = async (req, res) => {
   }
 };
 
+// @desc    Get patient due balance summary & detailed bill payment history
+// @route   GET /api/billing/patient-dues/:uhid
+// @access  Private
+const getPatientDues = async (req, res) => {
+  try {
+    const { uhid } = req.params;
+    const patient = await Patient.findOne(tenantFilter(req, { uhid }));
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient not found' });
+    }
+
+    const bills = await Billing.find(tenantFilter(req, {
+      patientId: patient._id,
+      status: 'Final',
+      dueAmount: { $gt: 0 }
+    })).sort({ createdAt: -1 });
+
+    const totalDueAmount = bills.reduce((sum, b) => sum + (b.dueAmount || 0), 0);
+
+    res.json({
+      patient: {
+        _id: patient._id,
+        uhid: patient.uhid,
+        patientName: patient.patientName,
+        mobile: patient.mobile,
+        gender: patient.gender,
+        age: patient.age
+      },
+      totalDueAmount,
+      dueBillCount: bills.length,
+      bills: bills.map(b => ({
+        _id: b._id,
+        billNo: b.billNo,
+        invoiceNo: b.invoiceNo,
+        billType: b.billType,
+        createdAt: b.createdAt,
+        grandTotal: b.grandTotal,
+        amountPaid: b.amountPaid,
+        dueAmount: b.dueAmount,
+        paymentStatus: b.paymentStatus,
+        paymentMode: b.paymentMode,
+        payments: b.payments || []
+      }))
+    });
+  } catch (error) {
+    console.error('Get Patient Dues Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Get all patients / bills with pending due amounts
+// @route   GET /api/billing/dues
+// @access  Private
+const getDuesList = async (req, res) => {
+  try {
+    const { search, status } = req.query;
+    let query = {
+      status: 'Final',
+      dueAmount: { $gt: 0 }
+    };
+
+    if (status) {
+      query.paymentStatus = status;
+    }
+
+    if (search) {
+      const term = search.trim();
+      query.$or = [
+        { patientName: { $regex: term, $options: 'i' } },
+        { uhid: { $regex: term, $options: 'i' } },
+        { patientMobile: { $regex: term, $options: 'i' } },
+        { invoiceNo: { $regex: term, $options: 'i' } },
+        { billNo: { $regex: term, $options: 'i' } }
+      ];
+    }
+
+    const bills = await Billing.find(tenantFilter(req, query))
+      .populate('patientId', 'patientName uhid mobile gender age')
+      .sort({ updatedAt: -1 });
+
+    const totalOutstanding = bills.reduce((sum, b) => sum + (b.dueAmount || 0), 0);
+    const uniquePatientIds = new Set(bills.map(b => b.patientId?._id?.toString()).filter(Boolean));
+
+    res.json({
+      bills,
+      totalOutstanding,
+      patientCount: uniquePatientIds.size,
+      totalCount: bills.length
+    });
+  } catch (error) {
+    console.error('Get Dues List Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Record due recovery payment for a bill
+// @route   POST /api/billing/dues/pay
+// @access  Private
+const recordDuePayment = async (req, res) => {
+  try {
+    const { billId, amountPaid, paymentMode, transactionRef, remarks } = req.body;
+
+    if (!billId || !amountPaid || parseFloat(amountPaid) <= 0) {
+      return res.status(400).json({ message: 'Bill ID and valid payment amount are required' });
+    }
+
+    const bill = await Billing.findOne(tenantFilter(req, { _id: billId }));
+    if (!bill) {
+      return res.status(404).json({ message: 'Bill record not found' });
+    }
+
+    if (bill.dueAmount <= 0) {
+      return res.status(400).json({ message: 'This bill has no pending due amount' });
+    }
+
+    const payAmt = parseFloat(amountPaid);
+    if (payAmt > bill.dueAmount) {
+      return res.status(400).json({ message: `Entered amount (₹${payAmt}) exceeds remaining due amount (₹${bill.dueAmount})` });
+    }
+
+    const dueBeforePayment = bill.dueAmount;
+    const dueAfterPayment = Number((dueBeforePayment - payAmt).toFixed(2));
+    const newAmountPaid = Number(((bill.amountPaid || 0) + payAmt).toFixed(2));
+    const newPaymentStatus = dueAfterPayment === 0 ? 'Paid' : 'Partially Paid';
+
+    // Add to payments array
+    bill.payments = bill.payments || [];
+    bill.payments.push({
+      amount: payAmt,
+      paymentMode: paymentMode || 'Cash',
+      transactionRef: transactionRef || '',
+      paidAt: new Date(),
+      receivedBy: req.user._id,
+      receivedByName: req.user.username || 'Billing Staff',
+      dueBeforePayment,
+      dueAfterPayment,
+      remarks: remarks || ''
+    });
+
+    bill.amountPaid = newAmountPaid;
+    bill.dueAmount = dueAfterPayment;
+    bill.paymentStatus = newPaymentStatus;
+
+    // Add audit entry
+    bill.auditTrail = bill.auditTrail || [];
+    bill.auditTrail.push({
+      action: 'Due Payment Received',
+      performedBy: req.user._id,
+      performedByName: req.user.username || 'Staff',
+      timestamp: new Date(),
+      remarks: `Recovered due payment of ₹${payAmt} via ${paymentMode || 'Cash'}. Remaining Due: ₹${dueAfterPayment}`
+    });
+
+    await bill.save();
+
+    res.json({
+      message: 'Due payment recorded successfully!',
+      bill
+    });
+  } catch (error) {
+    console.error('Record Due Payment Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   generateBillItems, createBill, updateBill,
   getPatientBills, getBillById, getAllBills,
   searchPatient, getEligiblePatients,
   createAdvance, getPatientAdvances, cancelBill, getDashboardStats,
-  getDiscountRequests, approveDiscountRequest, rejectDiscountRequest
-};
+  getDiscountRequests, approveDiscountRequest, rejectDiscountRequest,
+  getPatientDues, getDuesList, recordDuePayment
+};

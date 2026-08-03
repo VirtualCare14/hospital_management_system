@@ -90,6 +90,20 @@ const billingSchema = new mongoose.Schema({
     default: 0
   },
   
+  // Payment installment & due recovery history
+  payments: [{
+    paymentNo: { type: String, default: '' },
+    amount: { type: Number, required: true },
+    paymentMode: { type: String, default: 'Cash' },
+    transactionRef: { type: String, default: '' },
+    paidAt: { type: Date, default: Date.now },
+    receivedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    receivedByName: { type: String, default: '' },
+    dueBeforePayment: { type: Number, default: 0 },
+    dueAfterPayment: { type: Number, default: 0 },
+    remarks: { type: String, default: '' }
+  }],
+  
   // Track removed items for admin
   removedItems: [billingItemSchema],
   status: {

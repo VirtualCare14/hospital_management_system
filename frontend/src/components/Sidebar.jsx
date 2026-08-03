@@ -40,7 +40,8 @@ import {
   CalendarCheck,
   Fingerprint,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  Printer
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -82,7 +83,7 @@ const Sidebar = () => {
     { to: '/admin/users', label: 'User Management', icon: UserPlus },
     { to: '/admin/departments', label: 'Manage Depts', icon: FolderHeart },
     { to: '/admin/hospital-settings', label: 'Hospital Settings', icon: Settings },
-    { to: '/admin/room-settings', label: 'IPD Administration', icon: Bed },
+    { to: '/admin/room-settings', label: 'IPD Settings', icon: Bed },
     { to: '/admin/consumable-services', label: 'Consumable Services', icon: Package },
     { to: '/admin/ot-settings', label: 'OT Settings', icon: Scissors },
     { to: '/admin/same-day-care', label: 'Same Day Care Settings', icon: Bandage },
@@ -104,6 +105,7 @@ const Sidebar = () => {
     { to: '/doctor/ot-patients', label: 'OT Patients', icon: Scissors },
     { to: '/doctor/completed', label: 'Completed Consultations', icon: CheckCircle },
     { to: '/doctor/discharge-requests', label: 'Discharge Requests', icon: DoorOpen },
+    { to: '/doctor/edit-print-rx', label: 'Edit Print Rx', icon: Printer },
   ];
 
   const labLinks = [
@@ -201,15 +203,6 @@ const Sidebar = () => {
 
       {/* Nav Link List */}
       <nav className="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto custom-scrollbar">
-        <NavLink
-          to="/"
-          onClick={handleOptionClick}
-          title="Module Home"
-          className={({ isActive }) => getLinkClass(isActive)}
-        >
-          <LayoutDashboard className="h-5 w-5 shrink-0" />
-          {isExpanded && <span className="truncate">Module Home</span>}
-        </NavLink>
 
         {/* Admin Links - only for admin role */}
         {user.role === 'admin' && (
@@ -569,6 +562,15 @@ const Sidebar = () => {
               >
                 <LayoutDashboard className="h-4 w-4 shrink-0" />
                 {isExpanded && <span className="truncate">Billing Dashboard</span>}
+              </NavLink>
+              <NavLink
+                to="/module/8?tab=due-recovery"
+                onClick={handleOptionClick}
+                title="Due Amount Recovery"
+                className={() => getLinkClass(window.location.search.includes('tab=due-recovery'), true)}
+              >
+                <BadgeIndianRupee className="h-4 w-4 shrink-0 text-orange-500" />
+                {isExpanded && <span className="truncate">Due Amount Recovery</span>}
               </NavLink>
             </div>
           </div>

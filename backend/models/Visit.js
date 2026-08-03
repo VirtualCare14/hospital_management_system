@@ -99,6 +99,42 @@ const visitSchema = new mongoose.Schema({
   followUpRemarks: {
     type: String,
     default: ''
+  },
+  // OPD Billing Fields
+  opdFee: {
+    type: Number,
+    default: 0
+  },
+  discountType: {
+    type: String,
+    enum: ['amount', 'percent', 'none'],
+    default: 'none'
+  },
+  discountValue: {
+    type: Number,
+    default: 0
+  },
+  discountAmount: {
+    type: Number,
+    default: 0
+  },
+  netOpdFee: {
+    type: Number,
+    default: 0
+  },
+  paymentStatus: {
+    type: String,
+    enum: ['Paid', 'Not Paid'],
+    default: 'Paid'
+  },
+  paymentMode: {
+    type: String,
+    enum: ['Cash', 'UPI', 'Card', 'Net Banking', 'Other', 'Pending'],
+    default: 'Cash'
+  },
+  billNumber: {
+    type: String,
+    default: null
   }
 }, { timestamps: true });
 

@@ -78,7 +78,7 @@ const DoctorIpdPatients = () => {
         </div>
       </div>
 
-      <div className="card overflow-hidden">
+      <div className="card overflow-visible">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm border-collapse">
             <thead className="bg-orange-50 text-xs font-bold uppercase text-orange-950 border-b border-orange-100">

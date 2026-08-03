@@ -289,215 +289,231 @@ const getSymptomsAutocomplete = async (req, res) => {
   }
 };
 
-// @desc    Get the logged-in doctor's appointments for a date
+// Helper function to fetch patient list by filter for a doctor
+const fetchPatientsForDoctor = async (req, doctorId, filter) => {
+  const d = new Date();
+  const today = d.toISOString().slice(0, 10);
+  d.setDate(d.getDate() + 1);
+  const tomorrow = d.toISOString().slice(0, 10);
+
+  const targetDoctorId = req.query.doctorId || (req.user.role === 'doctor' ? doctorId : null);
+  const doctorQuery = targetDoctorId ? { doctorId: targetDoctorId } : {};
+
+  let patients = [];
+
+  if (filter === 'previous') {
+    const visits = await Visit.find(tenantQuery(req, { 
+      ...doctorQuery, 
+      appointmentDate: { $lt: today },
+      consultationStatus: { $ne: 'completed' }
+    }))
+      .populate('patientId')
+      .populate('createdBy', 'username doctorName role')
+      .sort({ appointmentDate: -1, slot: 1 });
+    
+    patients = visits.map(buildPatientData).filter(Boolean);
+
+    const pastFollowUpConsultations = await Consultation.find(tenantQuery(req, {
+      ...doctorQuery,
+      consultationStatus: 'completed',
+      followUpDate: { $lt: today, $ne: null, $ne: '' }
+    }))
+      .populate('patientId')
+      .sort({ followUpDate: -1 });
+
+    const existingIds = new Set(patients.map(p => p._id.toString()));
+    for (const c of pastFollowUpConsultations) {
+      const p = c.patientId;
+      if (p && !existingIds.has(p._id.toString())) {
+        const newerCompleted = await Consultation.findOne(tenantQuery(req, {
+          patientId: p._id,
+          consultationStatus: 'completed',
+          _id: { $ne: c._id },
+          createdAt: { $gt: c.createdAt }
+        }));
+        if (!newerCompleted) {
+          existingIds.add(p._id.toString());
+          patients.push({
+            _id: p._id,
+            uhid: p.uhid,
+            patientName: p.patientName,
+            mobile: p.mobile,
+            gender: p.gender,
+            dob: p.dob,
+            department: p.department || '',
+            doctorId: targetDoctorId ? { _id: targetDoctorId } : null,
+            appointmentDate: c.followUpDate,
+            slot: 'Follow-up',
+            consultationStatus: 'completed',
+            createdAt: c.createdAt
+          });
+        }
+      }
+    }
+
+  } else if (filter === 'today') {
+    const visits = await Visit.find(tenantQuery(req, { 
+      ...doctorQuery, 
+      appointmentDate: { $regex: `^${today}` },
+      consultationStatus: { $ne: 'completed' }
+    }))
+      .populate('patientId')
+      .populate('createdBy', 'username doctorName role')
+      .sort({ slot: 1 });
+    
+    patients = visits.map(buildPatientData).filter(Boolean);
+
+    const todayFollowUps = await Consultation.find(tenantQuery(req, {
+      ...doctorQuery,
+      consultationStatus: 'completed',
+      followUpDate: { $regex: `^${today}` }
+    }))
+      .populate('patientId')
+      .sort({ updatedAt: -1 });
+
+    const existingIds = new Set(patients.map(p => p._id.toString()));
+    for (const c of todayFollowUps) {
+      const p = c.patientId;
+      if (p && !existingIds.has(p._id.toString())) {
+        const newerCompleted = await Consultation.findOne(tenantQuery(req, {
+          patientId: p._id,
+          consultationStatus: 'completed',
+          _id: { $ne: c._id },
+          createdAt: { $gt: c.createdAt }
+        }));
+        if (!newerCompleted) {
+          existingIds.add(p._id.toString());
+          patients.push({
+            _id: p._id,
+            uhid: p.uhid,
+            patientName: p.patientName,
+            mobile: p.mobile,
+            gender: p.gender,
+            dob: p.dob,
+            department: p.department || '',
+            doctorId: targetDoctorId ? { _id: targetDoctorId } : null,
+            appointmentDate: today,
+            slot: 'Follow-up',
+            consultationStatus: 'completed',
+            createdAt: c.createdAt
+          });
+        }
+      }
+    }
+
+  } else if (filter === 'upcoming') {
+    const visits = await Visit.find(tenantQuery(req, { 
+      ...doctorQuery, 
+      appointmentDate: { $gte: tomorrow },
+      consultationStatus: { $ne: 'completed' }
+    }))
+      .populate('patientId')
+      .populate('createdBy', 'username doctorName role')
+      .sort({ appointmentDate: 1, slot: 1 });
+    
+    patients = visits.map(buildPatientData).filter(Boolean);
+
+    const futureFollowUps = await Consultation.find(tenantQuery(req, {
+      ...doctorQuery,
+      consultationStatus: 'completed',
+      followUpDate: { $gte: tomorrow, $ne: null, $ne: '' }
+    }))
+      .populate('patientId')
+      .sort({ followUpDate: 1 });
+
+    const existingIds = new Set(patients.map(p => p._id.toString()));
+    for (const c of futureFollowUps) {
+      const p = c.patientId;
+      if (p && !existingIds.has(p._id.toString())) {
+        const newerCompleted = await Consultation.findOne(tenantQuery(req, {
+          patientId: p._id,
+          consultationStatus: 'completed',
+          _id: { $ne: c._id },
+          createdAt: { $gt: c.createdAt }
+        }));
+        if (!newerCompleted) {
+          existingIds.add(p._id.toString());
+          patients.push({
+            _id: p._id,
+            uhid: p.uhid,
+            patientName: p.patientName,
+            mobile: p.mobile,
+            gender: p.gender,
+            dob: p.dob,
+            department: p.department || '',
+            doctorId: targetDoctorId ? { _id: targetDoctorId } : null,
+            appointmentDate: c.followUpDate,
+            slot: 'Follow-up',
+            consultationStatus: 'completed',
+            createdAt: c.createdAt
+          });
+        }
+      }
+    }
+
+    patients.sort((a, b) => (a.appointmentDate || '').localeCompare(b.appointmentDate || ''));
+
+  } else if (filter === 'completed') {
+    const completedConsultations = await Consultation.find(tenantQuery(req, {
+      ...doctorQuery,
+      consultationStatus: 'completed'
+    }))
+      .populate('patientId')
+      .sort({ consultationCompletedDate: -1, updatedAt: -1 });
+
+    patients = completedConsultations.map(c => {
+      const p = c.patientId;
+      if (!p) return null;
+      return {
+        _id: p._id,
+        uhid: p.uhid,
+        patientName: p.patientName,
+        mobile: p.mobile,
+        gender: p.gender,
+        dob: p.dob,
+        department: p.department || c.department || '',
+        doctorId: targetDoctorId ? { _id: targetDoctorId } : null,
+        appointmentDate: c.consultationCompletedDate || c.createdAt,
+        slot: 'Completed',
+        consultationStatus: 'completed',
+        consultationId: c._id,
+        createdAt: c.createdAt
+      };
+    }).filter(Boolean);
+
+  } else if (filter === 'pending') {
+    const visits = await Visit.find(tenantQuery(req, {
+      ...doctorQuery,
+      consultationStatus: { $ne: 'completed' }
+    }))
+      .populate('patientId')
+      .populate('createdBy', 'username doctorName role')
+      .sort({ appointmentDate: -1, slot: 1 });
+    patients = visits.map(buildPatientData).filter(Boolean);
+  } else {
+    const visits = await Visit.find(tenantQuery(req, {
+      ...doctorQuery
+    }))
+      .populate('patientId')
+      .populate('createdBy', 'username doctorName role')
+      .sort({ createdAt: -1 });
+    patients = visits.map(buildPatientData).filter(Boolean);
+  }
+
+  return patients;
+};
+
+// @desc    Get appointments/patients for a doctor
 // @route   GET /api/consultation/appointments
-// @access  Private/Doctor
+// @access  Private
 const getDoctorAppointments = async (req, res) => {
   try {
     const doctorId = req.query.doctorId || req.user._id.toString();
-
     if (req.user.role === 'doctor' && doctorId !== req.user._id.toString()) {
       return res.status(403).json({ message: 'Not authorized' });
     }
-    
     const filter = req.query.filter || 'today';
-    const today = new Date().toISOString().slice(0, 10);
-
-    // Build combined patient list from visits AND follow-up consultations
-    let patients = [];
-
-    if (filter === 'previous') {
-      // 1. Get all visits with past appointment dates (exclude completed ones)
-      const visits = await Visit.find(tenantQuery(req, { 
-        doctorId, 
-        appointmentDate: { $lt: today },
-        consultationStatus: { $ne: 'completed' }
-      }))
-        .populate('patientId')
-        .populate('createdBy', 'username doctorName role')
-        .sort({ appointmentDate: -1, slot: 1 });
-      
-      patients = visits.map(buildPatientData).filter(Boolean);
-
-      // 2. Add past follow-up patients (completed consultations with followUpDate in the past)
-      const pastFollowUpConsultations = await Consultation.find(tenantQuery(req, {
-        doctorId,
-        consultationStatus: 'completed',
-        followUpDate: { $lt: today, $ne: null, $ne: '' }
-      }))
-        .populate('patientId')
-        .sort({ followUpDate: -1 });
-
-      const existingIds = new Set(patients.map(p => p._id.toString()));
-      for (const c of pastFollowUpConsultations) {
-        const p = c.patientId;
-        if (p && !existingIds.has(p._id.toString())) {
-          // Check if there is a newer completed consultation for this patient (meaning follow-up is already done)
-          const newerCompleted = await Consultation.findOne(tenantQuery(req, {
-            patientId: p._id,
-            consultationStatus: 'completed',
-            _id: { $ne: c._id },
-            createdAt: { $gt: c.createdAt }
-          }));
-          if (!newerCompleted) {
-            existingIds.add(p._id.toString());
-            patients.push({
-              _id: p._id,
-              uhid: p.uhid,
-              patientName: p.patientName,
-              mobile: p.mobile,
-              gender: p.gender,
-              dob: p.dob,
-              department: p.department || '',
-              doctorId: { _id: doctorId },
-              appointmentDate: c.followUpDate,
-              slot: 'Follow-up',
-              consultationStatus: 'completed',
-              createdAt: c.createdAt
-            });
-          }
-        }
-      }
-
-    } else if (filter === 'today') {
-      // 1. Get today's visits (exclude completed ones)
-      const visits = await Visit.find(tenantQuery(req, { 
-        doctorId, 
-        appointmentDate: today,
-        consultationStatus: { $ne: 'completed' }
-      }))
-        .populate('patientId')
-        .populate('createdBy', 'username doctorName role')
-        .sort({ slot: 1 });
-      
-      patients = visits.map(buildPatientData).filter(Boolean);
-
-      // 2. Add today's follow-ups (completed consultations with followUpDate = today)
-      const todayFollowUps = await Consultation.find(tenantQuery(req, {
-        doctorId,
-        consultationStatus: 'completed',
-        followUpDate: today
-      }))
-        .populate('patientId')
-        .sort({ updatedAt: -1 });
-
-      const existingIds = new Set(patients.map(p => p._id.toString()));
-      for (const c of todayFollowUps) {
-        const p = c.patientId;
-        if (p && !existingIds.has(p._id.toString())) {
-          // Check if there is a newer completed consultation for this patient (meaning follow-up is already done)
-          const newerCompleted = await Consultation.findOne(tenantQuery(req, {
-            patientId: p._id,
-            consultationStatus: 'completed',
-            _id: { $ne: c._id },
-            createdAt: { $gt: c.createdAt }
-          }));
-          if (!newerCompleted) {
-            existingIds.add(p._id.toString());
-            patients.push({
-              _id: p._id,
-              uhid: p.uhid,
-              patientName: p.patientName,
-              mobile: p.mobile,
-              gender: p.gender,
-              dob: p.dob,
-              department: p.department || '',
-              doctorId: { _id: doctorId },
-              appointmentDate: today,
-              slot: 'Follow-up',
-              consultationStatus: 'completed',
-              createdAt: c.createdAt
-            });
-          }
-        }
-      }
-
-    } else if (filter === 'upcoming') {
-      // 1. Get future visits (exclude completed ones)
-      const visits = await Visit.find(tenantQuery(req, { 
-        doctorId, 
-        appointmentDate: { $gt: today },
-        consultationStatus: { $ne: 'completed' }
-      }))
-        .populate('patientId')
-        .populate('createdBy', 'username doctorName role')
-        .sort({ appointmentDate: 1, slot: 1 });
-      
-      patients = visits.map(buildPatientData).filter(Boolean);
-
-      // 2. Add future follow-ups (consultations with followUpDate in the future)
-      const futureFollowUps = await Consultation.find(tenantQuery(req, {
-        doctorId,
-        consultationStatus: 'completed',
-        followUpDate: { $gt: today, $ne: null, $ne: '' }
-      }))
-        .populate('patientId')
-        .sort({ followUpDate: 1 });
-
-      const existingIds = new Set(patients.map(p => p._id.toString()));
-      for (const c of futureFollowUps) {
-        const p = c.patientId;
-        if (p && !existingIds.has(p._id.toString())) {
-          // Check if there is a newer completed consultation for this patient (meaning follow-up is already done)
-          const newerCompleted = await Consultation.findOne(tenantQuery(req, {
-            patientId: p._id,
-            consultationStatus: 'completed',
-            _id: { $ne: c._id },
-            createdAt: { $gt: c.createdAt }
-          }));
-          if (!newerCompleted) {
-            existingIds.add(p._id.toString());
-            patients.push({
-              _id: p._id,
-              uhid: p.uhid,
-              patientName: p.patientName,
-              mobile: p.mobile,
-              gender: p.gender,
-              dob: p.dob,
-              department: p.department || '',
-              doctorId: { _id: doctorId },
-              appointmentDate: c.followUpDate,
-              slot: 'Follow-up',
-              consultationStatus: 'completed',
-              createdAt: c.createdAt
-            });
-          }
-        }
-      }
-
-      // Sort by appointmentDate
-      patients.sort((a, b) => (a.appointmentDate || '').localeCompare(b.appointmentDate || ''));
-
-    } else if (filter === 'completed') {
-      // Get all completed consultations for this doctor/hospital
-      const query = tenantQuery(req, { consultationStatus: 'completed' });
-      if (req.user.role === 'doctor') query.doctorId = doctorId;
-
-      const completedConsultations = await Consultation.find(query)
-        .populate('patientId')
-        .sort({ consultationCompletedDate: -1, updatedAt: -1 });
-
-      patients = completedConsultations.map(c => {
-        const p = c.patientId;
-        if (!p) return null;
-        return {
-          _id: p._id,
-          uhid: p.uhid,
-          patientName: p.patientName,
-          mobile: p.mobile,
-          gender: p.gender,
-          dob: p.dob,
-          department: p.department || c.department || '',
-          doctorId: { _id: doctorId },
-          appointmentDate: c.consultationCompletedDate || c.createdAt,
-          slot: 'Completed',
-          consultationStatus: 'completed',
-          consultationId: c._id,
-          createdAt: c.createdAt
-        };
-      }).filter(Boolean);
-    }
-
+    const patients = await fetchPatientsForDoctor(req, doctorId, filter);
     res.status(200).json(patients);
   } catch (error) {
     console.error('Get Doctor Appointments Error:', error);
@@ -511,54 +527,26 @@ const getDoctorAppointments = async (req, res) => {
 const getDoctorStats = async (req, res) => {
   try {
     const doctorId = req.query.doctorId || req.user._id.toString();
-    
     if (req.user.role === 'doctor' && doctorId !== req.user._id.toString()) {
       return res.status(403).json({ message: 'Not authorized' });
     }
-    
-    const today = new Date().toISOString().slice(0, 10);
 
-    // Visit-based counts
-    const totalUniquePatients = await Visit.distinct('patientId', tenantQuery(req, { doctorId }));
-    
-    const previousVisitsCount = await Visit.countDocuments(tenantQuery(req, { 
-      doctorId, appointmentDate: { $lt: today } 
-    }));
-    const todaysVisitsCount = await Visit.countDocuments(tenantQuery(req, { 
-      doctorId, appointmentDate: today 
-    }));
-    const upcomingVisitsCount = await Visit.countDocuments(tenantQuery(req, { 
-      doctorId, appointmentDate: { $gt: today } 
-    }));
-
-    // Follow-up counts
-    const previousFollowUpCount = await Consultation.countDocuments(tenantQuery(req, { 
-      doctorId, consultationStatus: 'completed',
-      followUpDate: { $lt: today, $ne: null, $ne: '' } 
-    }));
-    const todaysFollowUpCount = await Consultation.countDocuments(tenantQuery(req, { 
-      doctorId, consultationStatus: 'completed',
-      followUpDate: today 
-    }));
-    const upcomingFollowUpCount = await Consultation.countDocuments(tenantQuery(req, { 
-      doctorId, consultationStatus: 'completed',
-      followUpDate: { $gt: today, $ne: null, $ne: '' } 
-    }));
-
-    const consultationCompletedCount = await Visit.countDocuments(tenantQuery(req, { 
-      doctorId, consultationStatus: 'completed' 
-    }));
-    const pendingOpdCount = await Visit.countDocuments(tenantQuery(req, { 
-      doctorId, consultationStatus: { $in: ['pending', null, undefined] } 
-    }));
+    const [allList, previousList, todaysList, upcomingList, completedList, pendingList] = await Promise.all([
+      fetchPatientsForDoctor(req, doctorId, 'all'),
+      fetchPatientsForDoctor(req, doctorId, 'previous'),
+      fetchPatientsForDoctor(req, doctorId, 'today'),
+      fetchPatientsForDoctor(req, doctorId, 'upcoming'),
+      fetchPatientsForDoctor(req, doctorId, 'completed'),
+      fetchPatientsForDoctor(req, doctorId, 'pending')
+    ]);
 
     res.status(200).json({
-      totalPatients: totalUniquePatients.length,
-      previousPatientsCount: previousVisitsCount + previousFollowUpCount,
-      todaysPatientsCount: todaysVisitsCount + todaysFollowUpCount,
-      upcomingPatientsCount: upcomingVisitsCount + upcomingFollowUpCount,
-      consultationCompletedCount,
-      pendingOpdCount
+      totalPatients: allList.length,
+      previousPatientsCount: previousList.length,
+      todaysPatientsCount: todaysList.length,
+      upcomingPatientsCount: upcomingList.length,
+      consultationCompletedCount: completedList.length,
+      pendingOpdCount: pendingList.length
     });
   } catch (error) {
     console.error('Get Doctor Stats Error:', error);

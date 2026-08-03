@@ -12,9 +12,50 @@ const tenantFilter = (req, query = {}) => (
 // @desc    Admit a patient to a bed
 // @route   POST /api/ipd/admit
 // @access  Private
+const IpdReferral = require('../models/IpdReferral');
+const Consultation = require('../models/Consultation');
+
+const getDoctorAdmissionFilter = async (hospitalId, targetDoctorId) => {
+  const hospitalQuery = hospitalId ? { hospitalId } : {};
+
+  const referrals = await IpdReferral.find({
+    ...hospitalQuery,
+    referredByDoctor: targetDoctorId
+  }).select('admissionId patientId');
+
+  const referredAdmissionIds = referrals.map(r => r.admissionId).filter(Boolean);
+  const referredPatientIdsFromReferral = referrals.map(r => r.patientId).filter(Boolean);
+
+  const consultations = await Consultation.find({
+    ...hospitalQuery,
+    doctorId: targetDoctorId
+  }).select('patientId');
+
+  const referredPatientIdsFromConsultation = consultations.map(c => c.patientId).filter(Boolean);
+
+  const allReferredPatientIds = [
+    ...new Set([
+      ...referredPatientIdsFromReferral.map(id => id.toString()),
+      ...referredPatientIdsFromConsultation.map(id => id.toString())
+    ])
+  ];
+
+  return {
+    $or: [
+      { doctorInCharge: targetDoctorId },
+      { referredDoctor: targetDoctorId },
+      { _id: { $in: referredAdmissionIds } },
+      { patientId: { $in: allReferredPatientIds } }
+    ]
+  };
+};
+
+// @desc    Admit a patient to a bed
+// @route   POST /api/ipd/admit
+// @access  Private
 const admitPatient = async (req, res) => {
   try {
-    const { patientId, roomId, bedId, doctorInCharge, admissionDate, status, isSameDayCare, provisionalDiagnosis } = req.body;
+    const { patientId, roomId, bedId, doctorInCharge, referredDoctor, admissionDate, status, isSameDayCare, provisionalDiagnosis } = req.body;
 
     if (!patientId || !doctorInCharge) {
       return res.status(400).json({ message: 'Patient and doctor in charge are required' });
@@ -43,6 +84,17 @@ const admitPatient = async (req, res) => {
     const doctor = await User.findOne(tenantFilter(req, { _id: doctorInCharge, role: 'doctor', isActive: true }));
     if (!doctor) {
       return res.status(400).json({ message: 'Selected doctor is invalid or inactive' });
+    }
+
+    // Check for pending referral for this patient to auto-populate referredDoctor if not provided
+    let finalReferredDoctor = referredDoctor || null;
+    const pendingReferral = await IpdReferral.findOne(tenantFilter(req, {
+      patientId,
+      status: 'Pending'
+    })).sort({ createdAt: -1 });
+
+    if (pendingReferral && !finalReferredDoctor) {
+      finalReferredDoctor = pendingReferral.referredByDoctor;
     }
 
     // 4. Verify bed exists, belongs to room (only if provided)
@@ -80,6 +132,7 @@ const admitPatient = async (req, res) => {
       roomId: roomId || null,
       bedId: bedId || null,
       doctorInCharge,
+      referredDoctor: finalReferredDoctor,
       admissionDate: admissionDate || new Date(),
       ipdNumber: formattedIpdNumber,
       pidNumber: formattedPidNumber,
@@ -95,6 +148,14 @@ const admitPatient = async (req, res) => {
     });
 
     const savedAdmission = await newAdmission.save();
+
+    // Link and update pending referral if any
+    if (pendingReferral) {
+      pendingReferral.status = 'Admitted';
+      pendingReferral.admissionId = savedAdmission._id;
+      pendingReferral.admittedAt = new Date();
+      await pendingReferral.save();
+    }
 
     // 7. Mark Bed as occupied
     if (bed) {
@@ -121,11 +182,25 @@ const admitPatient = async (req, res) => {
 // @access  Private
 const getAdmissions = async (req, res) => {
   try {
-    const admissions = await IpdAdmission.find(tenantFilter(req))
+    let query = tenantFilter(req);
+
+    const targetDoctorId = req.query.doctorId || (req.user?.role === 'doctor' ? req.user._id : null);
+    if (targetDoctorId) {
+      const doctorFilter = await getDoctorAdmissionFilter(req.user.hospitalId, targetDoctorId);
+      query = {
+        $and: [
+          query,
+          doctorFilter
+        ]
+      };
+    }
+
+    const admissions = await IpdAdmission.find(query)
       .populate('patientId', 'patientName uhid mobile dob gender')
       .populate('roomId', 'roomType')
       .populate('bedId', 'bedNumber bedType pricePerDay')
       .populate('doctorInCharge', 'doctorName username')
+      .populate('referredDoctor', 'doctorName username')
       .sort({ createdAt: -1 });
 
     res.status(200).json(admissions);
@@ -333,10 +408,67 @@ const changeBed = async (req, res) => {
   }
 };
 
+// @desc    Update admission date & time of an IPD patient (admitted or discharged/bill generated)
+// @route   PUT /api/ipd/admissions/:id/admission-date
+// @access  Private
+const updateAdmissionDate = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { admissionDate } = req.body;
+
+    if (!admissionDate) {
+      return res.status(400).json({ message: 'Admission date and time is required' });
+    }
+
+    const newDate = new Date(admissionDate);
+    if (isNaN(newDate.getTime())) {
+      return res.status(400).json({ message: 'Invalid admission date and time format' });
+    }
+
+    const admission = await IpdAdmission.findOne(tenantFilter(req, { _id: id }));
+    if (!admission) {
+      return res.status(404).json({ message: 'IPD admission record not found' });
+    }
+
+    admission.admissionDate = newDate;
+
+    // Synchronize initial bed history entry if present
+    if (admission.bedHistory && admission.bedHistory.length > 0) {
+      admission.bedHistory[0].startDate = newDate;
+    }
+
+    await admission.save();
+
+    // Update related discharge records if any exist
+    const IpdDischarge = require('../models/IpdDischarge');
+    await IpdDischarge.updateMany(
+      { admissionId: admission._id },
+      { $set: { admissionDate: newDate } }
+    );
+
+    // Update related OT records if any exist
+    const IpdOtRecord = require('../models/IpdOtRecord');
+    await IpdOtRecord.updateMany(
+      { admissionId: admission._id },
+      { $set: { admissionDate: newDate } }
+    );
+
+    res.status(200).json({
+      message: 'Admission date and time updated successfully',
+      admission
+    });
+  } catch (error) {
+    console.error('Update Admission Date Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   admitPatient,
   getAdmissions,
   dischargePatient,
   allocateBed,
-  changeBed
+  changeBed,
+  updateAdmissionDate
 };
+

@@ -21,7 +21,8 @@ import {
   CheckCircle, 
   AlertTriangle,
   TrendingUp,
-  UserCheck
+  UserCheck,
+  CalendarDays
 } from 'lucide-react';
 import client from '../../api/client';
 import { useHeader } from '../../context/HeaderContext';
@@ -48,9 +49,108 @@ const DEFAULT_ROOM_TYPES = [
 ];
 
 const IpdAdminWorkspace = () => {
-  const [activeTab, setActiveTab] = useState('rooms'); // 'rooms', 'beds', 'dashboard', 'doctors', 'settings', 'reports'
+  const [activeTab, setActiveTab] = useState('rooms'); // 'rooms', 'edit-admission-date', 'beds', 'dashboard', 'doctors', 'settings', 'reports'
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  // ==========================================
+  // TAB: EDIT ADMISSION DATE STATE & LOGIC
+  // ==========================================
+  const [admissionsList, setAdmissionsList] = useState([]);
+  const [loadingAdmissions, setLoadingAdmissions] = useState(false);
+  const [admissionSearch, setAdmissionSearch] = useState('');
+  const [admissionStatusFilter, setAdmissionStatusFilter] = useState('');
+
+  // Modal edit state
+  const [selectedAdmissionForEdit, setSelectedAdmissionForEdit] = useState(null);
+  const [editAdmissionDateVal, setEditAdmissionDateVal] = useState('');
+  const [updatingAdmissionDate, setUpdatingAdmissionDate] = useState(false);
+
+  const loadAdmissions = async () => {
+    setLoadingAdmissions(true);
+    try {
+      const { data } = await client.get('/ipd/admissions');
+      setAdmissionsList(data);
+    } catch (err) {
+      toast.error('Failed to load IPD admissions.');
+    } finally {
+      setLoadingAdmissions(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'edit-admission-date') {
+      loadAdmissions();
+    }
+  }, [activeTab]);
+
+  const handleOpenEditAdmissionModal = (adm) => {
+    setSelectedAdmissionForEdit(adm);
+    if (adm.admissionDate) {
+      const d = new Date(adm.admissionDate);
+      const pad = (n) => String(n).padStart(2, '0');
+      const formatted = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      setEditAdmissionDateVal(formatted);
+    } else {
+      setEditAdmissionDateVal('');
+    }
+  };
+
+  const handleUpdateAdmissionDate = async (e) => {
+    e.preventDefault();
+    if (!selectedAdmissionForEdit || !editAdmissionDateVal) {
+      toast.error('Please enter a valid admission date & time');
+      return;
+    }
+
+    setUpdatingAdmissionDate(true);
+    try {
+      await client.put(`/ipd/admissions/${selectedAdmissionForEdit._id}/admission-date`, {
+        admissionDate: editAdmissionDateVal
+      });
+      toast.success('Admission date & time updated successfully!');
+      setSelectedAdmissionForEdit(null);
+      loadAdmissions();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update admission date');
+    } finally {
+      setUpdatingAdmissionDate(false);
+    }
+  };
+
+  const setPresetDateTime = (hoursOrDaysOffset, type = 'days') => {
+    const now = new Date();
+    if (type === 'days') {
+      now.setDate(now.getDate() + hoursOrDaysOffset);
+    } else if (type === 'hours') {
+      now.setHours(now.getHours() + hoursOrDaysOffset);
+    }
+    const pad = (n) => String(n).padStart(2, '0');
+    setEditAdmissionDateVal(`${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`);
+  };
+
+  const filteredAdmissions = admissionsList.filter((adm) => {
+    const term = admissionSearch.toLowerCase();
+    const pName = adm.patientId?.patientName || '';
+    const uhid = adm.patientId?.uhid || adm.pidNumber || '';
+    const ipd = adm.ipdNumber || '';
+    const doctor = adm.doctorInCharge?.doctorName || adm.doctorInCharge?.username || '';
+    const room = adm.roomId?.roomType || '';
+    const bed = adm.bedId?.bedNumber || '';
+
+    const matchesSearch = !term || (
+      pName.toLowerCase().includes(term) ||
+      uhid.toLowerCase().includes(term) ||
+      ipd.toLowerCase().includes(term) ||
+      doctor.toLowerCase().includes(term) ||
+      room.toLowerCase().includes(term) ||
+      bed.toLowerCase().includes(term)
+    );
+
+    const matchesStatus = !admissionStatusFilter || adm.status === admissionStatusFilter;
+
+    return matchesSearch && matchesStatus;
+  });
 
   // Tabs master loaders
   const loadData = () => {
@@ -59,11 +159,13 @@ const IpdAdminWorkspace = () => {
     loadDoctors();
     loadSettings();
     loadReports();
+    loadAdmissions();
   };
 
   useEffect(() => {
     loadData();
   }, []);
+
 
   // ==========================================
   // TAB 1: ROOM CONFIGURATIONS
@@ -527,6 +629,7 @@ const IpdAdminWorkspace = () => {
       <div className="flex flex-wrap border-b border-orange-100 gap-1 text-sm bg-white p-2 rounded-2xl shadow-sm border border-orange-50">
         {[
           { id: 'rooms', label: 'Room Configurations', icon: Building2 },
+          { id: 'edit-admission-date', label: 'Edit Admission Date', icon: CalendarDays },
           { id: 'beds', label: 'Bed Management', icon: Bed },
           { id: 'dashboard', label: 'Occupancy Dashboard', icon: Activity },
           { id: 'doctors', label: 'Doctor Assignment', icon: Stethoscope },
@@ -857,6 +960,303 @@ const IpdAdminWorkspace = () => {
                 </form>
               )}
             </div>
+          </div>
+        )}
+
+        {/* ==================== TAB: EDIT ADMISSION DATE ==================== */}
+        {activeTab === 'edit-admission-date' && (
+          <div className="space-y-6">
+            {/* Info Banner */}
+            <div className="card p-5 bg-gradient-to-r from-orange-500/10 via-amber-500/5 to-transparent border border-orange-200/60 rounded-2xl flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <CalendarDays className="h-5 w-5 text-orange-600" />
+                  <h2 className="text-base font-bold text-gray-900">Edit Patient Admission Date & Time</h2>
+                </div>
+                <p className="text-xs text-gray-600 max-w-2xl">
+                  Modify the admission timestamp for active patients, discharged cases, or patients with generated bills. Updating the date recalculates admission duration for billing and historical records.
+                </p>
+              </div>
+              <button 
+                onClick={loadAdmissions} 
+                disabled={loadingAdmissions}
+                className="btn-secondary py-2 px-3 text-xs flex items-center gap-1.5 whitespace-nowrap shadow-sm"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${loadingAdmissions ? 'animate-spin text-orange-600' : ''}`} />
+                Refresh List
+              </button>
+            </div>
+
+            {/* Quick Metrics */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="card p-4 border-l-4 border-l-orange-500">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Total IPD Records</span>
+                <p className="text-2xl font-black text-gray-900 mt-1">{admissionsList.length}</p>
+              </div>
+              <div className="card p-4 border-l-4 border-l-emerald-500">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Admitted Patients</span>
+                <p className="text-2xl font-black text-emerald-600 mt-1">
+                  {admissionsList.filter(a => a.status === 'Admitted').length}
+                </p>
+              </div>
+              <div className="card p-4 border-l-4 border-l-slate-400">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Discharged / Billed</span>
+                <p className="text-2xl font-black text-slate-700 mt-1">
+                  {admissionsList.filter(a => a.status === 'Discharged').length}
+                </p>
+              </div>
+              <div className="card p-4 border-l-4 border-l-amber-500">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Pending Allocation</span>
+                <p className="text-2xl font-black text-amber-600 mt-1">
+                  {admissionsList.filter(a => a.status === 'Pending Allocation').length}
+                </p>
+              </div>
+            </div>
+
+            {/* Search and Filters */}
+            <div className="card p-4 flex flex-col md:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search by Patient Name, UHID, IPD Number, Doctor, or Bed Number..."
+                  className="input pl-9"
+                  value={admissionSearch}
+                  onChange={(e) => setAdmissionSearch(e.target.value)}
+                />
+              </div>
+              <select
+                className="input py-2 md:w-[200px]"
+                value={admissionStatusFilter}
+                onChange={(e) => setAdmissionStatusFilter(e.target.value)}
+              >
+                <option value="">All Admission Statuses</option>
+                <option value="Admitted">Admitted</option>
+                <option value="Discharged">Discharged / Billed</option>
+                <option value="Pending Allocation">Pending Allocation</option>
+              </select>
+            </div>
+
+            {/* Patients Table */}
+            <div className="card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-orange-50/50 text-xs font-bold uppercase text-orange-800 border-b border-orange-100">
+                      <th className="p-4">IPD / PID No</th>
+                      <th className="p-4">Patient Name & Info</th>
+                      <th className="p-4">Consultant Doctor</th>
+                      <th className="p-4">Room & Bed</th>
+                      <th className="p-4">Current Admission Date & Time</th>
+                      <th className="p-4">Status</th>
+                      <th className="p-4 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-orange-50 text-sm">
+                    {loadingAdmissions ? (
+                      <tr>
+                        <td colSpan="7" className="p-8 text-center text-gray-400">
+                          <RefreshCw className="h-6 w-6 animate-spin mx-auto text-orange-500 mb-2" />
+                          Loading IPD admission records...
+                        </td>
+                      </tr>
+                    ) : filteredAdmissions.length === 0 ? (
+                      <tr>
+                        <td colSpan="7" className="p-8 text-center text-gray-400">
+                          No matching IPD patient records found.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredAdmissions.map((adm) => (
+                        <tr key={adm._id} className="hover:bg-orange-50/10 transition-colors">
+                          <td className="p-4">
+                            <span className="font-mono font-bold text-gray-900 block text-xs">{adm.ipdNumber || 'N/A'}</span>
+                            <span className="font-mono text-gray-400 block text-[11px]">{adm.pidNumber || ''}</span>
+                          </td>
+                          <td className="p-4">
+                            <span className="font-bold text-gray-900 block">{adm.patientId?.patientName || 'Unknown Patient'}</span>
+                            <span className="text-xs text-gray-500 block">
+                              UHID: {adm.patientId?.uhid || 'N/A'} {adm.patientId?.gender ? `• ${adm.patientId.gender}` : ''} {adm.patientId?.age ? `(${adm.patientId.age} yrs)` : ''}
+                            </span>
+                          </td>
+                          <td className="p-4 text-xs font-semibold text-gray-800">
+                            {adm.doctorInCharge?.doctorName || adm.doctorInCharge?.username || 'N/A'}
+                          </td>
+                          <td className="p-4 text-xs">
+                            {adm.roomId?.roomType ? (
+                              <>
+                                <span className="font-semibold text-gray-800 block">{adm.roomId.roomType}</span>
+                                <span className="text-gray-500 block">Bed: {adm.bedId?.bedNumber || 'Unallocated'}</span>
+                              </>
+                            ) : (
+                              <span className="text-amber-600 font-medium italic">Pending Allocation</span>
+                            )}
+                          </td>
+                          <td className="p-4">
+                            <div className="flex items-center gap-1.5 font-bold text-gray-800 text-xs">
+                              <CalendarDays className="h-3.5 w-3.5 text-orange-500" />
+                              {adm.admissionDate ? new Date(adm.admissionDate).toLocaleString('en-IN', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                hour12: true
+                              }) : 'N/A'}
+                            </div>
+                          </td>
+                          <td className="p-4">
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                              adm.status === 'Admitted' ? 'bg-green-100 text-green-800 border border-green-200' :
+                              adm.status === 'Discharged' ? 'bg-slate-100 text-slate-700 border border-slate-200' :
+                              'bg-amber-100 text-amber-800 border border-amber-200'
+                            }`}>
+                              {adm.status === 'Discharged' ? 'Discharged / Billed' : adm.status}
+                            </span>
+                          </td>
+                          <td className="p-4 text-center">
+                            <button
+                              onClick={() => handleOpenEditAdmissionModal(adm)}
+                              className="btn-secondary py-1.5 px-3 text-xs flex items-center gap-1 mx-auto hover:bg-orange-100 hover:text-orange-700"
+                              title="Edit Admission Date & Time"
+                            >
+                              <Edit3 className="h-3.5 w-3.5 text-orange-600" />
+                              Edit Date
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* EDIT ADMISSION DATE MODAL */}
+            {selectedAdmissionForEdit && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+                <div className="card w-full max-w-lg p-6 space-y-5 bg-white shadow-2xl rounded-2xl animate-in fade-in zoom-in-95 duration-150">
+                  <div className="flex items-center justify-between border-b border-orange-100 pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 bg-orange-100 text-orange-600 rounded-xl">
+                        <CalendarDays className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h3 className="font-extrabold text-gray-900 text-lg">Edit Admission Date & Time</h3>
+                        <p className="text-xs text-gray-500">Update admission timestamp for patient records</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setSelectedAdmissionForEdit(null)}
+                      className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+
+                  {/* Patient Details Card */}
+                  <div className="bg-orange-50/50 p-3.5 rounded-xl border border-orange-100 space-y-1.5 text-xs">
+                    <div className="flex justify-between font-bold text-gray-900">
+                      <span>{selectedAdmissionForEdit.patientId?.patientName || 'Patient'}</span>
+                      <span className="text-orange-700">{selectedAdmissionForEdit.ipdNumber}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-600 text-[11px]">
+                      <span>UHID: {selectedAdmissionForEdit.patientId?.uhid || 'N/A'}</span>
+                      <span>Doctor: {selectedAdmissionForEdit.doctorInCharge?.doctorName || selectedAdmissionForEdit.doctorInCharge?.username || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-600 text-[11px] border-t border-orange-100/60 pt-1 mt-1">
+                      <span>
+                        Status: <strong className="text-gray-800">{selectedAdmissionForEdit.status}</strong>
+                      </span>
+                      <span>
+                        Room/Bed: <strong className="text-gray-800">{selectedAdmissionForEdit.roomId?.roomType || 'N/A'} ({selectedAdmissionForEdit.bedId?.bedNumber || 'N/A'})</strong>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Edit Form */}
+                  <form onSubmit={handleUpdateAdmissionDate} className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700">
+                        New Admission Date & Time
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="datetime-local"
+                          className="input py-2.5 text-sm font-semibold text-gray-900"
+                          value={editAdmissionDateVal}
+                          onChange={(e) => setEditAdmissionDateVal(e.target.value)}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    {/* Quick Presets */}
+                    <div className="space-y-1.5">
+                      <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Quick Presets</span>
+                      <div className="flex flex-wrap gap-2 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setPresetDateTime(0, 'days')}
+                          className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-700 hover:bg-orange-100 hover:text-orange-700 font-semibold transition"
+                        >
+                          Now
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPresetDateTime(-1, 'days')}
+                          className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-700 hover:bg-orange-100 hover:text-orange-700 font-semibold transition"
+                        >
+                          -1 Day
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPresetDateTime(-2, 'days')}
+                          className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-700 hover:bg-orange-100 hover:text-orange-700 font-semibold transition"
+                        >
+                          -2 Days
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPresetDateTime(-7, 'days')}
+                          className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-700 hover:bg-orange-100 hover:text-orange-700 font-semibold transition"
+                        >
+                          -7 Days
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="flex justify-end gap-2 border-t border-orange-50 pt-3">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedAdmissionForEdit(null)}
+                        className="btn-secondary py-2 px-4 text-xs"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={updatingAdmissionDate || !editAdmissionDateVal}
+                        className="btn py-2 px-5 text-xs flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        {updatingAdmissionDate ? (
+                          <>
+                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                            Updating...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="h-3.5 w-3.5" />
+                            Save Admission Date
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

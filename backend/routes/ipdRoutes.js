@@ -5,7 +5,8 @@ const {
   getAdmissions,
   dischargePatient,
   allocateBed,
-  changeBed
+  changeBed,
+  updateAdmissionDate
 } = require('../controllers/ipdController');
 const authMiddleware = require('../middleware/authMiddleware');
 
@@ -14,5 +15,7 @@ router.get('/admissions', authMiddleware, getAdmissions);
 router.post('/admissions/:id/discharge', authMiddleware, dischargePatient);
 router.put('/admissions/:id/allocate-bed', authMiddleware, allocateBed);
 router.put('/admissions/:id/change-bed', authMiddleware, changeBed);
+router.put('/admissions/:id/admission-date', authMiddleware, updateAdmissionDate);
+
 
 module.exports = router;

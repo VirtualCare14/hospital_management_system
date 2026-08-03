@@ -1,28 +1,49 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { FlaskConical, Plus, Save, Send, Scissors, X } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
+import { 
+  FlaskConical, Plus, Save, Send, Scissors, X, ShieldAlert, Stethoscope,
+  History, Activity, ChevronDown, ChevronUp, FileText, Pill, Printer, Download, Eye, Copy, Clock, Trash2
+} from 'lucide-react';
 import client from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-import { durationUnits } from '../../utils/options';
+import { durationUnits, languages } from '../../utils/options';
 import { formatDate } from '../../utils/dateFormat';
+import { sanitizeClonedDocumentForPdf } from '../../utils/pdfUtils';
+import PatientReceipt from '../../components/PatientReceipt';
+
+const calculateQty = (med) => {
+  const m = med.morning ? 1 : 0;
+  const a = med.afternoon ? 1 : 0;
+  const n = med.night ? 1 : 0;
+  const perDay = (m + a + n) * (parseFloat(med.dose) || 1);
+  const dur = parseInt(med.duration) || 0;
+  return Math.ceil(perDay * dur);
+};
 
 const ConsultationPage = () => {
   const { patientId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const receiptRef = useRef(null);
+
   const [patient, setPatient] = useState(null);
   const [loading, setLoading] = useState(true);
   const [symptoms, setSymptoms] = useState([{ symptom: '', durationDays: '', durationUnit: 'Days', pastHistory: '', remarks: '' }]);
   const [isVitalsEditable, setIsVitalsEditable] = useState(false);
+  const [showVitalsSection, setShowVitalsSection] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
   const [activeSymptomIndex, setActiveSymptomIndex] = useState(null);
+  const [symptomHighlightedIndex, setSymptomHighlightedIndex] = useState(-1);
   const [selectedTests, setSelectedTests] = useState([]);
   const [newTest, setNewTest] = useState('');
   const [testQuery, setTestQuery] = useState('');
   const [availableTests, setAvailableTests] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
   const [sendingToIpd, setSendingToIpd] = useState(false);
   const [referralSent, setReferralSent] = useState(false);
   const [generalPastHistory, setGeneralPastHistory] = useState('');
@@ -31,6 +52,8 @@ const ConsultationPage = () => {
   const [followUpRemarks, setFollowUpRemarks] = useState('');
   const [visitId, setVisitId] = useState(null);
   const [previousConsultation, setPreviousConsultation] = useState(null);
+  const [latestPastPrescription, setLatestPastPrescription] = useState(null);
+  const [showHistory, setShowHistory] = useState(true);
   const [subServices, setSubServices] = useState([]);
   const [showSameDayModal, setShowSameDayModal] = useState(false);
   const [sdCareType, setSdCareType] = useState('');
@@ -38,15 +61,70 @@ const ConsultationPage = () => {
   const [sdRemarks, setSdRemarks] = useState('');
   const [sdDoctors, setSdDoctors] = useState([]);
   const [loadingSdDoctors, setLoadingSdDoctors] = useState(false);
-  const { register, handleSubmit, reset } = useForm();
+
+  // Referral Checkbox States
+  const [sendToIpdChecked, setSendToIpdChecked] = useState(false);
+  const [sendToSameDayChecked, setSendToSameDayChecked] = useState(false);
+  const [referToOtChecked, setReferToOtChecked] = useState(false);
+
+  // Prescription & Medicines States
+  const [language, setLanguage] = useState('English');
+  const [showPreview, setShowPreview] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [showEditVitalsModal, setShowEditVitalsModal] = useState(false);
+  const [showEditPrintModal, setShowEditPrintModal] = useState(false);
+  const [printOptions, setPrintOptions] = useState(() => {
+    const saved = localStorage.getItem('doctor_print_options');
+    return saved ? JSON.parse(saved) : {
+      printVitals: true,
+      printLabTests: true,
+      printSymptomHistory: true,
+      printSymptomRemarks: true,
+      printGeneralPastHistory: true
+    };
+  });
+  const [pharmacyMedicines, setPharmacyMedicines] = useState([]);
+  const [activeMedIndex, setActiveMedIndex] = useState(null);
+  const [medSuggestions, setMedSuggestions] = useState([]);
+  const [medHighlightedIndex, setMedHighlightedIndex] = useState(-1);
+  const [medicines, setMedicines] = useState([
+    { medicine: '', dosageForm: 'Tablet', strength: '', dose: '1', morning: true, afternoon: false, night: true, duration: '5', remarks: 'After food', qty: 0 }
+  ]);
+
+  const { register, handleSubmit, reset, watch } = useForm();
+  const isReadOnly = Boolean(patient?.isDischarged || isSaved);
+
+  // Fetch Pharmacy Inventory Medicines
+  useEffect(() => {
+    const fetchPharmacyMedicines = async () => {
+      try {
+        const { data } = await client.get('/pharmacy/inventory?limit=5000');
+        const items = data.items || [];
+        const medicineStockMap = {};
+        items.forEach(item => {
+          const name = String(item.itemName || '').trim();
+          const qty = parseInt(item.quantity) || 0;
+          if (name) {
+            medicineStockMap[name] = (medicineStockMap[name] || 0) + qty;
+          }
+        });
+        const groupedArray = Object.keys(medicineStockMap).map(name => ({
+          name,
+          stock: medicineStockMap[name]
+        }));
+        setPharmacyMedicines(groupedArray);
+      } catch (err) {
+        console.error("Failed to load pharmacy medicines", err);
+      }
+    };
+    fetchPharmacyMedicines();
+  }, []);
 
   useEffect(() => {
     if (showSameDayModal) {
       setLoadingSdDoctors(true);
       client.get('/admin/doctors')
-        .then(({ data }) => {
-          setSdDoctors(data || []);
-        })
+        .then(({ data }) => setSdDoctors(data || []))
         .catch(err => {
           console.error(err);
           toast.error("Failed to load Same Day Care providers list");
@@ -55,42 +133,40 @@ const ConsultationPage = () => {
     }
   }, [showSameDayModal]);
 
-  // Load patient AND visit information
   useEffect(() => {
     const loadData = async () => {
       try {
         setLoading(true);
-        // Load patient info
-        const patientRes = await client.get(`/patients/${patientId}`);
-        setPatient(patientRes.data);
-        reset({
-          weight: patientRes.data.demographics?.weight || '',
-          height: patientRes.data.demographics?.height || '',
-          temperature: patientRes.data.demographics?.temperature || '',
-          bloodPressure: patientRes.data.demographics?.bloodPressure || ''
-        });
+        const [patientRes, consultationsRes, visitsRes, prescriptionRes] = await Promise.allSettled([
+          client.get(`/patients/${patientId}`),
+          client.get(`/consultation/${patientId}`),
+          client.get(`/patients/${patientId}/visits`),
+          client.get(`/prescription/${patientId}`)
+        ]);
 
-        // Load previous consultations to find latest completed one
-        try {
-          const consultationsRes = await client.get(`/consultation/${patientId}`);
-          const completedConsultation = consultationsRes.data.find(c => c.consultationStatus === 'completed');
-          if (completedConsultation) {
-            setPreviousConsultation(completedConsultation);
-          }
-        } catch (err) {
-          console.log('Error loading previous consultations:', err);
+        if (patientRes.status === 'fulfilled') {
+          setPatient(patientRes.value.data);
+          reset({
+            weight: patientRes.value.data.demographics?.weight || '',
+            height: patientRes.value.data.demographics?.height || '',
+            temperature: patientRes.value.data.demographics?.temperature || '',
+            bloodPressure: patientRes.value.data.demographics?.bloodPressure || '',
+            bmi: patientRes.value.data.demographics?.bmi || '',
+            drugAllergy: patientRes.value.data.demographics?.drugAllergy || ''
+          });
         }
 
-        // Get the latest visit for this patient
-        try {
-          const visitsRes = await client.get(`/patients/${patientId}/visits`);
-          const visits = visitsRes.data;
-          if (visits && visits.length > 0) {
-            const latestVisit = visits[0]; // Most recent first
-            setVisitId(latestVisit._id);
-          }
-        } catch (err) {
-          console.log('No visits found for patient');
+        if (consultationsRes.status === 'fulfilled' && consultationsRes.value.data?.length > 0) {
+          const completedConsultation = consultationsRes.value.data.find(c => c.consultationStatus === 'completed');
+          if (completedConsultation) setPreviousConsultation(completedConsultation);
+        }
+
+        if (visitsRes.status === 'fulfilled' && visitsRes.value.data?.length > 0) {
+          setVisitId(visitsRes.value.data[0]._id);
+        }
+
+        if (prescriptionRes.status === 'fulfilled' && prescriptionRes.value.data) {
+          setLatestPastPrescription(prescriptionRes.value.data);
         }
       } catch (error) {
         console.error('Error loading data:', error);
@@ -125,19 +201,219 @@ const ConsultationPage = () => {
     });
   }, []);
 
+  const updateMedicine = (index, field, value) => {
+    const updated = [...medicines];
+    updated[index][field] = value;
+    setMedicines(updated);
+
+    if (field === 'medicine') {
+      setActiveMedIndex(index);
+      setMedHighlightedIndex(-1);
+      if (value && value.trim().length >= 3) {
+        const query = value.toLowerCase().trim();
+        const matches = pharmacyMedicines.filter(m => m.name.toLowerCase().includes(query)).slice(0, 10);
+        setMedSuggestions(matches);
+      } else {
+        setMedSuggestions([]);
+      }
+    }
+  };
+
+  const selectMedicineSuggestion = (medObj, index) => {
+    const updated = [...medicines];
+    updated[index].medicine = medObj.name;
+    setMedicines(updated);
+    setMedSuggestions([]);
+    setActiveMedIndex(null);
+    setMedHighlightedIndex(-1);
+  };
+
+  const handleMedKeyDown = (e, index) => {
+    if (activeMedIndex !== index || !medSuggestions || medSuggestions.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setMedHighlightedIndex((prevIndex) => (
+        prevIndex < medSuggestions.length - 1 ? prevIndex + 1 : 0
+      ));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setMedHighlightedIndex((prevIndex) => (
+        prevIndex > 0 ? prevIndex - 1 : medSuggestions.length - 1
+      ));
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      if (medHighlightedIndex >= 0 && medHighlightedIndex < medSuggestions.length) {
+        e.preventDefault();
+        selectMedicineSuggestion(medSuggestions[medHighlightedIndex], index);
+      }
+    } else if (e.key === 'Escape') {
+      setMedSuggestions([]);
+      setActiveMedIndex(null);
+      setMedHighlightedIndex(-1);
+    }
+  };
+
+  const toggleTiming = (index, timing) => {
+    const updated = [...medicines];
+    updated[index][timing] = !updated[index][timing];
+    setMedicines(updated);
+  };
+
+  const calculateQty = (med) => {
+    if (!med) return 0;
+    const isTablet = String(med.dosageForm || 'Tablet').toLowerCase() === 'tablet';
+    if (!isTablet) {
+      if (med.customQty !== undefined && med.customQty !== '') {
+        return parseInt(med.customQty) || 0;
+      }
+      return parseInt(med.qty) || 1;
+    }
+    const doseNum = parseFloat(med.dose) || 1;
+    const durationNum = parseInt(med.duration) || 1;
+    let timingsCount = 0;
+    if (med.morning) timingsCount += 1;
+    if (med.afternoon) timingsCount += 1;
+    if (med.night) timingsCount += 1;
+    if (timingsCount === 0) timingsCount = 1;
+    return Math.ceil(doseNum * timingsCount * durationNum);
+  };
+
+  const addMedicineRow = () => {
+    setMedicines([
+      ...medicines,
+      { medicine: '', dosageForm: 'Tablet', strength: '', dose: '1', morning: true, afternoon: false, night: true, duration: '5', remarks: 'After food', qty: 0, customQty: '' }
+    ]);
+  };
+
+  const removeMedicineRow = (index) => {
+    if (medicines.length === 1) {
+      setMedicines([{ medicine: '', dosageForm: 'Tablet', strength: '', dose: '1', morning: true, afternoon: false, night: true, duration: '5', remarks: 'After food', qty: 0 }]);
+      return;
+    }
+    setMedicines(medicines.filter((_, i) => i !== index));
+  };
+
+  const handleCopyPreviousMedicines = (rxMeds) => {
+    if (!rxMeds || rxMeds.length === 0) {
+      toast.error("No previous medicines found to copy");
+      return;
+    }
+    const formatted = rxMeds.map(m => ({
+      medicine: m.medicine || '',
+      dosageForm: m.dosageForm || 'Tablet',
+      strength: m.strength || '',
+      dose: m.dose || '1',
+      morning: m.morning !== undefined ? m.morning : true,
+      afternoon: m.afternoon !== undefined ? m.afternoon : false,
+      night: m.night !== undefined ? m.night : true,
+      duration: String(m.duration || '5'),
+      remarks: m.remarks || 'After food',
+      qty: m.qty || 0
+    }));
+    setMedicines(formatted);
+    toast.success(`${formatted.length} previous medicine(s) pre-filled!`);
+  };
+
+  const handleContinuePreviousMedicines = () => {
+    const prevMeds = latestPastPrescription?.medicines || previousConsultation?.medicines || previousConsultation?.prescription?.medicines || [];
+    if (!prevMeds || prevMeds.length === 0) {
+      toast.error('No previous prescription medicines found for this patient.');
+      return;
+    }
+
+    const formattedMeds = prevMeds.map(m => ({
+      medicine: m.medicine || m.name || '',
+      dosageForm: m.dosageForm || 'Tablet',
+      strength: m.strength || '',
+      dose: m.dose !== undefined ? String(m.dose) : '1',
+      morning: m.morning !== undefined ? Boolean(m.morning) : true,
+      afternoon: m.afternoon !== undefined ? Boolean(m.afternoon) : false,
+      night: m.night !== undefined ? Boolean(m.night) : true,
+      duration: m.duration !== undefined ? String(m.duration) : '5',
+      remarks: m.remarks || 'After food',
+      qty: m.qty || 0
+    }));
+
+    setMedicines(formattedMeds);
+    toast.success(`Loaded ${formattedMeds.length} medicine(s) from previous prescription!`);
+  };
+
+  const buildPrescriptionDataForPrint = () => {
+    const validMeds = medicines.filter(m => m.medicine && m.medicine.trim()).map(m => ({
+      ...m,
+      qty: calculateQty(m)
+    }));
+
+    const formVitals = watch();
+    const mergedVitals = {
+      weight: formVitals.weight || patient?.demographics?.weight || previousConsultation?.vitals?.weight,
+      height: formVitals.height || patient?.demographics?.height || previousConsultation?.vitals?.height,
+      temperature: formVitals.temperature || patient?.demographics?.temperature || previousConsultation?.vitals?.temperature,
+      bloodPressure: formVitals.bloodPressure || patient?.demographics?.bloodPressure || previousConsultation?.vitals?.bloodPressure,
+      bmi: formVitals.bmi || patient?.demographics?.bmi || previousConsultation?.vitals?.bmi,
+      drugAllergy: formVitals.drugAllergy || patient?.demographics?.drugAllergy || previousConsultation?.vitals?.drugAllergy
+    };
+
+    const mergedSymptoms = [
+      ...(previousConsultation?.symptoms || []),
+      ...symptoms.filter((item) => item.symptom).map((item) => ({ 
+        symptom: item.symptom, 
+        durationDays: item.durationDays || 0,
+        durationUnit: item.durationUnit,
+        pastHistory: item.pastHistory,
+        remarks: item.remarks
+      }))
+    ];
+
+    return {
+      _id: 'draft-rx',
+      consultationId: previousConsultation?._id || 'draft-cons',
+      patientId: patient?._id,
+      doctorName: user?.doctorName || user?.username || 'Doctor',
+      language: typeof language === 'object' ? language.value : language,
+      medicines: validMeds,
+      vitals: mergedVitals,
+      symptoms: mergedSymptoms,
+      diagnosisRemark: diagnosisRemark || previousConsultation?.diagnosisRemark || '',
+      tests: [...(previousConsultation?.tests || []), ...selectedTests],
+      pastHistory: generalPastHistory,
+      followUpDate: followUpDate || previousConsultation?.followUpDate,
+      followUpRemarks: followUpRemarks || previousConsultation?.followUpRemarks,
+      printOptions,
+      createdAt: new Date().toISOString()
+    };
+  };
+
+  const buildPatientDataForReceipt = () => {
+    const formVitals = watch();
+    const mergedVitals = {
+      weight: formVitals.weight || patient?.demographics?.weight || previousConsultation?.vitals?.weight,
+      height: formVitals.height || patient?.demographics?.height || previousConsultation?.vitals?.height,
+      temperature: formVitals.temperature || patient?.demographics?.temperature || previousConsultation?.vitals?.temperature,
+      bloodPressure: formVitals.bloodPressure || patient?.demographics?.bloodPressure || previousConsultation?.vitals?.bloodPressure,
+      bmi: formVitals.bmi || patient?.demographics?.bmi || previousConsultation?.vitals?.bmi,
+      drugAllergy: formVitals.drugAllergy || patient?.demographics?.drugAllergy || previousConsultation?.vitals?.drugAllergy
+    };
+
+    return {
+      ...patient,
+      demographics: mergedVitals,
+      doctorId: { doctorName: user?.doctorName || user?.username || 'Doctor', username: user?.username }
+    };
+  };
+
   const updateSymptom = async (index, field, value) => {
     const next = symptoms.map((item, idx) => idx === index ? { ...item, [field]: value } : item);
     setSymptoms(next);
-    
-    // Trigger autocomplete for symptom field when user types 1 or more characters
+
     if (field === 'symptom') {
       setActiveSymptomIndex(index);
+      setSymptomHighlightedIndex(-1);
       if (value && value.length >= 1) {
         try {
           const { data } = await client.get(`/consultation/symptoms/autocomplete?q=${encodeURIComponent(value)}`);
           setSuggestions(data || []);
         } catch (error) {
-          console.error('Autocomplete error:', error);
           setSuggestions([]);
         }
       } else {
@@ -151,10 +427,32 @@ const ConsultationPage = () => {
     setSymptoms(next);
     setSuggestions([]);
     setActiveSymptomIndex(null);
+    setSymptomHighlightedIndex(-1);
   };
 
-  const toggleTest = (test) => {
-    setSelectedTests((current) => current.includes(test) ? current.filter((item) => item !== test) : [...current, test]);
+  const handleSymptomKeyDown = (e, index) => {
+    if (activeSymptomIndex !== index || !suggestions || suggestions.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSymptomHighlightedIndex((prevIndex) => (
+        prevIndex < suggestions.length - 1 ? prevIndex + 1 : 0
+      ));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSymptomHighlightedIndex((prevIndex) => (
+        prevIndex > 0 ? prevIndex - 1 : suggestions.length - 1
+      ));
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      if (symptomHighlightedIndex >= 0 && symptomHighlightedIndex < suggestions.length) {
+        e.preventDefault();
+        selectSuggestion(suggestions[symptomHighlightedIndex], index);
+      }
+    } else if (e.key === 'Escape') {
+      setSuggestions([]);
+      setActiveSymptomIndex(null);
+      setSymptomHighlightedIndex(-1);
+    }
   };
 
   const selectTest = (test) => {
@@ -176,68 +474,186 @@ const ConsultationPage = () => {
 
   const onSubmit = async (data) => {
     setSaving(true);
-    
-    // Merge symptoms
-    const mergedSymptoms = [
-      ...(previousConsultation?.symptoms || []),
-      ...symptoms.filter((item) => item.symptom).map((item) => ({ 
-        symptom: item.symptom, 
-        durationDays: item.durationDays || 0,
-        durationUnit: item.durationUnit,
-        pastHistory: item.pastHistory,
-        remarks: item.remarks
-      }))
-    ];
-
-    // Merge general history
-    const mergedPastHistory = [
-      previousConsultation?.generalPastHistory,
-      generalPastHistory
-    ].filter(Boolean).join('\n');
-
-    // Merge diagnosis remark
-    const mergedDiagnosisRemark = [
-      previousConsultation?.diagnosisRemark,
-      diagnosisRemark
-    ].filter(Boolean).join('\n');
-
-    // Merge vitals
-    const mergedVitals = {
-      weight: data.weight || previousConsultation?.vitals?.weight,
-      height: data.height || previousConsultation?.vitals?.height,
-      temperature: data.temperature || previousConsultation?.vitals?.temperature,
-      bmi: data.bmi || previousConsultation?.vitals?.bmi,
-      drugAllergy: data.drugAllergy || previousConsultation?.vitals?.drugAllergy,
-      bloodPressure: data.bloodPressure || previousConsultation?.vitals?.bloodPressure
-    };
-
-    // Merge tests
-    const mergedTests = [
-      ...(previousConsultation?.tests || []),
-      ...selectedTests
-    ];
-
-    const payload = {
-      patientId,
-      visitId, // Pass visitId to link consultation to visit
-      symptoms: mergedSymptoms,
-      pastHistory: mergedPastHistory,
-      diagnosisRemark: mergedDiagnosisRemark,
-      vitals: mergedVitals,
-      tests: mergedTests,
-      sendToLab: data.sendToLab,
-      followUpDate: followUpDate || previousConsultation?.followUpDate,
-      followUpRemarks: followUpRemarks || previousConsultation?.followUpRemarks
-    };
-
     try {
-      // ALWAYS create a new consultation record
-      await client.post('/consultation/create', payload);
-      toast.success(data.sendToLab ? 'Consultation saved and sent to lab' : 'Consultation saved');
-      navigate(`/doctor/prescription/${patientId}${previousConsultation ? '?addMore=true' : ''}`);
+      const mergedSymptoms = [
+        ...(previousConsultation?.symptoms || []),
+        ...symptoms.filter((item) => item.symptom).map((item) => ({ 
+          symptom: item.symptom, 
+          durationDays: item.durationDays || 0,
+          durationUnit: item.durationUnit,
+          pastHistory: item.pastHistory,
+          remarks: item.remarks
+        }))
+      ];
+
+      const mergedPastHistory = [
+        previousConsultation?.generalPastHistory,
+        generalPastHistory
+      ].filter(Boolean).join('\n');
+
+      const mergedDiagnosisRemark = [
+        previousConsultation?.diagnosisRemark,
+        diagnosisRemark
+      ].filter(Boolean).join('\n');
+
+      const mergedVitals = {
+        weight: data.weight || previousConsultation?.vitals?.weight,
+        height: data.height || previousConsultation?.vitals?.height,
+        temperature: data.temperature || previousConsultation?.vitals?.temperature,
+        bmi: data.bmi || previousConsultation?.vitals?.bmi,
+        drugAllergy: data.drugAllergy || previousConsultation?.vitals?.drugAllergy,
+        bloodPressure: data.bloodPressure || previousConsultation?.vitals?.bloodPressure
+      };
+
+      const mergedTests = [
+        ...(previousConsultation?.tests || []),
+        ...selectedTests
+      ];
+
+      const consultationPayload = {
+        patientId,
+        visitId,
+        symptoms: mergedSymptoms,
+        pastHistory: mergedPastHistory,
+        diagnosisRemark: mergedDiagnosisRemark,
+        vitals: mergedVitals,
+        tests: mergedTests,
+        sendToLab: data.sendToLab,
+        followUpDate: followUpDate || previousConsultation?.followUpDate,
+        followUpRemarks: followUpRemarks || previousConsultation?.followUpRemarks
+      };
+
+      const { data: consRes } = await client.post('/consultation/create', consultationPayload);
+
+      const validMedicines = medicines.filter(m => m.medicine && m.medicine.trim());
+      if (validMedicines.length > 0) {
+        const rxPayload = {
+          patientId,
+          consultationId: consRes?.consultation?._id || consRes?._id || previousConsultation?._id,
+          medicines: validMedicines.map(m => ({
+            ...m,
+            qty: calculateQty(m)
+          })),
+          language: typeof language === 'object' ? language.value : language
+        };
+        await client.post('/prescription/create', rxPayload);
+      }
+
+      toast.success(data.sendToLab ? 'Consultation & Prescription saved and sent to lab' : 'Consultation & Prescription saved successfully');
+      navigate('/doctor');
     } catch (error) {
-      console.error('Saving consultation failed:', error);
-      toast.error('Unable to save consultation. Please try again.');
+      console.error('Saving failed:', error);
+      toast.error(error.response?.data?.message || 'Unable to save consultation. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveAndPrint = async () => {
+    setSaving(true);
+    try {
+      const formValues = watch();
+      const mergedSymptoms = [
+        ...(previousConsultation?.symptoms || []),
+        ...symptoms.filter((item) => item.symptom).map((item) => ({ 
+          symptom: item.symptom, 
+          durationDays: item.durationDays || 0,
+          durationUnit: item.durationUnit,
+          pastHistory: item.pastHistory,
+          remarks: item.remarks
+        }))
+      ];
+
+      const mergedPastHistory = [
+        previousConsultation?.generalPastHistory,
+        generalPastHistory
+      ].filter(Boolean).join('\n');
+
+      const mergedDiagnosisRemark = [
+        previousConsultation?.diagnosisRemark,
+        diagnosisRemark
+      ].filter(Boolean).join('\n');
+
+      const mergedVitals = {
+        weight: formValues.weight || previousConsultation?.vitals?.weight,
+        height: formValues.height || previousConsultation?.vitals?.height,
+        temperature: formValues.temperature || previousConsultation?.vitals?.temperature,
+        bmi: formValues.bmi || previousConsultation?.vitals?.bmi,
+        drugAllergy: formValues.drugAllergy || previousConsultation?.vitals?.drugAllergy,
+        bloodPressure: formValues.bloodPressure || previousConsultation?.vitals?.bloodPressure
+      };
+
+      const mergedTests = [
+        ...(previousConsultation?.tests || []),
+        ...selectedTests
+      ];
+
+      const consultationPayload = {
+        patientId,
+        visitId,
+        symptoms: mergedSymptoms,
+        pastHistory: mergedPastHistory,
+        diagnosisRemark: mergedDiagnosisRemark,
+        vitals: mergedVitals,
+        tests: mergedTests,
+        sendToLab: formValues.sendToLab,
+        followUpDate: followUpDate || previousConsultation?.followUpDate,
+        followUpRemarks: followUpRemarks || previousConsultation?.followUpRemarks
+      };
+
+      const { data: consRes } = await client.post('/consultation/create', consultationPayload);
+
+      const validMedicines = medicines.filter(m => m.medicine && m.medicine.trim());
+      if (validMedicines.length > 0) {
+        const rxPayload = {
+          patientId,
+          consultationId: consRes?.consultation?._id || consRes?._id || previousConsultation?._id,
+          medicines: validMedicines.map(m => ({
+            ...m,
+            qty: calculateQty(m)
+          })),
+          language: typeof language === 'object' ? language.value : language
+        };
+        await client.post('/prescription/create', rxPayload);
+      }
+
+      setIsSaved(true);
+
+      // Process selected referral module after saving
+      if (sendToIpdChecked && !referralSent) {
+        await handleSendToIpd();
+      } else if (referToOtChecked) {
+        const defaultNotes = `Referred to OT by Dr. ${user?.doctorName || user?.username || 'Doctor'}. Diagnosis: ${diagnosisRemark || 'N/A'}`;
+        const customRemarks = window.prompt("Enter remarks for OT Referral:", defaultNotes);
+        if (customRemarks !== null) {
+          try {
+            await client.post('/ipd/referrals', { patientId: patient._id, notes: customRemarks });
+            toast.success(`${patient.patientName} referred to OT successfully!`);
+          } catch (err) {
+            toast.error(err.response?.data?.message || 'Failed to send to OT');
+          }
+        }
+      } else if (sendToSameDayChecked) {
+        handleSendToSameDayOpen();
+      }
+
+      toast.success('Consultation saved! Opening print option...');
+      setShowPreview(true);
+
+      setTimeout(() => {
+        try {
+          window.print();
+        } catch (printErr) {
+          console.warn("Direct window.print() failed, falling back to PDF generation", printErr);
+        }
+        if (!sendToSameDayChecked) {
+          navigate('/doctor');
+        }
+      }, 500);
+
+    } catch (error) {
+      console.error('Saving failed:', error);
+      toast.error(error.response?.data?.message || 'Failed to save');
     } finally {
       setSaving(false);
     }
@@ -251,11 +667,8 @@ const ConsultationPage = () => {
 
     setSendingToIpd(true);
     try {
-      await client.post('/ipd/referrals', {
-        patientId: patient._id,
-        notes: customRemarks
-      });
-      toast.success(`${patient.patientName} has been referred to IPD successfully!`);
+      await client.post('/ipd/referrals', { patientId: patient._id, notes: customRemarks });
+      toast.success(`${patient.patientName} referred to IPD successfully!`);
       setReferralSent(true);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to send to IPD');
@@ -297,420 +710,1074 @@ const ConsultationPage = () => {
       });
       toast.success(`${patient.patientName} referred to Same Day Care (${sdCareType})!`);
       setShowSameDayModal(false);
+      navigate('/doctor');
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to refer patient');
     }
   };
 
-  if (loading) return <div className="card p-5">Loading patient & consultation data...</div>;
-  if (!patient) return <div className="card p-5">Patient not found.</div>;
+  if (loading) return <div className="card p-8 text-center font-bold text-gray-600">Loading Patient Case Record...</div>;
+  if (!patient) return <div className="card p-8 text-center font-bold text-red-600">Patient records not found.</div>;
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" autoComplete="off">
-      {patient.isDischarged && (
-        <div className="card p-4 border border-gray-255 bg-gray-50 flex items-center gap-3">
-          <ShieldAlert className="text-gray-500 h-6 w-6 shrink-0" />
-          <div>
-            <h4 className="font-extrabold text-gray-800 text-sm uppercase tracking-wider">Patient is Discharged</h4>
-            <p className="text-xs text-gray-650 mt-0.5 font-semibold">
-              This patient has been discharged from the hospital. The OPD case record is read-only. No new consultations, referrals, or prescriptions can be saved.
-            </p>
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-5 pb-12" autoComplete="off">
+      {isReadOnly && !patient?.isDischarged && (
+        <div className="card p-4 border border-emerald-200 bg-emerald-50/90 flex items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <span className="h-3 w-3 rounded-full bg-emerald-500 animate-pulse"></span>
+            <div>
+              <h4 className="font-extrabold text-emerald-950 text-sm uppercase tracking-wider">Consultation & Prescription Completed (Read-Only)</h4>
+              <p className="text-xs text-emerald-800 mt-0.5 font-semibold">
+                This consultation has been saved & printed. Symptoms, remarks, medicines, and clinical details are now locked.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowPreviewModal(true)}
+            className="btn-secondary bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs py-2 px-3 flex items-center gap-1.5 rounded-xl cursor-pointer"
+          >
+            <Eye className="h-4 w-4" /> View RX
+          </button>
+        </div>
+      )}
+
+      {/* 2-Column Master Layout (85% Left Column, 15% Right Sticky Column) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        
+        {/* Left Column (85% Width -> lg:col-span-10) */}
+        <fieldset disabled={isReadOnly} className={isReadOnly ? 'lg:col-span-10 space-y-5 border-0 p-0 m-0' : 'lg:col-span-10 space-y-5 border-0 p-0 m-0'}>
+
+          {/* Follow-Up Patient Previous History Banner */}
+          {previousConsultation && (
+            <div className="card p-4 bg-gradient-to-r from-purple-50/70 via-white to-indigo-50/40 border border-purple-200 shadow-sm space-y-3">
+              <div className="flex items-center justify-between border-b border-purple-100 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-purple-100 rounded-lg text-purple-700">
+                    <History className="h-4 w-4" />
+                  </div>
+                  <h3 className="text-sm font-extrabold text-gray-900 flex items-center gap-2">
+                    Follow-up Patient - Previous Consultation Summary
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowHistory(!showHistory)}
+                  className="p-1 text-purple-700 hover:bg-purple-100/60 rounded-md transition-colors cursor-pointer"
+                >
+                  {showHistory ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </button>
+              </div>
+
+              {showHistory && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                  <div className="p-3 bg-white rounded-xl border border-gray-200/70 space-y-1.5">
+                    <div className="font-bold text-gray-800 flex items-center gap-1 border-b border-gray-100 pb-1">
+                      <FileText className="h-3.5 w-3.5 text-blue-600" /> Previous Clinical Notes & Symptoms
+                    </div>
+                    {previousConsultation.diagnosisRemark && (
+                      <div>
+                        <span className="text-[10px] font-bold text-gray-500 uppercase block">Diagnosis:</span>
+                        <p className="font-semibold text-gray-900">{previousConsultation.diagnosisRemark}</p>
+                      </div>
+                    )}
+                    {previousConsultation.symptoms && previousConsultation.symptoms.length > 0 && (
+                      <div>
+                        <span className="text-[10px] font-bold text-gray-500 uppercase block mb-0.5">Symptoms:</span>
+                        <div className="flex flex-wrap gap-1">
+                          {previousConsultation.symptoms.map((s, idx) => (
+                            <span key={idx} className="bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                              {s.symptom} {s.durationDays ? `(${s.durationDays} ${s.durationUnit || 'Days'})` : ''}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-3 bg-white rounded-xl border border-gray-200/70 space-y-1.5">
+                    <div className="font-bold text-gray-800 flex items-center gap-1 border-b border-gray-100 pb-1">
+                      <Stethoscope className="h-3.5 w-3.5 text-orange-600" /> Previous Vitals & Follow-up
+                    </div>
+                    {previousConsultation.vitals && (
+                      <div className="grid grid-cols-3 gap-1 text-[11px] font-semibold text-gray-700">
+                        <div>WT: <span className="font-bold text-gray-900">{previousConsultation.vitals.weight || '-'} kg</span></div>
+                        <div>HT: <span className="font-bold text-gray-900">{previousConsultation.vitals.height || '-'} cm</span></div>
+                        <div>BP: <span className="font-bold text-gray-900">{previousConsultation.vitals.bloodPressure || '-'}</span></div>
+                        <div>Temp: <span className="font-bold text-gray-900">{previousConsultation.vitals.temperature || '-'} °C</span></div>
+                        <div>BMI: <span className="font-bold text-gray-900">{previousConsultation.vitals.bmi || '-'}</span></div>
+                        <div>Allergy: <span className="font-bold text-red-600">{previousConsultation.vitals.drugAllergy || 'None'}</span></div>
+                      </div>
+                    )}
+                    {previousConsultation.followUpDate && (
+                      <div className="text-[11px] font-bold text-purple-700 pt-1">
+                        Follow-up Date: {formatDate(previousConsultation.followUpDate)} {previousConsultation.followUpRemarks ? `(${previousConsultation.followUpRemarks})` : ''}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {!isReadOnly && (
+                <div className="pt-2 border-t border-purple-100/80 flex items-center justify-between gap-3 flex-wrap">
+                  <span className="text-xs font-bold text-purple-900">Follow-up Patient Quick Action:</span>
+                  <button
+                    type="button"
+                    onClick={handleContinuePreviousMedicines}
+                    className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-black py-1.5 px-3 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs transition-all"
+                    title="Automatically pre-fill same medicines into current prescription form"
+                  >
+                    <Copy className="h-3.5 w-3.5" /> Continue Previous Medicines
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Symptoms Section */}
+          <section className="card p-5 bg-white border border-gray-200/80 shadow-xs space-y-4">
+            <h2 className="text-lg font-black text-gray-900 border-b border-gray-100 pb-3">
+              Symptoms
+            </h2>
+
+            {symptoms.map((item, index) => (
+              <div key={index} className="p-3 bg-slate-50/80 rounded-xl border border-gray-200/80 space-y-2 relative">
+                <div className="grid grid-cols-12 gap-3 items-center">
+                  <div className="col-span-12 lg:col-span-3 relative">
+                    <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-1">Symptom Name #{index + 1}</label>
+                    <input 
+                      className="input w-full text-sm font-bold text-gray-900 border-gray-300" 
+                      placeholder="Type symptom (e.g. Fever)..." 
+                      value={item.symptom} 
+                      onChange={(e) => updateSymptom(index, 'symptom', e.target.value)}
+                      onFocus={() => {
+                        setActiveSymptomIndex(index);
+                        setSymptomHighlightedIndex(-1);
+                      }}
+                      onKeyDown={(e) => handleSymptomKeyDown(e, index)}
+                    />
+                    {activeSymptomIndex === index && suggestions.length > 0 && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-orange-300 rounded-md shadow-lg z-20 max-h-40 overflow-y-auto">
+                        {suggestions.map((suggestion, sugIdx) => (
+                          <button
+                            key={sugIdx}
+                            type="button"
+                            className={`w-full text-left px-3 py-2 text-sm font-bold border-b border-orange-50 last:border-b-0 cursor-pointer transition-colors ${
+                              symptomHighlightedIndex === sugIdx 
+                                ? 'bg-orange-200 text-orange-950 font-black' 
+                                : 'hover:bg-orange-100 text-gray-800'
+                            }`}
+                            onClick={() => selectSuggestion(suggestion, index)}
+                            onMouseEnter={() => setSymptomHighlightedIndex(sugIdx)}
+                          >
+                            {suggestion}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="col-span-6 lg:col-span-1">
+                    <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-1">Duration</label>
+                    <input 
+                      className="input w-full text-sm font-bold text-gray-900 border-gray-300" 
+                      placeholder="Days" 
+                      type="number" 
+                      value={item.durationDays} 
+                      onChange={(e) => updateSymptom(index, 'durationDays', e.target.value)} 
+                    />
+                  </div>
+
+                  <div className="col-span-6 lg:col-span-2">
+                    <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-1">Unit</label>
+                    <select 
+                      className="input w-full text-sm font-bold text-gray-900 border-gray-300" 
+                      value={item.durationUnit} 
+                      onChange={(e) => updateSymptom(index, 'durationUnit', e.target.value)}
+                    >
+                      {durationUnits.map((unit) => <option key={unit}>{unit}</option>)}
+                    </select>
+                  </div>
+
+                  <div className="col-span-12 lg:col-span-3">
+                    <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-1">Past History with Symptom</label>
+                    <input 
+                      className="input w-full text-sm font-semibold text-gray-900 border-gray-300" 
+                      placeholder="Past History details..." 
+                      value={item.pastHistory} 
+                      onChange={(e) => updateSymptom(index, 'pastHistory', e.target.value)}
+                    />
+                  </div>
+
+                  <div className="col-span-12 lg:col-span-3">
+                    <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-1">Remarks / Instructions</label>
+                    <input 
+                      className="input w-full text-sm font-semibold text-gray-900 border-gray-300" 
+                      placeholder="Remarks..." 
+                      value={item.remarks} 
+                      onChange={(e) => updateSymptom(index, 'remarks', e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-1">
+                  {index === symptoms.length - 1 && (
+                    <button 
+                      type="button" 
+                      className="text-xs sm:text-sm font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 cursor-pointer" 
+                      onClick={() => {
+                        if (!item.symptom || !item.symptom.trim()) {
+                          toast.error('Please enter symptom name before adding another row.');
+                          return;
+                        }
+                        setSymptoms([...symptoms, { symptom: '', durationDays: '', durationUnit: 'Days', pastHistory: '', remarks: '' }]);
+                      }}
+                    >
+                      <Plus className="h-4 w-4" /> Add Symptom Row
+                    </button>
+                  )}
+                  {symptoms.length > 1 && (
+                    <button 
+                      type="button" 
+                      className="text-xs sm:text-sm font-bold text-red-600 hover:text-red-700 cursor-pointer" 
+                      onClick={() => setSymptoms(symptoms.filter((_, idx) => idx !== index))}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            <div className="border-t border-gray-100 pt-4 mt-2">
+              <label className="text-xs sm:text-sm font-extrabold text-gray-800 mb-1 block">General Past History</label>
+              <textarea 
+                className="input w-full text-sm font-semibold text-gray-900 border-gray-300 h-24 resize-none" 
+                placeholder="Overall medical history, allergies, previous illnesses..." 
+                value={generalPastHistory}
+                onChange={(e) => setGeneralPastHistory(e.target.value)}
+              />
+            </div>
+          </section>
+
+          {/* Same Row Container: Lab Investigations & Reports AND Diagnosis / Remarks for Patient */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* Lab Investigations & Reports Box */}
+            <section className="card p-5 bg-white border border-gray-200/80 shadow-xs space-y-3 flex flex-col justify-between">
+              <div className="space-y-3">
+                <h2 className="text-lg font-black text-gray-900 border-b border-gray-100 pb-2.5 flex items-center justify-between">
+                  <span>Lab Investigations & Reports</span>
+                  <label className="flex items-center gap-1.5 text-xs sm:text-sm font-extrabold text-orange-600 cursor-pointer">
+                    <input type="checkbox" {...register('sendToLab')} />
+                    <FlaskConical className="h-4 w-4" /> Send To Lab
+                  </label>
+                </h2>
+
+                <div className="relative">
+                  <input
+                    className="input w-full text-sm font-bold text-gray-900 border-gray-300"
+                    placeholder="Search lab tests..."
+                    value={testQuery}
+                    onChange={(e) => setTestQuery(e.target.value)}
+                  />
+                  {testQuery && (
+                    <div className="absolute z-20 mt-1 w-full bg-white border border-orange-200 rounded-lg shadow-lg max-h-44 overflow-y-auto">
+                      {availableTests.filter((test) => test.toLowerCase().includes(testQuery.toLowerCase()) && !selectedTests.includes(test)).slice(0, 10).map((test) => (
+                        <button
+                          key={test}
+                          type="button"
+                          className="w-full text-left px-3 py-2 text-sm font-bold text-gray-800 hover:bg-orange-50 border-b border-gray-50 last:border-b-0 cursor-pointer"
+                          onClick={() => selectTest(test)}
+                        >
+                          {test}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                  {selectedTests.map((test) => (
+                    <span key={test} className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs sm:text-sm font-bold text-orange-800">
+                      {test}
+                      <button type="button" onClick={() => removeSelectedTest(test)} className="h-4 w-4 rounded-full bg-orange-200 text-orange-800 hover:bg-orange-300 inline-flex items-center justify-center font-black text-xs cursor-pointer">
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <input className="input w-full text-sm font-bold text-gray-900 border-gray-300" placeholder="Add custom test..." value={newTest} onChange={(e) => setNewTest(e.target.value)} />
+                <button type="button" className="btn-secondary text-sm px-4 py-2 font-bold" onClick={addTest}>
+                  + Add
+                </button>
+              </div>
+            </section>
+
+            {/* Diagnosis / Remarks for Patient Box */}
+            <section className="card p-5 bg-white border border-gray-200/80 shadow-xs space-y-3 flex flex-col justify-between">
+              <div>
+                <h2 className="text-lg font-black text-gray-900 border-b border-gray-100 pb-2.5 flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-orange-600" />
+                  <span>Diagnosis / Remarks for Patient</span>
+                </h2>
+                <div className="mt-3">
+                  <label className="text-xs sm:text-sm font-extrabold text-gray-800 mb-1.5 block">Clinical Diagnosis & Patient Remarks</label>
+                  <textarea 
+                    className="input w-full text-sm font-bold text-gray-900 border border-gray-300 h-28 p-3 resize-y rounded-xl" 
+                    placeholder="Type clinical diagnosis, doctor's remarks, or special patient notes..." 
+                    value={diagnosisRemark}
+                    onChange={(e) => setDiagnosisRemark(e.target.value)}
+                  />
+                </div>
+              </div>
+            </section>
+          </div>
+
+          {/* Prescription Medicines Section */}
+          <section className="card p-5 bg-white border border-orange-200/80 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-orange-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-orange-100/80 rounded-lg text-orange-700">
+                  <Pill className="h-4 w-4" />
+                </div>
+                <h2 className="text-lg font-black text-gray-900">
+                  Prescription Medicines (Digital Rx)
+                </h2>
+              </div>
+
+              <div className="flex items-center gap-3 flex-wrap">
+                {!isReadOnly && (latestPastPrescription?.medicines?.length > 0 || previousConsultation) && (
+                  <button
+                    type="button"
+                    onClick={handleContinuePreviousMedicines}
+                    className="bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs py-1.5 px-3 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs transition-all"
+                    title="Automatically pre-fill medicines from previous prescription"
+                  >
+                    <Copy className="h-3.5 w-3.5" /> Continue Previous Medicines
+                  </button>
+                )}
+
+                <div className="flex items-center gap-1.5">
+                  <label className="text-xs sm:text-sm font-extrabold text-gray-800">Language:</label>
+                  <select 
+                    className="input text-sm font-bold text-gray-900 py-1.5 px-2 cursor-pointer border-gray-300"
+                    value={typeof language === 'object' ? language.value : language}
+                    onChange={(e) => setLanguage(e.target.value)}
+                  >
+                    {languages.map((lang) => {
+                      const val = typeof lang === 'object' ? lang.value : lang;
+                      const lbl = typeof lang === 'object' ? (lang.label || lang.value) : lang;
+                      return (
+                        <option key={val} value={val}>
+                          {lbl}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Medicines List - Single Horizontal Flex Row */}
+            <div className="space-y-3">
+              {medicines.map((med, index) => (
+                <div key={index} className="p-3 bg-gradient-to-r from-orange-50/30 via-white to-blue-50/20 rounded-xl border border-orange-200/70 shadow-2xs">
+                  <div className="flex flex-wrap xl:flex-nowrap items-end gap-2.5">
+                    {/* 1. Medicine Name */}
+                    <div className="flex-1 min-w-[200px] relative">
+                      <div className="flex items-center justify-between mb-0.5">
+                        <label className="text-xs sm:text-sm font-extrabold text-gray-800 uppercase">Medicine Name #{index + 1}</label>
+                        {pharmacyMedicines.length > 0 && (
+                          <span className="text-[10px] font-extrabold text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                            Stock Synced
+                          </span>
+                        )}
+                      </div>
+                      <input 
+                        className="input w-full text-sm font-bold text-gray-900 border-gray-300" 
+                        placeholder="Type medicine name (min. 3 chars)..." 
+                        value={med.medicine} 
+                        onChange={(e) => updateMedicine(index, 'medicine', e.target.value)}
+                        onFocus={() => {
+                          setActiveMedIndex(index);
+                          setMedHighlightedIndex(-1);
+                        }}
+                        onKeyDown={(e) => handleMedKeyDown(e, index)}
+                      />
+                      {activeMedIndex === index && medSuggestions.length > 0 && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-blue-300 rounded-md shadow-xl z-30 max-h-44 overflow-y-auto">
+                          {medSuggestions.map((mObj, mIdx) => (
+                            <button
+                              key={mIdx}
+                              type="button"
+                              className={`w-full text-left px-3 py-2 text-sm font-bold border-b border-blue-50 flex items-center justify-between cursor-pointer transition-colors ${
+                                medHighlightedIndex === mIdx 
+                                  ? 'bg-blue-100 text-blue-950 font-black' 
+                                  : 'hover:bg-blue-50 text-gray-800'
+                              }`}
+                              onClick={() => selectMedicineSuggestion(mObj, index)}
+                              onMouseEnter={() => setMedHighlightedIndex(mIdx)}
+                            >
+                              <span className="font-bold">{mObj.name}</span>
+                              <span className="text-xs font-black text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded">Stock: {mObj.stock}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 2. Form */}
+                    <div className="w-28 shrink-0">
+                      <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-0.5">Form</label>
+                      <select 
+                        className="input w-full text-sm font-bold text-gray-900 border-gray-300 px-1.5"
+                        value={med.dosageForm}
+                        onChange={(e) => updateMedicine(index, 'dosageForm', e.target.value)}
+                      >
+                        {['Tablet', 'Syrup', 'Injection', 'Capsule', 'Ointment', 'Eye Drops', 'Drop', 'Cream', 'Gel', 'Powder', 'Lotion', 'Spray'].map(f => <option key={f}>{f}</option>)}
+                      </select>
+                    </div>
+
+                    {/* 3. Strength */}
+                    <div className="w-22 shrink-0">
+                      <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-0.5">Strength</label>
+                      <input 
+                        className="input w-full text-sm font-bold text-gray-900 border-gray-300"
+                        placeholder="500mg"
+                        value={med.strength}
+                        onChange={(e) => updateMedicine(index, 'strength', e.target.value)}
+                      />
+                    </div>
+
+                    {/* 4. Dose */}
+                    <div className="w-16 shrink-0">
+                      <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-0.5 text-center">Dose</label>
+                      <input 
+                        className="input w-full text-sm font-bold text-gray-900 border-gray-300 text-center px-1"
+                        placeholder="1"
+                        value={med.dose}
+                        onChange={(e) => updateMedicine(index, 'dose', e.target.value)}
+                      />
+                    </div>
+
+                    {/* 5. Timings (M-A-N Checkboxes with Morning, Afternoon, Night) */}
+                    <div className="shrink-0">
+                      <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-0.5">Timing (M-A-N)</label>
+                      <div className="flex items-center justify-between gap-2 py-1.5 px-2 bg-gray-50 border border-gray-300 rounded-lg text-sm font-bold">
+                        <label className="flex items-center gap-1 cursor-pointer select-none text-gray-900 hover:text-orange-600">
+                          <input
+                            type="checkbox"
+                            checked={med.morning}
+                            onChange={() => toggleTiming(index, 'morning')}
+                            className="rounded text-orange-600 focus:ring-orange-500 h-4 w-4 cursor-pointer"
+                          />
+                          <span className="text-xs sm:text-sm font-extrabold">Morning</span>
+                        </label>
+                        <label className="flex items-center gap-1 cursor-pointer select-none text-gray-900 hover:text-orange-600">
+                          <input
+                            type="checkbox"
+                            checked={med.afternoon}
+                            onChange={() => toggleTiming(index, 'afternoon')}
+                            className="rounded text-orange-600 focus:ring-orange-500 h-4 w-4 cursor-pointer"
+                          />
+                          <span className="text-xs sm:text-sm font-extrabold">Afternoon</span>
+                        </label>
+                        <label className="flex items-center gap-1 cursor-pointer select-none text-gray-900 hover:text-orange-600">
+                          <input
+                            type="checkbox"
+                            checked={med.night}
+                            onChange={() => toggleTiming(index, 'night')}
+                            className="rounded text-orange-600 focus:ring-orange-500 h-4 w-4 cursor-pointer"
+                          />
+                          <span className="text-xs sm:text-sm font-extrabold">Night</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* 6. Days */}
+                    <div className="w-16 shrink-0">
+                      <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-0.5 text-center">Days</label>
+                      <input 
+                        className="input w-full text-sm font-bold text-gray-900 border-gray-300 text-center px-1"
+                        placeholder="Days"
+                        type="number"
+                        value={med.duration}
+                        onChange={(e) => updateMedicine(index, 'duration', e.target.value)}
+                      />
+                    </div>
+
+                    {/* 7. Total Qty */}
+                    <div className="w-18 shrink-0">
+                      <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-0.5 text-center">Qty</label>
+                      {String(med.dosageForm || 'Tablet').toLowerCase() === 'tablet' ? (
+                        <div 
+                          className="input w-full text-sm font-black text-gray-950 bg-gray-100 border-gray-300 flex items-center justify-center py-2 px-1 text-center cursor-not-allowed select-none"
+                          title="Tablet quantity is automatically calculated"
+                        >
+                          {calculateQty(med)}
+                        </div>
+                      ) : (
+                        <input
+                          type="number"
+                          min="1"
+                          className="input w-full text-sm font-black text-blue-900 bg-blue-50/80 border-blue-300 focus:border-blue-500 text-center px-1"
+                          placeholder="Qty"
+                          value={med.customQty !== undefined && med.customQty !== '' ? med.customQty : (med.qty || 1)}
+                          onChange={(e) => updateMedicine(index, 'customQty', e.target.value)}
+                          title="Qty for non-tablet forms is editable for Pharmacy billing"
+                        />
+                      )}
+                    </div>
+
+                    {/* 8. Instructions / Remarks */}
+                    <div className="flex-1 min-w-[200px]">
+                      <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-0.5">Special Instructions / Remarks</label>
+                      <input 
+                        className="input w-full text-sm font-semibold text-gray-900 border-gray-300"
+                        placeholder="e.g. Take after food with warm water"
+                        value={med.remarks}
+                        onChange={(e) => updateMedicine(index, 'remarks', e.target.value)}
+                      />
+                    </div>
+
+                    {/* 9. Remove Row Action */}
+                    <div className="shrink-0 pb-0.5">
+                      <button 
+                        type="button" 
+                        className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg border border-red-200 transition-colors cursor-pointer"
+                        title="Remove Row"
+                        onClick={() => removeMedicineRow(index)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button 
+              type="button" 
+              className="btn-secondary text-xs sm:text-sm font-bold py-2 px-3 flex items-center gap-1.5 border-orange-300 text-orange-700 hover:bg-orange-50 cursor-pointer"
+              onClick={addMedicineRow}
+            >
+              <Plus className="h-4 w-4" /> Add Medicine Row
+            </button>
+
+            {/* Live Inline Preview (Collapsible) */}
+            {showPreview && (
+              <div className="space-y-2 pt-3 border-t border-orange-100">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-bold text-gray-800 flex items-center gap-1">
+                    <Eye className="h-4 w-4 text-orange-600" /> Live Receipt & Digital Rx Preview
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowPreview(false)}
+                    className="text-xs sm:text-sm font-bold text-gray-500 hover:text-gray-700 cursor-pointer"
+                  >
+                    Hide Preview
+                  </button>
+                </div>
+                <div className="bg-gray-100 p-4 border border-gray-300 rounded-xl overflow-x-auto max-h-[600px] overflow-y-auto">
+                  <div ref={receiptRef}>
+                    <PatientReceipt patient={buildPatientDataForReceipt()} prescription={buildPrescriptionDataForPrint()} language={language} />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Hidden printable ref when inline preview is closed */}
+            {!showPreview && (
+              <div className="hidden">
+                <div ref={receiptRef}>
+                  <PatientReceipt patient={buildPatientDataForReceipt()} prescription={buildPrescriptionDataForPrint()} language={language} />
+                </div>
+              </div>
+            )}
+          </section>
+
+          {/* Follow-up Scheduling & Actions */}
+          <section className="card p-5 bg-white border border-gray-200/80 shadow-xs space-y-4">
+            <h2 className="text-lg font-black text-gray-900 border-b border-gray-100 pb-3">
+              Follow-up Scheduling & Actions
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-1">Follow-up Date</label>
+                <input 
+                  className="input w-full text-sm font-bold text-gray-900 border-gray-300" 
+                  type="date" 
+                  value={followUpDate}
+                  onChange={(e) => setFollowUpDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-1">Follow-up Instructions</label>
+                <input 
+                  className="input w-full text-sm font-bold text-gray-900 border-gray-300" 
+                  placeholder="e.g. Check BP, review reports"
+                  value={followUpRemarks}
+                  onChange={(e) => setFollowUpRemarks(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {!patient.isDischarged && (
+              <div className="flex items-center justify-between gap-4 flex-wrap pt-4 border-t border-gray-100">
+                {/* Single Primary Action Button: Save & Print Prescription */}
+                <button
+                  type="button"
+                  className="btn bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-black py-2.5 px-5 flex items-center gap-2 cursor-pointer shadow-md rounded-xl"
+                  onClick={handleSaveAndPrint}
+                  disabled={saving}
+                >
+                  <Printer className="h-4 w-4" /> {saving ? 'Saving...' : 'Save & Print Prescription'}
+                </button>
+
+                {/* Referral Checkboxes (Single Select Only - Processes on Save & Print) */}
+                <div className="flex items-center gap-4 border-l border-gray-200 pl-4 py-1 flex-wrap">
+                  <label className="flex items-center gap-1.5 text-xs sm:text-sm font-extrabold text-gray-800 cursor-pointer hover:text-indigo-600 select-none">
+                    <input
+                      type="checkbox"
+                      checked={sendToIpdChecked || referralSent}
+                      disabled={referralSent}
+                      onChange={(e) => {
+                        const isChecked = e.target.checked;
+                        if (isChecked) {
+                          setSendToIpdChecked(true);
+                          setSendToSameDayChecked(false);
+                          setReferToOtChecked(false);
+                        } else {
+                          setSendToIpdChecked(false);
+                        }
+                      }}
+                      className="rounded-full text-indigo-600 focus:ring-indigo-500 h-4 w-4 cursor-pointer"
+                    />
+                    <span>{referralSent ? '✓ Send to IPD (Referred)' : 'Send to IPD'}</span>
+                  </label>
+
+                  <label className="flex items-center gap-1.5 text-xs sm:text-sm font-extrabold text-gray-800 cursor-pointer hover:text-amber-600 select-none">
+                    <input
+                      type="checkbox"
+                      checked={sendToSameDayChecked}
+                      onChange={(e) => {
+                        const isChecked = e.target.checked;
+                        if (isChecked) {
+                          setSendToSameDayChecked(true);
+                          setSendToIpdChecked(false);
+                          setReferToOtChecked(false);
+                        } else {
+                          setSendToSameDayChecked(false);
+                        }
+                      }}
+                      className="rounded-full text-amber-600 focus:ring-amber-500 h-4 w-4 cursor-pointer"
+                    />
+                    <span>Same Day Care</span>
+                  </label>
+
+                  <label className="flex items-center gap-1.5 text-xs sm:text-sm font-extrabold text-gray-800 cursor-pointer hover:text-rose-600 select-none">
+                    <input
+                      type="checkbox"
+                      checked={referToOtChecked}
+                      onChange={(e) => {
+                        const isChecked = e.target.checked;
+                        if (isChecked) {
+                          setReferToOtChecked(true);
+                          setSendToIpdChecked(false);
+                          setSendToSameDayChecked(false);
+                        } else {
+                          setReferToOtChecked(false);
+                        }
+                      }}
+                      className="rounded-full text-rose-600 focus:ring-rose-500 h-4 w-4 cursor-pointer"
+                    />
+                    <span>Refer to OT</span>
+                  </label>
+                </div>
+              </div>
+            )}
+          </section>
+
+        </fieldset>
+
+        {/* Right Column (15% Width -> lg:col-span-2 Sticky Sidebar Panel) */}
+        <div className="lg:col-span-2 space-y-3.5 lg:sticky lg:top-4">
+          
+          {/* Card 0: Patient Info & Full Clinical Track */}
+          <div className="card p-3 bg-gradient-to-b from-orange-50/90 via-white to-orange-50/50 border border-orange-200/80 shadow-xs space-y-2">
+            <div className="flex items-center justify-between border-b border-orange-100 pb-1">
+              <span className="text-[10px] font-extrabold text-orange-600 uppercase tracking-wider">{patient.uhid}</span>
+              {patient.registeredBy && (
+                <span className="text-[10px] font-bold text-gray-500">Reg: <span className="capitalize text-gray-800">{patient.registeredBy}</span></span>
+              )}
+            </div>
+            
+            <div>
+              <h2 className="text-base font-black text-gray-900 leading-tight">{patient.patientName}</h2>
+              <p className="text-[11px] font-semibold text-gray-600 mt-0.5">
+                {patient.gender} • {patient.mobile}
+              </p>
+              <p className="text-[10px] font-bold text-orange-700 mt-0.5">
+                {formatDate(patient.appointmentDate)} ({patient.slot})
+              </p>
+              {previousConsultation && (
+                <span className="mt-1 bg-purple-100 text-purple-800 border border-purple-300 text-[9px] font-extrabold px-1.5 py-0.5 rounded-full inline-flex items-center gap-1">
+                  <History className="h-3 w-3" /> Follow-up Patient
+                </span>
+              )}
+            </div>
+
+            <div className="pt-1.5 border-t border-orange-100">
+              <Link
+                to={`/doctor/consultation-track/${patientId}`}
+                className="w-full btn-secondary bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300 font-bold text-xs py-1.5 px-2 flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs rounded-xl"
+              >
+                <Activity className="h-3.5 w-3.5 text-emerald-600" />
+                Full Clinical Track
+              </Link>
+            </div>
+          </div>
+
+          {/* Card 1: Vitals Summary with Edit Button */}
+          <div className="card p-3.5 bg-white border border-gray-200/80 shadow-xs space-y-2.5">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+              <span className="text-xs sm:text-sm font-black text-gray-900 uppercase tracking-wider flex items-center gap-1.5">
+                <Activity className="h-4 w-4 text-orange-600" /> Vitals
+              </span>
+              {!isReadOnly && (
+                <button
+                  type="button"
+                  className="text-xs font-extrabold text-orange-600 hover:text-orange-800 bg-orange-50 hover:bg-orange-100 px-2.5 py-1 rounded-lg border border-orange-200 cursor-pointer"
+                  onClick={() => setShowEditVitalsModal(true)}
+                >
+                  Edit
+                </button>
+              )}
+            </div>
+            <div className="space-y-1.5 text-xs sm:text-sm font-extrabold text-gray-800">
+              <div className="flex justify-between border-b border-gray-50 pb-1">
+                <span className="text-gray-600">Weight:</span>
+                <span className="text-sm sm:text-base font-black text-gray-950">{watch('weight') || patient?.demographics?.weight || previousConsultation?.vitals?.weight || '-'} kg</span>
+              </div>
+              <div className="flex justify-between border-b border-gray-50 pb-1">
+                <span className="text-gray-600">Height:</span>
+                <span className="text-sm sm:text-base font-black text-gray-950">{watch('height') || patient?.demographics?.height || previousConsultation?.vitals?.height || '-'} cm</span>
+              </div>
+              <div className="flex justify-between border-b border-gray-50 pb-1">
+                <span className="text-gray-600">BP:</span>
+                <span className="text-sm sm:text-base font-black text-gray-950">{watch('bloodPressure') || patient?.demographics?.bloodPressure || previousConsultation?.vitals?.bloodPressure || '-'}</span>
+              </div>
+              <div className="flex justify-between border-b border-gray-50 pb-1">
+                <span className="text-gray-600">Temp:</span>
+                <span className="text-sm sm:text-base font-black text-gray-950">{watch('temperature') || patient?.demographics?.temperature || previousConsultation?.vitals?.temperature || '-'} °C</span>
+              </div>
+              <div className="flex justify-between border-b border-gray-50 pb-1">
+                <span className="text-gray-600">BMI:</span>
+                <span className="text-sm sm:text-base font-black text-gray-950">{watch('bmi') || patient?.demographics?.bmi || previousConsultation?.vitals?.bmi || '-'}</span>
+              </div>
+              <div className="flex justify-between pt-0.5">
+                <span className="text-gray-600">Allergies:</span>
+                <span className="text-xs sm:text-sm font-black text-red-600 truncate max-w-[90px]">{watch('drugAllergy') || patient?.demographics?.drugAllergy || previousConsultation?.vitals?.drugAllergy || 'None'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 2: Symptoms Summary */}
+          <div className="card p-3.5 bg-white border border-gray-200/80 shadow-xs space-y-2.5">
+            <div className="border-b border-gray-100 pb-2">
+              <span className="text-xs sm:text-sm font-black text-gray-900 uppercase tracking-wider flex items-center gap-1.5">
+                <Stethoscope className="h-4 w-4 text-orange-600" /> Symptoms
+              </span>
+            </div>
+            {symptoms.filter(s => s.symptom && s.symptom.trim()).length > 0 ? (
+              <div className="space-y-1.5">
+                {symptoms.filter(s => s.symptom && s.symptom.trim()).map((s, idx) => (
+                  <div key={idx} className="p-2 bg-orange-50/90 border border-orange-200/80 rounded-lg text-xs sm:text-sm font-black text-orange-950 flex items-center justify-between gap-1">
+                    <span className="truncate max-w-[100px]">{s.symptom}</span>
+                    {s.durationDays && <span className="text-xs bg-orange-200 text-orange-950 px-1.5 py-0.5 rounded-md font-black">{s.durationDays}d</span>}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs sm:text-sm text-gray-500 font-semibold italic">No symptoms added</p>
+            )}
+          </div>
+
+          {/* Card 3: Preview & Actions */}
+          <div className="card p-3 bg-gradient-to-b from-orange-50/80 via-white to-orange-50/40 border border-orange-200 shadow-xs space-y-2">
+            <div className="border-b border-orange-100 pb-1">
+              <span className="text-[11px] font-extrabold text-gray-900 uppercase tracking-wider flex items-center gap-1">
+                <Eye className="h-3.5 w-3.5 text-orange-600" /> Actions
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowPreviewModal(true)}
+              className="w-full btn-secondary bg-orange-500 hover:bg-orange-600 text-white border-orange-600 font-extrabold text-xs py-2 px-2 flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs rounded-xl"
+            >
+              <Eye className="h-4 w-4" />
+              View RX
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowEditPrintModal(true)}
+              className="w-full btn-secondary bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300 font-bold text-xs py-2 px-2 flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs rounded-xl"
+              title="Configure print layout & sections for this prescription"
+            >
+              <Printer className="h-4 w-4 text-slate-600" />
+              Edit Print
+            </button>
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* Edit Print RX Options Modal */}
+      {showEditPrintModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="card w-full max-w-lg p-6 bg-white border border-gray-200 shadow-2xl rounded-2xl animate-in fade-in zoom-in duration-150 space-y-5">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <h3 className="text-base font-black text-gray-900 flex items-center gap-2">
+                <Printer className="h-5 w-5 text-orange-600" /> Edit Print RX Layout & Options
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowEditPrintModal(false)}
+                className="p-1 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Mandatory Fixed Sections Info */}
+            <div className="p-3 bg-orange-50/80 border border-orange-200 rounded-xl space-y-1.5">
+              <span className="text-xs font-black text-orange-950 uppercase tracking-wider block">Mandatory Prescription Sections (Always Printed):</span>
+              <div className="flex flex-wrap gap-1.5">
+                <span className="bg-white text-orange-900 border border-orange-300 px-2 py-0.5 rounded text-xs font-extrabold flex items-center gap-1">🔒 Patient Details</span>
+                <span className="bg-white text-orange-900 border border-orange-300 px-2 py-0.5 rounded text-xs font-extrabold flex items-center gap-1">🔒 Symptoms Name</span>
+                <span className="bg-white text-orange-900 border border-orange-300 px-2 py-0.5 rounded text-xs font-extrabold flex items-center gap-1">🔒 Diagnosis / Remarks</span>
+                <span className="bg-white text-orange-900 border border-orange-300 px-2 py-0.5 rounded text-xs font-extrabold flex items-center gap-1">🔒 Medicines (Digital Rx)</span>
+                <span className="bg-white text-orange-900 border border-orange-300 px-2 py-0.5 rounded text-xs font-extrabold flex items-center gap-1">🔒 Follow-up Date</span>
+              </div>
+            </div>
+
+            {/* Optional / Toggleable Print Sections */}
+            <div className="space-y-3 pt-1">
+              <label className="text-xs font-black text-gray-900 uppercase tracking-wider block">Optional Sections to Include in Prescription:</label>
+              
+              <div className="space-y-2.5 bg-gray-50/80 p-3.5 border border-gray-200 rounded-xl text-sm font-extrabold text-gray-800">
+                <label className="flex items-center justify-between cursor-pointer select-none hover:text-orange-600">
+                  <span>Include Vitals & Demographics</span>
+                  <input
+                    type="checkbox"
+                    checked={printOptions.printVitals}
+                    onChange={(e) => setPrintOptions({ ...printOptions, printVitals: e.target.checked })}
+                    className="rounded text-orange-600 focus:ring-orange-500 h-4.5 w-4.5 cursor-pointer"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between cursor-pointer select-none hover:text-orange-600 border-t border-gray-200/60 pt-2">
+                  <span>Include Lab Investigations & Reports</span>
+                  <input
+                    type="checkbox"
+                    checked={printOptions.printLabTests}
+                    onChange={(e) => setPrintOptions({ ...printOptions, printLabTests: e.target.checked })}
+                    className="rounded text-orange-600 focus:ring-orange-500 h-4.5 w-4.5 cursor-pointer"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between cursor-pointer select-none hover:text-orange-600 border-t border-gray-200/60 pt-2">
+                  <span>Include Past History with Symptoms</span>
+                  <input
+                    type="checkbox"
+                    checked={printOptions.printSymptomHistory}
+                    onChange={(e) => setPrintOptions({ ...printOptions, printSymptomHistory: e.target.checked })}
+                    className="rounded text-orange-600 focus:ring-orange-500 h-4.5 w-4.5 cursor-pointer"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between cursor-pointer select-none hover:text-orange-600 border-t border-gray-200/60 pt-2">
+                  <span>Include Symptom Remarks / Instructions</span>
+                  <input
+                    type="checkbox"
+                    checked={printOptions.printSymptomRemarks}
+                    onChange={(e) => setPrintOptions({ ...printOptions, printSymptomRemarks: e.target.checked })}
+                    className="rounded text-orange-600 focus:ring-orange-500 h-4.5 w-4.5 cursor-pointer"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between cursor-pointer select-none hover:text-orange-600 border-t border-gray-200/60 pt-2">
+                  <span>Include General Past History</span>
+                  <input
+                    type="checkbox"
+                    checked={printOptions.printGeneralPastHistory}
+                    onChange={(e) => setPrintOptions({ ...printOptions, printGeneralPastHistory: e.target.checked })}
+                    className="rounded text-orange-600 focus:ring-orange-500 h-4.5 w-4.5 cursor-pointer"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => {
+                  localStorage.setItem('doctor_print_options', JSON.stringify(printOptions));
+                  setShowEditPrintModal(false);
+                  toast.success("Print RX options applied successfully!");
+                }}
+                className="btn bg-orange-600 hover:bg-orange-700 text-white font-extrabold text-sm py-2.5 px-5 cursor-pointer rounded-xl shadow-md"
+              >
+                Save & Apply Print Layout
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      <div className="card p-5">
-        <p className="text-sm font-bold text-orange-600">
-          <span>{patient.uhid}</span>
-          {patient.registeredBy && patient.registeredBy !== 'N/A' && (
-            <span className="text-gray-500 font-bold"> • Registered by: <span className="capitalize text-orange-650">{patient.registeredBy}</span></span>
-          )}
-        </p>
-        <h1 className="text-2xl font-extrabold text-gray-900">{patient.patientName}</h1>
-        <p className="text-sm text-gray-500">{patient.gender} • {patient.mobile} • {formatDate(patient.appointmentDate)} {patient.slot}</p>
-      </div>
-
-      <section className="card space-y-4 p-5">
-        {previousConsultation?.symptoms?.length > 0 && (
-          <div className="space-y-2 mb-6 border-b border-orange-100 pb-4">
-            <h3 className="text-sm font-bold text-gray-700 uppercase">Previous Symptoms (Read-Only)</h3>
-            <div className="grid gap-2 md:grid-cols-[2fr_1fr_1fr_2fr_2fr] items-center text-xs font-semibold text-gray-500 px-2">
-              <div>Symptom</div>
-              <div>Duration</div>
-              <div>Unit</div>
-              <div>Past History</div>
-              <div>Remarks</div>
-            </div>
-            {previousConsultation.symptoms.map((item, idx) => (
-              <div key={idx} className="grid gap-2 md:grid-cols-[2fr_1fr_1fr_2fr_2fr] items-start md:items-center p-3 bg-gray-100 rounded-lg border border-gray-200 text-gray-600 text-sm">
-                <div className="font-semibold">{item.symptom}</div>
-                <div>{item.durationDays || '-'}</div>
-                <div>{item.durationUnit}</div>
-                <div className="italic">{item.pastHistory || 'N/A'}</div>
-                <div>{item.remarks || 'N/A'}</div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <h2 className="font-bold text-gray-800">Current Symptoms</h2>
-        
-        {/* Symptoms Header - Column Labels */}
-        <div className="grid gap-2 md:grid-cols-[2fr_1fr_1fr_2fr_2fr_auto] items-center text-xs font-semibold text-gray-600 mb-2 px-2">
-          <div>Symptom</div>
-          <div>Duration</div>
-          <div>Unit</div>
-          <div>Past History</div>
-          <div>Remarks</div>
-          <div>Action</div>
-        </div>
-        
-        {/* Symptoms Rows */}
-        {symptoms.map((item, index) => (
-          <div key={index} className="grid gap-2 md:grid-cols-[2fr_1fr_1fr_2fr_2fr_auto] items-start md:items-center p-3 bg-gray-50 rounded-lg border border-orange-100">
-            {/* Symptom Input with Autocomplete Dropdown */}
-            <div className="relative">
-              <input 
-                aria-label="symptom" 
-                className="input w-full" 
-                placeholder="Type symptom name" 
-                value={item.symptom} 
-                onChange={(e) => updateSymptom(index, 'symptom', e.target.value)}
-                onFocus={() => setActiveSymptomIndex(index)}
-              />
-              {/* Autocomplete Dropdown */}
-              {activeSymptomIndex === index && suggestions.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-orange-300 rounded-md shadow-lg z-10 max-h-48 overflow-y-auto">
-                  {suggestions.map((suggestion, suggestionIndex) => (
-                    <button
-                      key={suggestionIndex}
-                      type="button"
-                      className="w-full text-left px-3 py-2 hover:bg-orange-100 text-sm border-b border-orange-50 last:border-b-0"
-                      onClick={() => selectSuggestion(suggestion, index)}
-                    >
-                      {suggestion}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <input 
-              aria-label="duration" 
-              className="input" 
-              placeholder="Days" 
-              type="number" 
-              value={item.durationDays} 
-              onChange={(e) => updateSymptom(index, 'durationDays', e.target.value)} 
-            />
-            <select 
-              aria-label="duration-unit" 
-              className="input" 
-              value={item.durationUnit} 
-              onChange={(e) => updateSymptom(index, 'durationUnit', e.target.value)}
-            >
-              {durationUnits.map((unit) => <option key={unit}>{unit}</option>)}
-            </select>
-            <textarea 
-              className="input text-sm" 
-              placeholder="Any past issues with this symptom?" 
-              value={item.pastHistory} 
-              onChange={(e) => updateSymptom(index, 'pastHistory', e.target.value)}
-              rows="2"
-            />
-            <textarea 
-              className="input text-sm" 
-              placeholder="Additional remarks" 
-              value={item.remarks} 
-              onChange={(e) => updateSymptom(index, 'remarks', e.target.value)}
-              rows="2"
-            />
-            <div className="flex gap-1 flex-col">
-              <button 
-                type="button" 
-                className="btn-secondary text-xs py-1" 
-                onClick={() => {
-                  if (!item.symptom || !item.symptom.trim()) {
-                    toast.error('Please enter the symptom name before adding another row.');
-                    return;
-                  }
-                  setSymptoms([...symptoms, { symptom: '', durationDays: '', durationUnit: 'Days', pastHistory: '', remarks: '' }]);
-                }}
-              >
-                <Plus className="h-3 w-3" />
-              </button>
-              <button 
-                type="button" 
-                className="btn-ghost text-red-600 text-xs py-1" 
-                onClick={() => {
-                  const isBlank = !item.symptom || !item.symptom.trim();
-                  if (isBlank && symptoms.length > 1) {
-                    setSymptoms(symptoms.filter((_, idx) => idx !== index));
-                  } else {
-                    const next = symptoms.map((s, idx) => 
-                      idx === index 
-                        ? { symptom: '', durationDays: '', durationUnit: 'Days', pastHistory: '', remarks: '' } 
-                        : s
-                    );
-                    setSymptoms(next);
-                  }
-                }}
-              >
-                Clear
-              </button>
-            </div>
-          </div>
-        ))}
-        
-        <div className="border-t border-orange-100 pt-4 mt-4">
-          {previousConsultation?.generalPastHistory && (
-            <div className="mb-4 p-3 bg-gray-100 rounded-lg border border-gray-200 text-gray-600 text-sm">
-              <p className="text-xs font-bold text-gray-500 uppercase mb-1">Previous General Past History (Read-Only)</p>
-              <p className="whitespace-pre-line">{previousConsultation.generalPastHistory}</p>
-            </div>
-          )}
-          <label className="text-sm font-semibold text-gray-700 mb-2 block">General Past History</label>
-          <textarea 
-            className="input" 
-            placeholder="Overall medical history, allergies, previous illnesses" 
-            value={generalPastHistory}
-            onChange={(e) => setGeneralPastHistory(e.target.value)}
-            rows="3"
-          />
-        </div>
-        
-        <div>
-          {previousConsultation?.diagnosisRemark && (
-            <div className="mb-4 p-3 bg-gray-100 rounded-lg border border-gray-200 text-gray-600 text-sm">
-              <p className="text-xs font-bold text-gray-500 uppercase mb-1">Previous Diagnosis / Remarks (Read-Only)</p>
-              <p className="whitespace-pre-line">{previousConsultation.diagnosisRemark}</p>
-            </div>
-          )}
-          <label className="text-sm font-semibold text-gray-700 mb-2 block">Diagnosis / Remarks</label>
-          <textarea 
-            className="input" 
-            placeholder="Doctor's diagnosis and additional remarks" 
-            value={diagnosisRemark}
-            onChange={(e) => setDiagnosisRemark(e.target.value)}
-            rows="3"
-          />
-        </div>
-      </section>
-
-      <section className="card space-y-4 p-5 rounded-2xl shadow-sm bg-white">
-        <div className="flex items-center justify-between">
-          <h2 className="font-bold text-gray-800">Vitals</h2>
-          <button
-            type="button"
-            className={`btn-secondary text-xs px-3 py-1.5 rounded-lg border transition-all ${
-              isVitalsEditable 
-                ? 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100' 
-                : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
-            }`}
-            onClick={() => setIsVitalsEditable(!isVitalsEditable)}
-          >
-            {isVitalsEditable ? 'Lock Vitals (Read-Only)' : 'Edit Vitals'}
-          </button>
-        </div>
-        {previousConsultation?.vitals && (
-          <div className="grid gap-4 md:grid-cols-6 p-3 bg-gray-100 rounded-xl border border-gray-200 text-gray-600 text-sm mb-4">
-            <div className="col-span-6"><p className="text-xs font-bold text-gray-500 uppercase">Previous Vitals (Read-Only)</p></div>
-            <div><strong>Weight:</strong> {previousConsultation.vitals.weight ? `${previousConsultation.vitals.weight} kg` : '-'}</div>
-            <div><strong>Height:</strong> {previousConsultation.vitals.height ? `${previousConsultation.vitals.height} cm` : '-'}</div>
-            <div><strong>Temp:</strong> {previousConsultation.vitals.temperature ? `${previousConsultation.vitals.temperature} °C` : '-'}</div>
-            <div><strong>BP:</strong> {previousConsultation.vitals.bloodPressure || '-'}</div>
-            <div><strong>BMI:</strong> {previousConsultation.vitals.bmi || '-'}</div>
-            <div><strong>Drug Allergy:</strong> {previousConsultation.vitals.drugAllergy || '-'}</div>
-          </div>
-        )}
-        <div className="grid gap-4 md:grid-cols-6">
-          <div>
-            <label className="text-sm text-gray-600">Weight (kg)</label>
-            <input className="input" placeholder="Weight" disabled={!isVitalsEditable} {...register('weight')} />
-          </div>
-          <div>
-            <label className="text-sm text-gray-600">Height (cm)</label>
-            <input className="input" placeholder="Height" disabled={!isVitalsEditable} {...register('height')} />
-          </div>
-          <div>
-            <label className="text-sm text-gray-600">Temperature (°C)</label>
-            <input className="input" placeholder="Temperature °C" disabled={!isVitalsEditable} {...register('temperature')} />
-          </div>
-          <div>
-            <label className="text-sm text-gray-600">Blood Pressure</label>
-            <input className="input" placeholder="e.g. 120/80" disabled={!isVitalsEditable} {...register('bloodPressure')} />
-          </div>
-          <div>
-            <label className="text-sm text-gray-600">BMI</label>
-            <input className="input" placeholder="BMI optional" disabled={!isVitalsEditable} {...register('bmi')} />
-          </div>
-          <div>
-            <label className="text-sm text-gray-600">Drug Allergy</label>
-            <input className="input" placeholder="Drug Allergy" disabled={!isVitalsEditable} {...register('drugAllergy')} />
-          </div>
-        </div>
-      </section>
-
-      <section className="card space-y-4 p-5">
-        <h2 className="font-bold text-gray-800">Tests & Reports</h2>
-        {previousConsultation?.tests?.length > 0 && (
-          <div className="p-3 bg-gray-100 rounded-xl border border-gray-200 text-gray-600 text-sm mb-4">
-            <p className="text-xs font-bold text-gray-500 uppercase mb-2">Previous Recommended Tests (Read-Only)</p>
-            <div className="flex flex-wrap gap-2">
-              {previousConsultation.tests.map((test, index) => (
-                <span key={index} className="inline-flex items-center gap-1 rounded-full border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-gray-700">
-                  {test}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div className="relative">
-          <label className="text-sm font-semibold text-gray-700 mb-2 block">Search and select tests</label>
-          <input
-            className="input w-full"
-            placeholder="Search tests..."
-            value={testQuery}
-            onChange={(e) => setTestQuery(e.target.value)}
-          />
-          {testQuery && (
-            <div className="absolute z-20 mt-1 w-full bg-white border border-orange-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
-              {availableTests.filter((test) => test.toLowerCase().includes(testQuery.toLowerCase()) && !selectedTests.includes(test)).slice(0, 10).map((test) => (
-                <button
-                  key={test}
-                  type="button"
-                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-orange-50"
-                  onClick={() => selectTest(test)}
-                >
-                  {test}
-                </button>
-              ))}
-              {!availableTests.some((test) => test.toLowerCase().includes(testQuery.toLowerCase()) && !selectedTests.includes(test)) && (
-                <div className="px-3 py-2 text-sm text-gray-500">No matching tests found.</div>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="space-y-3">
-          <div className="flex flex-wrap gap-2">
-            {selectedTests.length === 0 ? (
-              <p className="text-xs text-gray-500">No tests selected yet. Use the search box above to add tests.</p>
-            ) : (
-              selectedTests.map((test) => (
-                <span key={test} className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700">
-                  {test}
-                  <button type="button" onClick={() => removeSelectedTest(test)} className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-orange-700 hover:bg-orange-200">
-                    ×
-                  </button>
-                </span>
-              ))
-            )}
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-[1fr_auto] items-end">
-            <div>
-              <label className="text-sm font-semibold text-gray-700 mb-2 block">Add custom test</label>
-              <input className="input w-full" placeholder="Add test name" value={newTest} onChange={(e) => setNewTest(e.target.value)} />
-            </div>
-            <button type="button" className="btn-secondary h-10 px-4" onClick={addTest}>
-              <Plus className="h-4 w-4" /> Add
-            </button>
-          </div>
-        </div>
-
-        <label className="flex items-center gap-2 text-sm font-semibold">
-          <input type="checkbox" {...register('sendToLab')} />
-          <FlaskConical className="h-4 w-4 text-orange-500" /> Send To Lab
-        </label>
-      </section>
-
-      <section className="card space-y-4 p-5">
-        <h2 className="font-bold text-gray-800">Follow-up Scheduling</h2>
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <label className="text-xs font-bold text-gray-500 mb-1 block">Follow-up Date</label>
-            <input 
-              className="input py-2 text-xs" 
-              type="date" 
-              value={followUpDate}
-              onChange={(e) => setFollowUpDate(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="text-xs font-bold text-gray-500 mb-1 block">Follow-up Remarks / Instructions</label>
-            <input 
-              className="input py-2 text-xs" 
-              type="text" 
-              placeholder="e.g. Check BP, review lab reports, etc."
-              value={followUpRemarks}
-              onChange={(e) => setFollowUpRemarks(e.target.value)}
-            />
-          </div>
-        </div>
-        {patient.isDischarged && (
-          <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200 font-medium">
-            This patient has been discharged and the consultation cannot be updated.
-          </div>
-        )}
-        {!patient.isDischarged && (
-          <div className="flex gap-2 flex-wrap">
-            <button className="btn" type="submit" disabled={saving}>
-              <Save className="h-4 w-4" /> {saving ? 'Saving...' : 'Save Consultation'}
-            </button>
-            <Link className="btn-secondary" to={`/doctor/prescription/${patientId}`}>Create Prescription</Link>
-            {referralSent ? (
-              <span className="btn-secondary bg-green-50 text-green-700 border-green-200 cursor-default">
-                ✓ Referred to IPD
-              </span>
-            ) : (
+      {/* Edit Vitals Modal */}
+      {showEditVitalsModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="card w-full max-w-md p-6 bg-white border border-gray-200 shadow-2xl rounded-2xl animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3 mb-4">
+              <h3 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
+                <Activity className="h-5 w-5 text-orange-600" /> Edit Patient Vitals
+              </h3>
               <button
                 type="button"
-                className="btn bg-indigo-600 hover:bg-indigo-700 text-white"
-                onClick={handleSendToIpd}
-                disabled={sendingToIpd}
+                onClick={() => setShowEditVitalsModal(false)}
+                className="p-1 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 cursor-pointer"
               >
-                <Send className="h-4 w-4" /> {sendingToIpd ? 'Sending...' : 'Send to IPD'}
+                <X className="h-5 w-5" />
               </button>
-            )}
-            <button
-              type="button"
-              className="btn bg-orange-600 hover:bg-orange-700 text-white"
-              onClick={handleSendToSameDayOpen}
-            >
-              <Send className="h-4 w-4" /> Send to Same Day Care
-            </button>
-            <button
-              type="button"
-              className="btn bg-rose-600 hover:bg-rose-700 text-white"
-              onClick={async () => {
-                const defaultNotes = `Referred to OT by Dr. ${user?.doctorName || user?.username || 'Doctor'}. Diagnosis: ${diagnosisRemark || 'N/A'}`;
-                const customRemarks = window.prompt("Enter remarks for OT Referral:", defaultNotes);
-                if (customRemarks === null) return;
-                try {
-                  await client.post('/ipd/referrals', {
-                    patientId: patient._id,
-                    notes: customRemarks
-                  });
-                  toast.success(`${patient.patientName} referred to OT successfully!`);
-                } catch (err) {
-                  toast.error(err.response?.data?.message || 'Failed to send to OT');
-                }
-              }}
-            >
-              <Scissors className="h-4 w-4" /> Send to OT
-            </button>
-          </div>
-        )}
-      </section>
+            </div>
 
+            <div className="grid grid-cols-2 gap-3 space-y-0">
+              <div>
+                <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-1">Weight (kg)</label>
+                <input className="input w-full text-sm font-bold text-gray-900 border-gray-300" placeholder="e.g. 70" {...register('weight')} />
+              </div>
+              <div>
+                <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-1">Height (cm)</label>
+                <input className="input w-full text-sm font-bold text-gray-900 border-gray-300" placeholder="e.g. 175" {...register('height')} />
+              </div>
+              <div>
+                <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-1">Temp (°C)</label>
+                <input className="input w-full text-sm font-bold text-gray-900 border-gray-300" placeholder="e.g. 37" {...register('temperature')} />
+              </div>
+              <div>
+                <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-1">Blood Pressure</label>
+                <input className="input w-full text-sm font-bold text-gray-900 border-gray-300" placeholder="120/80" {...register('bloodPressure')} />
+              </div>
+              <div>
+                <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-1">BMI</label>
+                <input className="input w-full text-sm font-bold text-gray-900 border-gray-300" placeholder="e.g. 22.5" {...register('bmi')} />
+              </div>
+              <div>
+                <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-1">Drug Allergy</label>
+                <input className="input w-full text-sm font-bold text-red-600 border-gray-300" placeholder="e.g. Penicillin" {...register('drugAllergy')} />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-5 border-t border-gray-100 mt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEditVitalsModal(false);
+                  toast.success("Vitals updated successfully!");
+                }}
+                className="btn bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs py-2 px-4 cursor-pointer rounded-xl"
+              >
+                Save & Close Vitals
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Show Preview Modal Popup */}
+      {showPreviewModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-gray-200 animate-in fade-in zoom-in duration-150">
+            {/* Modal Header */}
+            <div className="p-4 bg-gray-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Printer className="h-5 w-5 text-orange-400" />
+                <h3 className="text-base font-extrabold">Patient Receipt & Digital Prescription Preview</h3>
+              </div>
+              
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-gray-300">
+                  <label>Language:</label>
+                  <select 
+                    className="input bg-gray-800 text-white border-gray-700 text-xs py-1 px-2 font-bold cursor-pointer"
+                    value={typeof language === 'object' ? language.value : language}
+                    onChange={(e) => setLanguage(e.target.value)}
+                  >
+                    {languages.map((lang) => {
+                      const val = typeof lang === 'object' ? lang.value : lang;
+                      const lbl = typeof lang === 'object' ? (lang.label || lang.value) : lang;
+                      return (
+                        <option key={val} value={val}>
+                          {lbl}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowPreviewModal(false)}
+                  className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body: Printable Receipt Preview */}
+            <div className="p-4 sm:p-6 overflow-y-auto bg-slate-200/90 flex-1 flex justify-center items-start">
+              <div className="bg-white shadow-2xl rounded-sm w-full max-w-[210mm] border border-gray-300 overflow-hidden">
+                <PatientReceipt 
+                  ref={receiptRef}
+                  patient={buildPatientDataForReceipt()}
+                  prescription={buildPrescriptionDataForPrint()}
+                  language={language}
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+              <span className="text-xs font-bold text-gray-500">Live preview generated automatically from consultation data</span>
+              <button
+                type="button"
+                onClick={() => setShowPreviewModal(false)}
+                className="btn-secondary text-xs px-4 py-2 font-bold cursor-pointer"
+              >
+                Close Preview
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Same Day Care Modal */}
       {showSameDayModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="card w-full max-w-md p-6 relative bg-white border border-gray-100 shadow-2xl rounded-2xl animate-in fade-in zoom-in duration-200">
             <button
               type="button"
               onClick={() => setShowSameDayModal(false)}
-              className="absolute top-4 right-4 p-1 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              className="absolute top-4 right-4 p-1 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 cursor-pointer"
             >
               <X className="h-5 w-5" />
             </button>
@@ -722,7 +1789,7 @@ const ConsultationPage = () => {
               <div>
                 <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Select Care Type</label>
                 <select
-                  className="input w-full text-sm"
+                  className="input w-full text-sm font-semibold"
                   value={sdCareType}
                   onChange={(e) => setSdCareType(e.target.value)}
                   required
@@ -740,7 +1807,7 @@ const ConsultationPage = () => {
                   <p className="text-xs text-gray-400">Loading providers...</p>
                 ) : (
                   <select
-                    className="input w-full text-sm"
+                    className="input w-full text-sm font-semibold"
                     value={sdSelectedDocId}
                     onChange={(e) => setSdSelectedDocId(e.target.value)}
                   >
@@ -758,7 +1825,7 @@ const ConsultationPage = () => {
                 <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Referral Remarks</label>
                 <textarea
                   className="input w-full text-sm h-24 p-2.5 resize-none border border-gray-200 rounded-xl"
-                  placeholder="Enter custom remarks for the patient..."
+                  placeholder="Enter custom remarks..."
                   value={sdRemarks}
                   onChange={(e) => setSdRemarks(e.target.value)}
                 />
@@ -768,14 +1835,14 @@ const ConsultationPage = () => {
                 <button
                   type="button"
                   onClick={() => setShowSameDayModal(false)}
-                  className="btn-secondary text-xs px-4 py-2"
+                  className="btn-secondary text-xs px-4 py-2 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={handleSendToSameDaySubmit}
-                  className="btn text-xs px-4 py-2"
+                  className="btn text-xs px-4 py-2 cursor-pointer"
                 >
                   Send Referral
                 </button>

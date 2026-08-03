@@ -71,13 +71,63 @@ const addTimeline = async (req, admissionId, patientId, activity, description, m
 };
 
 // @desc    Get all IPD admissions with full patient details (for Patient List)
+const getDoctorAdmissionFilter = async (hospitalId, targetDoctorId) => {
+  const IpdReferral = require('../models/IpdReferral');
+  const Consultation = require('../models/Consultation');
+
+  const hospitalQuery = hospitalId ? { hospitalId } : {};
+
+  const referrals = await IpdReferral.find({
+    ...hospitalQuery,
+    referredByDoctor: targetDoctorId
+  }).select('admissionId patientId');
+
+  const referredAdmissionIds = referrals.map(r => r.admissionId).filter(Boolean);
+  const referredPatientIdsFromReferral = referrals.map(r => r.patientId).filter(Boolean);
+
+  const consultations = await Consultation.find({
+    ...hospitalQuery,
+    doctorId: targetDoctorId
+  }).select('patientId');
+
+  const referredPatientIdsFromConsultation = consultations.map(c => c.patientId).filter(Boolean);
+
+  const allReferredPatientIds = [
+    ...new Set([
+      ...referredPatientIdsFromReferral.map(id => id.toString()),
+      ...referredPatientIdsFromConsultation.map(id => id.toString())
+    ])
+  ];
+
+  return {
+    $or: [
+      { doctorInCharge: targetDoctorId },
+      { referredDoctor: targetDoctorId },
+      { _id: { $in: referredAdmissionIds } },
+      { patientId: { $in: allReferredPatientIds } }
+    ]
+  };
+};
+
 // @route   GET /api/ipd/patients
 // @access  Private
 const getIpdPatientList = async (req, res) => {
   try {
-    const { search, roomType, bedType, status, fromDate, toDate, page = 1, limit = 20 } = req.query;
+    const { search, roomType, bedType, status, fromDate, toDate, doctorId, page = 1, limit = 20 } = req.query;
 
     let query = tenantFilter(req);
+
+    // Apply doctor filtering if requested by doctor role or doctorId query param
+    const targetDoctorId = doctorId || (req.user?.role === 'doctor' ? req.user._id : null);
+    if (targetDoctorId) {
+      const doctorFilter = await getDoctorAdmissionFilter(req.user.hospitalId, targetDoctorId);
+      query = {
+        $and: [
+          query,
+          doctorFilter
+        ]
+      };
+    }
 
     if (search) {
       const searchRegex = new RegExp(search, 'i');
@@ -91,11 +141,24 @@ const getIpdPatientList = async (req, res) => {
       }).select('_id');
       const patientIds = matchingPatients.map(p => p._id);
 
-      query.$or = [
-        { patientId: { $in: patientIds } },
-        { ipdNumber: searchRegex },
-        { pidNumber: searchRegex }
-      ];
+      const searchCondition = {
+        $or: [
+          { patientId: { $in: patientIds } },
+          { ipdNumber: searchRegex },
+          { pidNumber: searchRegex }
+        ]
+      };
+
+      if (query.$and) {
+        query.$and.push(searchCondition);
+      } else {
+        query = {
+          $and: [
+            query,
+            searchCondition
+          ]
+        };
+      }
     }
 
     if (status) query.status = status;

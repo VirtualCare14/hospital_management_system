@@ -100,10 +100,22 @@ const CompletedConsultations = () => {
                 consultations.map((consultation) => (
                   <tr key={consultation._id} className="border-t border-orange-50 hover:bg-orange-50/50">
                     <td className="p-3 font-bold text-orange-700">
-                      {consultation.patientId?.uhid}
+                      <Link
+                        to={`/doctor/completed/${consultation._id}`}
+                        className="hover:underline"
+                        title="View consultation details"
+                      >
+                        {consultation.patientId?.uhid || '-'}
+                      </Link>
                     </td>
                     <td className="p-3">
-                      <span className="font-semibold text-gray-950 block">{consultation.patientId?.patientName}</span>
+                      <Link
+                        to={`/doctor/completed/${consultation._id}`}
+                        className="font-semibold text-gray-950 block hover:underline"
+                        title="View consultation details"
+                      >
+                        {consultation.patientId?.patientName || 'Unknown'}
+                      </Link>
                       {consultation.visitId?.createdBy && (
                         <span className="text-[10px] text-gray-500 font-bold block mt-0.5">
                           Registered by: <span className="capitalize text-orange-600">

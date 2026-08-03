@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Calendar, FileText, Clock, ChevronDown, ChevronUp, Stethoscope, Plus, Printer } from 'lucide-react';
+import { ArrowLeft, Calendar, FileText, Clock, ChevronDown, ChevronUp, Stethoscope, Plus, Printer, X } from 'lucide-react';
 import client from '../../api/client';
 import { formatDate } from '../../utils/dateFormat';
 import toast from 'react-hot-toast';
@@ -144,9 +144,9 @@ const PatientConsultationTrack = () => {
     return (
       <div className="card p-5">
         <p className="text-gray-500">Patient not found</p>
-        <Link to="/doctor/completed" className="btn-secondary mt-3 inline-flex">
-          <ArrowLeft className="h-4 w-4" /> Back to Completed Consultations
-        </Link>
+        <button onClick={() => navigate(-1)} className="btn bg-red-600 hover:bg-red-700 text-white font-bold text-xs inline-flex items-center gap-1.5 mt-3 cursor-pointer">
+          <X className="h-4 w-4 text-white stroke-[2.5]" /> Close & Go Back
+        </button>
       </div>
     );
   }
@@ -155,9 +155,14 @@ const PatientConsultationTrack = () => {
     <div className="space-y-5">
       {/* Header */}
       <div className="flex items-center gap-3 flex-wrap">
-        <Link to="/doctor/completed" className="btn-secondary">
-          <ArrowLeft className="h-4 w-4" />
-        </Link>
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="p-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white shadow-md transition-all border border-red-700 flex items-center justify-center cursor-pointer"
+          title="Close / Go Back"
+        >
+          <X className="h-5 w-5 text-white stroke-[2.5]" />
+        </button>
         <div className="flex-1">
           <h1 className="text-2xl font-extrabold text-gray-900">Patient Consultation Track</h1>
           <p className="text-sm text-gray-500">Complete consultation and prescription history for this patient</p>
