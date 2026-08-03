@@ -1092,12 +1092,53 @@ const generateBillItems = async (req, res) => {
 
 // @desc    Create / Save Bill
 // @route   POST /api/billing
+const generateUniqueInvoiceNo = async (hospitalId) => {
+  let invoiceNo = null;
+  let isUnique = false;
+  let attempts = 0;
+
+  while (!isUnique && attempts < 30) {
+    attempts++;
+    const settings = await HospitalSettings.findOneAndUpdate(
+      { hospitalId },
+      {
+        $inc: { invoiceCounter: 1 },
+        $setOnInsert: {
+          hospitalName: 'Hospital',
+          mobileNumbers: ['0000000000'],
+          address: 'Hospital Address'
+        }
+      },
+      { new: true, upsert: true, runValidators: false }
+    );
+
+    const prefix = settings?.invoicePrefix || 'HOSP-INV-2026-';
+    const counter = settings?.invoiceCounter || 1;
+    const paddedCounter = String(counter).padStart(4, '0');
+    const candidateNo = `${prefix}${paddedCounter}`;
+
+    const exists = await Billing.exists({ hospitalId, invoiceNo: candidateNo });
+    if (!exists) {
+      invoiceNo = candidateNo;
+      isUnique = true;
+    }
+  }
+
+  if (!invoiceNo) {
+    invoiceNo = `INV-${Date.now()}`;
+  }
+
+  return invoiceNo;
+};
+
+// @desc    Create / Save Bill
+// @route   POST /api/billing
 // @access  Private
 const createBill = async (req, res) => {
   try {
     const { 
       patientId, uhid, patientName, patientMobile, patientGender, patientAge, doctorName,
-      billType, items, gstPercentage, discountPercentage, status,
+      billType, items = [], gstPercentage, discountPercentage, status,
       paymentMode, transactionRef, mixedPayments, remarks, advanceAdjusted, amountPaid, dueAmount, paymentStatus,
       discountRequestStatus
     } = req.body;
@@ -1110,8 +1151,26 @@ const createBill = async (req, res) => {
       return res.status(400).json({ message: 'Payment mode is required to finalize the bill' });
     }
 
-    const activeItems = items.filter(i => !i.isRemoved);
-    const removedItems = items.filter(i => i.isRemoved);
+    const VALID_CATEGORIES = ['OPD', 'IPD', 'Lab', 'Medicine', 'Consumable', 'SameDayTreatment', 'BedCharge', 'OT', 'Other'];
+    const defaultCategory = VALID_CATEGORIES.includes(billType) ? billType : (billType === 'Pharmacy' ? 'Medicine' : 'Other');
+
+    const sanitizeItem = (i) => ({
+      category: VALID_CATEGORIES.includes(i.category) ? i.category : defaultCategory,
+      date: i.date || '',
+      description: String(i.description || i.name || 'Medical Charge'),
+      price: Math.max(0, parseFloat(i.price || 0)),
+      quantity: Math.max(1, parseInt(i.quantity || 1)),
+      discountAmount: Math.max(0, parseFloat(i.discountAmount || 0)),
+      gstPercentage: Math.max(0, parseFloat(i.gstPercentage || 0)),
+      gstAmount: 0,
+      total: 0,
+      sourceId: i.sourceId || undefined,
+      sourceModel: i.sourceModel || undefined,
+      isRemoved: !!i.isRemoved
+    });
+
+    const activeItems = (items || []).filter(i => i && !i.isRemoved).map(sanitizeItem);
+    const removedItems = (items || []).filter(i => i && i.isRemoved).map(sanitizeItem);
     
     let computedSubtotal = 0;
     let computedGstAmount = 0;
@@ -1140,31 +1199,7 @@ const createBill = async (req, res) => {
 
     let invoiceNo = undefined;
     if (status === 'Final') {
-      let isUnique = false;
-      let counterAttempts = 0;
-      while (!isUnique && counterAttempts < 25) {
-        counterAttempts++;
-        const settingsWithCounter = await HospitalSettings.findOneAndUpdate(
-          { hospitalId: req.user.hospitalId },
-          { $inc: { invoiceCounter: 1 } },
-          { new: true, upsert: true }
-        );
-
-        const prefix = settingsWithCounter?.invoicePrefix || 'HOSP-INV-2026-';
-        const counter = settingsWithCounter?.invoiceCounter || 1;
-        const paddedCounter = String(counter).padStart(4, '0');
-        const candidateInvoiceNo = `${prefix}${paddedCounter}`;
-
-        const exists = await Billing.exists({ hospitalId: req.user.hospitalId, invoiceNo: candidateInvoiceNo });
-        if (!exists) {
-          invoiceNo = candidateInvoiceNo;
-          isUnique = true;
-        }
-      }
-
-      if (!invoiceNo) {
-        invoiceNo = `INV-${Date.now()}`;
-      }
+      invoiceNo = await generateUniqueInvoiceNo(req.user.hospitalId);
     }
 
     const finalAmountPaid = status === 'Final' ? parseFloat(amountPaid || 0) : 0;
@@ -1383,22 +1418,8 @@ const updateBill = async (req, res) => {
     bill.updatedBy = req.user._id;
 
     let invoiceNo = bill.invoiceNo;
-    if (transitionToFinal) {
-      // Fetch settings and atomically increment counter
-      const settings = await HospitalSettings.findOneAndUpdate(
-        { hospitalId: req.user.hospitalId },
-        { $inc: { invoiceCounter: 1 } },
-        { new: false }
-      );
-
-      if (settings) {
-        const prefix = settings.invoicePrefix || 'HOSP-INV-2026-';
-        const counter = settings.invoiceCounter || 1;
-        const paddedCounter = String(counter).padStart(4, '0');
-        invoiceNo = `${prefix}${paddedCounter}`;
-      } else {
-        invoiceNo = `INV${Math.floor(100000 + Math.random() * 900000)}`;
-      }
+    if (transitionToFinal && !invoiceNo) {
+      invoiceNo = await generateUniqueInvoiceNo(req.user.hospitalId);
       bill.invoiceNo = invoiceNo;
     }
 
@@ -1766,24 +1787,10 @@ const approveDiscountRequest = async (req, res) => {
     bill.dueAmount = 0;
     bill.paymentStatus = 'Paid';
 
-    // Atomically increment invoice counter and generate invoiceNo
-    const settings = await HospitalSettings.findOneAndUpdate(
-      { hospitalId: req.user.hospitalId },
-      { $inc: { invoiceCounter: 1 } },
-      { new: true }
-    );
-
-    let invoiceNo;
-    if (settings) {
-      const prefix = settings.invoicePrefix || 'HOSP-INV-2026-';
-      const counter = settings.invoiceCounter || 1;
-      const paddedCounter = String(counter).padStart(4, '0');
-      invoiceNo = `${prefix}${paddedCounter}`;
-    } else {
-      invoiceNo = `INV${Math.floor(100000 + Math.random() * 900000)}`;
+    if (!bill.invoiceNo) {
+      bill.invoiceNo = await generateUniqueInvoiceNo(req.user.hospitalId);
     }
-
-    bill.invoiceNo = invoiceNo;
+    const invoiceNo = bill.invoiceNo;
     bill.status = 'Final';
     bill.discountRequestStatus = 'Approved';
     bill.updatedBy = req.user._id;
