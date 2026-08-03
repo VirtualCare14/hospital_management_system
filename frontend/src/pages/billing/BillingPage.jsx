@@ -179,6 +179,7 @@ const BillingPage = () => {
   const [advanceToAdjust, setAdvanceToAdjust] = useState(0);
   const [paymentMode, setPaymentMode] = useState('');
   const [transactionRef, setTransactionRef] = useState('');
+  const [customPaidAmount, setCustomPaidAmount] = useState('');
   
   // Mixed payment splits
   const [cashSplit, setCashSplit] = useState(0);
@@ -564,6 +565,11 @@ const BillingPage = () => {
   const maxAllowedAdjustment = Math.min(totalAdvanceAvailable, grandTotal);
   const netPayable = Math.max(0, grandTotal - parseFloat(advanceToAdjust || 0));
 
+  // Partial Payment Calculations
+  const effectiveAmountPaid = customPaidAmount !== '' ? Math.max(0, Math.min(netPayable, parseFloat(customPaidAmount || 0))) : netPayable;
+  const effectiveDueAmount = Number(Math.max(0, netPayable - effectiveAmountPaid).toFixed(2));
+  const effectivePaymentStatus = effectiveDueAmount <= 0 ? 'Paid' : (effectiveAmountPaid > 0 ? 'Partially Paid' : 'Unpaid');
+
   // Validation before finalizing
   const handleSaveBill = async (finalize = false) => {
     if (!selectedPatient) { toast.error('No patient selected'); return; }
@@ -577,8 +583,8 @@ const BillingPage = () => {
 
       if (paymentMode === 'Mixed Payment') {
         const totalSplit = parseFloat(cashSplit || 0) + parseFloat(upiSplit || 0) + parseFloat(cardSplit || 0);
-        if (Math.abs(totalSplit - netPayable) > 0.01) {
-          toast.error(`Split payments total (₹${totalSplit.toFixed(2)}) must equal Net Payable Amount (₹${netPayable.toFixed(2)})`);
+        if (Math.abs(totalSplit - effectiveAmountPaid) > 0.01) {
+          toast.error(`Split payments total (₹${totalSplit.toFixed(2)}) must equal Amount Received Now (₹${effectiveAmountPaid.toFixed(2)})`);
           return;
         }
       }
@@ -611,13 +617,13 @@ const BillingPage = () => {
           { method: 'Card', amount: parseFloat(cardSplit || 0) }
         ] : [],
         advanceAdjusted: parseFloat(advanceToAdjust || 0),
-        amountPaid: finalize ? netPayable : 0,
-        dueAmount: finalize ? 0 : grandTotal,
-        paymentStatus: finalize ? 'Paid' : 'Unpaid'
+        amountPaid: finalize ? effectiveAmountPaid : 0,
+        dueAmount: finalize ? effectiveDueAmount : grandTotal,
+        paymentStatus: finalize ? effectivePaymentStatus : 'Unpaid'
       };
 
       const { data } = await client.post('/billing', payload);
-      toast.success(finalize ? 'Tax Invoice generated and finalized' : 'Draft invoice saved');
+      toast.success(finalize ? `Tax Invoice generated (${effectivePaymentStatus})` : 'Draft invoice saved');
       
       if (finalize) {
         // Automatically trigger Print Dialog with layout
@@ -1489,11 +1495,11 @@ const BillingPage = () => {
 
                     {/* Final Payment Mode selector */}
                     <div className="card p-5 space-y-4">
-                      <h4 className="font-extrabold text-gray-900 text-sm border-b border-orange-100 pb-2">Final Payment Mode</h4>
+                      <h4 className="font-extrabold text-gray-900 text-sm border-b border-orange-100 pb-2">Final Payment Collection & Ledger</h4>
                       
                       <div className="space-y-3">
                         <div>
-                          <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Select Mode</label>
+                          <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Select Payment Mode *</label>
                           <select
                             className="input text-xs font-bold py-2.5"
                             value={paymentMode}
@@ -1504,6 +1510,61 @@ const BillingPage = () => {
                               <option key={mode} value={mode}>{mode}</option>
                             ))}
                           </select>
+                        </div>
+
+                        {/* Partial Payment Amount Received Input Box */}
+                        <div className="bg-gradient-to-br from-orange-50/60 to-amber-50/40 p-3 rounded-xl border border-orange-200 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <label className="block text-xs font-black uppercase tracking-wider text-gray-700">
+                              Amount Received Now (₹)
+                            </label>
+                            <span className="text-[10px] font-bold text-gray-500">
+                              Net Payable: ₹{netPayable.toFixed(2)}
+                            </span>
+                          </div>
+                          
+                          <div className="flex gap-2 items-center">
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              max={netPayable}
+                              className="input py-2 text-sm font-extrabold text-gray-900 bg-white border-orange-300 focus:border-orange-500 flex-1"
+                              placeholder={netPayable.toFixed(2)}
+                              value={customPaidAmount}
+                              onChange={(e) => setCustomPaidAmount(e.target.value)}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setCustomPaidAmount(String(netPayable))}
+                              className="px-2.5 py-1.5 bg-orange-500 text-white font-extrabold text-[10px] rounded-lg shadow-xs hover:bg-orange-600 transition"
+                            >
+                              Full Pay
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCustomPaidAmount('0')}
+                              className="px-2.5 py-1.5 bg-gray-200 text-gray-800 font-extrabold text-[10px] rounded-lg hover:bg-gray-300 transition"
+                            >
+                              Unpaid / 0
+                            </button>
+                          </div>
+
+                          {/* Live Balance Summary */}
+                          <div className="grid grid-cols-3 gap-2 pt-2 text-center text-xs border-t border-orange-100/80">
+                            <div className="bg-white p-1.5 rounded-lg border border-orange-100">
+                              <span className="text-[9px] text-gray-400 font-bold uppercase block">Net Payable</span>
+                              <span className="font-bold text-gray-900 text-[11px]">₹{netPayable.toFixed(2)}</span>
+                            </div>
+                            <div className="bg-emerald-50 p-1.5 rounded-lg border border-emerald-200">
+                              <span className="text-[9px] text-emerald-700 font-bold uppercase block">Paid Now</span>
+                              <span className="font-extrabold text-emerald-700 text-[11px]">₹{effectiveAmountPaid.toFixed(2)}</span>
+                            </div>
+                            <div className={`p-1.5 rounded-lg border ${effectiveDueAmount > 0 ? 'bg-red-50 border-red-200 text-red-700' : 'bg-gray-50 border-gray-200 text-gray-700'}`}>
+                              <span className="text-[9px] uppercase font-extrabold block">Due Left</span>
+                              <span className="font-extrabold text-[11px]">₹{effectiveDueAmount.toFixed(2)}</span>
+                            </div>
+                          </div>
                         </div>
 
                         {/* Transaction reference if applicable */}
@@ -2591,27 +2652,40 @@ const BillingPage = () => {
                         <td className="text-right border-l-0">₹{(printBillObj.grandTotal || 0).toFixed(2)}</td>
                       </tr>
 
-                      {/* LAYOUT DIFFERENCE: SUMMARY LEDGER DETAILS */}
-                      {printLayoutTab === 'summary' && (
-                        <>
-                          {printBillObj.advanceAdjusted > 0 && (
-                            <tr className="text-green-700">
-                              <td colSpan={footerColSpan} className="text-right border-r-0">Advance Adjusted:</td>
-                              <td className="text-right border-l-0">- ₹{(printBillObj.advanceAdjusted || 0).toFixed(2)}</td>
-                            </tr>
-                          )}
-                          <tr className="text-blue-700">
-                            <td colSpan={footerColSpan} className="text-right border-r-0">Amount Paid In Invoice:</td>
-                            <td className="text-right border-l-0">₹{(printBillObj.amountPaid || 0).toFixed(2)}</td>
-                          </tr>
-                          {printBillObj.dueAmount > 0 && (
-                            <tr className="text-red-600">
-                              <td colSpan={footerColSpan} className="text-right border-r-0">Balance Due Outstanding:</td>
-                              <td className="text-right border-l-0 font-black">₹{(printBillObj.dueAmount || 0).toFixed(2)}</td>
-                            </tr>
-                          )}
-                        </>
+                      {printBillObj.advanceAdjusted > 0 && (
+                        <tr className="text-green-700 font-bold">
+                          <td colSpan={footerColSpan} className="text-right border-r-0">Advance Adjusted:</td>
+                          <td className="text-right border-l-0">- ₹{(printBillObj.advanceAdjusted || 0).toFixed(2)}</td>
+                        </tr>
                       )}
+                      
+                      <tr className="font-extrabold text-[12px] border-t border-black">
+                        <td colSpan={footerColSpan} className="text-right border-r-0">Net Payable Amount:</td>
+                        <td className="text-right border-l-0">
+                          ₹{Math.max(0, (printBillObj.grandTotal || 0) - (printBillObj.advanceAdjusted || 0)).toFixed(2)}
+                        </td>
+                      </tr>
+
+                      <tr className="font-extrabold text-emerald-800">
+                        <td colSpan={footerColSpan} className="text-right border-r-0">Amount Paid / Received:</td>
+                        <td className="text-right border-l-0">₹{(printBillObj.amountPaid || 0).toFixed(2)}</td>
+                      </tr>
+
+                      {(printBillObj.dueAmount || 0) > 0 && (
+                        <tr className="font-black text-red-700 text-[12px]">
+                          <td colSpan={footerColSpan} className="text-right border-r-0">Balance Due Outstanding:</td>
+                          <td className="text-right border-l-0 font-black">₹{(printBillObj.dueAmount || 0).toFixed(2)}</td>
+                        </tr>
+                      )}
+
+                      <tr className="font-extrabold uppercase text-[10px]">
+                        <td colSpan={footerColSpan} className="text-right border-r-0">Payment Status:</td>
+                        <td className={`text-right border-l-0 font-black ${
+                          printBillObj.paymentStatus === 'Paid' ? 'text-green-700' : (printBillObj.paymentStatus === 'Partially Paid' ? 'text-amber-700' : 'text-red-700')
+                        }`}>
+                          {printBillObj.paymentStatus || 'Unpaid'}
+                        </td>
+                      </tr>
                     </tfoot>
                   </table>
 

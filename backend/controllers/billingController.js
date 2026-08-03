@@ -1140,22 +1140,61 @@ const createBill = async (req, res) => {
 
     let invoiceNo = undefined;
     if (status === 'Final') {
-      // Fetch settings again to atomically increment counter
-      const settingsWithCounter = await HospitalSettings.findOneAndUpdate(
-        { hospitalId: req.user.hospitalId },
-        { $inc: { invoiceCounter: 1 } },
-        { new: false } // returns settings prior to increment
-      );
+      let isUnique = false;
+      let counterAttempts = 0;
+      while (!isUnique && counterAttempts < 25) {
+        counterAttempts++;
+        const settingsWithCounter = await HospitalSettings.findOneAndUpdate(
+          { hospitalId: req.user.hospitalId },
+          { $inc: { invoiceCounter: 1 } },
+          { new: true, upsert: true }
+        );
 
-      if (settingsWithCounter) {
-        const prefix = settingsWithCounter.invoicePrefix || 'HOSP-INV-2026-';
-        const counter = settingsWithCounter.invoiceCounter || 1;
+        const prefix = settingsWithCounter?.invoicePrefix || 'HOSP-INV-2026-';
+        const counter = settingsWithCounter?.invoiceCounter || 1;
         const paddedCounter = String(counter).padStart(4, '0');
-        invoiceNo = `${prefix}${paddedCounter}`;
-      } else {
-        invoiceNo = `INV${Math.floor(100000 + Math.random() * 900000)}`;
+        const candidateInvoiceNo = `${prefix}${paddedCounter}`;
+
+        const exists = await Billing.exists({ hospitalId: req.user.hospitalId, invoiceNo: candidateInvoiceNo });
+        if (!exists) {
+          invoiceNo = candidateInvoiceNo;
+          isUnique = true;
+        }
+      }
+
+      if (!invoiceNo) {
+        invoiceNo = `INV-${Date.now()}`;
       }
     }
+
+    const finalAmountPaid = status === 'Final' ? parseFloat(amountPaid || 0) : 0;
+    const finalAdvanceAdjusted = parseFloat(advanceAdjusted || 0);
+    const netPayableCalculated = Math.max(0, grandTotal - finalAdvanceAdjusted);
+    const finalDueAmount = status === 'Final' ? Number(Math.max(0, netPayableCalculated - finalAmountPaid).toFixed(2)) : grandTotal;
+
+    let finalPaymentStatus = 'Unpaid';
+    if (status === 'Final') {
+      if (finalDueAmount <= 0) {
+        finalPaymentStatus = 'Paid';
+      } else if (finalAmountPaid > 0) {
+        finalPaymentStatus = 'Partially Paid';
+      } else {
+        finalPaymentStatus = 'Unpaid';
+      }
+    }
+
+    const initialPayments = (status === 'Final' && finalAmountPaid > 0) ? [{
+      paymentNo: 'PMT-1',
+      amount: finalAmountPaid,
+      paymentMode: paymentMode || 'Cash',
+      transactionRef: transactionRef || '',
+      paidAt: new Date(),
+      receivedBy: req.user._id,
+      receivedByName: req.user.username || 'Billing Staff',
+      dueBeforePayment: netPayableCalculated,
+      dueAfterPayment: finalDueAmount,
+      remarks: remarks || 'Initial payment received during invoice generation'
+    }] : [];
 
     // Set up audit trail
     const auditTrail = [{
@@ -1163,7 +1202,7 @@ const createBill = async (req, res) => {
       performedBy: req.user._id,
       performedByName: req.user.username || 'Staff',
       timestamp: new Date(),
-      remarks: status === 'Final' ? `Invoice finalized. Invoice No: ${invoiceNo}. Payment Mode: ${paymentMode}` : 'Draft invoice saved'
+      remarks: status === 'Final' ? `Invoice finalized (${finalPaymentStatus}). Invoice No: ${invoiceNo}. Paid: ₹${finalAmountPaid}, Due: ₹${finalDueAmount}` : 'Draft invoice saved'
     }];
 
     const bill = new Billing({
@@ -1186,10 +1225,11 @@ const createBill = async (req, res) => {
       transactionRef: transactionRef || '',
       mixedPayments: mixedPayments || [],
       remarks: remarks || '',
-      advanceAdjusted: parseFloat(advanceAdjusted || 0),
-      amountPaid: parseFloat(amountPaid || 0),
-      dueAmount: parseFloat(dueAmount || 0),
-      paymentStatus: paymentStatus || 'Unpaid',
+      advanceAdjusted: finalAdvanceAdjusted,
+      amountPaid: finalAmountPaid,
+      dueAmount: finalDueAmount,
+      paymentStatus: finalPaymentStatus,
+      payments: initialPayments,
       invoiceNo,
       auditTrail,
 
