@@ -8,6 +8,8 @@
   html, body {
     background-color: white !important;
     background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
   
   /* Enable printing colors and backgrounds */
@@ -18,17 +20,32 @@
 
   /* Set page size to A4 and remove margins to hide browser header/footer */
   @page {
-    size: A4;
-    margin: 0;
+    size: A4 portrait;
+    margin: 0mm !important;
   }
 
-  #print-area {
-    width: 100%;
-    margin: 0;
-    padding: 15mm 15mm 25mm 15mm; /* 15mm margins, extra bottom padding to avoid overlapping the footer */
-    box-sizing: border-box;
-    background-color: white;
+  /* Make pharmacy print area explicitly visible */
+  body.printing-pharmacy-invoice #print-area,
+  body.printing-pharmacy-invoice #print-area *,
+  body.printing-pharmacy-invoice .a4-receipt,
+  body.printing-pharmacy-invoice .a4-receipt * {
+    visibility: visible !important;
+  }
+
+  #print-area,
+  .a4-receipt {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    min-height: 100vh !important;
+    margin: 0 !important;
+    padding: 15mm 15mm 25mm 15mm !important;
+    box-sizing: border-box !important;
+    background-color: white !important;
     color: #000000 !important;
+    border: none !important;
+    box-shadow: none !important;
   }
 
   /* Fixed footer at the bottom of the A4 page */
@@ -37,7 +54,7 @@
     bottom: 10mm !important;
     left: 15mm !important;
     right: 15mm !important;
-    width: auto !important; /* Let it stretch within left/right constraints */
+    width: auto !important;
     margin: 0 !important;
     padding-top: 15px !important;
     padding-bottom: 5px !important;
@@ -87,9 +104,11 @@
     background-color: #f9fafb !important;
   }
 
-  /* Hide print buttons and controls */
+  /* Hide print buttons, controls, and modal background overlay */
   .no-print,
+  .no-print-backdrop,
   .print\:hidden {
     display: none !important;
+    visibility: hidden !important;
   }
 }

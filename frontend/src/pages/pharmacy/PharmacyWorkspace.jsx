@@ -4,6 +4,7 @@ import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 import toast from 'react-hot-toast';
 import BillingSettingsView from './BillingSettingsView';
 import ExcelUploadView from './ExcelUploadView';
+import './PharmacyInvoicePrint.css';
 import {
   Pill,
   Search,
@@ -3259,7 +3260,7 @@ const InvoicePrintModal = ({ billId, onClose }) => {
             Failed to load invoice data.
           </div>
         ) : (
-          <div id="print-area" className="p-6 text-gray-850 font-sans print:p-0">
+          <div id="print-area" className="a4-receipt p-6 text-gray-850 font-sans print:p-0">
             {/* Invoice Header */}
             <div className="grid grid-cols-2 border-b border-gray-300 pb-5 mb-5 items-start">
               <div>
