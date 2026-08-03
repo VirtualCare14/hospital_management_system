@@ -2424,7 +2424,7 @@ const BillingPage = () => {
               <div className="flex-1 overflow-y-auto p-8 flex justify-center bg-gray-200/50">
                 <div
                   ref={printAreaRef}
-                  className="bg-white shadow-lg w-[210mm] min-h-[297mm] p-10 border border-gray-300 relative text-gray-900 overflow-hidden text-left leading-normal"
+                  className="a4-receipt bg-white shadow-lg w-[210mm] min-h-[297mm] p-10 border border-gray-300 relative text-gray-900 overflow-hidden text-left leading-normal"
                   id="invoice-print-area"
                 >
                   {/* Printout stylesheet rules */}
@@ -2467,19 +2467,19 @@ const BillingPage = () => {
                     }
                     @media print {
                       body * {
-                        visibility: hidden;
+                        visibility: hidden !important;
                       }
-                      #invoice-print-area, #invoice-print-area * {
-                        visibility: visible;
+                      #invoice-print-area, #invoice-print-area *, .a4-receipt, .a4-receipt * {
+                        visibility: visible !important;
                         color: #000000 !important;
                         background-color: transparent !important;
                         background: none !important;
                         box-shadow: none !important;
                       }
-                      #invoice-print-area {
-                        position: absolute;
-                        left: 0;
-                        top: 0;
+                      #invoice-print-area, .a4-receipt {
+                        position: absolute !important;
+                        left: 0 !important;
+                        top: 0 !important;
                         width: 100% !important;
                         border: none !important;
                         box-shadow: none !important;
