@@ -1155,7 +1155,7 @@ const createBill = async (req, res) => {
     const defaultCategory = VALID_CATEGORIES.includes(billType) ? billType : (billType === 'Pharmacy' ? 'Medicine' : 'Other');
 
     const sanitizeItem = (i) => ({
-      category: VALID_CATEGORIES.includes(i.category) ? i.category : defaultCategory,
+      category: (i.category && String(i.category).trim()) ? String(i.category).trim() : defaultCategory,
       date: i.date || '',
       description: String(i.description || i.name || 'Medical Charge'),
       price: Math.max(0, parseFloat(i.price || 0)),

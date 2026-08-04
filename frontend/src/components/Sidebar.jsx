@@ -225,7 +225,7 @@ const Sidebar = () => {
         {/* Reception Links (Module 1) */}
         {hasAccess([1]) && (
           <div>
-            {renderSectionHeader('Patient Services')}
+            {renderSectionHeader('Reception & EMR')}
             <div className="space-y-1">
               {receptionLinks.map((link) => (
                 <NavLink
@@ -247,7 +247,7 @@ const Sidebar = () => {
         {/* Doctor Links (Module 2 & 3) */}
         {hasAccess([2]) && (
           <div>
-            {renderSectionHeader('Clinical Portal')}
+            {renderSectionHeader('Doctor Consultation')}
             <div className="space-y-1">
               {doctorLinks.map((link) => (
                 <NavLink
@@ -299,7 +299,7 @@ const Sidebar = () => {
         {/* IPD Links (Module 5) */}
         {hasAccess([5]) && (
           <div>
-            {renderSectionHeader('Inpatient Services')}
+            {renderSectionHeader('IPD Management')}
             <div className="space-y-1">
               <NavLink
                 to="/ipd/admission"

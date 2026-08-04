@@ -107,7 +107,7 @@ const DoctorIpdPatients = () => {
                   </td>
                 </tr>
               ) : (
-                admissions.map((adm) => {
+                admissions.map((adm, idx) => {
                   const patient = adm.patientId || {};
                   const age = patient.dob
                     ? Math.floor((new Date() - new Date(patient.dob)) / (365.25 * 24 * 60 * 60 * 1000))
@@ -140,7 +140,7 @@ const DoctorIpdPatients = () => {
                         </button>
 
                         {activeMenuId === adm._id && (
-                          <div className="absolute right-3 top-10 z-30 w-44 bg-white rounded-2xl shadow-xl border border-orange-100 py-1.5 space-y-0.5 animate-in fade-in zoom-in-95 duration-100 text-left">
+                          <div className={`absolute right-3 ${idx >= admissions.length - 2 && admissions.length > 2 ? 'bottom-full mb-1' : 'top-10'} z-50 w-44 bg-white rounded-2xl shadow-xl border border-orange-100 py-1.5 space-y-0.5 animate-in fade-in zoom-in-95 duration-100 text-left`}>
                             <Link 
                               to={`/doctor/ipd-chart/${adm._id}`}
                               onClick={() => setActiveMenuId(null)}

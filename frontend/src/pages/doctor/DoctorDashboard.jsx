@@ -216,12 +216,12 @@ const DoctorDashboard = () => {
         </div>
       ))}
 
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-extrabold text-gray-900">Doctor Dashboard</h1>
           <p className="text-sm text-gray-500">All registered patients are available for consultation and prescription.</p>
         </div>
-        <div className="relative w-full lg:w-96">
+        <div className="relative w-full md:w-80 lg:w-96">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input
             className="input"

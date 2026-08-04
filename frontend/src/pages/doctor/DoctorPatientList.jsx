@@ -229,7 +229,7 @@ const DoctorPatientList = () => {
                   </td>
                 </tr>
               ) : (
-                patients.map((patient) => (
+                patients.map((patient, idx) => (
                   <tr key={patient._id} className="border-t border-orange-50">
                     <td className="p-3 font-bold text-orange-700">{patient.uhid}</td>
                     <td className="p-3">
@@ -269,7 +269,7 @@ const DoctorPatientList = () => {
                           </button>
 
                           {activeMenuId === patient._id && (
-                            <div className="absolute right-0 top-10 z-30 w-48 bg-white rounded-2xl shadow-xl border border-orange-100 py-1.5 space-y-0.5 animate-in fade-in zoom-in-95 duration-100 text-left">
+                            <div className={`absolute right-0 ${idx >= patients.length - 2 && patients.length > 2 ? 'bottom-full mb-1' : 'top-10'} z-50 w-48 bg-white rounded-2xl shadow-xl border border-orange-100 py-1.5 space-y-0.5 animate-in fade-in zoom-in-95 duration-100 text-left`}>
                               <button
                                 type="button"
                                 onClick={async () => {

@@ -3,8 +3,8 @@ const mongoose = require('mongoose');
 const billingItemSchema = new mongoose.Schema({
   category: {
     type: String,
-    enum: ['OPD', 'IPD', 'Lab', 'Medicine', 'Consumable', 'SameDayTreatment', 'BedCharge', 'OT', 'Other'],
-    required: true
+    required: true,
+    default: 'Other'
   },
   date: { type: String, default: '' },
   description: { type: String, required: true },

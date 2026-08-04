@@ -291,7 +291,7 @@ const HospitalSettings = () => {
       </div>
 
       {/* Tabs Menu */}
-      <div className="flex border-b border-orange-100 mb-6 bg-white p-1 rounded-xl shadow-sm">
+      <div className="flex overflow-x-auto border-b border-orange-100 mb-6 bg-white p-1 rounded-xl shadow-sm space-x-1">
         <button
           type="button"
           onClick={() => setActiveTab('profile')}
@@ -670,9 +670,9 @@ const HospitalSettings = () => {
 
               <div className="pt-4 border-t border-orange-100/60 flex items-center justify-between gap-4">
                 <label htmlFor="dueModificationEnabled" className="cursor-pointer select-none">
-                  <h4 className="text-sm font-extrabold text-gray-900">Due Amount Modification Permission</h4>
+                  <h4 className="text-sm font-extrabold text-gray-900">Due Amount & Line Item Modification Permission</h4>
                   <p className="text-xs text-gray-500 mt-1">
-                    Allow adding new due line items or removing/waiving due amounts directly in the Due Amount Recovery Desk.
+                    Allow editing line items (Description, Price, Discount, GST %, Qty), adding custom category items in Invoice Builder, and modifying due amounts.
                   </p>
                 </label>
                 <label className="relative inline-flex items-center cursor-pointer shrink-0 select-none">

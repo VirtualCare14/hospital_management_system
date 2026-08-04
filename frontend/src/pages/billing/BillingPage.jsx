@@ -4,7 +4,8 @@ import {
   Search, User, Loader2, Printer, Download, Save, CheckCircle,
   X, Trash2, RefreshCw, FileText, Eye, Phone,
   Building2, CreditCard, Percent, DollarSign, Receipt, FileDown,
-  ArrowLeft, Stethoscope, Pill, TestTube, BedDouble, Package, Plus, Trash, EyeOff, LayoutDashboard, History, Coins, Ban
+  ArrowLeft, Stethoscope, Pill, TestTube, BedDouble, Package, Plus, Trash, EyeOff, LayoutDashboard, History, Coins, Ban,
+  MoreVertical, Pencil
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import SkeletonTable from '../../components/Skeleton/SkeletonTable';
@@ -289,6 +290,27 @@ const BillingPage = () => {
   const [applyDiscount, setApplyDiscount] = useState(true);
   const [requestAdminDiscount, setRequestAdminDiscount] = useState(false);
 
+  // Custom Charge / Category Item State & Modal
+  const [showCustomChargeModal, setShowCustomChargeModal] = useState(false);
+  const [categorySelectOption, setCategorySelectOption] = useState('Procedure');
+  const [customCategory, setCustomCategory] = useState('Procedure');
+  const [customItemName, setCustomItemName] = useState('');
+  const [customPrice, setCustomPrice] = useState('');
+  const [customDiscount, setCustomDiscount] = useState('0');
+  const [customGst, setCustomGst] = useState('0');
+  const [customQty, setCustomQty] = useState('1');
+
+  // Edit Line Item Modal State
+  const [activePatientMenuId, setActivePatientMenuId] = useState(null);
+  const [activeRowMenuIdx, setActiveRowMenuIdx] = useState(null);
+  const [showEditLineItemModal, setShowEditLineItemModal] = useState(false);
+  const [editingItemIdx, setEditingItemIdx] = useState(null);
+  const [editItemDesc, setEditItemDesc] = useState('');
+  const [editItemPrice, setEditItemPrice] = useState('');
+  const [editItemDiscount, setEditItemDiscount] = useState('0');
+  const [editItemGst, setEditItemGst] = useState('0');
+  const [editItemQty, setEditItemQty] = useState('1');
+
   // Payments and advances
   const [patientAdvances, setPatientAdvances] = useState([]);
   const [allPatientAdvances, setAllPatientAdvances] = useState([]);
@@ -569,6 +591,12 @@ const BillingPage = () => {
     setCardSplit(0);
     setBillType(isSameDayCare ? 'SameDayTreatment' : 'All');
     setRequestAdminDiscount(false);
+    setCustomCategory('');
+    setCustomItemName('');
+    setCustomPrice('');
+    setCustomDiscount('0');
+    setCustomGst('0');
+    setCustomQty('1');
 
     const effectiveBillType = isSameDayCare ? 'SameDayTreatment' : 'All';
     try {
@@ -657,6 +685,119 @@ const BillingPage = () => {
     } else {
       setSelectedItemIndexes(selectableIndices);
     }
+  };
+
+  // Add Custom Charge Item to Invoice
+  const handleAddCustomChargeItem = (e) => {
+    if (e) e.preventDefault();
+    if (!customItemName.trim()) {
+      toast.error('Please enter description or item name');
+      return;
+    }
+    const priceVal = parseFloat(customPrice);
+    if (isNaN(priceVal) || priceVal <= 0) {
+      toast.error('Please enter a valid price amount');
+      return;
+    }
+
+    const effectiveCat = (categorySelectOption === 'Other / Custom' ? customCategory : categorySelectOption).trim() || 'Other';
+    const discVal = Math.min(priceVal, parseFloat(customDiscount) || 0);
+    const gstPct = Math.min(100, Math.max(0, parseFloat(customGst) || 0));
+    const qtyVal = Math.max(1, parseInt(customQty) || 1);
+
+    const baseAmt = (priceVal - discVal) * qtyVal;
+    const gstAmt = baseAmt * (gstPct / 100);
+    const totalAmt = baseAmt + gstAmt;
+
+    const newItemObj = {
+      category: effectiveCat,
+      name: customItemName.trim(),
+      description: customItemName.trim(),
+      price: priceVal,
+      discountAmount: discVal,
+      gstPercentage: gstPct,
+      gstAmount: Number(gstAmt.toFixed(2)),
+      quantity: qtyVal,
+      total: Number(totalAmt.toFixed(2)),
+      isCustom: true
+    };
+
+    setItems(prev => {
+      const updated = [...prev, newItemObj];
+      const newIdx = updated.length - 1;
+      setSelectedItemIndexes(sPrev => [...sPrev, newIdx]);
+      return updated;
+    });
+
+    setCategorySelectOption('Procedure');
+    setCustomCategory('Procedure');
+    setCustomItemName('');
+    setCustomPrice('');
+    setCustomDiscount('0');
+    setCustomGst('0');
+    setCustomQty('1');
+    setShowCustomChargeModal(false);
+    toast.success(`Custom charge item "${newItemObj.name}" added to invoice!`);
+  };
+
+  const handleRemoveCustomItem = (idxToRemove) => {
+    setItems(prev => prev.filter((_, i) => i !== idxToRemove));
+    setSelectedItemIndexes(prev => prev.filter(i => i !== idxToRemove).map(i => (i > idxToRemove ? i - 1 : i)));
+    toast.success('Custom charge item removed');
+  };
+
+  const handleOpenEditLineItemModal = (idx, item) => {
+    if (!dueModificationEnabled) {
+      toast.error("Line item modifications are disabled in Hospital Settings. Turn ON 'Due Amount & Line Item Modification Permission' in Hospital Settings to enable.");
+      return;
+    }
+    setEditingItemIdx(idx);
+    setEditItemDesc(item.description || item.name || '');
+    setEditItemPrice(String(item.price || 0));
+    setEditItemDiscount(String(item.discountAmount || 0));
+    setEditItemGst(String(item.gstPercentage || 0));
+    setEditItemQty(String(item.quantity || 1));
+    setShowEditLineItemModal(true);
+  };
+
+  const handleSaveEditedLineItem = (e) => {
+    if (e) e.preventDefault();
+    if (editingItemIdx === null || editingItemIdx < 0) return;
+    if (!editItemDesc.trim()) {
+      toast.error('Description or item name cannot be empty');
+      return;
+    }
+    const newPrice = Math.max(0, parseFloat(editItemPrice) || 0);
+    const newDisc = Math.min(newPrice, Math.max(0, parseFloat(editItemDiscount) || 0));
+    const newGstPct = Math.min(100, Math.max(0, parseFloat(editItemGst) || 0));
+    const newQty = Math.max(1, parseInt(editItemQty) || 1);
+
+    const baseAmt = (newPrice - newDisc) * newQty;
+    const gstAmt = baseAmt * (newGstPct / 100);
+    const totalAmt = baseAmt + gstAmt;
+
+    setItems(prev => prev.map((itemVal, valIdx) => {
+      if (valIdx === editingItemIdx) {
+        return {
+          ...itemVal,
+          description: editItemDesc.trim(),
+          name: editItemDesc.trim(),
+          price: newPrice,
+          mrpIncGst: newPrice,
+          discountAmount: newDisc,
+          gstPercentage: newGstPct,
+          addGst: newGstPct > 0,
+          quantity: newQty,
+          gstAmount: Number(gstAmt.toFixed(2)),
+          total: Number(totalAmt.toFixed(2))
+        };
+      }
+      return itemVal;
+    }));
+
+    setShowEditLineItemModal(false);
+    setEditingItemIdx(null);
+    toast.success('Line item updated successfully!');
   };
 
   // Totals calculations based ONLY on selected checkboxes
@@ -1172,26 +1313,59 @@ const BillingPage = () => {
                             <td className="p-4 text-right">
                               <span className="font-black text-orange-600">₹{(p.totalPendingAmount || 0).toFixed(2)}</span>
                             </td>
-                            <td className="p-4 pr-6">
-                              <div className="flex items-center justify-center gap-2">
+                            <td className="p-4 pr-6 text-center relative action-menu-container" onClick={(e) => e.stopPropagation()}>
+                              <div className="relative inline-block">
                                 <button
-                                  onClick={() => handleOpenAdvanceDrawer(p)}
-                                  className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1"
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActivePatientMenuId(activePatientMenuId === p._id ? null : p._id);
+                                  }}
+                                  className="p-1.5 hover:bg-orange-100/70 text-gray-700 hover:text-orange-700 rounded-lg transition-colors border border-orange-200/80 bg-white shadow-2xs inline-flex items-center justify-center cursor-pointer"
+                                  title="Actions"
                                 >
-                                  <Plus className="h-3.5 w-3.5" /> Record Advance
+                                  <MoreVertical className="h-4 w-4" />
                                 </button>
-                                <button
-                                  onClick={() => handleCreateBill(p)}
-                                  className="btn text-xs py-1.5 px-3 flex items-center gap-1"
-                                >
-                                  <FileText className="h-3.5 w-3.5" /> Generate Invoice
-                                </button>
-                                <button
-                                  onClick={() => handlePrintLedgerDirectly(p)}
-                                  className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1 border-dashed border-orange-300 text-orange-700 hover:bg-orange-50"
-                                >
-                                  <Printer className="h-3.5 w-3.5" /> Print Ledger
-                                </button>
+
+                                {activePatientMenuId === p._id && (
+                                  <div className="absolute right-0 top-9 z-50 w-44 bg-white rounded-xl shadow-xl border border-orange-100 py-1 space-y-0.5 animate-in fade-in zoom-in-95 duration-100 text-left">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setActivePatientMenuId(null);
+                                        handleCreateBill(p);
+                                      }}
+                                      className="w-full px-3 py-2 text-xs font-bold text-gray-800 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                                    >
+                                      <FileText className="h-4 w-4 text-orange-600" /> Generate Invoice
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setActivePatientMenuId(null);
+                                        handleOpenAdvanceDrawer(p);
+                                      }}
+                                      className="w-full px-3 py-2 text-xs font-bold text-gray-800 hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                                    >
+                                      <Coins className="h-4 w-4 text-emerald-600" /> Record Advance
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setActivePatientMenuId(null);
+                                        handlePrintLedgerDirectly(p);
+                                      }}
+                                      className="w-full px-3 py-2 text-xs font-bold text-gray-800 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                                    >
+                                      <Printer className="h-4 w-4 text-blue-600" /> Print Ledger
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -1232,7 +1406,17 @@ const BillingPage = () => {
               {selectedPatient && (
                 <div className="card p-5 bg-gradient-to-br from-orange-50/30 to-white border border-orange-100 grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="md:col-span-2 border-r border-orange-100/50 pr-4">
-                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Patient Demographics</span>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Patient Demographics</span>
+                      <button
+                        type="button"
+                        onClick={() => setShowCustomChargeModal(true)}
+                        className="btn bg-orange-600 hover:bg-orange-700 text-white text-xs font-black py-1.5 px-3 rounded-xl shadow-xs flex items-center gap-1 cursor-pointer transition-colors"
+                        title="Add extra item or category to invoice"
+                      >
+                        <Plus className="h-3.5 w-3.5" /> Add Extra Category Item
+                      </button>
+                    </div>
                     <h3 className="text-lg font-black text-gray-900 mt-1">{selectedPatient.patientName}</h3>
                     <div className="text-xs text-gray-500 mt-1 flex flex-wrap gap-2">
                       <span className="font-mono font-bold text-orange-700">{formatUhid(selectedPatient.uhid)}</span>
@@ -1324,13 +1508,14 @@ const BillingPage = () => {
                               {accessDiscount && <th className="p-3 text-right w-24">Discount (₹)</th>}
                               <th className="p-3 text-right w-36">{billType === 'Pharmacy' ? 'Add GST (CGST+SGST)' : 'GST (%)'}</th>
                               <th className="p-3 text-right">Qty</th>
-                              <th className="p-3 text-right pr-4">Total</th>
+                              <th className="p-3 text-right">Total</th>
+                              <th className="p-3 text-center w-14 pr-4">Actions</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-orange-50/60">
                             {items.length === 0 ? (
                               <tr>
-                                <td colSpan={accessDiscount ? 8 : 7} className="p-12 text-center text-gray-400 font-bold">
+                                <td colSpan={accessDiscount ? 9 : 8} className="p-12 text-center text-gray-400 font-bold">
                                   No pending unbilled charges in this module.
                                 </td>
                               </tr>
@@ -1454,8 +1639,45 @@ const BillingPage = () => {
                                         </div>
                                       )}
                                     </td>
-                                    <td className="p-3 text-right font-semibold text-gray-600">{item.quantity}</td>
-                                    <td className="p-3 text-right font-black text-gray-900 pr-4">₹{(item.total || 0).toFixed(2)}</td>
+                                    <td className="p-3 text-right font-semibold text-gray-600">
+                                      {item.quantity}
+                                    </td>
+                                    <td className="p-3 text-right font-black text-gray-900">
+                                      ₹{(item.total || 0).toFixed(2)}
+                                    </td>
+                                    <td className="p-3 text-center pr-4 relative action-menu-container" onClick={(e) => e.stopPropagation()}>
+                                      {!isPaidAtReception && (
+                                        <div className="relative inline-block">
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setActiveRowMenuIdx(activeRowMenuIdx === idx ? null : idx);
+                                            }}
+                                            className="p-1 hover:bg-orange-100/70 text-gray-700 hover:text-orange-700 rounded-lg transition-colors border border-orange-200/80 bg-white shadow-2xs inline-flex items-center justify-center cursor-pointer"
+                                            title="More Actions"
+                                          >
+                                            <MoreVertical className="h-4 w-4" />
+                                          </button>
+
+                                          {activeRowMenuIdx === idx && (
+                                            <div className={`absolute right-0 ${idx >= items.length - 2 && items.length > 2 ? 'bottom-full mb-1' : 'top-9'} z-50 w-32 bg-white rounded-xl shadow-xl border border-orange-100 py-1 space-y-0.5 animate-in fade-in zoom-in-95 duration-100 text-left`}>
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  setActiveRowMenuIdx(null);
+                                                  handleOpenEditLineItemModal(idx, item);
+                                                }}
+                                                className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                                              >
+                                                <Pencil className="h-3.5 w-3.5 text-blue-600" /> Edit Item
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </td>
                                   </tr>
                                 );
                               })
@@ -2652,6 +2874,306 @@ const BillingPage = () => {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ======================================================================= */}
+      {/* ============= MODAL 4: ADD EXTRA DUE / CATEGORY ITEM POPUP ============ */}
+      {showCustomChargeModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4 border border-orange-100">
+            <div className="flex items-center justify-between border-b border-orange-100 pb-3">
+              <h3 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
+                <Plus className="h-5 w-5 text-orange-600" /> Add Extra Due / Category Item
+              </h3>
+              <button 
+                onClick={() => setShowCustomChargeModal(false)}
+                className="p-1 hover:bg-orange-50 text-gray-400 hover:text-gray-600 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={(e) => { e.preventDefault(); handleAddCustomChargeItem(); }} className="space-y-4">
+              {/* Category selection */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1">
+                  Category *
+                </label>
+                <select
+                  className="input py-2 text-xs font-bold border-orange-200 focus:ring-orange-500 mb-2 cursor-pointer"
+                  value={categorySelectOption}
+                  onChange={(e) => {
+                    setCategorySelectOption(e.target.value);
+                    if (e.target.value !== 'Other / Custom') {
+                      setCustomCategory(e.target.value);
+                    }
+                  }}
+                >
+                  <option value="OPD">OPD</option>
+                  <option value="IPD">IPD</option>
+                  <option value="Lab">Lab</option>
+                  <option value="Medicine">Medicine</option>
+                  <option value="Consumable">Consumable</option>
+                  <option value="SameDayTreatment">SameDayTreatment</option>
+                  <option value="BedCharge">BedCharge</option>
+                  <option value="OT">OT Surgery</option>
+                  <option value="Procedure">Procedure</option>
+                  <option value="Nursing">Nursing Charge</option>
+                  <option value="Equipment">Equipment Charge</option>
+                  <option value="Registration">Registration Fee</option>
+                  <option value="Other / Custom">+ Type Custom Category Name</option>
+                </select>
+
+                {categorySelectOption === 'Other / Custom' && (
+                  <input
+                    type="text"
+                    required
+                    placeholder="Enter custom category name..."
+                    className="input py-2 text-xs font-bold border-orange-200 animate-fadeIn"
+                    value={customCategory}
+                    onChange={(e) => setCustomCategory(e.target.value)}
+                  />
+                )}
+              </div>
+
+              {/* Description / Item Name */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1">
+                  Description / Item Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Enter charge description (e.g. Special Nursing, Dressing)..."
+                  className="input py-2 text-xs font-bold border-orange-200"
+                  value={customItemName}
+                  onChange={(e) => setCustomItemName(e.target.value)}
+                />
+              </div>
+
+              {/* Financial Inputs: Price, Discount, GST, Qty */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-1">
+                    Price (₹) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0.01"
+                    step="0.01"
+                    placeholder="0.00"
+                    className="input py-1.5 px-2.5 text-xs font-mono font-bold border-orange-200 text-right"
+                    value={customPrice}
+                    onChange={(e) => setCustomPrice(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-1">
+                    Discount (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    className="input py-1.5 px-2.5 text-xs font-mono font-bold border-orange-200 text-right"
+                    value={customDiscount}
+                    onChange={(e) => setCustomDiscount(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-1">
+                    GST (%)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    placeholder="0"
+                    className="input py-1.5 px-2.5 text-xs font-mono font-bold border-orange-200 text-right"
+                    value={customGst}
+                    onChange={(e) => setCustomGst(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-1">
+                    Quantity
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="1"
+                    className="input py-1.5 px-2.5 text-xs font-mono font-bold border-orange-200 text-center"
+                    value={customQty}
+                    onChange={(e) => setCustomQty(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Calculated Total Summary Box */}
+              <div className="p-3 bg-orange-50/70 rounded-xl border border-orange-200 flex items-center justify-between text-xs font-bold">
+                <span className="text-gray-700">Calculated Charge Item Total:</span>
+                <span className="text-base font-black text-orange-700">
+                  ₹{((Math.max(0, (parseFloat(customPrice) || 0) - Math.min(parseFloat(customPrice) || 0, parseFloat(customDiscount) || 0))) * Math.max(1, parseInt(customQty) || 1) * (1 + Math.max(0, parseFloat(customGst) || 0) / 100)).toFixed(2)}
+                </span>
+              </div>
+
+              {/* Modal Action Buttons */}
+              <div className="flex gap-2 justify-end border-t border-orange-100 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowCustomChargeModal(false)}
+                  className="btn-secondary py-2 px-4 text-xs font-bold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!customItemName.trim() || !customPrice}
+                  className="btn py-2 px-5 text-xs font-extrabold flex items-center gap-1.5 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 cursor-pointer"
+                >
+                  <Plus className="h-4 w-4" /> Add Item to Invoice
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================================= */}
+      {/* ============= MODAL 5: EDIT LINE ITEM POPUP MODAL ===================== */}
+      {showEditLineItemModal && editingItemIdx !== null && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4 border border-orange-100">
+            <div className="flex items-center justify-between border-b border-orange-100 pb-3">
+              <h3 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
+                <Pencil className="h-5 w-5 text-blue-600" /> Edit Line Item
+              </h3>
+              <button 
+                onClick={() => { setShowEditLineItemModal(false); setEditingItemIdx(null); }}
+                className="p-1 hover:bg-orange-50 text-gray-400 hover:text-gray-600 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditedLineItem} className="space-y-4">
+              {/* Category Badge (Read only) */}
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">
+                  Category
+                </label>
+                <span className={`inline-block px-2.5 py-1 rounded text-xs font-black uppercase ${CATEGORY_COLORS[items[editingItemIdx]?.category] || 'bg-gray-100 text-gray-800'}`}>
+                  {items[editingItemIdx]?.category}
+                </span>
+              </div>
+
+              {/* Description / Item Name */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1">
+                  Description / Item Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  className="input py-2 text-xs font-bold border-orange-200"
+                  value={editItemDesc}
+                  onChange={(e) => setEditItemDesc(e.target.value)}
+                />
+              </div>
+
+              {/* Financial Inputs: Price, Discount, GST, Qty */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-1">
+                    Price (₹) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    step="0.01"
+                    className="input py-1.5 px-2.5 text-xs font-mono font-bold border-orange-200 text-right"
+                    value={editItemPrice}
+                    onChange={(e) => setEditItemPrice(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-1">
+                    Discount (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="input py-1.5 px-2.5 text-xs font-mono font-bold border-orange-200 text-right"
+                    value={editItemDiscount}
+                    onChange={(e) => setEditItemDiscount(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-1">
+                    GST (%)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    className="input py-1.5 px-2.5 text-xs font-mono font-bold border-orange-200 text-right"
+                    value={editItemGst}
+                    onChange={(e) => setEditItemGst(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-1">
+                    Quantity *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    className="input py-1.5 px-2.5 text-xs font-mono font-bold border-orange-200 text-center"
+                    value={editItemQty}
+                    onChange={(e) => setEditItemQty(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Calculated Total Summary Box */}
+              <div className="p-3 bg-blue-50/70 rounded-xl border border-blue-200 flex items-center justify-between text-xs font-bold">
+                <span className="text-gray-700">Calculated Line Total:</span>
+                <span className="text-base font-black text-blue-700">
+                  ₹{((Math.max(0, (parseFloat(editItemPrice) || 0) - Math.min(parseFloat(editItemPrice) || 0, parseFloat(editItemDiscount) || 0))) * Math.max(1, parseInt(editItemQty) || 1) * (1 + Math.max(0, parseFloat(editItemGst) || 0) / 100)).toFixed(2)}
+                </span>
+              </div>
+
+              {/* Modal Action Buttons */}
+              <div className="flex gap-2 justify-end border-t border-orange-100 pt-3">
+                <button
+                  type="button"
+                  onClick={() => { setShowEditLineItemModal(false); setEditingItemIdx(null); }}
+                  className="btn-secondary py-2 px-4 text-xs font-bold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!editItemDesc.trim() || editItemPrice === ''}
+                  className="btn py-2 px-5 text-xs font-extrabold flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
+                >
+                  <Save className="h-4 w-4" /> Save Item Changes
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

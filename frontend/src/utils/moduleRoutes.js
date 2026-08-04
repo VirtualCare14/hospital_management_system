@@ -33,13 +33,6 @@ export const moduleCards = [
     path: '/doctor'
   },
   {
-    id: 3,
-    title: 'Digital Prescription',
-    subtitle: 'Medicines, PDF, print, multilingual WhatsApp sharing',
-    icon: HeartPulse,
-    path: '/doctor'
-  },
-  {
     id: 4,
     title: 'Lab',
     subtitle: 'Doctor test requests and lab status workflow',

@@ -561,7 +561,7 @@ const PatientList = () => {
       {/* Registrations Table */}
       <div className="card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
+          <table className="w-full min-w-[950px] text-left text-sm">
             <thead className="bg-orange-100/70 text-xs uppercase text-orange-900">
               <tr>
                 <th className="p-3">Registration #</th>
@@ -594,7 +594,7 @@ const PatientList = () => {
                   </td>
                 </tr>
               ) : (
-                registrations.map((reg) => (
+                registrations.map((reg, idx) => (
                   <tr key={reg._id} className="border-t border-orange-50">
                     <td className="p-3 font-mono font-bold text-xs text-blue-700">{reg.registrationNumber}</td>
                     <td className="p-3 font-bold text-orange-700 text-xs">{formatUhid(reg.uhid)}</td>
@@ -673,7 +673,7 @@ const PatientList = () => {
                       </button>
 
                       {activeMenuId === reg._id && (
-                        <div className="absolute right-3 top-10 z-30 w-44 bg-white rounded-xl shadow-xl border border-orange-100 py-1.5 space-y-0.5 animate-in fade-in zoom-in-95 duration-100">
+                        <div className={`absolute right-3 ${idx >= registrations.length - 3 && registrations.length > 3 ? 'bottom-full mb-1' : 'top-10'} z-50 w-44 bg-white rounded-xl shadow-xl border border-orange-100 py-1.5 space-y-0.5 animate-in fade-in zoom-in-95 duration-100`}>
                           <button
                             onClick={() => {
                               setActiveMenuId(null);
