@@ -47,7 +47,7 @@ const createOrUpdateHospitalSettings = asyncHandler(async (req, res) => {
       gstEnabled, gstPercentage, gstRules,
       discountEnabled, discountReasons,
       discountPercentage, discountFixedAmount, patientSpecificDiscounts,
-      sdtPricingInBilling, accessDiscount,
+      sdtPricingInBilling, accessDiscount, receptionSeePatientDue, dueModificationEnabled,
       medicationGracePeriod, medicationMissedThreshold
     } = req.body;
     
@@ -95,6 +95,8 @@ const createOrUpdateHospitalSettings = asyncHandler(async (req, res) => {
       patientSpecificDiscounts: patientSpecificDiscounts || 'Staff:10,EWS:100',
       sdtPricingInBilling: sdtPricingInBilling !== undefined ? Boolean(sdtPricingInBilling) : true,
       accessDiscount: accessDiscount !== undefined ? Boolean(accessDiscount) : false,
+      receptionSeePatientDue: receptionSeePatientDue !== undefined ? Boolean(receptionSeePatientDue) : false,
+      dueModificationEnabled: dueModificationEnabled !== undefined ? Boolean(dueModificationEnabled) : false,
       medicationGracePeriod: medicationGracePeriod !== undefined ? Number(medicationGracePeriod) : 30,
       medicationMissedThreshold: medicationMissedThreshold !== undefined ? Number(medicationMissedThreshold) : 60
     };

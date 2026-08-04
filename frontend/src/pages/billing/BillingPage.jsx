@@ -72,6 +72,26 @@ const BillingPage = () => {
   const [recoveryRemarks, setRecoveryRemarks] = useState('');
   const [recordingRecoveryPayment, setRecordingRecoveryPayment] = useState(false);
 
+  // Due modification permission & tab state
+  const [dueModificationEnabled, setDueModificationEnabled] = useState(false);
+  const [recoveryTab, setRecoveryTab] = useState('pay'); // 'pay' | 'add-item' | 'remove-item'
+
+  // Add Due Item Form State
+  const [newDueCategory, setNewDueCategory] = useState('Other');
+  const [newDueName, setNewDueName] = useState('');
+  const [newDuePrice, setNewDuePrice] = useState('');
+  const [newDueDiscount, setNewDueDiscount] = useState('0');
+  const [newDueGst, setNewDueGst] = useState('0');
+  const [newDueQty, setNewDueQty] = useState('1');
+  const [newDueRemarks, setNewDueRemarks] = useState('');
+  const [addingDueItem, setAddingDueItem] = useState(false);
+
+  // Remove / Waive Due State
+  const [selectedItemToRemoveIndex, setSelectedItemToRemoveIndex] = useState('');
+  const [waiverAmountInput, setWaiverAmountInput] = useState('');
+  const [removeDueRemarks, setRemoveDueRemarks] = useState('');
+  const [removingDueItem, setRemovingDueItem] = useState(false);
+
   const loadDuesList = async () => {
     setLoadingDues(true);
     try {
@@ -98,12 +118,38 @@ const BillingPage = () => {
     }
   }, [activeTab, duesSearch, duesStatusFilter]);
 
+  const fetchHospitalSettingsForBilling = useCallback(async () => {
+    try {
+      const { data } = await client.get('/admin/hospital-settings');
+      if (data?.exists && data?.data) {
+        setDueModificationEnabled(Boolean(data.data.dueModificationEnabled));
+      }
+    } catch (err) {
+      console.error('Error loading settings in BillingPage:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchHospitalSettingsForBilling();
+  }, [fetchHospitalSettingsForBilling, activeTab]);
+
   const handleOpenRecoveryModal = (bill) => {
     setSelectedBillForRecovery(bill);
     setRecoveryPaymentAmount(String(bill.dueAmount || ''));
     setRecoveryPaymentMode('Cash');
     setRecoveryTransactionRef('');
     setRecoveryRemarks('');
+    setRecoveryTab('pay');
+    setNewDueCategory('Other');
+    setNewDueName('');
+    setNewDuePrice('');
+    setNewDueDiscount('0');
+    setNewDueGst('0');
+    setNewDueQty('1');
+    setNewDueRemarks('');
+    setSelectedItemToRemoveIndex('');
+    setWaiverAmountInput('');
+    setRemoveDueRemarks('');
   };
 
   const handleRecordRecoveryPayment = async (e) => {
@@ -140,6 +186,77 @@ const BillingPage = () => {
       toast.error(err.response?.data?.message || 'Failed to record due payment');
     } finally {
       setRecordingRecoveryPayment(false);
+    }
+  };
+
+  const handleAddDueItem = async (e) => {
+    e.preventDefault();
+    if (!selectedBillForRecovery || !newDueName.trim() || !newDuePrice) {
+      toast.error('Please enter description/item name and valid price');
+      return;
+    }
+
+    const priceVal = parseFloat(newDuePrice);
+    if (isNaN(priceVal) || priceVal <= 0) {
+      toast.error('Please enter a valid positive price');
+      return;
+    }
+
+    setAddingDueItem(true);
+    try {
+      const { data } = await client.post('/billing/dues/add-item', {
+        billId: selectedBillForRecovery._id,
+        category: newDueCategory,
+        name: newDueName.trim(),
+        price: priceVal,
+        discountAmount: parseFloat(newDueDiscount) || 0,
+        gstPercentage: parseFloat(newDueGst) || 0,
+        quantity: parseInt(newDueQty) || 1,
+        remarks: newDueRemarks
+      });
+      toast.success(data.message || 'Due item added to bill successfully!');
+      setSelectedBillForRecovery(data.bill);
+      loadDuesList();
+      setNewDueName('');
+      setNewDuePrice('');
+      setNewDueDiscount('0');
+      setNewDueGst('0');
+      setNewDueQty('1');
+      setNewDueRemarks('');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to add due item');
+    } finally {
+      setAddingDueItem(false);
+    }
+  };
+
+  const handleRemoveDueItem = async (e) => {
+    e.preventDefault();
+    if (!selectedBillForRecovery) return;
+
+    if (selectedItemToRemoveIndex === '' && (!waiverAmountInput || parseFloat(waiverAmountInput) <= 0)) {
+      toast.error('Select an item to remove or enter a valid waiver amount');
+      return;
+    }
+
+    setRemovingDueItem(true);
+    try {
+      const { data } = await client.post('/billing/dues/remove-item', {
+        billId: selectedBillForRecovery._id,
+        itemIndex: selectedItemToRemoveIndex !== '' ? parseInt(selectedItemToRemoveIndex) : undefined,
+        removeAmount: waiverAmountInput ? parseFloat(waiverAmountInput) : undefined,
+        remarks: removeDueRemarks
+      });
+      toast.success(data.message || 'Due amount updated successfully!');
+      setSelectedBillForRecovery(data.bill);
+      loadDuesList();
+      setSelectedItemToRemoveIndex('');
+      setWaiverAmountInput('');
+      setRemoveDueRemarks('');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update due amount');
+    } finally {
+      setRemovingDueItem(false);
     }
   };
 
@@ -2037,23 +2154,37 @@ const BillingPage = () => {
           {/* RECOVER DUE PAYMENT MODAL */}
           {selectedBillForRecovery && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-              <div className="card w-full max-w-lg p-6 space-y-5 bg-white shadow-2xl rounded-2xl animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+              <div className="card w-full max-w-xl p-6 space-y-5 bg-white shadow-2xl rounded-2xl animate-in fade-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
                 <div className="flex items-center justify-between border-b border-orange-100 pb-3">
                   <div className="flex items-center gap-2">
                     <div className="p-2 bg-emerald-100 text-emerald-600 rounded-xl">
                       <Coins className="h-5 w-5" />
                     </div>
                     <div>
-                      <h3 className="font-extrabold text-gray-900 text-lg">Recover Patient Due Amount</h3>
-                      <p className="text-xs text-gray-500">Record installment/due recovery payment</p>
+                      <h3 className="font-extrabold text-gray-900 text-lg">Recover & Manage Patient Dues</h3>
+                      <p className="text-xs text-gray-500">Record installment payments or manage due items for this patient</p>
                     </div>
                   </div>
-                  <button
-                    onClick={() => setSelectedBillForRecovery(null)}
-                    className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition"
-                  >
-                    <X className="h-5 w-5" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPrintBillObj(selectedBillForRecovery);
+                        setShowPrintModal(true);
+                      }}
+                      className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5 text-orange-700 border-orange-200 bg-orange-50 hover:bg-orange-100 cursor-pointer"
+                      title="Print Updated Invoice"
+                    >
+                      <Printer className="h-3.5 w-3.5 text-orange-600" />
+                      <span className="hidden sm:inline font-bold">Print Invoice</span>
+                    </button>
+                    <button
+                      onClick={() => setSelectedBillForRecovery(null)}
+                      className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Patient & Invoice Summary Box */}
@@ -2082,141 +2213,442 @@ const BillingPage = () => {
                   </div>
                 </div>
 
-                {/* Payment Form */}
-                <form onSubmit={handleRecordRecoveryPayment} className="space-y-4">
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-gray-700">
-                      Payment Amount to Recover (₹) *
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      max={selectedBillForRecovery.dueAmount}
-                      className="input py-2.5 text-base font-extrabold text-gray-900 border-emerald-300 focus:border-emerald-500"
-                      value={recoveryPaymentAmount}
-                      onChange={(e) => setRecoveryPaymentAmount(e.target.value)}
-                      placeholder="e.g. 2500"
-                      required
-                    />
+                {/* Sub-tabs if dueModificationEnabled is true */}
+                {dueModificationEnabled && (
+                  <div className="flex border-b border-orange-100 gap-1 text-xs font-bold bg-gray-50/80 p-1 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setRecoveryTab('pay')}
+                      className={`flex-1 py-1.5 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+                        recoveryTab === 'pay'
+                          ? 'bg-white text-emerald-700 shadow-xs border border-emerald-200/60'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      <Coins className="h-3.5 w-3.5 text-emerald-600" /> Record Payment
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRecoveryTab('add-item')}
+                      className={`flex-1 py-1.5 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+                        recoveryTab === 'add-item'
+                          ? 'bg-white text-blue-700 shadow-xs border border-blue-200/60'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      <Plus className="h-3.5 w-3.5 text-blue-600" /> + Add Dues
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRecoveryTab('remove-item')}
+                      className={`flex-1 py-1.5 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+                        recoveryTab === 'remove-item'
+                          ? 'bg-white text-red-700 shadow-xs border border-red-200/60'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      <Trash className="h-3.5 w-3.5 text-red-600" /> - Remove Dues
+                    </button>
                   </div>
+                )}
 
-                  {/* Dynamic Calculation Live Box */}
-                  {recoveryPaymentAmount && !isNaN(parseFloat(recoveryPaymentAmount)) && (
-                    <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-200 text-xs space-y-1">
-                      <div className="flex justify-between text-gray-700">
-                        <span>Current Due Balance:</span>
-                        <span className="font-bold">₹{selectedBillForRecovery.dueAmount?.toFixed(2)}</span>
+                {/* TAB 1: RECORD PAYMENT */}
+                {recoveryTab === 'pay' && (
+                  <form onSubmit={handleRecordRecoveryPayment} className="space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700">
+                        Payment Amount to Recover (₹) *
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        max={selectedBillForRecovery.dueAmount}
+                        className="input py-2.5 text-base font-extrabold text-gray-900 border-emerald-300 focus:border-emerald-500"
+                        value={recoveryPaymentAmount}
+                        onChange={(e) => setRecoveryPaymentAmount(e.target.value)}
+                        placeholder="e.g. 2500"
+                        required
+                      />
+                    </div>
+
+                    {/* Dynamic Calculation Live Box */}
+                    {recoveryPaymentAmount && !isNaN(parseFloat(recoveryPaymentAmount)) && (
+                      <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-200 text-xs space-y-1">
+                        <div className="flex justify-between text-gray-700">
+                          <span>Current Due Balance:</span>
+                          <span className="font-bold">₹{selectedBillForRecovery.dueAmount?.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-emerald-700 font-bold">
+                          <span>Payment Received Now:</span>
+                          <span>- ₹{parseFloat(recoveryPaymentAmount || 0).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-gray-900 font-extrabold border-t border-emerald-200 pt-1 mt-1">
+                          <span>Remaining Due After Payment:</span>
+                          <span className={Math.max(0, selectedBillForRecovery.dueAmount - parseFloat(recoveryPaymentAmount || 0)) === 0 ? 'text-green-600 font-black' : 'text-red-600'}>
+                            ₹{Math.max(0, selectedBillForRecovery.dueAmount - parseFloat(recoveryPaymentAmount || 0)).toFixed(2)}
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex justify-between text-emerald-700 font-bold">
-                        <span>Payment Received Now:</span>
-                        <span>- ₹{parseFloat(recoveryPaymentAmount || 0).toFixed(2)}</span>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1">
+                          Payment Mode *
+                        </label>
+                        <select
+                          className="input py-2 text-xs font-semibold"
+                          value={recoveryPaymentMode}
+                          onChange={(e) => setRecoveryPaymentMode(e.target.value)}
+                        >
+                          {['Cash', 'UPI', 'Card', 'Net Banking', 'Cheque', 'Insurance'].map(m => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
                       </div>
-                      <div className="flex justify-between text-gray-900 font-extrabold border-t border-emerald-200 pt-1 mt-1">
-                        <span>Remaining Due After Payment:</span>
-                        <span className={Math.max(0, selectedBillForRecovery.dueAmount - parseFloat(recoveryPaymentAmount || 0)) === 0 ? 'text-green-600 font-black' : 'text-red-600'}>
-                          ₹{Math.max(0, selectedBillForRecovery.dueAmount - parseFloat(recoveryPaymentAmount || 0)).toFixed(2)}
-                        </span>
+
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1">
+                          Transaction Ref / UTR
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ref / Txn No."
+                          className="input py-2 text-xs"
+                          value={recoveryTransactionRef}
+                          onChange={(e) => setRecoveryTransactionRef(e.target.value)}
+                        />
                       </div>
                     </div>
-                  )}
 
-                  <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1">
-                        Payment Mode *
+                        Notes / Remarks
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Installment 2 paid at counter"
+                        className="input py-2 text-xs"
+                        value={recoveryRemarks}
+                        onChange={(e) => setRecoveryRemarks(e.target.value)}
+                      />
+                    </div>
+
+                    {/* Payment History Timeline Section */}
+                    {selectedBillForRecovery.payments && selectedBillForRecovery.payments.length > 0 && (
+                      <div className="space-y-2 border-t border-orange-100 pt-3">
+                        <span className="text-[11px] font-extrabold text-gray-500 uppercase tracking-wider flex items-center gap-1">
+                          <History className="h-3.5 w-3.5 text-orange-500" /> Payment History Log ({selectedBillForRecovery.payments.length})
+                        </span>
+                        <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                          {selectedBillForRecovery.payments.map((p, pIdx) => (
+                            <div key={pIdx} className="p-2 bg-gray-50 rounded-lg border border-gray-200 text-[11px] flex justify-between items-center">
+                              <div>
+                                <span className="font-bold text-emerald-700">Paid ₹{p.amount.toFixed(2)}</span>
+                                <span className="text-gray-500 block text-[10px]">
+                                  Via {p.paymentMode} {p.transactionRef ? `(${p.transactionRef})` : ''} • {p.paidAt ? new Date(p.paidAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
+                                </span>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-gray-400 block text-[10px]">Due Left: ₹{(p.dueAfterPayment || 0).toFixed(2)}</span>
+                                {p.receivedByName && <span className="text-gray-500 font-semibold block text-[10px]">By {p.receivedByName}</span>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Action buttons */}
+                    <div className="flex justify-end gap-2 border-t border-orange-50 pt-3">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedBillForRecovery(null)}
+                        className="btn-secondary py-2 px-4 text-xs"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={recordingRecoveryPayment || !recoveryPaymentAmount}
+                        className="btn py-2 px-5 text-xs flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50"
+                      >
+                        {recordingRecoveryPayment ? (
+                          <>
+                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle className="h-3.5 w-3.5" />
+                            Confirm & Record Payment
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* TAB 2: ADD EXTRA DUE ITEM */}
+                {recoveryTab === 'add-item' && (
+                  <form onSubmit={handleAddDueItem} className="space-y-4">
+                    <div className="p-3 bg-blue-50/60 rounded-xl border border-blue-100 text-xs">
+                      <p className="font-bold text-blue-900">Add Line Item to Patient Bill</p>
+                      <p className="text-[11px] text-blue-700 mt-0.5">
+                        This will add a new item directly into this patient's bill ({selectedBillForRecovery.invoiceNo || selectedBillForRecovery.billNo}) and increase the net payable due.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-1">
+                          Category *
+                        </label>
+                        <select
+                          className="input py-2 text-xs font-semibold"
+                          value={newDueCategory}
+                          onChange={(e) => setNewDueCategory(e.target.value)}
+                        >
+                          <option value="OPD">OPD Charges</option>
+                          <option value="IPD">IPD Charge</option>
+                          <option value="Lab">Lab Test</option>
+                          <option value="Medicine">Medicine / Pharmacy</option>
+                          <option value="Consumable">Consumable</option>
+                          <option value="OT">OT Procedure</option>
+                          <option value="SameDayTreatment">Same Day Treatment</option>
+                          <option value="Other">Other Charges</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-1">
+                          Description / Item Name *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Additional Consultation / Dressing"
+                          className="input py-2 text-xs"
+                          value={newDueName}
+                          onChange={(e) => setNewDueName(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-1">
+                          Price (₹) *
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0.01"
+                          required
+                          placeholder="0.00"
+                          className="input py-2 text-xs font-bold"
+                          value={newDuePrice}
+                          onChange={(e) => setNewDuePrice(e.target.value)}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-1">
+                          Discount (₹)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="0"
+                          className="input py-2 text-xs"
+                          value={newDueDiscount}
+                          onChange={(e) => setNewDueDiscount(e.target.value)}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-1">
+                          GST (%)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="0"
+                          className="input py-2 text-xs"
+                          value={newDueGst}
+                          onChange={(e) => setNewDueGst(e.target.value)}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-1">
+                          Qty *
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          required
+                          className="input py-2 text-xs font-bold"
+                          value={newDueQty}
+                          onChange={(e) => setNewDueQty(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Item Total Calculation Box */}
+                    {newDuePrice && !isNaN(parseFloat(newDuePrice)) && (
+                      <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-200 text-xs flex justify-between items-center font-bold">
+                        <span className="text-gray-700">Calculated Item Total:</span>
+                        <span className="text-blue-700 text-sm font-extrabold">
+                          ₹{(
+                            (Math.max(0, (parseFloat(newDuePrice) || 0) - (parseFloat(newDueDiscount) || 0)) * (parseInt(newDueQty) || 1)) *
+                            (1 + (parseFloat(newDueGst) || 0) / 100)
+                          ).toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-1">
+                        Remarks / Notes
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Reason for adding due..."
+                        className="input py-2 text-xs"
+                        value={newDueRemarks}
+                        onChange={(e) => setNewDueRemarks(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="flex justify-end gap-2 border-t border-orange-50 pt-3">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedBillForRecovery(null)}
+                        className="btn-secondary py-2 px-4 text-xs"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={addingDueItem || !newDueName.trim() || !newDuePrice}
+                        className="btn py-2 px-5 text-xs flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {addingDueItem ? (
+                          <>
+                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                            Adding...
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="h-3.5 w-3.5" />
+                            Add Due to Bill
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* TAB 3: REMOVE DUES / WAIVER */}
+                {recoveryTab === 'remove-item' && (
+                  <form onSubmit={handleRemoveDueItem} className="space-y-4">
+                    <div className="p-3 bg-red-50/60 rounded-xl border border-red-100 text-xs">
+                      <p className="font-bold text-red-900">Remove Item or Waive Due Amount</p>
+                      <p className="text-[11px] text-red-700 mt-0.5">
+                        Select a line item to remove or enter a waiver amount to reduce the net payable due balance on this bill.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-1">
+                        Remove Existing Line Item
                       </label>
                       <select
                         className="input py-2 text-xs font-semibold"
-                        value={recoveryPaymentMode}
-                        onChange={(e) => setRecoveryPaymentMode(e.target.value)}
+                        value={selectedItemToRemoveIndex}
+                        onChange={(e) => {
+                          setSelectedItemToRemoveIndex(e.target.value);
+                          if (e.target.value !== '') setWaiverAmountInput('');
+                        }}
                       >
-                        {['Cash', 'UPI', 'Card', 'Net Banking', 'Cheque', 'Insurance'].map(m => (
-                          <option key={m} value={m}>{m}</option>
+                        <option value="">-- Or select specific item to remove --</option>
+                        {(selectedBillForRecovery.items || []).map((item, idx) => (
+                          <option key={idx} value={idx}>
+                            [{item.category}] {item.description || item.name || 'Item'} - Qty: {item.quantity} (Total: ₹{(item.total || 0).toFixed(2)})
+                          </option>
                         ))}
                       </select>
                     </div>
 
+                    <div className="text-center text-xs text-gray-400 font-bold uppercase tracking-wider my-1">
+                      — OR —
+                    </div>
+
                     <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1">
-                        Transaction Ref / UTR
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-1">
+                        Waive / Remove Due Amount (₹)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        max={selectedBillForRecovery.dueAmount}
+                        placeholder="Enter amount to remove/waive..."
+                        className="input py-2 text-xs font-bold"
+                        value={waiverAmountInput}
+                        onChange={(e) => {
+                          setWaiverAmountInput(e.target.value);
+                          if (e.target.value) setSelectedItemToRemoveIndex('');
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-1">
+                        Remarks / Reason for Removal *
                       </label>
                       <input
                         type="text"
-                        placeholder="Ref / Txn No."
+                        required
+                        placeholder="e.g. Discount approved by management / Item cancelled"
                         className="input py-2 text-xs"
-                        value={recoveryTransactionRef}
-                        onChange={(e) => setRecoveryTransactionRef(e.target.value)}
+                        value={removeDueRemarks}
+                        onChange={(e) => setRemoveDueRemarks(e.target.value)}
                       />
                     </div>
-                  </div>
 
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1">
-                      Notes / Remarks
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Installment 2 paid at counter"
-                      className="input py-2 text-xs"
-                      value={recoveryRemarks}
-                      onChange={(e) => setRecoveryRemarks(e.target.value)}
-                    />
-                  </div>
-
-                  {/* Payment History Timeline Section */}
-                  {selectedBillForRecovery.payments && selectedBillForRecovery.payments.length > 0 && (
-                    <div className="space-y-2 border-t border-orange-100 pt-3">
-                      <span className="text-[11px] font-extrabold text-gray-500 uppercase tracking-wider flex items-center gap-1">
-                        <History className="h-3.5 w-3.5 text-orange-500" /> Payment History Log ({selectedBillForRecovery.payments.length})
-                      </span>
-                      <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
-                        {selectedBillForRecovery.payments.map((p, pIdx) => (
-                          <div key={pIdx} className="p-2 bg-gray-50 rounded-lg border border-gray-200 text-[11px] flex justify-between items-center">
-                            <div>
-                              <span className="font-bold text-emerald-700">Paid ₹{p.amount.toFixed(2)}</span>
-                              <span className="text-gray-500 block text-[10px]">
-                                Via {p.paymentMode} {p.transactionRef ? `(${p.transactionRef})` : ''} • {p.paidAt ? new Date(p.paidAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
-                              </span>
-                            </div>
-                            <div className="text-right">
-                              <span className="text-gray-400 block text-[10px]">Due Left: ₹{(p.dueAfterPayment || 0).toFixed(2)}</span>
-                              {p.receivedByName && <span className="text-gray-500 font-semibold block text-[10px]">By {p.receivedByName}</span>}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                    <div className="flex justify-end gap-2 border-t border-orange-50 pt-3">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedBillForRecovery(null)}
+                        className="btn-secondary py-2 px-4 text-xs"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={removingDueItem || (!selectedItemToRemoveIndex && !waiverAmountInput) || !removeDueRemarks.trim()}
+                        className="btn py-2 px-5 text-xs flex items-center gap-1.5 bg-red-600 hover:bg-red-700 disabled:opacity-50"
+                      >
+                        {removingDueItem ? (
+                          <>
+                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                            Removing...
+                          </>
+                        ) : (
+                          <>
+                            <Trash className="h-3.5 w-3.5" />
+                            Confirm Removal
+                          </>
+                        )}
+                      </button>
                     </div>
-                  )}
-
-                  {/* Action buttons */}
-                  <div className="flex justify-end gap-2 border-t border-orange-50 pt-3">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedBillForRecovery(null)}
-                      className="btn-secondary py-2 px-4 text-xs"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={recordingRecoveryPayment || !recoveryPaymentAmount}
-                      className="btn py-2 px-5 text-xs flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50"
-                    >
-                      {recordingRecoveryPayment ? (
-                        <>
-                          <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                          Processing...
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle className="h-3.5 w-3.5" />
-                          Confirm & Record Payment
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </form>
+                  </form>
+                )}
               </div>
             </div>
           )}

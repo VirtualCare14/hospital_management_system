@@ -128,13 +128,6 @@ const DoctorDashboard = () => {
     client.get('/consultation/stats').then(({ data }) => setCounts(data)).catch(() => setCounts(null));
   };
 
-  const handleDelete = async (id) => {
-    const ok = window.confirm('Delete patient and related records? This cannot be undone.');
-    if (!ok) return;
-    await client.delete(`/patients/${id}`);
-    refreshAll();
-  };
-
   const handleSendToOt = async (patient) => {
     if (!window.confirm(`Send ${patient.patientName} to OT (Operation Theatre)?`)) return;
     try {
@@ -406,7 +399,6 @@ const DoctorDashboard = () => {
                       )}
                       <Link className="btn-secondary text-xs text-green-600" to={`/doctor/consultation-track/${patient._id}`}><History className="h-3 w-3" /> Track</Link>
                       <button className="btn-secondary text-xs text-indigo-600" onClick={() => handleSendToOt(patient)}><Send className="h-3 w-3" /> OT</button>
-                      <button className="btn-ghost text-red-600" onClick={() => handleDelete(patient._id)} title="Delete Patient"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   </td>
                 </tr>

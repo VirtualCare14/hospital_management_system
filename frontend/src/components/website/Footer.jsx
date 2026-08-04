@@ -1,4 +1,4 @@
-import logoImg from '../../assets/yt.jpeg';
+import logoImg from '../../assets/medora360_logo.png';
 
 export default function Footer() {
   const currentYear = new Date().getFullYear();

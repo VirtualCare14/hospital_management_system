@@ -39,6 +39,8 @@ const HospitalSettings = () => {
       discountEnabled: true,
       sdtPricingInBilling: true,
       accessDiscount: false,
+      receptionSeePatientDue: false,
+      dueModificationEnabled: false,
       medicationGracePeriod: 30,
       medicationMissedThreshold: 60
     }
@@ -137,6 +139,8 @@ const HospitalSettings = () => {
           patientSpecificDiscounts: data.data.patientSpecificDiscounts !== undefined ? data.data.patientSpecificDiscounts : 'Staff:10,EWS:100',
           sdtPricingInBilling: data.data.sdtPricingInBilling !== undefined ? data.data.sdtPricingInBilling : true,
           accessDiscount: data.data.accessDiscount !== undefined ? data.data.accessDiscount : false,
+          receptionSeePatientDue: data.data.receptionSeePatientDue !== undefined ? data.data.receptionSeePatientDue : false,
+          dueModificationEnabled: data.data.dueModificationEnabled !== undefined ? data.data.dueModificationEnabled : false,
           medicationGracePeriod: data.data.medicationGracePeriod !== undefined ? data.data.medicationGracePeriod : 30,
           medicationMissedThreshold: data.data.medicationMissedThreshold !== undefined ? data.data.medicationMissedThreshold : 60
         });
@@ -248,6 +252,8 @@ const HospitalSettings = () => {
         patientSpecificDiscounts: '',
         sdtPricingInBilling: Boolean(data.sdtPricingInBilling),
         accessDiscount: Boolean(data.accessDiscount),
+        receptionSeePatientDue: Boolean(data.receptionSeePatientDue),
+        dueModificationEnabled: Boolean(data.dueModificationEnabled),
         medicationGracePeriod: Number(data.medicationGracePeriod || 30),
         medicationMissedThreshold: Number(data.medicationMissedThreshold || 60)
       };
@@ -624,7 +630,7 @@ const HospitalSettings = () => {
         {/* ===================== TAB 3: APPLY DISCOUNTS % ===================== */}
         {activeTab === 'gst-discount' && (
           <div className="space-y-6 animate-fadeIn">
-            {/* Access Discount Switch */}
+            {/* Access Discount & Reception Patient Due Switches */}
             <div className="bg-orange-50/20 p-5 rounded-2xl border border-orange-100/60 shadow-sm space-y-4 text-left">
               <div className="flex items-center justify-between gap-4">
                 <label htmlFor="accessDiscount" className="cursor-pointer select-none">
@@ -643,9 +649,46 @@ const HospitalSettings = () => {
                   <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
                 </label>
               </div>
+
+              <div className="pt-4 border-t border-orange-100/60 flex items-center justify-between gap-4">
+                <label htmlFor="receptionSeePatientDue" className="cursor-pointer select-none">
+                  <h4 className="text-sm font-extrabold text-gray-900">Reception Module Patient Due Display</h4>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Show "Payment Due" column in Reception module patient list so receptionists can see pending patient due amounts.
+                  </p>
+                </label>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0 select-none">
+                  <input
+                    type="checkbox"
+                    id="receptionSeePatientDue"
+                    className="sr-only peer"
+                    {...register('receptionSeePatientDue')}
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
+                </label>
+              </div>
+
+              <div className="pt-4 border-t border-orange-100/60 flex items-center justify-between gap-4">
+                <label htmlFor="dueModificationEnabled" className="cursor-pointer select-none">
+                  <h4 className="text-sm font-extrabold text-gray-900">Due Amount Modification Permission</h4>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Allow adding new due line items or removing/waiving due amounts directly in the Due Amount Recovery Desk.
+                  </p>
+                </label>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0 select-none">
+                  <input
+                    type="checkbox"
+                    id="dueModificationEnabled"
+                    className="sr-only peer"
+                    {...register('dueModificationEnabled')}
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
+                </label>
+              </div>
+
               <div className="pt-2 border-t border-orange-100/50 flex justify-end">
                 <button type="submit" className="btn text-xs py-2 px-4 flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600">
-                  <Save className="h-3.5 w-3.5" /> Save Discount Setting
+                  <Save className="h-3.5 w-3.5" /> Save Settings
                 </button>
               </div>
             </div>

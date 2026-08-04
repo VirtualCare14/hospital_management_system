@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, X, ArrowRight, LayoutGrid } from 'lucide-react';
-import logoImg from '../../assets/yt.jpeg';
+import logoImg from '../../assets/medora360_logo.png';
 import PortalAccessModal from './PortalAccessModal';
 
 export default function Navbar() {

@@ -167,8 +167,8 @@ const PatientConsultationTrack = () => {
           <h1 className="text-2xl font-extrabold text-gray-900">Patient Consultation Track</h1>
           <p className="text-sm text-gray-500">Complete consultation and prescription history for this patient</p>
         </div>
-        <Link to={`/doctor/consultation/${patientId}?addMore=true`} className="btn bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs inline-flex items-center gap-1">
-          <Plus className="h-3.5 w-3.5" /> Add Consult
+        <Link to={`/doctor/prescription/${patientId}?addMore=true`} className="btn bg-green-600 hover:bg-green-700 text-white font-bold text-xs inline-flex items-center gap-1 shadow-xs">
+          <Plus className="h-3.5 w-3.5" /> Add Prescription
         </Link>
       </div>
 
@@ -183,7 +183,7 @@ const PatientConsultationTrack = () => {
             </p>
           </div>
           <div className="flex gap-2">
-            <Link to={`/doctor/prescription/${patientId}?addMore=true`} className="btn bg-green-600 hover:bg-green-700 text-white font-bold text-xs inline-flex items-center gap-1">
+            <Link to={`/doctor/prescription/${patientId}?addMore=true`} className="btn bg-green-600 hover:bg-green-700 text-white font-bold text-xs inline-flex items-center gap-1 shadow-xs">
               <Plus className="h-3.5 w-3.5" /> Add Prescription
             </Link>
           </div>
@@ -194,8 +194,8 @@ const PatientConsultationTrack = () => {
       {consultations.length === 0 && (
         <div className="card p-5 text-center">
           <p className="text-gray-500">No consultations found for this patient.</p>
-          <Link to={`/doctor/consultation/${patientId}?addMore=true`} className="btn bg-orange-500 hover:bg-orange-600 text-white font-bold text-sm mt-3 inline-flex items-center gap-1">
-            <Plus className="h-4 w-4" /> Add Consult
+          <Link to={`/doctor/prescription/${patientId}?addMore=true`} className="btn bg-green-600 hover:bg-green-700 text-white font-bold text-sm mt-3 inline-flex items-center gap-1 shadow-xs">
+            <Plus className="h-4 w-4" /> Add Prescription
           </Link>
         </div>
       )}

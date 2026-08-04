@@ -55,6 +55,21 @@ const PatientList = () => {
   const [totalRecords, setTotalRecords] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
 
+  // Hospital settings (for payment due display permission)
+  const [receptionSeePatientDue, setReceptionSeePatientDue] = useState(false);
+
+  useEffect(() => {
+    client.get('/admin/hospital-settings')
+      .then(({ data }) => {
+        if (data?.exists && data?.data) {
+          setReceptionSeePatientDue(Boolean(data.data.receptionSeePatientDue));
+        }
+      })
+      .catch((err) => {
+        console.error('Error fetching hospital settings in PatientList:', err);
+      });
+  }, []);
+
   // Active Action Menu
   const [activeMenuId, setActiveMenuId] = useState(null);
 
@@ -556,6 +571,7 @@ const PatientList = () => {
                 <th className="p-3">Follow Up Date</th>
                 <th className="p-3">Department</th>
                 <th className="p-3">Doctor</th>
+                {receptionSeePatientDue && <th className="p-3">Payment Due</th>}
                 <th className="p-3">Status</th>
                 <th className="p-3">Action</th>
               </tr>
@@ -563,13 +579,13 @@ const PatientList = () => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="9" className="p-8">
-                    <SkeletonTable rows={pageSize > 10 ? 10 : pageSize} columns={9} className="w-full" />
+                  <td colSpan={receptionSeePatientDue ? 10 : 9} className="p-8">
+                    <SkeletonTable rows={pageSize > 10 ? 10 : pageSize} columns={receptionSeePatientDue ? 10 : 9} className="w-full" />
                   </td>
                 </tr>
               ) : registrations.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="p-12 text-center">
+                  <td colSpan={receptionSeePatientDue ? 10 : 9} className="p-12 text-center">
                     <div className="flex flex-col items-center justify-center gap-2 text-gray-400">
                       <Users className="h-10 w-10 text-gray-300" />
                       <p className="font-bold text-gray-600 text-sm">No patients found</p>
@@ -590,14 +606,15 @@ const PatientList = () => {
                           <>
                             <span className="text-gray-300">•</span>
                             <button
+                              type="button"
                               onClick={() => {
                                 navigator.clipboard.writeText(reg.aadhaar);
                                 toast.success('Aadhaar copied to clipboard!');
                               }}
-                              className="text-[10px] text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 cursor-pointer font-medium bg-transparent border-none p-0"
-                              title="Copy Aadhaar Card Number"
+                              className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-1 rounded-md transition-colors flex items-center cursor-pointer border-none bg-transparent"
+                              title={`Copy Aadhaar Number (${reg.aadhaar})`}
                             >
-                              <Copy className="h-3 w-3" /> Aadhaar: {reg.aadhaar}
+                              <Copy className="h-3.5 w-3.5" />
                             </button>
                           </>
                         )}
@@ -628,6 +645,17 @@ const PatientList = () => {
                     </td>
                     <td className="p-3 text-xs">{reg.department}</td>
                     <td className="p-3 text-xs">Dr. {reg.doctorName}</td>
+                    {receptionSeePatientDue && (
+                      <td className="p-3 text-xs">
+                        {reg.dueAmount > 0 ? (
+                          <span className="inline-block px-2.5 py-1 rounded-lg text-xs font-black bg-red-100 text-red-700 border border-red-200 shadow-2xs">
+                            ₹{Number(reg.dueAmount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 text-xs font-medium">₹0.00</span>
+                        )}
+                      </td>
+                    )}
                     <td className="p-3">
                       <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
                         reg.consultationStatus === 'completed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'

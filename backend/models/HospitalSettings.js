@@ -145,6 +145,14 @@ const hospitalSettingsSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  receptionSeePatientDue: {
+    type: Boolean,
+    default: false
+  },
+  dueModificationEnabled: {
+    type: Boolean,
+    default: false
+  },
   medicationGracePeriod: {
     type: Number,
     default: 30

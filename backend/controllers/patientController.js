@@ -659,6 +659,39 @@ const getRegistrations = async (req, res) => {
       });
     }
 
+    // Fetch patient due balances from Billing
+    const Billing = require('../models/Billing');
+    const patientIds = visits.map(v => v.patientId?._id).filter(Boolean);
+    const uhids = visits.map(v => v.uhid).filter(Boolean);
+
+    const patientDueMap = {};
+    if (patientIds.length > 0 || uhids.length > 0) {
+      const dues = await Billing.aggregate([
+        {
+          $match: tenantQuery(req, {
+            $or: [
+              { patientId: { $in: patientIds } },
+              { uhid: { $in: uhids } }
+            ],
+            status: 'Final',
+            dueAmount: { $gt: 0 }
+          })
+        },
+        {
+          $group: {
+            _id: '$patientId',
+            uhid: { $first: '$uhid' },
+            totalDue: { $sum: '$dueAmount' }
+          }
+        }
+      ]);
+
+      dues.forEach(d => {
+        if (d._id) patientDueMap[d._id.toString()] = d.totalDue;
+        if (d.uhid) patientDueMap[d.uhid] = d.totalDue;
+      });
+    }
+
     // Enrich with patient data & follow-up information
     const enriched = visits.map(v => {
       let effectiveFollowUpDate = v.followUpDate || null;
@@ -680,6 +713,9 @@ const getRegistrations = async (req, res) => {
         }
       }
 
+      const pIdStr = v.patientId?._id ? v.patientId._id.toString() : null;
+      const dueAmt = (pIdStr && patientDueMap[pIdStr] !== undefined) ? patientDueMap[pIdStr] : (patientDueMap[v.uhid] || 0);
+
       return {
         _id: v._id,
         registrationNumber: v.registrationNumber,
@@ -700,7 +736,8 @@ const getRegistrations = async (req, res) => {
         doctorId: v.doctorId?._id,
         followUpDate: effectiveFollowUpDate,
         followUpSource: effectiveFollowUpSource,
-        followUpRemarks: effectiveFollowUpRemarks
+        followUpRemarks: effectiveFollowUpRemarks,
+        dueAmount: dueAmt
       };
     });
 

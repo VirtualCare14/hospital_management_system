@@ -121,11 +121,8 @@ const CompletedConsultationDetails = () => {
               <Printer className="h-4 w-4" /> Print Prescription
             </button>
           )}
-          <Link to={`/doctor/consultation/${patient._id}?addMore=true`} className="btn bg-orange-500 hover:bg-orange-600 text-white font-bold text-sm">
-            Add Consult
-          </Link>
-          <Link to={`/doctor/prescription/${patient._id}?addMore=true`} className="btn bg-green-600 hover:bg-green-700 text-white font-bold text-sm">
-            Add Prescription
+          <Link to={`/doctor/prescription/${patient._id}?addMore=true`} className="btn bg-green-600 hover:bg-green-700 text-white font-bold text-sm inline-flex items-center gap-1.5 shadow-sm">
+            <Plus className="h-4 w-4" /> Add Prescription
           </Link>
         </div>
       </div>

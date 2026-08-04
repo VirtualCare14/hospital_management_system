@@ -177,18 +177,14 @@ const Sidebar = () => {
       <div className={`p-4 border-b border-orange-100 flex items-center ${isExpanded ? 'justify-between' : 'justify-center'} h-[72px] shrink-0`}>
         {isExpanded ? (
           <div className="flex items-center gap-3 min-w-0">
-            <div className="bg-orange-500 text-white p-2 rounded-xl shrink-0 shadow-sm">
-              <HeartPulse className="h-5 w-5 animate-pulse" />
-            </div>
+            <img src="/logo.png" alt="Medora360 Logo" className="h-9 w-9 object-contain shrink-0 rounded-full shadow-xs" />
             <div className="min-w-0">
               <h2 className="font-bold text-gray-800 text-sm leading-tight truncate">{user.hospitalName || 'Hospital'}</h2>
               <span className="text-[10px] text-orange-500 font-bold tracking-wider uppercase block truncate">EMR PORTAL</span>
             </div>
           </div>
         ) : (
-          <div className="bg-orange-500 text-white p-2 rounded-xl shrink-0 shadow-sm" title={user.hospitalName || 'Hospital'}>
-            <HeartPulse className="h-5 w-5 animate-pulse" />
-          </div>
+          <img src="/logo.png" alt="Medora360 Logo" className="h-8 w-8 object-contain shrink-0 rounded-full shadow-xs" title={user.hospitalName || 'Hospital'} />
         )}
 
         <button

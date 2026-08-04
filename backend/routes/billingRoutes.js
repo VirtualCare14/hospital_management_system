@@ -6,7 +6,7 @@ const {
   searchPatient, getEligiblePatients,
   createAdvance, getPatientAdvances, cancelBill, getDashboardStats,
   getDiscountRequests, approveDiscountRequest, rejectDiscountRequest,
-  getPatientDues, getDuesList, recordDuePayment
+  getPatientDues, getDuesList, recordDuePayment, addDueItem, removeDueItem
 } = require('../controllers/billingController');
 const authMiddleware = require('../middleware/authMiddleware');
 
@@ -24,6 +24,8 @@ router.get('/billing/eligible-patients', authMiddleware, getEligiblePatients);
 router.get('/billing/patient-dues/:uhid', authMiddleware, getPatientDues);
 router.get('/billing/dues', authMiddleware, getDuesList);
 router.post('/billing/dues/pay', authMiddleware, recordDuePayment);
+router.post('/billing/dues/add-item', authMiddleware, addDueItem);
+router.post('/billing/dues/remove-item', authMiddleware, removeDueItem);
 router.get('/billing/search/:query', authMiddleware, searchPatient);
 
 router.get('/billing/generate/:uhid', authMiddleware, generateBillItems);

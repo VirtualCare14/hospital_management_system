@@ -2058,6 +2058,8 @@ const recordDuePayment = async (req, res) => {
 
     await bill.save();
 
+    await bill.save();
+
     res.json({
       message: 'Due payment recorded successfully!',
       bill
@@ -2068,11 +2070,151 @@ const recordDuePayment = async (req, res) => {
   }
 };
 
+// @desc    Add a due line item to an existing finalized bill
+// @route   POST /api/billing/dues/add-item
+// @access  Private
+const addDueItem = async (req, res) => {
+  try {
+    const { billId, category, name, price, discountAmount, gstPercentage, quantity, remarks } = req.body;
+
+    if (!billId) {
+      return res.status(400).json({ message: 'Bill ID is required' });
+    }
+
+    const bill = await Billing.findOne(tenantFilter(req, { _id: billId }));
+    if (!bill) {
+      return res.status(404).json({ message: 'Bill record not found' });
+    }
+
+    const priceVal = parseFloat(price) || 0;
+    const discountVal = parseFloat(discountAmount) || 0;
+    const qtyVal = parseInt(quantity) || 1;
+    const gstVal = parseFloat(gstPercentage) || 0;
+
+    const basePriceAfterDiscount = Math.max(0, priceVal - discountVal);
+    const itemSubtotal = Number((basePriceAfterDiscount * qtyVal).toFixed(2));
+    const itemGst = Number((itemSubtotal * (gstVal / 100)).toFixed(2));
+    const itemTotal = Number((itemSubtotal + itemGst).toFixed(2));
+
+    const newItem = {
+      category: category || 'Other',
+      description: name || 'Due Item',
+      name: name || 'Due Item',
+      price: priceVal,
+      quantity: qtyVal,
+      discountAmount: discountVal,
+      gstPercentage: gstVal,
+      gstAmount: itemGst,
+      total: itemTotal,
+      remarks: remarks || ''
+    };
+
+    bill.items = bill.items || [];
+    bill.items.push(newItem);
+
+    // Recalculate bill totals
+    bill.subtotal = Number(((bill.subtotal || 0) + itemSubtotal).toFixed(2));
+    bill.gstAmount = Number(((bill.gstAmount || 0) + itemGst).toFixed(2));
+    bill.grandTotal = Number(((bill.grandTotal || 0) + itemTotal).toFixed(2));
+    bill.dueAmount = Number(((bill.dueAmount || 0) + itemTotal).toFixed(2));
+
+    if (bill.dueAmount > 0) {
+      bill.paymentStatus = (bill.amountPaid || 0) > 0 ? 'Partially Paid' : 'Unpaid';
+    }
+
+    bill.auditTrail = bill.auditTrail || [];
+    bill.auditTrail.push({
+      action: 'Due Line Item Added',
+      performedBy: req.user._id,
+      performedByName: req.user.username || req.user.doctorName || 'Staff',
+      timestamp: new Date(),
+      remarks: `Added due item "${name || category}" (₹${itemTotal}). New Net Due: ₹${bill.dueAmount}`
+    });
+
+    await bill.save();
+
+    res.json({
+      message: 'Due item added to bill successfully',
+      bill
+    });
+  } catch (error) {
+    console.error('Add Due Item Error:', error);
+    res.status(500).json({ message: error.message || 'Server error' });
+  }
+};
+
+// @desc    Remove a line item or waive due amount from a bill
+// @route   POST /api/billing/dues/remove-item
+// @access  Private
+const removeDueItem = async (req, res) => {
+  try {
+    const { billId, itemIndex, removeAmount, remarks } = req.body;
+
+    if (!billId) {
+      return res.status(400).json({ message: 'Bill ID is required' });
+    }
+
+    const bill = await Billing.findOne(tenantFilter(req, { _id: billId }));
+    if (!bill) {
+      return res.status(404).json({ message: 'Bill record not found' });
+    }
+
+    let removedVal = 0;
+
+    if (itemIndex !== undefined && itemIndex !== null && itemIndex !== '' && parseInt(itemIndex) >= 0 && bill.items && bill.items[parseInt(itemIndex)]) {
+      const idx = parseInt(itemIndex);
+      const targetItem = bill.items[idx];
+      removedVal = targetItem.total || 0;
+      const baseSub = Math.max(0, (targetItem.price || 0) - (targetItem.discountAmount || 0)) * (targetItem.quantity || 1);
+      const gstVal = baseSub * ((targetItem.gstPercentage || 0) / 100);
+
+      bill.items.splice(idx, 1);
+      bill.subtotal = Math.max(0, Number(((bill.subtotal || 0) - baseSub).toFixed(2)));
+      bill.gstAmount = Math.max(0, Number(((bill.gstAmount || 0) - gstVal).toFixed(2)));
+      bill.grandTotal = Math.max(0, Number(((bill.grandTotal || 0) - removedVal).toFixed(2)));
+      bill.dueAmount = Math.max(0, Number(((bill.dueAmount || 0) - removedVal).toFixed(2)));
+    } else if (removeAmount && parseFloat(removeAmount) > 0) {
+      removedVal = parseFloat(removeAmount);
+      bill.grandTotal = Math.max(0, Number(((bill.grandTotal || 0) - removedVal).toFixed(2)));
+      bill.dueAmount = Math.max(0, Number(((bill.dueAmount || 0) - removedVal).toFixed(2)));
+    } else {
+      return res.status(400).json({ message: 'Please specify an item index to remove or valid waiver amount' });
+    }
+
+    if (bill.dueAmount <= 0) {
+      bill.paymentStatus = 'Paid';
+    } else if (bill.amountPaid > 0) {
+      bill.paymentStatus = 'Partially Paid';
+    } else {
+      bill.paymentStatus = 'Unpaid';
+    }
+
+    bill.auditTrail = bill.auditTrail || [];
+    bill.auditTrail.push({
+      action: 'Due Amount Removed / Waived',
+      performedBy: req.user._id,
+      performedByName: req.user.username || req.user.doctorName || 'Staff',
+      timestamp: new Date(),
+      remarks: `Removed ₹${removedVal} from due balance (${remarks || 'No remarks'}). Remaining Due: ₹${bill.dueAmount}`
+    });
+
+    await bill.save();
+
+    res.json({
+      message: 'Due amount updated successfully',
+      bill
+    });
+  } catch (error) {
+    console.error('Remove Due Item Error:', error);
+    res.status(500).json({ message: error.message || 'Server error' });
+  }
+};
+
 module.exports = {
   generateBillItems, createBill, updateBill,
   getPatientBills, getBillById, getAllBills,
   searchPatient, getEligiblePatients,
   createAdvance, getPatientAdvances, cancelBill, getDashboardStats,
   getDiscountRequests, approveDiscountRequest, rejectDiscountRequest,
-  getPatientDues, getDuesList, recordDuePayment
+  getPatientDues, getDuesList, recordDuePayment, addDueItem, removeDueItem
 };

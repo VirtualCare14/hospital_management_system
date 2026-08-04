@@ -101,10 +101,14 @@ const PrescriptionPage = () => {
         }
 
         if (prescriptionRes.status === 'fulfilled' && prescriptionRes.value.data) {
-          const prevRx = prescriptionRes.value.data;
+          const rawRx = prescriptionRes.value.data;
+          const rxList = Array.isArray(rawRx) ? rawRx : (rawRx ? [rawRx] : []);
+          setAllPrescriptions(rxList);
+
+          const prevRx = rxList.find(p => Array.isArray(p.medicines) && p.medicines.length > 0) || rxList[0] || null;
           setPreviousPrescription(prevRx);
 
-          if (addMoreMode && prevRx.medicines && prevRx.medicines.length > 0) {
+          if (addMoreMode && prevRx && prevRx.medicines && prevRx.medicines.length > 0) {
             const formatted = prevRx.medicines.map(m => ({
               medicine: m.medicine || '',
               dosageForm: m.dosageForm || 'Tablet',
@@ -290,12 +294,22 @@ const PrescriptionPage = () => {
   };
 
   const handleCopyPreviousMedicines = (rxMeds) => {
-    if (!rxMeds || rxMeds.length === 0) {
+    let medsToCopy = rxMeds;
+    if (!medsToCopy || !Array.isArray(medsToCopy) || medsToCopy.length === 0) {
+      if (previousPrescription && Array.isArray(previousPrescription.medicines) && previousPrescription.medicines.length > 0) {
+        medsToCopy = previousPrescription.medicines;
+      } else if (allPrescriptions && allPrescriptions.length > 0) {
+        const found = allPrescriptions.find(p => Array.isArray(p.medicines) && p.medicines.length > 0);
+        if (found) medsToCopy = found.medicines;
+      }
+    }
+
+    if (!medsToCopy || medsToCopy.length === 0) {
       toast.error("No previous medicines found to copy");
       return;
     }
-    const formatted = rxMeds.map(m => ({
-      medicine: m.medicine || '',
+    const formatted = medsToCopy.map(m => ({
+      medicine: m.medicine || m.name || m.drugName || '',
       dosageForm: m.dosageForm || 'Tablet',
       strength: m.strength || '',
       dose: m.dose || '1',

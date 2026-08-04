@@ -6,7 +6,8 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { 
   FlaskConical, Plus, Save, Send, Scissors, X, ShieldAlert, Stethoscope,
-  History, Activity, ChevronDown, ChevronUp, FileText, Pill, Printer, Download, Eye, Copy, Clock, Trash2
+  History, Activity, ChevronDown, ChevronUp, FileText, Pill, Printer, Download, Eye, Copy, Clock, Trash2,
+  PanelRightClose, PanelRightOpen
 } from 'lucide-react';
 import client from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -53,7 +54,9 @@ const ConsultationPage = () => {
   const [visitId, setVisitId] = useState(null);
   const [previousConsultation, setPreviousConsultation] = useState(null);
   const [latestPastPrescription, setLatestPastPrescription] = useState(null);
+  const [pastPrescriptions, setPastPrescriptions] = useState([]);
   const [showHistory, setShowHistory] = useState(true);
+  const [showRightPanel, setShowRightPanel] = useState(true);
   const [subServices, setSubServices] = useState([]);
   const [showSameDayModal, setShowSameDayModal] = useState(false);
   const [sdCareType, setSdCareType] = useState('');
@@ -166,7 +169,12 @@ const ConsultationPage = () => {
         }
 
         if (prescriptionRes.status === 'fulfilled' && prescriptionRes.value.data) {
-          setLatestPastPrescription(prescriptionRes.value.data);
+          const rawPx = prescriptionRes.value.data;
+          const pxList = Array.isArray(rawPx) ? rawPx : (rawPx ? [rawPx] : []);
+          setPastPrescriptions(pxList);
+
+          const rxWithMeds = pxList.find(p => Array.isArray(p.medicines) && p.medicines.length > 0) || pxList[0] || null;
+          setLatestPastPrescription(rxWithMeds);
         }
       } catch (error) {
         console.error('Error loading data:', error);
@@ -315,21 +323,43 @@ const ConsultationPage = () => {
   };
 
   const handleContinuePreviousMedicines = () => {
-    const prevMeds = latestPastPrescription?.medicines || previousConsultation?.medicines || previousConsultation?.prescription?.medicines || [];
+    let prevMeds = [];
+
+    // 1. Try from latestPastPrescription (object)
+    if (latestPastPrescription && Array.isArray(latestPastPrescription.medicines) && latestPastPrescription.medicines.length > 0) {
+      prevMeds = latestPastPrescription.medicines;
+    } 
+    // 2. Try from pastPrescriptions list
+    else if (pastPrescriptions && pastPrescriptions.length > 0) {
+      const rxMatch = pastPrescriptions.find(p => Array.isArray(p.medicines) && p.medicines.length > 0);
+      if (rxMatch) {
+        prevMeds = rxMatch.medicines;
+      }
+    }
+
+    // 3. Try from previousConsultation
+    if (!prevMeds || prevMeds.length === 0) {
+      if (previousConsultation?.medicines?.length > 0) {
+        prevMeds = previousConsultation.medicines;
+      } else if (previousConsultation?.prescription?.medicines?.length > 0) {
+        prevMeds = previousConsultation.prescription.medicines;
+      }
+    }
+
     if (!prevMeds || prevMeds.length === 0) {
       toast.error('No previous prescription medicines found for this patient.');
       return;
     }
 
     const formattedMeds = prevMeds.map(m => ({
-      medicine: m.medicine || m.name || '',
+      medicine: m.medicine || m.name || m.drugName || '',
       dosageForm: m.dosageForm || 'Tablet',
       strength: m.strength || '',
-      dose: m.dose !== undefined ? String(m.dose) : '1',
+      dose: m.dose !== undefined && m.dose !== null ? String(m.dose) : '1',
       morning: m.morning !== undefined ? Boolean(m.morning) : true,
       afternoon: m.afternoon !== undefined ? Boolean(m.afternoon) : false,
       night: m.night !== undefined ? Boolean(m.night) : true,
-      duration: m.duration !== undefined ? String(m.duration) : '5',
+      duration: m.duration !== undefined && m.duration !== null ? String(m.duration) : '5',
       remarks: m.remarks || 'After food',
       qty: m.qty || 0
     }));
@@ -455,6 +485,21 @@ const ConsultationPage = () => {
     }
   };
 
+  const addSymptom = () => {
+    const last = symptoms[symptoms.length - 1];
+    if (symptoms.length > 0 && (!last?.symptom || !last.symptom.trim())) {
+      toast.error('Please enter symptom name before adding another row.');
+      return;
+    }
+    setSymptoms([...symptoms, { symptom: '', durationDays: '', durationUnit: 'Days', pastHistory: '', remarks: '' }]);
+  };
+
+  const removeSymptom = (index) => {
+    if (symptoms.length > 1) {
+      setSymptoms(symptoms.filter((_, idx) => idx !== index));
+    }
+  };
+
   const selectTest = (test) => {
     if (!test) return;
     setSelectedTests((current) => current.includes(test) ? current : [...current, test]);
@@ -464,12 +509,18 @@ const ConsultationPage = () => {
   const removeSelectedTest = (test) => {
     setSelectedTests((current) => current.filter((item) => item !== test));
   };
+  const removeTest = removeSelectedTest;
 
   const addTest = () => {
     if (newTest.trim()) {
       setSelectedTests((current) => [...new Set([...current, newTest.trim()])]);
       setNewTest('');
     }
+  };
+
+  const prescriptionData = latestPastPrescription;
+  const handlePrescriptionAction = (action) => {
+    navigate(`/doctor/prescription/${patientId}?action=${action}`);
   };
 
   const onSubmit = async (data) => {
@@ -742,11 +793,24 @@ const ConsultationPage = () => {
         </div>
       )}
 
-      {/* 2-Column Master Layout (85% Left Column, 15% Right Sticky Column) */}
+      {/* Floating Toggle Button when Side Panel is Closed */}
+      {!showRightPanel && (
+        <button
+          type="button"
+          onClick={() => setShowRightPanel(true)}
+          className="fixed top-24 right-4 z-40 btn bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white font-extrabold text-xs py-2.5 px-4 shadow-2xl rounded-full flex items-center gap-2 border border-white/40 cursor-pointer transition-all animate-in fade-in slide-in-from-right-5"
+          title="Open Patient Summary & Vitals Panel"
+        >
+          <PanelRightOpen className="h-4 w-4 text-white" />
+          <span>Open Side Panel</span>
+        </button>
+      )}
+
+      {/* Master Layout (Dynamic 12-Column or 10-Column Width) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         
-        {/* Left Column (85% Width -> lg:col-span-10) */}
-        <fieldset disabled={isReadOnly} className={isReadOnly ? 'lg:col-span-10 space-y-5 border-0 p-0 m-0' : 'lg:col-span-10 space-y-5 border-0 p-0 m-0'}>
+        {/* Left Column (Dynamic: Full 12 Cols if Side Panel Closed, else 10 Cols) */}
+        <fieldset disabled={isReadOnly} className={showRightPanel ? (isReadOnly ? 'lg:col-span-10 space-y-5 border-0 p-0 m-0 transition-all duration-300' : 'lg:col-span-10 space-y-5 border-0 p-0 m-0 transition-all duration-300') : 'lg:col-span-12 space-y-5 border-0 p-0 m-0 transition-all duration-300'}>
 
           {/* Follow-Up Patient Previous History Banner */}
           {previousConsultation && (
@@ -773,12 +837,12 @@ const ConsultationPage = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                   <div className="p-3 bg-white rounded-xl border border-gray-200/70 space-y-1.5">
                     <div className="font-bold text-gray-800 flex items-center gap-1 border-b border-gray-100 pb-1">
-                      <FileText className="h-3.5 w-3.5 text-blue-600" /> Previous Clinical Notes & Symptoms
+                      <FileText className="h-3.5 w-3.5 text-purple-600" /> Previous Clinical Notes
                     </div>
                     {previousConsultation.diagnosisRemark && (
                       <div>
-                        <span className="text-[10px] font-bold text-gray-500 uppercase block">Diagnosis:</span>
-                        <p className="font-semibold text-gray-900">{previousConsultation.diagnosisRemark}</p>
+                        <span className="text-[10px] font-bold text-gray-500 uppercase block mb-0.5">Diagnosis / Remarks:</span>
+                        <p className="text-gray-800 font-semibold bg-gray-50 p-1.5 rounded border border-gray-100">{previousConsultation.diagnosisRemark}</p>
                       </div>
                     )}
                     {previousConsultation.symptoms && previousConsultation.symptoms.length > 0 && (
@@ -877,77 +941,63 @@ const ConsultationPage = () => {
                     )}
                   </div>
 
-                  <div className="col-span-6 lg:col-span-1">
+                  <div className="col-span-12 sm:col-span-4 lg:col-span-2">
                     <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-1">Duration</label>
                     <input 
+                      type="number"
+                      min="1"
                       className="input w-full text-sm font-bold text-gray-900 border-gray-300" 
-                      placeholder="Days" 
-                      type="number" 
+                      placeholder="e.g. 3" 
                       value={item.durationDays} 
-                      onChange={(e) => updateSymptom(index, 'durationDays', e.target.value)} 
+                      onChange={(e) => updateSymptom(index, 'durationDays', e.target.value)}
                     />
                   </div>
 
-                  <div className="col-span-6 lg:col-span-2">
+                  <div className="col-span-12 sm:col-span-4 lg:col-span-2">
                     <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-1">Unit</label>
                     <select 
-                      className="input w-full text-sm font-bold text-gray-900 border-gray-300" 
-                      value={item.durationUnit} 
+                      className="input w-full text-sm font-bold text-gray-900 border-gray-300"
+                      value={item.durationUnit || 'Days'}
                       onChange={(e) => updateSymptom(index, 'durationUnit', e.target.value)}
                     >
-                      {durationUnits.map((unit) => <option key={unit}>{unit}</option>)}
+                      {durationUnits.map(unit => (
+                        <option key={unit} value={unit}>{unit}</option>
+                      ))}
                     </select>
                   </div>
 
                   <div className="col-span-12 lg:col-span-3">
-                    <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-1">Past History with Symptom</label>
+                    <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-1">Past History / Notes</label>
                     <input 
-                      className="input w-full text-sm font-semibold text-gray-900 border-gray-300" 
-                      placeholder="Past History details..." 
-                      value={item.pastHistory} 
+                      className="input w-full text-sm font-bold text-gray-900 border-gray-300" 
+                      placeholder="e.g. Recurrent since 2 months" 
+                      value={item.pastHistory || ''} 
                       onChange={(e) => updateSymptom(index, 'pastHistory', e.target.value)}
                     />
                   </div>
 
-                  <div className="col-span-12 lg:col-span-3">
-                    <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-1">Remarks / Instructions</label>
-                    <input 
-                      className="input w-full text-sm font-semibold text-gray-900 border-gray-300" 
-                      placeholder="Remarks..." 
-                      value={item.remarks} 
-                      onChange={(e) => updateSymptom(index, 'remarks', e.target.value)}
-                    />
+                  <div className="col-span-12 sm:col-span-4 lg:col-span-2 flex items-end">
+                    {symptoms.length > 1 && (
+                      <button 
+                        type="button" 
+                        className="btn-secondary w-full text-red-600 hover:text-red-700 hover:bg-red-50 text-xs font-bold py-2.5 flex items-center justify-center gap-1 cursor-pointer"
+                        onClick={() => removeSymptom(index)}
+                      >
+                        <Trash2 className="h-4 w-4" /> Remove
+                      </button>
+                    )}
                   </div>
-                </div>
-
-                <div className="flex justify-end gap-2 pt-1">
-                  {index === symptoms.length - 1 && (
-                    <button 
-                      type="button" 
-                      className="text-xs sm:text-sm font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 cursor-pointer" 
-                      onClick={() => {
-                        if (!item.symptom || !item.symptom.trim()) {
-                          toast.error('Please enter symptom name before adding another row.');
-                          return;
-                        }
-                        setSymptoms([...symptoms, { symptom: '', durationDays: '', durationUnit: 'Days', pastHistory: '', remarks: '' }]);
-                      }}
-                    >
-                      <Plus className="h-4 w-4" /> Add Symptom Row
-                    </button>
-                  )}
-                  {symptoms.length > 1 && (
-                    <button 
-                      type="button" 
-                      className="text-xs sm:text-sm font-bold text-red-600 hover:text-red-700 cursor-pointer" 
-                      onClick={() => setSymptoms(symptoms.filter((_, idx) => idx !== index))}
-                    >
-                      Remove
-                    </button>
-                  )}
                 </div>
               </div>
             ))}
+
+            <button 
+              type="button" 
+              className="btn-secondary text-xs font-extrabold py-2 px-3 flex items-center gap-1 text-orange-700 bg-orange-50 hover:bg-orange-100 border-orange-200 cursor-pointer"
+              onClick={addSymptom}
+            >
+              <Plus className="h-4 w-4 text-orange-600" /> Add Another Symptom
+            </button>
 
             <div className="border-t border-gray-100 pt-4 mt-2">
               <label className="text-xs sm:text-sm font-extrabold text-gray-800 mb-1 block">General Past History</label>
@@ -996,89 +1046,43 @@ const ConsultationPage = () => {
                   )}
                 </div>
 
-                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
-                  {selectedTests.map((test) => (
-                    <span key={test} className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs sm:text-sm font-bold text-orange-800">
-                      {test}
-                      <button type="button" onClick={() => removeSelectedTest(test)} className="h-4 w-4 rounded-full bg-orange-200 text-orange-800 hover:bg-orange-300 inline-flex items-center justify-center font-black text-xs cursor-pointer">
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <input className="input w-full text-sm font-bold text-gray-900 border-gray-300" placeholder="Add custom test..." value={newTest} onChange={(e) => setNewTest(e.target.value)} />
-                <button type="button" className="btn-secondary text-sm px-4 py-2 font-bold" onClick={addTest}>
-                  + Add
-                </button>
+                {selectedTests.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {selectedTests.map((t) => (
+                      <span key={t} className="bg-orange-100 text-orange-950 px-2.5 py-1 rounded-lg text-xs font-extrabold flex items-center gap-1.5 border border-orange-200">
+                        {t}
+                        <button type="button" onClick={() => removeTest(t)} className="text-orange-600 hover:text-orange-900 cursor-pointer">
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </section>
 
-            {/* Diagnosis / Remarks for Patient Box */}
+            {/* Diagnosis / Remarks for Patient */}
             <section className="card p-5 bg-white border border-gray-200/80 shadow-xs space-y-3 flex flex-col justify-between">
-              <div>
-                <h2 className="text-lg font-black text-gray-900 border-b border-gray-100 pb-2.5 flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-orange-600" />
-                  <span>Diagnosis / Remarks for Patient</span>
+              <div className="space-y-3">
+                <h2 className="text-lg font-black text-gray-900 border-b border-gray-100 pb-2.5">
+                  Diagnosis / Remarks
                 </h2>
-                <div className="mt-3">
-                  <label className="text-xs sm:text-sm font-extrabold text-gray-800 mb-1.5 block">Clinical Diagnosis & Patient Remarks</label>
-                  <textarea 
-                    className="input w-full text-sm font-bold text-gray-900 border border-gray-300 h-28 p-3 resize-y rounded-xl" 
-                    placeholder="Type clinical diagnosis, doctor's remarks, or special patient notes..." 
-                    value={diagnosisRemark}
-                    onChange={(e) => setDiagnosisRemark(e.target.value)}
-                  />
-                </div>
+                <textarea
+                  className="input w-full text-sm font-bold text-gray-900 border-gray-300 h-28 resize-none"
+                  placeholder="Enter diagnosis or doctor notes for patient..."
+                  value={diagnosisRemark}
+                  onChange={(e) => setDiagnosisRemark(e.target.value)}
+                />
               </div>
             </section>
           </div>
 
-          {/* Prescription Medicines Section */}
-          <section className="card p-5 bg-white border border-orange-200/80 shadow-xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-orange-100 pb-3">
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 bg-orange-100/80 rounded-lg text-orange-700">
-                  <Pill className="h-4 w-4" />
-                </div>
-                <h2 className="text-lg font-black text-gray-900">
-                  Prescription Medicines (Digital Rx)
-                </h2>
-              </div>
-
-              <div className="flex items-center gap-3 flex-wrap">
-                {!isReadOnly && (latestPastPrescription?.medicines?.length > 0 || previousConsultation) && (
-                  <button
-                    type="button"
-                    onClick={handleContinuePreviousMedicines}
-                    className="bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs py-1.5 px-3 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs transition-all"
-                    title="Automatically pre-fill medicines from previous prescription"
-                  >
-                    <Copy className="h-3.5 w-3.5" /> Continue Previous Medicines
-                  </button>
-                )}
-
-                <div className="flex items-center gap-1.5">
-                  <label className="text-xs sm:text-sm font-extrabold text-gray-800">Language:</label>
-                  <select 
-                    className="input text-sm font-bold text-gray-900 py-1.5 px-2 cursor-pointer border-gray-300"
-                    value={typeof language === 'object' ? language.value : language}
-                    onChange={(e) => setLanguage(e.target.value)}
-                  >
-                    {languages.map((lang) => {
-                      const val = typeof lang === 'object' ? lang.value : lang;
-                      const lbl = typeof lang === 'object' ? (lang.label || lang.value) : lang;
-                      return (
-                        <option key={val} value={val}>
-                          {lbl}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
-              </div>
+          {/* Section: Prescription Medicines */}
+          <section className="card p-5 bg-white border border-gray-200/80 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                <Pill className="h-5 w-5 text-orange-600" /> Rx Medicines
+              </h2>
             </div>
 
             {/* Medicines List - Single Horizontal Flex Row */}
@@ -1404,138 +1408,160 @@ const ConsultationPage = () => {
 
         </fieldset>
 
-        {/* Right Column (15% Width -> lg:col-span-2 Sticky Sidebar Panel) */}
-        <div className="lg:col-span-2 space-y-3.5 lg:sticky lg:top-4">
-          
-          {/* Card 0: Patient Info & Full Clinical Track */}
-          <div className="card p-3 bg-gradient-to-b from-orange-50/90 via-white to-orange-50/50 border border-orange-200/80 shadow-xs space-y-2">
-            <div className="flex items-center justify-between border-b border-orange-100 pb-1">
-              <span className="text-[10px] font-extrabold text-orange-600 uppercase tracking-wider">{patient.uhid}</span>
-              {patient.registeredBy && (
-                <span className="text-[10px] font-bold text-gray-500">Reg: <span className="capitalize text-gray-800">{patient.registeredBy}</span></span>
-              )}
-            </div>
+        {/* Right Column (Sticky Sidebar Panel) */}
+        {showRightPanel && (
+          <div className="lg:col-span-2 space-y-3.5 lg:sticky lg:top-4 transition-all duration-300 animate-in fade-in slide-in-from-right-4">
             
-            <div>
-              <h2 className="text-base font-black text-gray-900 leading-tight">{patient.patientName}</h2>
-              <p className="text-[11px] font-semibold text-gray-600 mt-0.5">
-                {patient.gender} • {patient.mobile}
-              </p>
-              <p className="text-[10px] font-bold text-orange-700 mt-0.5">
-                {formatDate(patient.appointmentDate)} ({patient.slot})
-              </p>
-              {previousConsultation && (
-                <span className="mt-1 bg-purple-100 text-purple-800 border border-purple-300 text-[9px] font-extrabold px-1.5 py-0.5 rounded-full inline-flex items-center gap-1">
-                  <History className="h-3 w-3" /> Follow-up Patient
-                </span>
-              )}
-            </div>
+            {/* Card 0: Patient Info & Full Clinical Track */}
+            <div className="card p-3 bg-gradient-to-b from-orange-50/90 via-white to-orange-50/50 border border-orange-200/80 shadow-xs space-y-2">
+              <div className="flex items-center justify-between border-b border-orange-100 pb-1">
+                <span className="text-[10px] font-extrabold text-orange-600 uppercase tracking-wider">{patient.uhid}</span>
+                <div className="flex items-center gap-1.5">
+                  {patient.registeredBy && (
+                    <span className="text-[10px] font-bold text-gray-500">Reg: <span className="capitalize text-gray-800">{patient.registeredBy}</span></span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowRightPanel(false)}
+                    className="p-0.5 text-gray-400 hover:text-orange-600 hover:bg-orange-100/60 rounded transition-colors cursor-pointer"
+                    title="Close Side Panel (Full Wide View)"
+                  >
+                    <PanelRightClose className="h-4 w-4 text-orange-600" />
+                  </button>
+                </div>
+              </div>
+              
+              <div>
+                <h2 className="text-base font-black text-gray-900 leading-tight">{patient.patientName}</h2>
+                <p className="text-[11px] font-semibold text-gray-600 mt-0.5">
+                  {patient.gender} • {patient.mobile}
+                </p>
+                <p className="text-[10px] font-bold text-orange-700 mt-0.5">
+                  {formatDate(patient.appointmentDate)} ({patient.slot})
+                </p>
+                {previousConsultation && (
+                  <span className="mt-1 bg-purple-100 text-purple-800 border border-purple-300 text-[9px] font-extrabold px-1.5 py-0.5 rounded-full inline-flex items-center gap-1">
+                    <History className="h-3 w-3" /> Follow-up Patient
+                  </span>
+                )}
+              </div>
 
-            <div className="pt-1.5 border-t border-orange-100">
-              <Link
-                to={`/doctor/consultation-track/${patientId}`}
-                className="w-full btn-secondary bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300 font-bold text-xs py-1.5 px-2 flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs rounded-xl"
-              >
-                <Activity className="h-3.5 w-3.5 text-emerald-600" />
-                Full Clinical Track
-              </Link>
-            </div>
-          </div>
-
-          {/* Card 1: Vitals Summary with Edit Button */}
-          <div className="card p-3.5 bg-white border border-gray-200/80 shadow-xs space-y-2.5">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-              <span className="text-xs sm:text-sm font-black text-gray-900 uppercase tracking-wider flex items-center gap-1.5">
-                <Activity className="h-4 w-4 text-orange-600" /> Vitals
-              </span>
-              {!isReadOnly && (
-                <button
-                  type="button"
-                  className="text-xs font-extrabold text-orange-600 hover:text-orange-800 bg-orange-50 hover:bg-orange-100 px-2.5 py-1 rounded-lg border border-orange-200 cursor-pointer"
-                  onClick={() => setShowEditVitalsModal(true)}
+              <div className="pt-1.5 border-t border-orange-100">
+                <Link
+                  to={`/doctor/consultation-track/${patientId}`}
+                  className="w-full btn-secondary bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300 font-bold text-xs py-1.5 px-2 flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs rounded-xl"
                 >
-                  Edit
-                </button>
+                  <Activity className="h-3.5 w-3.5 text-emerald-600" />
+                  Full Clinical Track
+                </Link>
+              </div>
+            </div>
+
+            {/* Card 1: Vitals Summary with Edit Button */}
+            <div className="card p-3.5 bg-white border border-gray-200/80 shadow-xs space-y-2.5">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+                <span className="text-xs sm:text-sm font-black text-gray-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <Activity className="h-4 w-4 text-orange-600" /> Vitals
+                </span>
+                {!isReadOnly && (
+                  <button
+                    type="button"
+                    className="text-xs font-extrabold text-orange-600 hover:text-orange-800 bg-orange-50 hover:bg-orange-100 px-2.5 py-1 rounded-lg border border-orange-200 cursor-pointer"
+                    onClick={() => setShowEditVitalsModal(true)}
+                  >
+                    Edit
+                  </button>
+                )}
+              </div>
+              <div className="space-y-1.5 text-xs sm:text-sm font-extrabold text-gray-800">
+                <div className="flex justify-between border-b border-gray-50 pb-1">
+                  <span className="text-gray-600">Weight:</span>
+                  <span className="text-sm sm:text-base font-black text-gray-950">{watch('weight') || patient?.demographics?.weight || previousConsultation?.vitals?.weight || '-'} kg</span>
+                </div>
+                <div className="flex justify-between border-b border-gray-50 pb-1">
+                  <span className="text-gray-600">Height:</span>
+                  <span className="text-sm sm:text-base font-black text-gray-950">{watch('height') || patient?.demographics?.height || previousConsultation?.vitals?.height || '-'} cm</span>
+                </div>
+                <div className="flex justify-between border-b border-gray-50 pb-1">
+                  <span className="text-gray-600">BP:</span>
+                  <span className="text-sm sm:text-base font-black text-gray-950">{watch('bloodPressure') || patient?.demographics?.bloodPressure || previousConsultation?.vitals?.bloodPressure || '-'}</span>
+                </div>
+                <div className="flex justify-between border-b border-gray-50 pb-1">
+                  <span className="text-gray-600">Temp:</span>
+                  <span className="text-sm sm:text-base font-black text-gray-950">{watch('temperature') || patient?.demographics?.temperature || previousConsultation?.vitals?.temperature || '-'} °C</span>
+                </div>
+                <div className="flex justify-between border-b border-gray-50 pb-1">
+                  <span className="text-gray-600">BMI:</span>
+                  <span className="text-sm sm:text-base font-black text-gray-950">{watch('bmi') || patient?.demographics?.bmi || previousConsultation?.vitals?.bmi || '-'}</span>
+                </div>
+                <div className="flex justify-between pt-0.5">
+                  <span className="text-gray-600">Allergies:</span>
+                  <span className="text-xs sm:text-sm font-black text-red-600 truncate max-w-[90px]">{watch('drugAllergy') || patient?.demographics?.drugAllergy || previousConsultation?.vitals?.drugAllergy || 'None'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 2: Symptoms Summary */}
+            <div className="card p-3.5 bg-white border border-gray-200/80 shadow-xs space-y-2.5">
+              <div className="border-b border-gray-100 pb-2">
+                <span className="text-xs sm:text-sm font-black text-gray-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <Stethoscope className="h-4 w-4 text-orange-600" /> Symptoms
+                </span>
+              </div>
+              {symptoms.filter(s => s.symptom && s.symptom.trim()).length > 0 ? (
+                <div className="space-y-1.5">
+                  {symptoms.filter(s => s.symptom && s.symptom.trim()).map((s, idx) => (
+                    <div key={idx} className="p-2 bg-orange-50/90 border border-orange-200/80 rounded-lg text-xs sm:text-sm font-black text-orange-950 flex items-center justify-between gap-1">
+                      <span className="truncate max-w-[100px]">{s.symptom}</span>
+                      {s.durationDays && <span className="text-xs bg-orange-200 text-orange-950 px-1.5 py-0.5 rounded-md font-black">{s.durationDays}d</span>}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs sm:text-sm text-gray-500 font-semibold italic">No symptoms added</p>
               )}
             </div>
-            <div className="space-y-1.5 text-xs sm:text-sm font-extrabold text-gray-800">
-              <div className="flex justify-between border-b border-gray-50 pb-1">
-                <span className="text-gray-600">Weight:</span>
-                <span className="text-sm sm:text-base font-black text-gray-950">{watch('weight') || patient?.demographics?.weight || previousConsultation?.vitals?.weight || '-'} kg</span>
-              </div>
-              <div className="flex justify-between border-b border-gray-50 pb-1">
-                <span className="text-gray-600">Height:</span>
-                <span className="text-sm sm:text-base font-black text-gray-950">{watch('height') || patient?.demographics?.height || previousConsultation?.vitals?.height || '-'} cm</span>
-              </div>
-              <div className="flex justify-between border-b border-gray-50 pb-1">
-                <span className="text-gray-600">BP:</span>
-                <span className="text-sm sm:text-base font-black text-gray-950">{watch('bloodPressure') || patient?.demographics?.bloodPressure || previousConsultation?.vitals?.bloodPressure || '-'}</span>
-              </div>
-              <div className="flex justify-between border-b border-gray-50 pb-1">
-                <span className="text-gray-600">Temp:</span>
-                <span className="text-sm sm:text-base font-black text-gray-950">{watch('temperature') || patient?.demographics?.temperature || previousConsultation?.vitals?.temperature || '-'} °C</span>
-              </div>
-              <div className="flex justify-between border-b border-gray-50 pb-1">
-                <span className="text-gray-600">BMI:</span>
-                <span className="text-sm sm:text-base font-black text-gray-950">{watch('bmi') || patient?.demographics?.bmi || previousConsultation?.vitals?.bmi || '-'}</span>
-              </div>
-              <div className="flex justify-between pt-0.5">
-                <span className="text-gray-600">Allergies:</span>
-                <span className="text-xs sm:text-sm font-black text-red-600 truncate max-w-[90px]">{watch('drugAllergy') || patient?.demographics?.drugAllergy || previousConsultation?.vitals?.drugAllergy || 'None'}</span>
-              </div>
-            </div>
-          </div>
 
-          {/* Card 2: Symptoms Summary */}
-          <div className="card p-3.5 bg-white border border-gray-200/80 shadow-xs space-y-2.5">
-            <div className="border-b border-gray-100 pb-2">
-              <span className="text-xs sm:text-sm font-black text-gray-900 uppercase tracking-wider flex items-center gap-1.5">
-                <Stethoscope className="h-4 w-4 text-orange-600" /> Symptoms
-              </span>
-            </div>
-            {symptoms.filter(s => s.symptom && s.symptom.trim()).length > 0 ? (
-              <div className="space-y-1.5">
-                {symptoms.filter(s => s.symptom && s.symptom.trim()).map((s, idx) => (
-                  <div key={idx} className="p-2 bg-orange-50/90 border border-orange-200/80 rounded-lg text-xs sm:text-sm font-black text-orange-950 flex items-center justify-between gap-1">
-                    <span className="truncate max-w-[100px]">{s.symptom}</span>
-                    {s.durationDays && <span className="text-xs bg-orange-200 text-orange-950 px-1.5 py-0.5 rounded-md font-black">{s.durationDays}d</span>}
-                  </div>
-                ))}
+            {/* Card 3: Preview & Actions */}
+            <div className="card p-3 bg-gradient-to-b from-orange-50/80 via-white to-orange-50/40 border border-orange-200 shadow-xs space-y-2">
+              <div className="border-b border-orange-100 pb-1">
+                <span className="text-[11px] font-extrabold text-gray-900 uppercase tracking-wider flex items-center gap-1">
+                  <Eye className="h-3.5 w-3.5 text-orange-600" /> Actions
+                </span>
               </div>
-            ) : (
-              <p className="text-xs sm:text-sm text-gray-500 font-semibold italic">No symptoms added</p>
-            )}
-          </div>
 
-          {/* Card 3: Preview & Actions */}
-          <div className="card p-3 bg-gradient-to-b from-orange-50/80 via-white to-orange-50/40 border border-orange-200 shadow-xs space-y-2">
-            <div className="border-b border-orange-100 pb-1">
-              <span className="text-[11px] font-extrabold text-gray-900 uppercase tracking-wider flex items-center gap-1">
-                <Eye className="h-3.5 w-3.5 text-orange-600" /> Actions
-              </span>
+              <button
+                type="button"
+                onClick={() => setShowPreviewModal(true)}
+                className="w-full btn-secondary bg-orange-500 hover:bg-orange-600 text-white border-orange-600 font-extrabold text-xs py-2 px-2 flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs rounded-xl"
+              >
+                <Eye className="h-4 w-4" />
+                View RX
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowEditPrintModal(true)}
+                className="w-full btn-secondary bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300 font-bold text-xs py-2 px-2 flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs rounded-xl"
+                title="Configure print layout & sections for this prescription"
+              >
+                <Printer className="h-4 w-4 text-slate-600" />
+                Edit Print
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowRightPanel(false)}
+                className="w-full btn-secondary bg-orange-50 hover:bg-orange-100 text-orange-700 border-orange-200 font-bold text-xs py-1.5 px-2 flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs rounded-xl mt-1"
+                title="Close side panel and expand main workspace to full width"
+              >
+                <PanelRightClose className="h-3.5 w-3.5 text-orange-600" />
+                Close Side Panel
+              </button>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setShowPreviewModal(true)}
-              className="w-full btn-secondary bg-orange-500 hover:bg-orange-600 text-white border-orange-600 font-extrabold text-xs py-2 px-2 flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs rounded-xl"
-            >
-              <Eye className="h-4 w-4" />
-              View RX
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setShowEditPrintModal(true)}
-              className="w-full btn-secondary bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300 font-bold text-xs py-2 px-2 flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs rounded-xl"
-              title="Configure print layout & sections for this prescription"
-            >
-              <Printer className="h-4 w-4 text-slate-600" />
-              Edit Print
-            </button>
           </div>
-
-        </div>
+        )}
 
       </div>
 
