@@ -102,26 +102,42 @@ const createPatient = async (req, res) => {
       paymentMode: reqPaymentMode
     } = req.body;
 
-    if (!patientName || !mobile || !address || !dob || !gender || !department || !doctorId || !appointmentDate || !slot) {
-      return res.status(400).json({ message: 'All required registration fields must be provided' });
+    const isEmergency = req.body.isEmergency || (!department && !slot);
+
+    if (!patientName || !mobile || !dob || !gender) {
+      return res.status(400).json({ message: 'Patient Name, Mobile, Date of Birth, and Gender are required.' });
     }
 
-    // Verify doctor exists and has role doctor or nursing
-    const doctor = await User.findOne(tenantQuery(req, { _id: doctorId, role: { $in: ['doctor', 'nursing'] } }));
+    if (!isEmergency && (!department || !doctorId || !appointmentDate || !slot)) {
+      return res.status(400).json({ message: 'All required registration fields must be provided for OPD appointments' });
+    }
+
+    const finalDepartment = department || 'Emergency';
+    const finalAppointmentDate = appointmentDate || new Date().toISOString().split('T')[0];
+    const finalSlot = slot || 'Emergency';
+
+    // Verify doctor exists if doctorId is provided, or fallback to authenticated user
+    let doctor = null;
+    if (doctorId) {
+      doctor = await User.findOne(tenantQuery(req, { _id: doctorId }));
+    }
     if (!doctor) {
-      return res.status(400).json({ message: 'Selected doctor is invalid' });
+      doctor = await User.findOne(tenantQuery(req, { _id: req.user._id }));
     }
+    const docIdForAppt = doctor?._id || req.user._id;
 
-    // Check if slot is already booked for this doctor and date
-    const slotBooked = await Visit.findOne({
-      doctorId,
-      appointmentDate,
-      slot,
-      ...(req.user.hospitalId ? { hospitalId: req.user.hospitalId } : {})
-    });
+    // Check if slot is already booked for non-emergency registration
+    if (!isEmergency && doctorId && finalSlot !== 'Emergency') {
+      const slotBooked = await Visit.findOne({
+        doctorId,
+        appointmentDate: finalAppointmentDate,
+        slot: finalSlot,
+        ...(req.user.hospitalId ? { hospitalId: req.user.hospitalId } : {})
+      });
 
-    if (slotBooked) {
-      return res.status(400).json({ message: 'This slot is already booked for the selected doctor and date.' });
+      if (slotBooked) {
+        return res.status(400).json({ message: 'This slot is already booked for the selected doctor and date.' });
+      }
     }
 
     // Check if patient with this Aadhaar or Mobile number already exists
@@ -182,11 +198,11 @@ const createPatient = async (req, res) => {
 
     // Generate appointment number (per doctor + department + date)
     const { appointmentNumber, appointmentDateSeq } = await generateAppointmentNumber(
-      req.user.hospitalId, doctorId, department, appointmentDate
+      req.user.hospitalId, docIdForAppt, finalDepartment, finalAppointmentDate
     );
 
     // Determine visit type
-    let finalVisitType = visitType || 'OPD';
+    let finalVisitType = isEmergency ? 'Emergency' : (visitType || 'OPD');
     if (department && department.toLowerCase().trim() === 'same day care') {
       finalVisitType = 'Same Day Treatment';
     }
@@ -219,14 +235,14 @@ const createPatient = async (req, res) => {
       registrationNumber,
       registrationDate: new Date(),
       visitType: finalVisitType,
-      department,
-      doctorId,
-      appointmentDate,
-      slot,
+      department: finalDepartment,
+      doctorId: docIdForAppt,
+      appointmentDate: finalAppointmentDate,
+      slot: finalSlot,
       appointmentNumber,
       appointmentDateSeq,
-      appointmentDept: department,
-      appointmentDoctorId: doctorId,
+      appointmentDept: finalDepartment,
+      appointmentDoctorId: docIdForAppt,
       visitNumber,
       demographics: {
         weight: weight || undefined,
@@ -352,7 +368,7 @@ const createPatient = async (req, res) => {
     });
   } catch (error) {
     console.error('Create Patient Error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 };
 

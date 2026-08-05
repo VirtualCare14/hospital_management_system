@@ -34,6 +34,10 @@ const consultationSchema = new mongoose.Schema({
   diagnosisRemark: {
     type: String
   },
+  patientAdvice: {
+    type: String,
+    default: ''
+  },
   vitals: {
     weight: { type: Number },
     height: { type: Number },

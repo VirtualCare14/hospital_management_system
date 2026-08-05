@@ -13,7 +13,9 @@ const EditPrintRxSettings = () => {
       printLabTests: true,
       printSymptomHistory: true,
       printSymptomRemarks: true,
-      printGeneralPastHistory: true
+      printGeneralPastHistory: true,
+      printDiagnosisRemarks: true,
+      printPatientAdvice: true
     };
   });
 
@@ -45,6 +47,7 @@ const EditPrintRxSettings = () => {
     doctorName: 'Doctor',
     language: 'English',
     diagnosisRemark: 'Acute Viral Fever with mild throat infection.',
+    patientAdvice: 'Drink plenty of warm fluids, rest adequately, and avoid cold food.',
     tests: ['Complete Blood Count (CBC)', 'Dengue NS1 Antigen', 'Widal Test'],
     pastHistory: 'History of seasonal allergic rhinitis. No diabetes or hypertension.',
     symptoms: [
@@ -99,9 +102,6 @@ const EditPrintRxSettings = () => {
               </div>
               <div className="flex items-center gap-2 bg-white/80 p-2.5 rounded-lg border border-orange-200 text-xs font-extrabold text-orange-950">
                 <CheckCircle2 className="h-4 w-4 text-emerald-600" /> Symptoms Name & Duration
-              </div>
-              <div className="flex items-center gap-2 bg-white/80 p-2.5 rounded-lg border border-orange-200 text-xs font-extrabold text-orange-950">
-                <CheckCircle2 className="h-4 w-4 text-emerald-600" /> Clinical Diagnosis / Remarks
               </div>
               <div className="flex items-center gap-2 bg-white/80 p-2.5 rounded-lg border border-orange-200 text-xs font-extrabold text-orange-950">
                 <CheckCircle2 className="h-4 w-4 text-emerald-600" /> Prescription Medicines (Digital Rx)
@@ -163,8 +163,28 @@ const EditPrintRxSettings = () => {
                 <span>Include General Past History</span>
                 <input
                   type="checkbox"
-                  checked={printOptions.printGeneralPastHistory}
+                  checked={printOptions.printGeneralPastHistory !== false}
                   onChange={(e) => setPrintOptions({ ...printOptions, printGeneralPastHistory: e.target.checked })}
+                  className="rounded text-orange-600 focus:ring-orange-500 h-5 w-5 cursor-pointer"
+                />
+              </label>
+
+              <label className="flex items-center justify-between cursor-pointer select-none hover:text-orange-600 border-t border-gray-200/80 pt-3">
+                <span>Include Diagnosis & Remarks</span>
+                <input
+                  type="checkbox"
+                  checked={printOptions.printDiagnosisRemarks !== false}
+                  onChange={(e) => setPrintOptions({ ...printOptions, printDiagnosisRemarks: e.target.checked })}
+                  className="rounded text-orange-600 focus:ring-orange-500 h-5 w-5 cursor-pointer"
+                />
+              </label>
+
+              <label className="flex items-center justify-between cursor-pointer select-none hover:text-orange-600 border-t border-gray-200/80 pt-3">
+                <span>Include Advice for Patient</span>
+                <input
+                  type="checkbox"
+                  checked={printOptions.printPatientAdvice !== false}
+                  onChange={(e) => setPrintOptions({ ...printOptions, printPatientAdvice: e.target.checked })}
                   className="rounded text-orange-600 focus:ring-orange-500 h-5 w-5 cursor-pointer"
                 />
               </label>

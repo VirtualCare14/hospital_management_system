@@ -26,7 +26,7 @@ const visitSchema = new mongoose.Schema({
   },
   visitType: {
     type: String,
-    enum: ['OPD', 'IPD', 'Same Day Treatment'],
+    enum: ['OPD', 'IPD', 'Same Day Treatment', 'Emergency'],
     default: 'OPD',
     required: true
   },

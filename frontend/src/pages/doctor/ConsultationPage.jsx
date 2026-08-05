@@ -7,7 +7,7 @@ import jsPDF from 'jspdf';
 import { 
   FlaskConical, Plus, Save, Send, Scissors, X, ShieldAlert, Stethoscope,
   History, Activity, ChevronDown, ChevronUp, FileText, Pill, Printer, Download, Eye, Copy, Clock, Trash2,
-  PanelRightClose, PanelRightOpen
+  PanelRightClose, PanelRightOpen, ClipboardList
 } from 'lucide-react';
 import client from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -49,6 +49,7 @@ const ConsultationPage = () => {
   const [referralSent, setReferralSent] = useState(false);
   const [generalPastHistory, setGeneralPastHistory] = useState('');
   const [diagnosisRemark, setDiagnosisRemark] = useState('');
+  const [patientAdvice, setPatientAdvice] = useState('');
   const [followUpDate, setFollowUpDate] = useState('');
   const [followUpRemarks, setFollowUpRemarks] = useState('');
   const [visitId, setVisitId] = useState(null);
@@ -83,7 +84,9 @@ const ConsultationPage = () => {
       printLabTests: true,
       printSymptomHistory: true,
       printSymptomRemarks: true,
-      printGeneralPastHistory: true
+      printGeneralPastHistory: true,
+      printDiagnosisRemarks: true,
+      printPatientAdvice: true
     };
   });
   const [pharmacyMedicines, setPharmacyMedicines] = useState([]);
@@ -404,7 +407,10 @@ const ConsultationPage = () => {
       medicines: validMeds,
       vitals: mergedVitals,
       symptoms: mergedSymptoms,
-      diagnosisRemark: diagnosisRemark || previousConsultation?.diagnosisRemark || '',
+      diagnosisRemark: [
+        diagnosisRemark ? `Diagnosis/Remark: ${diagnosisRemark}` : null,
+        patientAdvice ? `Advice: ${patientAdvice}` : null
+      ].filter(Boolean).join('\n\n') || (diagnosisRemark || patientAdvice || previousConsultation?.diagnosisRemark || ''),
       tests: [...(previousConsultation?.tests || []), ...selectedTests],
       pastHistory: generalPastHistory,
       followUpDate: followUpDate || previousConsultation?.followUpDate,
@@ -999,24 +1005,50 @@ const ConsultationPage = () => {
               <Plus className="h-4 w-4 text-orange-600" /> Add Another Symptom
             </button>
 
-            <div className="border-t border-gray-100 pt-4 mt-2">
-              <label className="text-xs sm:text-sm font-extrabold text-gray-800 mb-1 block">General Past History</label>
-              <textarea 
-                className="input w-full text-sm font-semibold text-gray-900 border-gray-300 h-24 resize-none" 
-                placeholder="Overall medical history, allergies, previous illnesses..." 
-                value={generalPastHistory}
-                onChange={(e) => setGeneralPastHistory(e.target.value)}
-              />
-            </div>
           </section>
 
-          {/* Same Row Container: Lab Investigations & Reports AND Diagnosis / Remarks for Patient */}
+          {/* Row 1: General Past History AND Diagnosis / Remark */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* General Past History */}
+            <section className="card p-5 bg-white border border-gray-200/80 shadow-xs space-y-3 flex flex-col justify-between">
+              <div className="space-y-3">
+                <h2 className="text-lg font-black text-gray-900 border-b border-gray-100 pb-2.5 flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-orange-600" /> General Past History
+                </h2>
+                <textarea 
+                  className="input w-full text-sm font-semibold text-gray-900 border-gray-300 h-28 resize-none" 
+                  placeholder="Overall medical history, allergies, previous illnesses..." 
+                  value={generalPastHistory}
+                  onChange={(e) => setGeneralPastHistory(e.target.value)}
+                />
+              </div>
+            </section>
+
+            {/* Diagnosis / Remark */}
+            <section className="card p-5 bg-white border border-gray-200/80 shadow-xs space-y-3 flex flex-col justify-between">
+              <div className="space-y-3">
+                <h2 className="text-lg font-black text-gray-900 border-b border-gray-100 pb-2.5 flex items-center gap-2">
+                  <Stethoscope className="h-5 w-5 text-orange-600" /> Diagnosis / Remark
+                </h2>
+                <textarea
+                  className="input w-full text-sm font-bold text-gray-900 border-gray-300 h-28 resize-none"
+                  placeholder="Enter diagnosis or doctor notes for patient..."
+                  value={diagnosisRemark}
+                  onChange={(e) => setDiagnosisRemark(e.target.value)}
+                />
+              </div>
+            </section>
+          </div>
+
+          {/* Row 2: Lab Investigations & Reports AND Advice for Patient */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {/* Lab Investigations & Reports Box */}
             <section className="card p-5 bg-white border border-gray-200/80 shadow-xs space-y-3 flex flex-col justify-between">
               <div className="space-y-3">
                 <h2 className="text-lg font-black text-gray-900 border-b border-gray-100 pb-2.5 flex items-center justify-between">
-                  <span>Lab Investigations & Reports</span>
+                  <span className="flex items-center gap-2">
+                    <FlaskConical className="h-5 w-5 text-orange-600" /> Lab Investigations & Reports
+                  </span>
                   <label className="flex items-center gap-1.5 text-xs sm:text-sm font-extrabold text-orange-600 cursor-pointer">
                     <input type="checkbox" {...register('sendToLab')} />
                     <FlaskConical className="h-4 w-4" /> Send To Lab
@@ -1061,17 +1093,17 @@ const ConsultationPage = () => {
               </div>
             </section>
 
-            {/* Diagnosis / Remarks for Patient */}
+            {/* Advice for Patient */}
             <section className="card p-5 bg-white border border-gray-200/80 shadow-xs space-y-3 flex flex-col justify-between">
               <div className="space-y-3">
-                <h2 className="text-lg font-black text-gray-900 border-b border-gray-100 pb-2.5">
-                  Diagnosis / Remarks
+                <h2 className="text-lg font-black text-gray-900 border-b border-gray-100 pb-2.5 flex items-center gap-2">
+                  <ClipboardList className="h-5 w-5 text-orange-600" /> Advice for Patient
                 </h2>
                 <textarea
-                  className="input w-full text-sm font-bold text-gray-900 border-gray-300 h-28 resize-none"
-                  placeholder="Enter diagnosis or doctor notes for patient..."
-                  value={diagnosisRemark}
-                  onChange={(e) => setDiagnosisRemark(e.target.value)}
+                  className="input w-full text-sm font-semibold text-gray-900 border-gray-300 h-28 resize-none"
+                  placeholder="Enter advice, dietary guidelines, or special instructions for patient..."
+                  value={patientAdvice}
+                  onChange={(e) => setPatientAdvice(e.target.value)}
                 />
               </div>
             </section>
@@ -1643,8 +1675,28 @@ const ConsultationPage = () => {
                   <span>Include General Past History</span>
                   <input
                     type="checkbox"
-                    checked={printOptions.printGeneralPastHistory}
+                    checked={printOptions.printGeneralPastHistory !== false}
                     onChange={(e) => setPrintOptions({ ...printOptions, printGeneralPastHistory: e.target.checked })}
+                    className="rounded text-orange-600 focus:ring-orange-500 h-4.5 w-4.5 cursor-pointer"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between cursor-pointer select-none hover:text-orange-600 border-t border-gray-200/60 pt-2">
+                  <span>Include Diagnosis & Remarks</span>
+                  <input
+                    type="checkbox"
+                    checked={printOptions.printDiagnosisRemarks !== false}
+                    onChange={(e) => setPrintOptions({ ...printOptions, printDiagnosisRemarks: e.target.checked })}
+                    className="rounded text-orange-600 focus:ring-orange-500 h-4.5 w-4.5 cursor-pointer"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between cursor-pointer select-none hover:text-orange-600 border-t border-gray-200/60 pt-2">
+                  <span>Include Advice for Patient</span>
+                  <input
+                    type="checkbox"
+                    checked={printOptions.printPatientAdvice !== false}
+                    onChange={(e) => setPrintOptions({ ...printOptions, printPatientAdvice: e.target.checked })}
                     className="rounded text-orange-600 focus:ring-orange-500 h-4.5 w-4.5 cursor-pointer"
                   />
                 </label>

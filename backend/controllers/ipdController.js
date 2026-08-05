@@ -81,9 +81,9 @@ const admitPatient = async (req, res) => {
     }
 
     // 3. Verify doctor exists and is active
-    const doctor = await User.findOne(tenantFilter(req, { _id: doctorInCharge, role: 'doctor', isActive: true }));
+    const doctor = await User.findOne(tenantFilter(req, { _id: doctorInCharge, role: { $in: ['doctor', 'nursing', 'admin'] } }));
     if (!doctor) {
-      return res.status(400).json({ message: 'Selected doctor is invalid or inactive' });
+      return res.status(400).json({ message: 'Selected consultant doctor is invalid' });
     }
 
     // Check for pending referral for this patient to auto-populate referredDoctor if not provided

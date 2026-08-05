@@ -102,6 +102,7 @@ const createPrescription = async (req, res) => {
     
     // Get diagnosis remark from consultation if not explicitly provided
     const diagnosisRemark = consultationData?.diagnosisRemark || consultation?.diagnosisRemark || '';
+    const patientAdvice = consultationData?.patientAdvice || consultation?.patientAdvice || '';
 
     const prescription = await Prescription.create({
       patientId,
@@ -111,6 +112,7 @@ const createPrescription = async (req, res) => {
       visitId: visitId,
       medicines,
       diagnosisRemark,
+      patientAdvice,
       language: language || 'English',
       pdfUrl: pdfUrl || '',
       prescriptionDateTime: new Date() // Auto capture system timestamp

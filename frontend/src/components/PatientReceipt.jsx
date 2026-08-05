@@ -402,9 +402,9 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
         <>
           <hr style={{ margin: '14px 0', border: 'none', borderTop: '1px solid #000' }} />
           
-          {prescription.diagnosisRemark && (
+          {prescription.diagnosisRemark && printOptions.printDiagnosisRemarks !== false && (
             <div style={{ marginBottom: '12px' }}>
-              <p style={{ fontWeight: 'bold', margin: '0 0 4px 0', fontSize: '11px' }}>Advice for the patient:</p>
+              <p style={{ fontWeight: 'bold', margin: '0 0 4px 0', fontSize: '11px' }}>Diagnosis & Remarks:</p>
               <p style={{ 
                 margin: '0', 
                 fontSize: '10px',
@@ -412,6 +412,20 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
                 whiteSpace: 'pre-line'
               }}>
                 {translateClinicalText(prescription.diagnosisRemark, activeLang)}
+              </p>
+            </div>
+          )}
+
+          {prescription.patientAdvice && printOptions.printPatientAdvice !== false && (
+            <div style={{ marginBottom: '12px' }}>
+              <p style={{ fontWeight: 'bold', margin: '0 0 4px 0', fontSize: '11px' }}>Advice for the Patient:</p>
+              <p style={{ 
+                margin: '0', 
+                fontSize: '10px',
+                lineHeight: '1.5',
+                whiteSpace: 'pre-line'
+              }}>
+                {translateClinicalText(prescription.patientAdvice, activeLang)}
               </p>
             </div>
           )}

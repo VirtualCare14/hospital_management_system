@@ -41,6 +41,10 @@ const prescriptionSchema = new mongoose.Schema({
   diagnosisRemark: {
     type: String
   },
+  patientAdvice: {
+    type: String,
+    default: ''
+  },
   language: {
     type: String,
     required: true,
