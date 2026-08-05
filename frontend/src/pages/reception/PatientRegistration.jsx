@@ -17,16 +17,16 @@ import { generateTimeSlots, filterSlotsForDate } from '../../utils/timeSlots';
 const Field = ({ label, required = false, icon: Icon, children, className = '', error, hint }) => (
   <div className={`space-y-2 ${className}`}>
     <div className="flex items-center justify-between">
-      <label className="block text-[15px] font-extrabold text-gray-900 tracking-wide">
+      <label className="block text-xs sm:text-sm font-extrabold text-gray-900 tracking-wide">
         {label}
-        {required && <span className="text-red-600 font-black ml-1 text-base">*</span>}
+        {required && <span className="text-red-600 font-black ml-1 text-sm">*</span>}
       </label>
       {hint && <div>{hint}</div>}
     </div>
     <div className="relative flex items-center">
       {Icon && (
-        <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none z-10 flex items-center justify-center">
-          <Icon className="h-4.5 w-4.5 text-gray-500 stroke-[2]" />
+        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none z-10 flex items-center justify-center">
+          <Icon className="h-4 w-4 text-gray-500 stroke-[2]" />
         </div>
       )}
       {children}
@@ -530,7 +530,7 @@ const PatientRegistration = () => {
               {/* Patient Name */}
               <Field label="Patient Name" required icon={User} error={errors.patientName?.message}>
                 <input
-                  className={`input h-11 pl-11 text-base font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 shadow-2xs ${errors.patientName ? 'border-red-500 focus:ring-red-500' : ''}`}
+                  className={`input h-11 pl-9 pr-2 text-xs sm:text-sm font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 shadow-2xs ${errors.patientName ? 'border-red-500 focus:ring-red-500' : ''}`}
                   placeholder="Enter patient full name"
                   {...register('patientName', { required: 'Patient name is required' })}
                 />
@@ -557,7 +557,7 @@ const PatientRegistration = () => {
                 }
               >
                 <input
-                  className={`input h-11 pl-11 pr-10 text-base font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 shadow-2xs ${errors.mobile ? 'border-red-500 focus:ring-red-500' : isMobileValid ? 'border-emerald-500 focus:ring-emerald-500 bg-emerald-50/30' : ''}`}
+                  className={`input h-11 pl-9 pr-10 text-xs sm:text-sm font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 shadow-2xs ${errors.mobile ? 'border-red-500 focus:ring-red-500' : isMobileValid ? 'border-emerald-500 focus:ring-emerald-500 bg-emerald-50/30' : ''}`}
                   placeholder="Enter 10-digit mobile number"
                   maxLength={10}
                   {...register('mobile', {
@@ -597,7 +597,7 @@ const PatientRegistration = () => {
                 }
               >
                 <input
-                  className={`input h-11 pl-11 pr-10 text-base font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 shadow-2xs ${errors.aadhaar ? 'border-red-500 focus:ring-red-500' : isAadhaarValid ? 'border-emerald-500 focus:ring-emerald-500 bg-emerald-50/30' : ''}`}
+                  className={`input h-11 pl-9 pr-10 text-xs sm:text-sm font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 shadow-2xs ${errors.aadhaar ? 'border-red-500 focus:ring-red-500' : isAadhaarValid ? 'border-emerald-500 focus:ring-emerald-500 bg-emerald-50/30' : ''}`}
                   placeholder="Enter 12-digit Aadhaar number"
                   maxLength={12}
                   {...register('aadhaar', {
@@ -617,7 +617,7 @@ const PatientRegistration = () => {
               {/* Gender & DOB Row */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Gender" required icon={Users} error={errors.gender?.message}>
-                  <select className="input h-11 pl-11 text-base font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs" {...register('gender', { required: 'Gender is required' })}>
+                  <select className="input h-11 pl-9 pr-2 text-xs sm:text-sm font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs" {...register('gender', { required: 'Gender is required' })}>
                     <option value="">Select gender</option>
                     <option>Male</option>
                     <option>Female</option>
@@ -627,7 +627,7 @@ const PatientRegistration = () => {
 
                 <Field label="Date of Birth" required icon={Calendar} error={errors.dob?.message}>
                   <input
-                    className="input h-11 pl-11 text-base font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs"
+                    className="input h-11 pl-9 pr-1 text-xs sm:text-sm font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs"
                     type="date"
                     {...register('dob', { required: 'Date of birth is required' })}
                   />
@@ -637,7 +637,7 @@ const PatientRegistration = () => {
               {/* Address */}
               <Field label="Address" icon={MapPin} error={errors.address?.message}>
                 <textarea
-                  className="input pl-11 text-base font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 min-h-20 shadow-2xs"
+                  className="input pl-9 text-xs sm:text-sm font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 min-h-20 shadow-2xs"
                   placeholder="Enter full address"
                   rows={2}
                   {...register('address')}
@@ -661,7 +661,7 @@ const PatientRegistration = () => {
                 {departmentsLoading ? (
                   <SkeletonInput />
                 ) : (
-                  <select className="input h-11 pl-11 text-base font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs" {...register('department', { required: 'Department is required' })}>
+                  <select className="input h-11 pl-9 pr-2 text-xs sm:text-sm font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs" {...register('department', { required: 'Department is required' })}>
                     <option value="">Select department</option>
                     {departments.map((dept) => (
                       <option key={dept._id} value={dept.departmentName}>{dept.departmentName}</option>
@@ -675,7 +675,7 @@ const PatientRegistration = () => {
                 {doctorsLoading ? (
                   <SkeletonInput />
                 ) : (
-                  <select className="input h-11 pl-11 text-base font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs" {...register('doctorId', { required: 'Doctor / Provider selection is required' })}>
+                  <select className="input h-11 pl-9 pr-2 text-xs sm:text-sm font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs" {...register('doctorId', { required: 'Doctor / Provider selection is required' })}>
                     <option value="">Select doctor / care provider</option>
                     {doctors.map((doc) => (
                       <option key={doc._id} value={doc._id}>
@@ -689,7 +689,7 @@ const PatientRegistration = () => {
               {/* Appointment Date (Auto-picked today's date) */}
               <Field label="Appointment Date" required icon={Calendar} error={errors.appointmentDate?.message}>
                 <input
-                  className="input h-11 pl-11 text-base font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs"
+                  className="input h-11 pl-9 pr-1 text-xs sm:text-sm font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs"
                   type="date"
                   {...register('appointmentDate', { required: 'Appointment date is required' })}
                 />
@@ -698,7 +698,7 @@ const PatientRegistration = () => {
               {/* Free Available Slots */}
               <Field label="Free Available Slots" required icon={Clock} error={errors.slot?.message}>
                 <select 
-                  className={`input h-11 pl-11 text-base font-bold border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs ${doctorAvailabilityStatus ? 'border-red-500 text-red-600' : 'text-gray-900'}`} 
+                  className={`input h-11 pl-9 pr-2 text-xs sm:text-sm font-bold border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs ${doctorAvailabilityStatus ? 'border-red-500 text-red-600' : 'text-gray-900'}`} 
                   {...register('slot', { required: 'Slot selection is required' })}
                 >
                   <option value="">
@@ -741,7 +741,7 @@ const PatientRegistration = () => {
               {/* OPD Fee */}
               <Field label="OPD Fee (₹)" icon={IndianRupee}>
                 <input
-                  className="input h-11 pl-11 text-base font-bold text-gray-900 bg-white border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                  className="input h-11 pl-9 pr-2 text-xs sm:text-sm font-bold text-gray-900 bg-white border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
                   placeholder="0"
                   type="number"
                   min="0"
@@ -753,7 +753,7 @@ const PatientRegistration = () => {
               {/* Discount Mode & Value Row */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Discount Mode" icon={Tag}>
-                  <select className="input h-11 pl-11 text-sm font-bold text-gray-900 bg-white border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs" {...register('discountType')}>
+                  <select className="input h-11 pl-9 pr-2 text-xs sm:text-sm font-bold text-gray-900 bg-white border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs" {...register('discountType')}>
                     <option value="none">No Discount</option>
                     <option value="amount">Rupees (₹)</option>
                     <option value="percent">Percent (%)</option>
@@ -763,7 +763,7 @@ const PatientRegistration = () => {
                 {discountTypeVal !== 'none' ? (
                   <Field label={discountTypeVal === 'percent' ? "Value (%)" : "Value (₹)"} icon={Tag}>
                     <input
-                      className="input h-11 pl-11 text-base font-bold border-amber-400 focus:ring-amber-500 text-amber-950 bg-white shadow-2xs"
+                      className="input h-11 pl-9 pr-2 text-xs sm:text-sm font-bold border-amber-400 focus:ring-amber-500 text-amber-950 bg-white shadow-2xs"
                       placeholder={discountTypeVal === 'percent' ? "%" : "₹"}
                       type="number"
                       min="0"
@@ -775,7 +775,7 @@ const PatientRegistration = () => {
                 ) : (
                   <div className="opacity-40 pointer-events-none">
                     <Field label="Value" icon={Tag}>
-                      <input className="input h-11 pl-11 text-sm bg-gray-100" placeholder="Disabled" disabled />
+                      <input className="input h-11 pl-9 pr-2 text-xs sm:text-sm bg-gray-100" placeholder="Disabled" disabled />
                     </Field>
                   </div>
                 )}
@@ -784,7 +784,7 @@ const PatientRegistration = () => {
               {/* Payment Status & Payment Mode Row */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Payment Status" icon={Wallet}>
-                  <select className={`input h-11 pl-11 text-sm font-extrabold bg-white cursor-pointer border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 shadow-2xs ${paymentStatusVal === 'Not Paid' ? 'text-red-600 border-red-400' : 'text-emerald-700 border-emerald-400'}`} {...register('paymentStatus')}>
+                  <select className={`input h-11 pl-9 pr-2 text-xs sm:text-sm font-extrabold bg-white cursor-pointer border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 shadow-2xs ${paymentStatusVal === 'Not Paid' ? 'text-red-600 border-red-400' : 'text-emerald-700 border-emerald-400'}`} {...register('paymentStatus')}>
                     <option value="Paid">Paid</option>
                     <option value="Not Paid">Not Paid</option>
                   </select>
@@ -792,7 +792,7 @@ const PatientRegistration = () => {
 
                 {paymentStatusVal === 'Paid' ? (
                   <Field label="Payment Mode" icon={Wallet}>
-                    <select className="input h-11 pl-11 text-sm font-bold text-gray-900 bg-white border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs" {...register('paymentMode')}>
+                    <select className="input h-11 pl-9 pr-2 text-xs sm:text-sm font-bold text-gray-900 bg-white border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs" {...register('paymentMode')}>
                       <option value="Cash">Cash</option>
                       <option value="UPI">UPI</option>
                       <option value="Card">Card</option>
@@ -803,7 +803,7 @@ const PatientRegistration = () => {
                 ) : (
                   <div className="opacity-40 pointer-events-none">
                     <Field label="Payment Mode" icon={Wallet}>
-                      <input className="input h-11 pl-11 text-sm bg-gray-100" placeholder="Pending" disabled />
+                      <input className="input h-11 pl-9 pr-2 text-xs sm:text-sm bg-gray-100" placeholder="Pending" disabled />
                     </Field>
                   </div>
                 )}
