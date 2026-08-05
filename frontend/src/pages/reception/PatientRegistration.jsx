@@ -516,9 +516,9 @@ const PatientRegistration = () => {
         )}
 
         {/* Full Width 3-Column Layout for Sections 1, 2, and 3 in Same Row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 w-full">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 lg:gap-6 w-full">
           {/* Column 1: Patient Personal Details */}
-          <div className="space-y-5 p-5 bg-gray-50/70 rounded-2xl border border-gray-300 flex flex-col justify-between shadow-2xs">
+          <div className="space-y-5 p-4 sm:p-5 bg-gray-50/70 rounded-2xl border border-gray-300 flex flex-col justify-between shadow-2xs">
             <div className="space-y-4">
               <div className="flex items-center gap-2.5 border-b border-gray-300 pb-2.5 mb-2">
                 <User className="h-5 w-5 text-indigo-700 stroke-[2]" />
@@ -615,7 +615,7 @@ const PatientRegistration = () => {
               </Field>
 
               {/* Gender & DOB Row */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Gender" required icon={Users} error={errors.gender?.message}>
                   <select className="input h-11 pl-11 text-base font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs" {...register('gender', { required: 'Gender is required' })}>
                     <option value="">Select gender</option>
@@ -647,7 +647,7 @@ const PatientRegistration = () => {
           </div>
 
           {/* Column 2: Appointment & Department Info */}
-          <div className="space-y-5 p-5 bg-gray-50/70 rounded-2xl border border-gray-300 flex flex-col justify-between shadow-2xs">
+          <div className="space-y-5 p-4 sm:p-5 bg-gray-50/70 rounded-2xl border border-gray-300 flex flex-col justify-between shadow-2xs">
             <div className="space-y-4">
               <div className="flex items-center gap-2.5 border-b border-gray-300 pb-2.5 mb-2">
                 <Stethoscope className="h-5 w-5 text-indigo-700 stroke-[2]" />
@@ -722,7 +722,7 @@ const PatientRegistration = () => {
           </div>
 
           {/* Column 3: OPD Consultation Fee & Discount Billing */}
-          <div className="space-y-5 p-5 bg-indigo-50/80 border border-indigo-200 rounded-2xl flex flex-col justify-between shadow-2xs">
+          <div className="space-y-5 p-4 sm:p-5 bg-indigo-50/80 border border-indigo-200 rounded-2xl flex flex-col justify-between shadow-2xs">
             <div className="space-y-4">
               <div className="flex items-center justify-between border-b border-indigo-200 pb-2.5 mb-2">
                 <div className="flex items-center gap-2.5">
@@ -751,7 +751,7 @@ const PatientRegistration = () => {
               </Field>
 
               {/* Discount Mode & Value Row */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Discount Mode" icon={Tag}>
                   <select className="input h-11 pl-11 text-sm font-bold text-gray-900 bg-white border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs" {...register('discountType')}>
                     <option value="none">No Discount</option>
@@ -782,7 +782,7 @@ const PatientRegistration = () => {
               </div>
 
               {/* Payment Status & Payment Mode Row */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Payment Status" icon={Wallet}>
                   <select className={`input h-11 pl-11 text-sm font-extrabold bg-white cursor-pointer border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 shadow-2xs ${paymentStatusVal === 'Not Paid' ? 'text-red-600 border-red-400' : 'text-emerald-700 border-emerald-400'}`} {...register('paymentStatus')}>
                     <option value="Paid">Paid</option>
@@ -843,7 +843,7 @@ const PatientRegistration = () => {
           </button>
 
           {showVitals && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 p-4 bg-gray-50 border border-gray-300 rounded-xl">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4 mt-4 p-4 bg-gray-50 border border-gray-300 rounded-xl">
               <Field label="Weight (kg)" icon={Activity}>
                 <input className="input h-11 pl-11 text-base font-bold text-gray-900" placeholder="kg" type="number" step="0.1" {...register('weight')} />
               </Field>
