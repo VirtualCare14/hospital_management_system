@@ -106,6 +106,21 @@ const IpdAdmission = () => {
   // Post-Admission Print modal states
   const [receiptModalAdmission, setReceiptModalAdmission] = useState(null);
 
+  // Handle Keyboard 'ESC' key press to remove post-admission print card modal
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        setReceiptModalAdmission(null);
+      }
+    };
+    if (receiptModalAdmission) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [receiptModalAdmission]);
+
   // OPD Referrals state
   const [referrals, setReferrals] = useState([]);
   const [loadingReferrals, setLoadingReferrals] = useState(false);
@@ -1667,20 +1682,26 @@ const IpdAdmission = () => {
 
       {/* POST-ADMISSION PRINT CARD MODAL VIA PORTAL */}
       {receiptModalAdmission && createPortal(
-        <div className="fixed inset-0 z-[99999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 admission-portal-container">
-          <div className="bg-white rounded-3xl p-6 max-w-lg w-full border border-gray-200 shadow-2xl space-y-5 admission-print-card">
-            {/* Modal Header (Screen Only) */}
+        <div 
+          className="fixed inset-0 z-[99999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 admission-portal-container cursor-pointer"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setReceiptModalAdmission(null);
+            }
+          }}
+        >
+          <div 
+            className="bg-white rounded-3xl p-6 max-w-lg w-full border border-gray-200 shadow-2xl space-y-5 admission-print-card cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header (Screen Only) - No close button */}
             <div className="flex justify-between items-center border-b border-gray-100 pb-3 no-print">
               <h2 className="font-black text-gray-900 text-base flex items-center gap-2">
                 <FileText className="text-orange-600 h-5 w-5" /> IPD Patient Admission Card
               </h2>
-              <button
-                type="button"
-                onClick={() => setReceiptModalAdmission(null)}
-                className="text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-100 rounded-lg cursor-pointer"
-              >
-                <X className="h-5 w-5" />
-              </button>
+              <span className="text-[10px] text-gray-400 font-extrabold bg-gray-100 border border-gray-200 px-2.5 py-1 rounded-full uppercase tracking-wider">
+                Press ESC to remove
+              </span>
             </div>
 
             {/* Printable Content Container */}
@@ -1836,22 +1857,18 @@ const IpdAdmission = () => {
 
             </div>
 
-            {/* Print & Action Buttons (Screen Only) */}
-            <div className="flex gap-3 border-t border-gray-100 pt-4 no-print">
-              <button
-                type="button"
-                onClick={() => setReceiptModalAdmission(null)}
-                className="btn-secondary flex-1 py-2.5 rounded-xl border border-gray-300 text-xs font-bold text-gray-700 hover:bg-gray-100 cursor-pointer transition-colors"
-              >
-                Close
-              </button>
+            {/* Print Button & Keyboard Hint (Screen Only) - Explicit close button removed */}
+            <div className="space-y-2 border-t border-gray-100 pt-4 no-print">
               <button
                 type="button"
                 onClick={triggerPrintAdmissionCard}
-                className="btn flex-1 py-2.5 rounded-xl bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-md"
+                className="btn w-full py-2.5 rounded-xl bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-md"
               >
                 <Printer className="h-4 w-4" /> Print Admission Card
               </button>
+              <p className="text-[10px] text-gray-400 font-extrabold text-center">
+                Press <kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded text-gray-700 font-mono">ESC</kbd> key or click outside to remove
+              </p>
             </div>
           </div>
         </div>,

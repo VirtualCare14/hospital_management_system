@@ -34,6 +34,61 @@ const getPatientByUhid = async (req, uhid) => {
   return { ...patient.toObject(), patientAge: age };
 };
 
+// Helper to check if patient is currently in IPD or Same Day Care and not discharged yet
+const checkPatientDischargeStatus = async (req, patientId, billType = '') => {
+  if (!patientId) return { allowed: true };
+
+  // 1. Check IPD Active Admission (status != Discharged)
+  const activeIpd = await IpdAdmission.findOne(tenantFilter(req, {
+    patientId,
+    status: { $ne: 'Discharged' }
+  })).sort({ createdAt: -1 });
+
+  if (activeIpd) {
+    return {
+      allowed: false,
+      reason: `Cannot finalize bill: Patient is currently admitted in IPD (Status: ${activeIpd.status}, IPD No: ${activeIpd.ipdNumber}) and has not been discharged yet. Please complete patient discharge before finalizing the bill.`
+    };
+  }
+
+  // 2. Check Active Same Day Care / Same Day Treatment (status != Completed)
+  const activeSdt = await SameDayTreatment.findOne(tenantFilter(req, {
+    patientId,
+    status: { $ne: 'Completed' }
+  })).sort({ createdAt: -1 });
+
+  if (activeSdt) {
+    return {
+      allowed: false,
+      reason: `Cannot finalize bill: Patient is currently undergoing Same Day Care (${activeSdt.treatmentType || 'Care'}) and has not been marked completed/discharged yet.`
+    };
+  }
+
+  // 3. Verify specific IPD billType
+  if (billType === 'IPD' || billType === 'BedCharge') {
+    const latestIpd = await IpdAdmission.findOne(tenantFilter(req, { patientId })).sort({ createdAt: -1 });
+    if (latestIpd && latestIpd.status !== 'Discharged') {
+      return {
+        allowed: false,
+        reason: `Cannot finalize IPD bill: Patient IPD admission (IPD No: ${latestIpd.ipdNumber}) status is "${latestIpd.status}". Discharge must be completed first.`
+      };
+    }
+  }
+
+  // 4. Verify specific Same Day Care billType
+  if (billType === 'SameDayTreatment' || billType === 'Same Day Care') {
+    const latestSdt = await SameDayTreatment.findOne(tenantFilter(req, { patientId })).sort({ createdAt: -1 });
+    if (latestSdt && latestSdt.status !== 'Completed') {
+      return {
+        allowed: false,
+        reason: `Cannot finalize Same Day Care bill: Care record status is "${latestSdt.status}". Discharge / completion must be saved first.`
+      };
+    }
+  }
+
+  return { allowed: true };
+};
+
 // Helper to format date
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
 
@@ -1054,6 +1109,18 @@ const generateBillItems = async (req, res) => {
     const activeAdvances = await AdvancePayment.find(tenantFilter(req, { patientId: patient._id, isAdjusted: false }));
     const totalAdvance = activeAdvances.reduce((sum, adv) => sum + adv.amount, 0);
 
+    // Check if patient is currently in IPD or Same Day Care and not discharged
+    const activeIpdAdmission = await IpdAdmission.findOne(tenantFilter(req, { patientId: patient._id, status: { $ne: 'Discharged' } })).sort({ createdAt: -1 });
+    const activeSdtRecord = await SameDayTreatment.findOne(tenantFilter(req, { patientId: patient._id, status: { $ne: 'Completed' } })).sort({ createdAt: -1 });
+
+    const dischargeBlocked = !!(activeIpdAdmission || activeSdtRecord);
+    let dischargeBlockReason = null;
+    if (activeIpdAdmission) {
+      dischargeBlockReason = `Cannot finalize bill: Patient is currently admitted in IPD (${activeIpdAdmission.ipdNumber || 'IPD'}, Status: ${activeIpdAdmission.status}) and has not been discharged yet. Please complete patient discharge before finalizing the bill.`;
+    } else if (activeSdtRecord) {
+      dischargeBlockReason = `Cannot finalize bill: Patient is currently undergoing Same Day Care (${activeSdtRecord.treatmentType || 'Care'}) and treatment has not been marked completed/discharged yet.`;
+    }
+
     res.json({
       patient: {
         _id: patient._id,
@@ -1066,7 +1133,9 @@ const generateBillItems = async (req, res) => {
         doctorName,
         registrationDate: fmtDate(registrationDate),
         admissionDetails,
-        category: patient.category || 'General'
+        category: patient.category || 'General',
+        dischargeBlocked,
+        dischargeBlockReason
       },
       items: activeItems,
       subtotal,
@@ -1147,8 +1216,14 @@ const createBill = async (req, res) => {
       return res.status(400).json({ message: 'Patient ID, UHID, and bill type are required' });
     }
 
-    if (status === 'Final' && !paymentMode) {
-      return res.status(400).json({ message: 'Payment mode is required to finalize the bill' });
+    if (status === 'Final') {
+      if (!paymentMode) {
+        return res.status(400).json({ message: 'Payment mode is required to finalize the bill' });
+      }
+      const checkDischarge = await checkPatientDischargeStatus(req, patientId, billType);
+      if (!checkDischarge.allowed) {
+        return res.status(400).json({ message: checkDischarge.reason });
+      }
     }
 
     const VALID_CATEGORIES = ['OPD', 'IPD', 'Lab', 'Medicine', 'Consumable', 'SameDayTreatment', 'BedCharge', 'OT', 'Other'];
@@ -1345,10 +1420,16 @@ const updateBill = async (req, res) => {
     const bill = await Billing.findOne(tenantFilter(req, { _id: id }));
     if (!bill) return res.status(404).json({ message: 'Bill not found' });
 
-    const transitionToFinal = status === 'Final' && bill.status !== 'Final';
+    const transitionToFinal = status === 'Final' || (bill.status === 'Draft' && req.body.status === 'Final');
 
-    if (transitionToFinal && !paymentMode) {
-      return res.status(400).json({ message: 'Payment mode is required to finalize the bill' });
+    if (transitionToFinal || status === 'Final') {
+      if (!paymentMode && !bill.paymentMode) {
+        return res.status(400).json({ message: 'Payment mode is required to finalize the bill' });
+      }
+      const checkDischarge = await checkPatientDischargeStatus(req, bill.patientId, bill.billType);
+      if (!checkDischarge.allowed) {
+        return res.status(400).json({ message: checkDischarge.reason });
+      }
     }
 
     const logs = [];
@@ -1774,6 +1855,11 @@ const approveDiscountRequest = async (req, res) => {
 
     const bill = await Billing.findOne(tenantFilter(req, { _id: id }));
     if (!bill) return res.status(404).json({ message: 'Bill request not found' });
+
+    const checkDischarge = await checkPatientDischargeStatus(req, bill.patientId, bill.billType);
+    if (!checkDischarge.allowed) {
+      return res.status(400).json({ message: checkDischarge.reason });
+    }
 
     bill.discountPercentage = pct;
     bill.discountAmount = bill.subtotal * (pct / 100);

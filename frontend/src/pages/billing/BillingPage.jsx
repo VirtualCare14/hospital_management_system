@@ -834,6 +834,10 @@ const BillingPage = () => {
     if (selectedItems.length === 0) { toast.error('Please select at least one charge item to bill'); return; }
     
     if (finalize) {
+      if (selectedPatient?.dischargeBlocked) {
+        toast.error(selectedPatient.dischargeBlockReason || 'Cannot finalize bill: Patient is currently admitted in IPD / Same Day Care and has not been discharged yet.');
+        return;
+      }
       if (!paymentMode) {
         toast.error('Please select a payment mode before finalizing the invoice');
         return;
@@ -1444,6 +1448,31 @@ const BillingPage = () => {
                     ) : (
                       <p className="text-xs text-gray-400 mt-1">No active admission (OPD patient)</p>
                     )}
+                  </div>
+                </div>
+              )}
+
+              {/* Active IPD / Same Day Care Non-Discharged Alert Banner */}
+              {selectedPatient?.dischargeBlocked && (
+                <div className="p-4 bg-gradient-to-r from-red-50 via-amber-50 to-orange-50 border-2 border-red-300 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-red-100 text-red-700 rounded-xl shrink-0">
+                      <Ban className="h-6 w-6 text-red-600 animate-pulse" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black uppercase text-red-700 tracking-wider">Final Bill Locked</span>
+                        <span className="px-2 py-0.5 rounded-md bg-red-600 text-white font-black text-[10px]">
+                          Patient Not Discharged
+                        </span>
+                      </div>
+                      <p className="text-xs font-extrabold text-gray-900 mt-0.5">
+                        {selectedPatient.dischargeBlockReason}
+                      </p>
+                      <p className="text-[11px] text-gray-600 mt-0.5">
+                        You can prepare draft charges, but invoice finalization is locked until the patient is officially discharged.
+                      </p>
+                    </div>
                   </div>
                 </div>
               )}
