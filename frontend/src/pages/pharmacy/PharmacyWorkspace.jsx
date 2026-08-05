@@ -53,6 +53,42 @@ import * as XLSX from 'xlsx';
 import { createPortal } from 'react-dom';
 import './PharmacyInvoicePrint.css';
 
+// Helper for pharmacy quantity input with Pack.LooseUnits format support (e.g. 0.10 when unitsPerPack=15 means 10 loose units)
+export const parsePharmacyQuantity = (quantityInput, unitsPerPack = 1) => {
+  if (quantityInput === null || quantityInput === undefined || quantityInput === '') {
+    return { packs: 0, looseUnits: 0, totalUnits: 0, effectivePacks: 0 };
+  }
+
+  const str = String(quantityInput).trim();
+  const up = Number(unitsPerPack) > 0 ? Number(unitsPerPack) : 1;
+
+  if (up === 1) {
+    const num = parseFloat(str) || 0;
+    return { packs: num, looseUnits: 0, totalUnits: num, effectivePacks: num };
+  }
+
+  if (str.includes('.')) {
+    const parts = str.split('.');
+    const packs = parseInt(parts[0], 10) || 0;
+    const looseStr = parts[1] || '0';
+    const looseUnits = parseInt(looseStr, 10) || 0;
+
+    if (looseUnits > 0 && looseUnits <= up) {
+      const totalUnits = (packs * up) + looseUnits;
+      const effectivePacks = totalUnits / up;
+      return { packs, looseUnits, totalUnits, effectivePacks };
+    } else {
+      const effectivePacks = parseFloat(str) || 0;
+      const totalUnits = Math.round(effectivePacks * up * 10000) / 10000;
+      return { packs: effectivePacks, looseUnits: 0, totalUnits, effectivePacks };
+    }
+  } else {
+    const packs = parseFloat(str) || 0;
+    const totalUnits = packs * up;
+    return { packs, looseUnits: 0, totalUnits, effectivePacks: packs };
+  }
+};
+
 // Color Helper for stock status
 const getStatusDetails = (qty, expiryDateStr, threshold = 10) => {
   const expiryDate = new Date(expiryDateStr);
@@ -2408,9 +2444,9 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
     let grandTotal = 0;
 
     const itemsCalculated = billItems.map(item => {
-      const qty = parseFloat(item.quantity) || 0;
-      const unitsPerPack = parseInt(item.unitsPerPack) || 1;
-      const totalUnits = Math.round(qty * unitsPerPack);
+      const parsed = parsePharmacyQuantity(item.quantity, item.unitsPerPack);
+      const totalUnits = parsed.totalUnits;
+      const qty = parsed.effectivePacks;
       
       const perUnitRate = parseFloat(item.perUnitRate) || 0;
       const perUnitRateWithGst = parseFloat(item.perUnitRateWithGst) || 0;
@@ -2547,7 +2583,10 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
         toast.error(`Please resolve missing stock for ${item.itemName}`);
         return;
       }
-      if (isNaN(item.quantity) || item.quantity <= 0) {
+      const unitsPerPack = item.unitsPerPack || 1;
+      const parsed = parsePharmacyQuantity(item.quantity, unitsPerPack);
+      const unitsSold = parsed.totalUnits;
+      if (isNaN(unitsSold) || unitsSold <= 0) {
         toast.error(`Please enter a valid positive quantity for ${item.itemName}`);
         return;
       }
@@ -2555,13 +2594,6 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
         toast.error(`Cannot bill expired medicine: ${item.itemName} (Batch: ${item.batch})`);
         return;
       }
-      const unitsPerPack = item.unitsPerPack || 1;
-      const unitsSoldExact = item.quantity * unitsPerPack;
-      if (Math.abs(unitsSoldExact - Math.round(unitsSoldExact)) > 1e-5) {
-        toast.error(`Invalid quantity for ${item.itemName}. Quantity must correspond to whole units (e.g. multiples of ${(1 / unitsPerPack).toFixed(3)}).`);
-        return;
-      }
-      const unitsSold = Math.round(unitsSoldExact);
       if (unitsSold > item.availableQtyUnits) {
         toast.error(`Insufficient stock for ${item.itemName}. Available: ${item.availableQtyUnits} units, Requested: ${unitsSold} units`);
         return;
@@ -2672,14 +2704,27 @@ const NewBillView = ({ isWalkIn = false, selectedPrescription = null, clearPresc
                 />
               </div>
               <div>
-                <label className="mb-1 block font-bold text-gray-550">Mobile Number *</label>
-                <input 
-                  type="text" 
-                  className="input py-2 text-xs" 
-                  placeholder="e.g. 9876543210"
-                  value={patientDetails.mobile}
-                  onChange={(e) => setPatientDetails({ ...patientDetails, mobile: e.target.value })}
-                />
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block font-bold text-gray-550">Mobile Number *</label>
+                  {patientDetails.mobile?.replace(/\D/g, '').length === 10 && (
+                    <span className="text-[10px] font-extrabold text-green-700 flex items-center gap-1 bg-green-50 px-2 py-0.5 rounded-full border border-green-300">
+                      <CheckCircle className="h-3 w-3 text-green-600" /> Valid 10-Digit
+                    </span>
+                  )}
+                </div>
+                <div className="relative">
+                  <input 
+                    type="text" 
+                    maxLength="10"
+                    className={`input py-2 text-xs transition-all duration-300 ${patientDetails.mobile?.replace(/\D/g, '').length === 10 ? 'bg-green-50/80 border-2 border-green-500 text-green-900 font-bold ring-2 ring-green-400/20 pr-9' : ''}`} 
+                    placeholder="e.g. 9876543210"
+                    value={patientDetails.mobile}
+                    onChange={(e) => setPatientDetails({ ...patientDetails, mobile: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                  />
+                  {patientDetails.mobile?.replace(/\D/g, '').length === 10 && (
+                    <CheckCircle className="absolute right-3 top-2.5 h-4 w-4 text-green-600 pointer-events-none" />
+                  )}
+                </div>
               </div>
               <div>
                 <label className="mb-1 block font-bold text-gray-550">Age / Gender</label>
@@ -3222,8 +3267,8 @@ const InvoicePrintModal = ({ billId, onClose }) => {
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 print:p-0 print:static print:bg-transparent no-print-backdrop">
-      <div className="bg-white rounded-3xl p-6 max-w-4xl w-full border border-orange-100 shadow-2xl print:border-none print:shadow-none print:p-0 print:max-w-none print:w-full print:static max-h-[95vh] overflow-y-auto print:overflow-visible flex flex-col justify-between">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 print:p-0 print:static print:bg-transparent pharmacy-invoice-modal-overlay">
+      <div className="bg-white rounded-3xl p-6 max-w-4xl w-full border border-orange-100 shadow-2xl print:border-none print:shadow-none print:p-0 print:max-w-none print:w-full print:static max-h-[95vh] overflow-y-auto print:overflow-visible flex flex-col justify-between pharmacy-invoice-modal-card">
         
         {/* Modal controls - hidden during printing */}
         <div className="flex justify-between items-center border-b border-orange-50 pb-3 mb-4 print:hidden">
@@ -5112,7 +5157,7 @@ const PurchaseEntryView = ({ editId = null, onSaveComplete }) => {
   const handleOpenAddModal = () => {
     setEditingItemIdx(null);
     setActiveItem({
-      itemName: '', description: '', dosageForm: '', packType: '', unitsPerPack: 1, quantity: 0,
+      itemName: '', description: '', dosageForm: '', packType: '', unitsPerPack: 1, quantity: '',
       batch: '', expiry: '', purchaseRateExGst: 0, sellingRateExGst: 0, discountPercent: 0,
       cgst: 0, sgst: 0, hsn: '0', sellingCgst: 0, sellingSgst: 0, isSameGstAsPurchase: true,
       thresholdMedicineNumber: 10
@@ -5144,10 +5189,14 @@ const PurchaseEntryView = ({ editId = null, onSaveComplete }) => {
   };
 
   // Perform overall total sum calculations
-  const subTotal = items.reduce((sum, it) => sum + (Number(it.quantity) * Number(it.purchaseRateExGst || 0)), 0);
+  const subTotal = items.reduce((sum, it) => {
+    const qtyPacks = parsePharmacyQuantity(it.quantity, it.unitsPerPack).effectivePacks;
+    return sum + (qtyPacks * Number(it.purchaseRateExGst || 0));
+  }, 0);
   const totalDiscount = items.reduce((sum, it) => sum + (Number(it.discountAmount) || 0), 0);
   const totalGst = items.reduce((sum, it) => {
-    const taxable = (Number(it.quantity) * Number(it.purchaseRateExGst || 0)) - (Number(it.discountAmount) || 0);
+    const qtyPacks = parsePharmacyQuantity(it.quantity, it.unitsPerPack).effectivePacks;
+    const taxable = (qtyPacks * Number(it.purchaseRateExGst || 0)) - (Number(it.discountAmount) || 0);
     const gstPct = (Number(it.sgst) || 0) + (Number(it.cgst) || 0);
     return sum + (taxable * gstPct / 100);
   }, 0);
@@ -5156,18 +5205,19 @@ const PurchaseEntryView = ({ editId = null, onSaveComplete }) => {
 
   const saveModalItem = (e) => {
     e.preventDefault();
-    if (!activeItem.itemName || !activeItem.batch || !activeItem.expiry || Number(activeItem.quantity) <= 0) {
+    const activeQtyParsed = parsePharmacyQuantity(activeItem.quantity, activeItem.unitsPerPack);
+    if (!activeItem.itemName || !activeItem.batch || !activeItem.expiry || activeQtyParsed.totalUnits <= 0) {
       toast.error('Please fill in Medicine Name, Batch No, Expiry Date and a valid Quantity.');
       return;
     }
 
-    const qty = Number(activeItem.quantity) || 0;
+    const qtyPacks = activeQtyParsed.effectivePacks;
     const purchaseRateExGst = Number(activeItem.purchaseRateExGst) || 0;
     const discPct = Number(activeItem.discountPercent) || 0;
     const sgstPct = Number(activeItem.sgst) || 0;
     const cgstPct = Number(activeItem.cgst) || 0;
 
-    const gross = qty * purchaseRateExGst;
+    const gross = qtyPacks * purchaseRateExGst;
     const discAmt = gross * (discPct / 100);
     const taxable = gross - discAmt;
     const gstPct = sgstPct + cgstPct;
@@ -5175,6 +5225,9 @@ const PurchaseEntryView = ({ editId = null, onSaveComplete }) => {
 
     const updatedItem = {
       ...activeItem,
+      quantity: activeQtyParsed.effectivePacks,
+      displayQuantity: activeItem.quantity,
+      totalUnits: activeQtyParsed.totalUnits,
       discountAmount: discAmt,
       totalAmount: taxable + gstAmt
     };
@@ -5243,7 +5296,8 @@ const PurchaseEntryView = ({ editId = null, onSaveComplete }) => {
   };
 
   // Live modal item calculations preview
-  const modalGross = (Number(activeItem.quantity) || 0) * (Number(activeItem.purchaseRateExGst) || 0);
+  const activeQtyParsed = parsePharmacyQuantity(activeItem.quantity, activeItem.unitsPerPack);
+  const modalGross = activeQtyParsed.effectivePacks * (Number(activeItem.purchaseRateExGst) || 0);
   const modalDiscAmt = modalGross * ((Number(activeItem.discountPercent) || 0) / 100);
   const modalTaxable = modalGross - modalDiscAmt;
   const modalGstAmt = modalTaxable * (((Number(activeItem.cgst) || 0) + (Number(activeItem.sgst) || 0)) / 100);
@@ -5718,11 +5772,12 @@ const PurchaseEntryView = ({ editId = null, onSaveComplete }) => {
                   <label className="block font-bold text-gray-550 mb-1">Qty (Packs) *</label>
                   <input
                     type="number"
-                    min="1"
+                    step="any"
+                    min="0.001"
                     required
                     className="input py-2 text-xs border-orange-200 font-bold"
-                    value={activeItem.quantity || ''}
-                    onChange={(e) => setActiveItem({ ...activeItem, quantity: parseInt(e.target.value) || 0 })}
+                    value={activeItem.quantity !== undefined ? activeItem.quantity : ''}
+                    onChange={(e) => setActiveItem({ ...activeItem, quantity: e.target.value })}
                   />
                 </div>
                 <div>

@@ -24,7 +24,7 @@ export default function Navbar() {
 
   return (
     <>
-      <nav className={`fixed top-0 left-0 w-full h-[90px] z-50 transition-all duration-300 flex items-center ${scrolled ? 'bg-white/95 backdrop-blur-md shadow-sm border-b border-slate-100' : 'bg-white/80 backdrop-blur-sm'}`}>
+      <nav className={`fixed top-0 left-0 w-full h-[96px] sm:h-[110px] md:h-[120px] z-50 transition-all duration-300 flex items-center ${scrolled ? 'bg-white/95 backdrop-blur-md shadow-sm border-b border-slate-100' : 'bg-white/80 backdrop-blur-sm'}`}>
         <div className="max-w-[1400px] mx-auto px-6 md:px-12 w-full flex justify-between items-center relative">
 
           {/* Logo */}
@@ -35,18 +35,18 @@ export default function Navbar() {
                 alt="Medora360"
                 loading="eager"
                 decoding="async"
-                className="h-[60px] sm:h-[72px] md:h-[84px] w-auto object-contain transition-all duration-300"
+                className="h-[76px] sm:h-[92px] md:h-[106px] lg:h-[114px] w-auto object-contain transition-all duration-300"
               />
             </div>
           </a>
 
           {/* Center Links (Desktop - Home, About, Service, Contact) */}
-          <div className="hidden lg:flex absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 items-center gap-7 font-sans font-semibold text-[14.5px]">
+          <div className="hidden lg:flex absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 items-center gap-8 font-sans font-bold text-[18px]">
             {navLinks.map((link) => (
               <a
                 key={link.name}
                 href={link.href}
-                className="text-[#475467] hover:text-[#0F172A] transition-colors duration-200 py-1.5"
+                className="text-[#344054] hover:text-[#0F172A] transition-colors duration-200 py-1.5"
               >
                 <span>{link.name}</span>
               </a>
@@ -54,12 +54,12 @@ export default function Navbar() {
           </div>
 
           {/* Desktop fallback for md screen size */}
-          <div className="hidden md:flex lg:hidden items-center gap-4">
+          <div className="hidden md:flex lg:hidden items-center gap-5">
             {navLinks.map((link) => (
               <a
                 key={link.name}
                 href={link.href}
-                className="font-sans font-semibold text-[13.5px] text-[#475467] hover:text-[#0F172A] transition-colors duration-200"
+                className="font-sans font-bold text-[18px] text-[#344054] hover:text-[#0F172A] transition-colors duration-200"
               >
                 <span>{link.name}</span>
               </a>
@@ -70,14 +70,14 @@ export default function Navbar() {
           <div className="hidden md:flex items-center gap-4 flex-shrink-0">
             <button
               onClick={() => setIsPortalModalOpen(true)}
-              className="inline-flex items-center gap-2 px-4 py-[9px] rounded-lg font-sans font-bold text-[13.5px] text-[#FF6A00] bg-orange-50 border border-orange-200 hover:bg-orange-100 transition-all duration-200 cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 py-[10px] rounded-lg font-sans font-bold text-[15px] text-[#FF6A00] bg-orange-50 border border-orange-200 hover:bg-orange-100 transition-all duration-200 cursor-pointer"
             >
               <LayoutGrid className="w-4 h-4" />
               <span>Portal Entry</span>
             </button>
             <a
               href="#contact"
-              className="inline-flex items-center gap-2 px-5 py-[9px] rounded-lg font-sans font-bold text-[14px] text-white bg-[#EA580C] hover:bg-[#C2410C] shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5"
+              className="inline-flex items-center gap-2 px-5 py-[10px] rounded-lg font-sans font-bold text-[15px] text-white bg-[#EA580C] hover:bg-[#C2410C] shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5"
             >
               <span>Book a Demo</span>
               <ArrowRight className="w-4 h-4" />
@@ -99,14 +99,14 @@ export default function Navbar() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-x-0 top-[90px] z-40 bg-white/95 backdrop-blur-xl border-b border-slate-100 py-6 px-6 flex flex-col gap-4 md:hidden shadow-lg"
+            className="fixed inset-x-0 top-[96px] sm:top-[110px] z-40 bg-white/95 backdrop-blur-xl border-b border-slate-100 py-6 px-6 flex flex-col gap-4 md:hidden shadow-lg"
           >
             {navLinks.map((link) => (
               <a
                 key={link.name}
                 href={link.href}
                 onClick={() => setIsOpen(false)}
-                className="font-sans font-semibold text-[16px] text-[#344054] hover:text-[#0F172A] transition-colors py-2 border-b border-slate-100 flex justify-between items-center"
+                className="font-sans font-bold text-[18px] text-[#344054] hover:text-[#0F172A] transition-colors py-2.5 border-b border-slate-100 flex justify-between items-center"
               >
                 <span>{link.name}</span>
               </a>

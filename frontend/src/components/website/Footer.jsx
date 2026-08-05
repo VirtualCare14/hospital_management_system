@@ -30,7 +30,7 @@ export default function Footer() {
                   alt="Medora360"
                   loading="lazy"
                   decoding="async"
-                  className="h-[42px] w-auto object-contain transition-all duration-300 group-hover:scale-[1.04]"
+                  className="h-[56px] sm:h-[68px] md:h-[76px] w-auto object-contain transition-all duration-300 group-hover:scale-[1.04]"
                 />
               </a>
             </div>
