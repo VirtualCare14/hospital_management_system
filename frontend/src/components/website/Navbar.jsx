@@ -24,7 +24,7 @@ export default function Navbar() {
 
   return (
     <>
-      <nav className={`fixed top-0 left-0 w-full h-[96px] sm:h-[110px] md:h-[120px] z-50 transition-all duration-300 flex items-center ${scrolled ? 'bg-white/95 backdrop-blur-md shadow-sm border-b border-slate-100' : 'bg-white/80 backdrop-blur-sm'}`}>
+      <nav className={`fixed top-0 left-0 w-full h-[72px] sm:h-[80px] md:h-[84px] z-50 transition-all duration-300 flex items-center ${scrolled ? 'bg-white/95 backdrop-blur-md shadow-sm border-b border-slate-100' : 'bg-white/80 backdrop-blur-sm'}`}>
         <div className="max-w-[1400px] mx-auto px-6 md:px-12 w-full flex justify-between items-center relative">
 
           {/* Logo */}

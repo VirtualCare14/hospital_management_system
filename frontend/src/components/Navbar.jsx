@@ -74,8 +74,8 @@ const Navbar = () => {
   const moduleCategory = getModuleCategory(location.pathname);
 
   return (
-    <div className="px-3 sm:px-4 md:px-5 lg:px-8 pt-3 sm:pt-4 pb-1 relative z-30">
-      <header className="w-full min-h-[76px] sm:min-h-[88px] md:min-h-[96px] bg-gradient-to-r from-white via-orange-50/20 to-amber-50/10 rounded-[20px] border border-orange-500/10 p-3 sm:p-4 md:px-6 md:py-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 relative shadow-[0_10px_30px_rgba(15,23,42,0.06)] animate-in fade-in slide-in-from-top-3 duration-300">
+    <div className="px-3 sm:px-4 md:px-5 lg:px-8 pt-2.5 sm:pt-3 pb-1 relative z-30">
+      <header className="w-full min-h-[60px] sm:min-h-[64px] md:min-h-[68px] bg-gradient-to-r from-white via-orange-50/20 to-amber-50/10 rounded-[20px] border border-orange-500/10 p-2.5 sm:p-3 md:px-5 md:py-2.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 relative shadow-[0_10px_30px_rgba(15,23,42,0.06)] animate-in fade-in slide-in-from-top-3 duration-300">
         
         {/* Background Decorations Container */}
         <div className="absolute inset-0 rounded-[20px] overflow-hidden pointer-events-none">

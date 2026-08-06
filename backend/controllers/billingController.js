@@ -122,52 +122,113 @@ const calculateMedicineQty = (med) => {
 // @desc    Get patients eligible for billing (patients with billable services)
 // @route   GET /api/billing/eligible-patients
 // @access  Private
+// @desc    Get patients eligible for billing (patients with billable services) - Ultra Fast
+// @route   GET /api/billing/eligible-patients
+// @access  Private
 const getEligiblePatients = async (req, res) => {
   try {
     const { search, module, page = 1, limit = 20 } = req.query;
-    
+    const currentPage = Math.max(1, parseInt(page) || 1);
+    const limitVal = Math.max(1, parseInt(limit) || 20);
+
+    const tf = tenantFilter(req);
+
     // Build patient search filter
-    let patientFilter = tenantFilter(req);
+    let patientFilter = { ...tf };
     if (search && search.trim()) {
       const regex = { $regex: search.trim(), $options: 'i' };
-      patientFilter = {
-        ...patientFilter,
-        $or: [
-          { uhid: regex },
-          { patientName: regex },
-          { mobile: regex }
-        ]
-      };
+      patientFilter.$or = [
+        { uhid: regex },
+        { patientName: regex },
+        { mobile: regex }
+      ];
     }
 
-    let allPatients = [];
+    let candidatePatientIds = [];
 
     if (module === 'SameDayCare') {
-      // Direct lookup of patients with completed Same Day Care treatments for ultra-fast load
       const sdtRecords = await SameDayTreatment.find(tenantFilter(req, { status: 'Completed' }), 'patientId').lean();
-      const sdtPatientIds = [...new Set(sdtRecords.map(r => r.patientId?.toString()).filter(Boolean))];
-      if (sdtPatientIds.length === 0) {
-        if (req.query.page || req.query.limit) {
-          return res.json({ patients: [], page: 1, pageSize: parseInt(limit) || 20, totalRecords: 0, totalPages: 1, hasNextPage: false, hasPreviousPage: false });
-        }
-        return res.json([]);
-      }
-      patientFilter = {
-        ...patientFilter,
-        _id: { $in: sdtPatientIds }
-      };
-      allPatients = await Patient.find(patientFilter).sort({ createdAt: -1 }).lean();
+      candidatePatientIds = [...new Set(sdtRecords.map(r => r.patientId?.toString()).filter(Boolean))];
+    } else if (module === 'OPD') {
+      const [consultations, patients] = await Promise.all([
+        Consultation.find(tenantFilter(req, { isBilled: false }), 'patientId').lean(),
+        Patient.find(patientFilter, '_id').sort({ createdAt: -1 }).limit(100).lean()
+      ]);
+      const set = new Set([
+        ...consultations.map(c => c.patientId?.toString()),
+        ...patients.map(p => p._id.toString())
+      ].filter(Boolean));
+      candidatePatientIds = Array.from(set);
+    } else if (module === 'IPD') {
+      const admissions = await IpdAdmission.find(tenantFilter(req, { status: 'Admitted' }), 'patientId').lean();
+      candidatePatientIds = [...new Set(admissions.map(a => a.patientId?.toString()).filter(Boolean))];
+    } else if (module === 'Lab') {
+      const labs = await IpdLabTest.find(tenantFilter(req, { billed: false }), 'patientId').lean();
+      candidatePatientIds = [...new Set(labs.map(l => l.patientId?.toString()).filter(Boolean))];
+    } else if (module === 'Pharmacy') {
+      const meds = await IpdMedicine.find(tenantFilter(req, { billed: false }), 'patientId').lean();
+      candidatePatientIds = [...new Set(meds.map(m => m.patientId?.toString()).filter(Boolean))];
+    } else if (module === 'OT') {
+      const ots = await IpdOtRecord.find(tenantFilter(req, { isBilled: false }), 'patientId').lean();
+      candidatePatientIds = [...new Set(ots.map(o => o.patientId?.toString()).filter(Boolean))];
     } else {
-      allPatients = await Patient.find(patientFilter).sort({ createdAt: -1 }).lean();
+      // All Connected Modules (Default)
+      const [
+        consultations,
+        consumables,
+        medicines,
+        labs,
+        ots,
+        sdts,
+        admissions,
+        recentPatients
+      ] = await Promise.all([
+        Consultation.find(tenantFilter(req, { isBilled: false }), 'patientId').lean(),
+        IpdConsumable.find(tenantFilter(req, { billed: false }), 'patientId').lean(),
+        IpdMedicine.find(tenantFilter(req, { billed: false }), 'patientId').lean(),
+        IpdLabTest.find(tenantFilter(req, { billed: false }), 'patientId').lean(),
+        IpdOtRecord.find(tenantFilter(req, { isBilled: false }), 'patientId').lean(),
+        SameDayTreatment.find(tenantFilter(req, { isBilled: false }), 'patientId').lean(),
+        IpdAdmission.find(tenantFilter(req, { status: 'Admitted' }), 'patientId').lean(),
+        Patient.find(patientFilter, '_id').sort({ createdAt: -1 }).limit(100).lean()
+      ]);
+
+      const set = new Set([
+        ...consultations.map(c => c.patientId?.toString()),
+        ...consumables.map(c => c.patientId?.toString()),
+        ...medicines.map(m => m.patientId?.toString()),
+        ...labs.map(l => l.patientId?.toString()),
+        ...ots.map(o => o.patientId?.toString()),
+        ...sdts.map(s => s.patientId?.toString()),
+        ...admissions.map(a => a.patientId?.toString()),
+        ...recentPatients.map(p => p._id?.toString())
+      ].filter(Boolean));
+      candidatePatientIds = Array.from(set);
     }
 
-    // Parallelize checking of billable items for all patients concurrently
-    const results = await Promise.all(
-      allPatients.map(async (patient) => {
-        const hasBillableItems = await checkBillableItems(patient._id);
-        if (!hasBillableItems.hasItems) return null;
+    if (candidatePatientIds.length > 0) {
+      patientFilter._id = { $in: candidatePatientIds };
+    }
 
-        const advances = await AdvancePayment.find({ patientId: patient._id, isAdjusted: false }).lean();
+    // DB Level Count & Pagination
+    const totalRecords = await Patient.countDocuments(patientFilter);
+    const paginatedPatients = await Patient.find(patientFilter)
+      .sort({ createdAt: -1 })
+      .skip((currentPage - 1) * limitVal)
+      .limit(limitVal)
+      .lean();
+
+    // Check billable items ONLY for the 20 paginated patients
+    const results = await Promise.all(
+      paginatedPatients.map(async (patient) => {
+        const [hasBillableItems, advances, ipdAdmission, otRecord, visit] = await Promise.all([
+          checkBillableItems(patient._id),
+          AdvancePayment.find({ patientId: patient._id, isAdjusted: false }).lean(),
+          IpdAdmission.findOne({ patientId: patient._id }).sort({ createdAt: -1 }).lean(),
+          IpdOtRecord.findOne({ patientId: patient._id }).sort({ createdAt: -1 }).lean(),
+          Visit.findOne({ patientId: patient._id }).sort({ createdAt: -1 }).lean()
+        ]);
+        
         const totalAdvance = advances.reduce((sum, a) => sum + a.amount, 0);
         const adjustedPendingAmount = Math.max(0, hasBillableItems.totalPendingAmount - totalAdvance);
 
@@ -176,28 +237,25 @@ const getEligiblePatients = async (req, res) => {
           _id: patient._id,
           patientName: patient.patientName,
           uhid: patient.uhid,
+          pidNumber: visit?.registrationNumber || patient.registrationNumber || null,
+          ipdNumber: ipdAdmission?.ipdNumber || patient.ipdNumber || null,
+          otNumber: otRecord?.otId || (otRecord?._id ? `OT-${otRecord._id.toString().substring(18).toUpperCase()}` : null),
           mobile: patient.mobile,
           gender: patient.gender,
           patientAge: age,
           dob: patient.dob,
           address: patient.address,
-          categories: hasBillableItems.categories,
+          categories: hasBillableItems.categories.length > 0 ? hasBillableItems.categories : ['General Billing'],
           totalPendingAmount: adjustedPendingAmount
         };
       })
     );
 
-    const eligiblePatients = results.filter(Boolean);
+    const totalPages = Math.ceil(totalRecords / limitVal) || 1;
 
     if (req.query.page || req.query.limit) {
-      const currentPage = Math.max(1, parseInt(page) || 1);
-      const limitVal = Math.max(1, parseInt(limit) || 20);
-      const totalRecords = eligiblePatients.length;
-      const totalPages = Math.ceil(totalRecords / limitVal) || 1;
-      const paginated = eligiblePatients.slice((currentPage - 1) * limitVal, currentPage * limitVal);
-
       return res.json({
-        patients: paginated,
+        patients: results,
         page: currentPage,
         pageSize: limitVal,
         totalRecords,
@@ -207,7 +265,7 @@ const getEligiblePatients = async (req, res) => {
       });
     }
 
-    res.json(eligiblePatients);
+    res.json(results);
   } catch (error) {
     console.error('Get Eligible Patients Error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -1762,6 +1820,25 @@ const cancelBill = async (req, res) => {
 // @access  Private
 const getDashboardStats = async (req, res) => {
   try {
+    const { startDate, endDate } = req.query;
+
+    let startOfDate = new Date();
+    startOfDate.setHours(0,0,0,0);
+    let endOfDate = new Date();
+    endOfDate.setHours(23,59,59,999);
+
+    if (startDate) {
+      startOfDate = new Date(startDate);
+      startOfDate.setHours(0,0,0,0);
+    }
+    if (endDate) {
+      endOfDate = new Date(endDate);
+      endOfDate.setHours(23,59,59,999);
+    } else if (startDate) {
+      endOfDate = new Date(startDate);
+      endOfDate.setHours(23,59,59,999);
+    }
+
     const startOfToday = new Date();
     startOfToday.setHours(0,0,0,0);
     const endOfToday = new Date();
@@ -1771,13 +1848,77 @@ const getDashboardStats = async (req, res) => {
     startOfMonth.setDate(1);
     startOfMonth.setHours(0,0,0,0);
 
-    const allBills = await Billing.find(tenantFilter(req, { status: { $ne: 'Draft' } }));
+    const tf = tenantFilter(req);
 
-    let todayCollection = 0;
-    let monthlyCollection = 0;
-    let outstanding = 0;
-    let discountToday = 0;
+    // Parallel DB queries for maximum performance
+    const [
+      totalIpd,
+      activeIpd,
+      totalOpd,
+      rangeOpdVisits,
+      rangeOpdPatients,
+      totalDischarges,
+      rangeDischarges,
+      allBills,
+      todayAdvances,
+      monthAdvances,
+      rangeAdvances,
+      unbilledConsultations,
+      unbilledConsumables,
+      unbilledMedicines,
+      unbilledLabs,
+      unbilledOts,
+      unbilledSdts
+    ] = await Promise.all([
+      IpdAdmission.countDocuments(tf),
+      IpdAdmission.countDocuments({ ...tf, status: 'Admitted' }),
+      Patient.countDocuments(tf),
+      Visit.countDocuments({ ...tf, visitType: 'OPD', createdAt: { $gte: startOfDate, $lte: endOfDate } }),
+      Patient.countDocuments({ ...tf, createdAt: { $gte: startOfDate, $lte: endOfDate } }),
+      IpdAdmission.countDocuments(tf),
+      IpdAdmission.countDocuments({ ...tf, status: 'Discharged', dischargeDate: { $gte: startOfDate, $lte: endOfDate } }),
+      Billing.find({ ...tf, status: { $ne: 'Draft' } }).lean(),
+      AdvancePayment.find({ ...tf, createdAt: { $gte: startOfToday, $lte: endOfToday } }).lean(),
+      AdvancePayment.find({ ...tf, createdAt: { $gte: startOfMonth } }).lean(),
+      AdvancePayment.find({ ...tf, createdAt: { $gte: startOfDate, $lte: endOfDate } }).lean(),
+      Consultation.find({ ...tf, isBilled: false }, 'patientId').lean(),
+      IpdConsumable.find({ ...tf, billed: false }, 'patientId').lean(),
+      IpdMedicine.find({ ...tf, billed: false }, 'patientId').lean(),
+      IpdLabTest.find({ ...tf, billed: false }, 'patientId').lean(),
+      IpdOtRecord.find({ ...tf, isBilled: false }, 'patientId').lean(),
+      SameDayTreatment.find({ ...tf, isBilled: false }, 'patientId').lean()
+    ]);
+
+    const todayOpd = Math.max(rangeOpdVisits, rangeOpdPatients);
+
+    // Unique pending billing patient count
+    const pendingPatientSet = new Set();
+    [
+      ...unbilledConsultations,
+      ...unbilledConsumables,
+      ...unbilledMedicines,
+      ...unbilledLabs,
+      ...unbilledOts,
+      ...unbilledSdts
+    ].forEach(item => {
+      if (item.patientId) pendingPatientSet.add(item.patientId.toString());
+    });
+    const billingPendingCount = pendingPatientSet.size;
+
+    let billsCompletedToday = 0;
+    let paymentReceivedToday = 0;
+    let outstandingToday = 0;
     
+    let paymentReceivedMonth = 0;
+    let paymentPendingMonth = 0;
+
+    let selectedRangeCollection = 0;
+    let selectedRangeOutstanding = 0;
+    let selectedRangeBillsCompleted = 0;
+
+    let overallOutstanding = 0;
+    let discountToday = 0;
+
     let paidCount = 0;
     let unpaidCount = 0;
     let partialCount = 0;
@@ -1785,7 +1926,10 @@ const getDashboardStats = async (req, res) => {
 
     allBills.forEach(bill => {
       const createdAt = new Date(bill.createdAt);
-      
+      const isToday = createdAt >= startOfToday && createdAt <= endOfToday;
+      const isMonth = createdAt >= startOfMonth;
+      const isSelectedRange = createdAt >= startOfDate && createdAt <= endOfDate;
+
       if (bill.status === 'Cancelled') {
         cancelledCount++;
       } else {
@@ -1793,27 +1937,58 @@ const getDashboardStats = async (req, res) => {
         else if (bill.paymentStatus === 'Partially Paid') partialCount++;
         else unpaidCount++;
 
-        outstanding += bill.dueAmount || 0;
-      }
+        overallOutstanding += bill.dueAmount || 0;
 
-      if (createdAt >= startOfToday && createdAt <= endOfToday) {
-        if (bill.status !== 'Cancelled') {
-          todayCollection += bill.amountPaid || 0;
+        if (isToday) {
+          if (bill.status === 'Final') billsCompletedToday++;
+          paymentReceivedToday += bill.amountPaid || 0;
+          outstandingToday += bill.dueAmount || 0;
           discountToday += bill.discountAmount || 0;
         }
-      }
 
-      if (createdAt >= startOfMonth) {
-        if (bill.status !== 'Cancelled') {
-          monthlyCollection += bill.amountPaid || 0;
+        if (isMonth) {
+          paymentReceivedMonth += bill.amountPaid || 0;
+          paymentPendingMonth += bill.dueAmount || 0;
+        }
+
+        if (isSelectedRange) {
+          if (bill.status === 'Final') selectedRangeBillsCompleted++;
+          selectedRangeCollection += bill.amountPaid || 0;
+          selectedRangeOutstanding += bill.dueAmount || 0;
         }
       }
     });
 
+    const todayAdvanceTotal = todayAdvances.reduce((sum, a) => sum + (a.amount || 0), 0);
+    const monthAdvanceTotal = monthAdvances.reduce((sum, a) => sum + (a.amount || 0), 0);
+    const rangeAdvanceTotal = rangeAdvances.reduce((sum, a) => sum + (a.amount || 0), 0);
+
+    paymentReceivedToday += todayAdvanceTotal;
+    paymentReceivedMonth += monthAdvanceTotal;
+    selectedRangeCollection += rangeAdvanceTotal;
+
     res.json({
-      todayCollection,
-      monthlyCollection,
-      outstandingPayments: outstanding,
+      // 9 Core Requested Metrics
+      totalIpd,
+      activeIpd,
+      totalOpd,
+      todayOpd,
+      totalDischarges: totalDischarges || rangeDischarges,
+      rangeDischarges,
+      billingPendingCount,
+      billsCompletedToday: selectedRangeBillsCompleted || billsCompletedToday,
+      paymentReceivedToday: selectedRangeCollection || paymentReceivedToday,
+      outstandingToday: selectedRangeOutstanding || outstandingToday,
+      paymentReceivedMonth,
+      paymentPendingMonth,
+
+      // Filter Date Range info
+      startDate: startOfDate.toISOString().split('T')[0],
+      endDate: endOfDate.toISOString().split('T')[0],
+
+      todayCollection: paymentReceivedToday,
+      monthlyCollection: paymentReceivedMonth,
+      outstandingPayments: overallOutstanding,
       discountSummary: discountToday,
       billCounts: {
         paid: paidCount,

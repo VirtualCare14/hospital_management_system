@@ -1691,97 +1691,77 @@ const IpdAdmission = () => {
           }}
         >
           <div 
-            className="bg-white rounded-3xl p-6 max-w-lg w-full border border-gray-200 shadow-2xl space-y-5 admission-print-card cursor-default"
+            className="bg-white rounded-3xl p-4 max-w-lg w-full max-h-[88vh] overflow-y-auto border border-gray-200 shadow-2xl space-y-3.5 admission-print-card cursor-default"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal Header (Screen Only) - No close button */}
-            <div className="flex justify-between items-center border-b border-gray-100 pb-3 no-print">
-              <h2 className="font-black text-gray-900 text-base flex items-center gap-2">
-                <FileText className="text-orange-600 h-5 w-5" /> IPD Patient Admission Card
+            {/* Modal Header (Screen Only) */}
+            <div className="flex justify-between items-center border-b border-gray-100 pb-2.5 no-print">
+              <h2 className="font-black text-gray-900 text-sm flex items-center gap-2">
+                <FileText className="text-orange-600 h-4.5 w-4.5" /> IPD Patient Admission Card
               </h2>
-              <span className="text-[10px] text-gray-400 font-extrabold bg-gray-100 border border-gray-200 px-2.5 py-1 rounded-full uppercase tracking-wider">
-                Press ESC to remove
-              </span>
+              <button
+                type="button"
+                onClick={() => setReceiptModalAdmission(null)}
+                className="p-1 bg-red-100 hover:bg-red-200 text-red-600 hover:text-red-700 rounded-full transition-colors cursor-pointer"
+                title="Close Modal"
+              >
+                <X className="h-4.5 w-4.5" />
+              </button>
             </div>
 
             {/* Printable Content Container */}
-            <div id="ipd-admission-card-content" className="space-y-4 text-gray-900">
+            <div id="ipd-admission-card-content" className="space-y-2.5 text-gray-900">
               
-              {/* TOP HOSPITAL DETAILS BANNER */}
-              <div className="text-center border-b-2 border-orange-500 pb-3">
-                {hospitalSettings?.logoUrl ? (
-                  <img src={hospitalSettings.logoUrl} alt="Hospital Logo" className="h-14 mx-auto mb-1.5 object-contain" />
-                ) : (
-                  <div className="bg-orange-600 text-white p-2 rounded-2xl w-12 h-12 mx-auto flex items-center justify-center font-black text-xl mb-1 shadow-sm">
-                    H
-                  </div>
-                )}
-                {hospitalSettings?.hospitalName && (
-                  <h1 className="text-xl font-black tracking-tight text-gray-900 uppercase">
-                    {hospitalSettings.hospitalName}
-                  </h1>
-                )}
-                {hospitalSettings?.address && (
-                  <p className="text-xs text-gray-600 font-semibold max-w-md mx-auto mt-0.5 leading-snug">
-                    {hospitalSettings.address}
-                  </p>
-                )}
-                <div className="flex items-center justify-center gap-4 text-[11px] font-bold text-orange-700 mt-1 flex-wrap">
-                  {hospitalSettings?.mobileNumbers?.length > 0 && (
-                    <span>Phone: {hospitalSettings.mobileNumbers.join(', ')}</span>
-                  )}
-                  {hospitalSettings?.email && (
-                    <span>Email: {hospitalSettings.email}</span>
-                  )}
-                </div>
-                <div className="mt-2 inline-block bg-orange-600 text-white font-black text-xs px-4 py-1 rounded-full uppercase tracking-wider">
+              {/* CARD TITLE BADGE */}
+              <div className="text-center pb-0.5">
+                <div className="inline-block bg-orange-600 text-white font-black text-[11px] px-4 py-1 rounded-full uppercase tracking-wider shadow-xs">
                   IPD Patient Admission Card
                 </div>
               </div>
 
               {/* IDENTIFIERS BADGE ROW */}
-              <div className="grid grid-cols-3 gap-2 bg-orange-50 p-2.5 rounded-xl border border-orange-200 text-center font-mono">
+              <div className="grid grid-cols-3 gap-2 bg-orange-50 p-2 rounded-xl border border-orange-200 text-center font-mono">
                 <div>
-                  <span className="text-[10px] font-bold text-gray-500 block uppercase">UHID Number</span>
+                  <span className="text-[9px] font-bold text-gray-500 block uppercase">UHID Number</span>
                   <span className="font-extrabold text-xs text-gray-900">{formatUhid(receiptModalAdmission.patientId?.uhid)}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] font-bold text-gray-500 block uppercase">Admission ID (PID)</span>
+                  <span className="text-[9px] font-bold text-gray-500 block uppercase">Admission ID (PID)</span>
                   <span className="font-extrabold text-xs text-blue-700">{receiptModalAdmission.pidNumber || 'N/A'}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] font-bold text-gray-500 block uppercase">IPD Case ID</span>
+                  <span className="text-[9px] font-bold text-gray-500 block uppercase">IPD Case ID</span>
                   <span className="font-extrabold text-xs text-orange-700">{receiptModalAdmission.ipdNumber || 'N/A'}</span>
                 </div>
               </div>
 
               {/* SECTION 1: PATIENT BASIC INFORMATION */}
               <div className="border border-gray-200 rounded-xl overflow-hidden text-xs">
-                <div className="bg-gray-100 px-3 py-1.5 font-extrabold text-gray-800 uppercase tracking-wide border-b border-gray-200 flex justify-between items-center">
+                <div className="bg-gray-100 px-3 py-1 font-extrabold text-gray-800 text-[11px] uppercase tracking-wide border-b border-gray-200 flex justify-between items-center">
                   <span>Patient Demographics</span>
-                  <span className="text-[10px] text-gray-500 font-bold">Reg Date: {new Date(receiptModalAdmission.patientId?.createdAt || Date.now()).toLocaleDateString()}</span>
+                  <span className="text-[9px] text-gray-500 font-bold">Reg Date: {new Date(receiptModalAdmission.patientId?.createdAt || Date.now()).toLocaleDateString()}</span>
                 </div>
-                <div className="p-3 grid grid-cols-2 gap-x-4 gap-y-2">
+                <div className="p-2.5 grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">
                   <div>
-                    <span className="text-gray-500 text-[10px] font-bold uppercase block">Patient Name</span>
-                    <span className="font-black text-gray-900 text-sm">{receiptModalAdmission.patientId?.patientName || 'N/A'}</span>
+                    <span className="text-gray-500 text-[9px] font-bold uppercase block">Patient Name</span>
+                    <span className="font-black text-gray-900 text-xs">{receiptModalAdmission.patientId?.patientName || 'N/A'}</span>
                   </div>
                   <div>
-                    <span className="text-gray-500 text-[10px] font-bold uppercase block">Mobile Number</span>
+                    <span className="text-gray-500 text-[9px] font-bold uppercase block">Mobile Number</span>
                     <span className="font-bold text-gray-900">{receiptModalAdmission.patientId?.mobile || 'N/A'}</span>
                   </div>
                   <div>
-                    <span className="text-gray-500 text-[10px] font-bold uppercase block">Gender / Age</span>
+                    <span className="text-gray-500 text-[9px] font-bold uppercase block">Gender / Age</span>
                     <span className="font-bold text-gray-900">
                       {receiptModalAdmission.patientId?.gender || 'N/A'} • {receiptModalAdmission.patientId?.dob ? `${Math.floor((new Date() - new Date(receiptModalAdmission.patientId.dob)) / (365.25 * 24 * 60 * 60 * 1000))} yrs` : 'N/A'}
                     </span>
                   </div>
                   <div>
-                    <span className="text-gray-500 text-[10px] font-bold uppercase block">Aadhaar Number</span>
+                    <span className="text-gray-500 text-[9px] font-bold uppercase block">Aadhaar Number</span>
                     <span className="font-mono font-bold text-gray-900">{receiptModalAdmission.patientId?.aadhaar || 'N/A'}</span>
                   </div>
-                  <div className="col-span-2 border-t border-gray-100 pt-1.5 mt-0.5">
-                    <span className="text-gray-500 text-[10px] font-bold uppercase block">Residential Address</span>
+                  <div className="col-span-2 border-t border-gray-100 pt-1 mt-0.5">
+                    <span className="text-gray-500 text-[9px] font-bold uppercase block">Residential Address</span>
                     <span className="font-semibold text-gray-800">{receiptModalAdmission.patientId?.address || 'Not Provided'}</span>
                   </div>
                 </div>
@@ -1789,26 +1769,26 @@ const IpdAdmission = () => {
 
               {/* SECTION 2: WARD & BED ALLOCATION */}
               <div className="border border-gray-200 rounded-xl overflow-hidden text-xs">
-                <div className="bg-gray-100 px-3 py-1.5 font-extrabold text-gray-800 uppercase tracking-wide border-b border-gray-200">
+                <div className="bg-gray-100 px-3 py-1 font-extrabold text-gray-800 text-[11px] uppercase tracking-wide border-b border-gray-200">
                   Ward & Bed Allocation Details
                 </div>
-                <div className="p-3 grid grid-cols-2 gap-x-4 gap-y-2">
+                <div className="p-2.5 grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">
                   <div>
-                    <span className="text-gray-500 text-[10px] font-bold uppercase block">Ward / Room Category</span>
+                    <span className="text-gray-500 text-[9px] font-bold uppercase block">Ward / Room Category</span>
                     <span className="font-extrabold text-gray-900">{receiptModalAdmission.roomId?.roomType || 'Standard Ward'}</span>
                   </div>
                   <div>
-                    <span className="text-gray-500 text-[10px] font-bold uppercase block">Allocated Bed Number</span>
-                    <span className="font-mono font-extrabold text-orange-700 text-sm">
+                    <span className="text-gray-500 text-[9px] font-bold uppercase block">Allocated Bed Number</span>
+                    <span className="font-mono font-extrabold text-orange-700 text-xs">
                       Bed {receiptModalAdmission.bedId?.bedNumber || 'N/A'} {receiptModalAdmission.bedId?.bedType ? `(${receiptModalAdmission.bedId.bedType})` : ''}
                     </span>
                   </div>
                   <div>
-                    <span className="text-gray-500 text-[10px] font-bold uppercase block">Date & Time of Admission</span>
+                    <span className="text-gray-500 text-[9px] font-bold uppercase block">Date & Time of Admission</span>
                     <span className="font-extrabold text-gray-900">{new Date(receiptModalAdmission.admissionDate).toLocaleString()}</span>
                   </div>
                   <div>
-                    <span className="text-gray-500 text-[10px] font-bold uppercase block">Daily Bed Charge</span>
+                    <span className="text-gray-500 text-[9px] font-bold uppercase block">Daily Bed Charge</span>
                     <span className="font-extrabold text-emerald-700">₹{receiptModalAdmission.bedId?.pricePerDay || 0} / day</span>
                   </div>
                 </div>
@@ -1816,40 +1796,40 @@ const IpdAdmission = () => {
 
               {/* SECTION 3: CONSULTANT & ADMISSION DETAILS */}
               <div className="border border-gray-200 rounded-xl overflow-hidden text-xs">
-                <div className="bg-gray-100 px-3 py-1.5 font-extrabold text-gray-800 uppercase tracking-wide border-b border-gray-200">
+                <div className="bg-gray-100 px-3 py-1 font-extrabold text-gray-800 text-[11px] uppercase tracking-wide border-b border-gray-200">
                   Medical & Consultant Details
                 </div>
-                <div className="p-3 grid grid-cols-2 gap-x-4 gap-y-2">
+                <div className="p-2.5 grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">
                   <div>
-                    <span className="text-gray-500 text-[10px] font-bold uppercase block">Consultant In Charge</span>
+                    <span className="text-gray-500 text-[9px] font-bold uppercase block">Consultant In Charge</span>
                     <span className="font-extrabold text-gray-900">Dr. {receiptModalAdmission.doctorInCharge?.doctorName || receiptModalAdmission.doctorInCharge?.username || 'Attending Physician'}</span>
                   </div>
                   <div>
-                    <span className="text-gray-500 text-[10px] font-bold uppercase block">Referred By Doctor</span>
+                    <span className="text-gray-500 text-[9px] font-bold uppercase block">Referred By Doctor</span>
                     <span className="font-bold text-gray-800">
                       {receiptModalAdmission.referredDoctor ? `Dr. ${receiptModalAdmission.referredDoctor.doctorName || receiptModalAdmission.referredDoctor.username}` : 'Direct Admission'}
                     </span>
                   </div>
                   <div>
-                    <span className="text-gray-500 text-[10px] font-bold uppercase block">Provisional Diagnosis</span>
+                    <span className="text-gray-500 text-[9px] font-bold uppercase block">Provisional Diagnosis</span>
                     <span className="font-bold text-gray-800">{receiptModalAdmission.provisionalDiagnosis || 'Under Observation'}</span>
                   </div>
                   <div>
-                    <span className="text-gray-500 text-[10px] font-bold uppercase block">Admission Status</span>
+                    <span className="text-gray-500 text-[9px] font-bold uppercase block">Admission Status</span>
                     <span className="font-bold text-emerald-700">{receiptModalAdmission.status || 'Admitted'}</span>
                   </div>
                 </div>
               </div>
 
               {/* SIGNATURE & STAMP FOOTER */}
-              <div className="pt-6 grid grid-cols-2 gap-8 text-center text-xs">
+              <div className="pt-2 grid grid-cols-2 gap-6 text-center text-[11px]">
                 <div>
-                  <div className="border-t border-dashed border-gray-400 pt-1 font-bold text-gray-600">
+                  <div className="border-t border-dashed border-gray-400 pt-0.5 font-bold text-gray-600">
                     Patient / Relative Signature
                   </div>
                 </div>
                 <div>
-                  <div className="border-t border-dashed border-gray-400 pt-1 font-bold text-gray-600">
+                  <div className="border-t border-dashed border-gray-400 pt-0.5 font-bold text-gray-600">
                     Admitting Desk Officer / Stamp
                   </div>
                 </div>
@@ -1857,17 +1837,17 @@ const IpdAdmission = () => {
 
             </div>
 
-            {/* Print Button & Keyboard Hint (Screen Only) - Explicit close button removed */}
-            <div className="space-y-2 border-t border-gray-100 pt-4 no-print">
+            {/* Print Button & Keyboard Hint (Screen Only) */}
+            <div className="space-y-1.5 border-t border-gray-100 pt-2.5 no-print">
               <button
                 type="button"
                 onClick={triggerPrintAdmissionCard}
-                className="btn w-full py-2.5 rounded-xl bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-md"
+                className="btn w-full py-2 rounded-xl bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-xs"
               >
                 <Printer className="h-4 w-4" /> Print Admission Card
               </button>
               <p className="text-[10px] text-gray-400 font-extrabold text-center">
-                Press <kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded text-gray-700 font-mono">ESC</kbd> key or click outside to remove
+                Press <kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded text-gray-700 font-mono">ESC</kbd> key or click outside to close
               </p>
             </div>
           </div>

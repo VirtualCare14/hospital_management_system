@@ -531,41 +531,41 @@ const Sidebar = () => {
         {hasAccess([8]) && (
           <div>
             {renderSectionHeader('Billing Desk')}
-            <NavLink
-              to="/module/8?tab=billing"
-              onClick={handleOptionClick}
-              title="OPD/IPD Billing Desk"
-              className={({ isActive }) => getLinkClass(isActive && window.location.search.includes('tab=billing'))}
-            >
-              <CreditCard className="h-5 w-5 shrink-0" />
-              {isExpanded && <span className="truncate">OPD/IPD Billing Desk</span>}
-            </NavLink>
-            <div className="mt-1 space-y-1">
-              <NavLink
-                to="/module/8?tab=registry"
-                onClick={handleOptionClick}
-                title="Invoice Registry"
-                className={() => getLinkClass(window.location.search.includes('tab=registry'), true)}
-              >
-                <FileText className="h-4 w-4 shrink-0" />
-                {isExpanded && <span className="truncate">Invoice Registry</span>}
-              </NavLink>
+            <div className="space-y-1">
               <NavLink
                 to="/module/8?tab=dashboard"
                 onClick={handleOptionClick}
                 title="Billing Dashboard"
-                className={() => getLinkClass(window.location.search.includes('tab=dashboard'), true)}
+                className={() => getLinkClass(window.location.search.includes('tab=dashboard'))}
               >
-                <LayoutDashboard className="h-4 w-4 shrink-0" />
+                <LayoutDashboard className="h-5 w-5 shrink-0" />
                 {isExpanded && <span className="truncate">Billing Dashboard</span>}
+              </NavLink>
+              <NavLink
+                to="/module/8?tab=billing"
+                onClick={handleOptionClick}
+                title="OPD/IPD Billing Desk"
+                className={() => getLinkClass(window.location.search.includes('tab=billing') || (location.pathname === '/module/8' && !window.location.search.includes('tab=')))}
+              >
+                <CreditCard className="h-5 w-5 shrink-0" />
+                {isExpanded && <span className="truncate">OPD/IPD Billing Desk</span>}
+              </NavLink>
+              <NavLink
+                to="/module/8?tab=registry"
+                onClick={handleOptionClick}
+                title="Invoice Registry"
+                className={() => getLinkClass(window.location.search.includes('tab=registry'))}
+              >
+                <FileText className="h-5 w-5 shrink-0" />
+                {isExpanded && <span className="truncate">Invoice Registry</span>}
               </NavLink>
               <NavLink
                 to="/module/8?tab=due-recovery"
                 onClick={handleOptionClick}
                 title="Due Amount Recovery"
-                className={() => getLinkClass(window.location.search.includes('tab=due-recovery'), true)}
+                className={() => getLinkClass(window.location.search.includes('tab=due-recovery'))}
               >
-                <BadgeIndianRupee className="h-4 w-4 shrink-0 text-orange-500" />
+                <BadgeIndianRupee className="h-5 w-5 shrink-0 text-orange-500" />
                 {isExpanded && <span className="truncate">Due Amount Recovery</span>}
               </NavLink>
             </div>

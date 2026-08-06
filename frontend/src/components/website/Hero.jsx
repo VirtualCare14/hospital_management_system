@@ -42,7 +42,7 @@ export default function Hero() {
       {/* HERO SECTION */}
       <section
         id="home"
-        className="relative min-h-[95vh] flex flex-col justify-center overflow-hidden bg-white isolate pt-[96px] sm:pt-[110px] md:pt-[120px]"
+        className="relative min-h-[95vh] flex flex-col justify-center overflow-hidden bg-white isolate pt-[72px] sm:pt-[80px] md:pt-[84px]"
       >
         {/* Background depth layers */}
         <div className="absolute inset-0 -z-10 pointer-events-none">

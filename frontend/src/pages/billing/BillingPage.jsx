@@ -5,7 +5,7 @@ import {
   X, Trash2, RefreshCw, FileText, Eye, Phone,
   Building2, CreditCard, Percent, DollarSign, Receipt, FileDown,
   ArrowLeft, Stethoscope, Pill, TestTube, BedDouble, Package, Plus, Trash, EyeOff, LayoutDashboard, History, Coins, Ban,
-  MoreVertical, Pencil
+  MoreVertical, Pencil, Users, CheckCircle2, Clock, AlertTriangle, TrendingUp, TrendingDown, FileCheck, BadgeIndianRupee, Calendar, Filter, MapPin, UserCheck
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import SkeletonTable from '../../components/Skeleton/SkeletonTable';
@@ -292,6 +292,7 @@ const BillingPage = () => {
 
   // Custom Charge / Category Item State & Modal
   const [showCustomChargeModal, setShowCustomChargeModal] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [categorySelectOption, setCategorySelectOption] = useState('Procedure');
   const [customCategory, setCustomCategory] = useState('Procedure');
   const [customItemName, setCustomItemName] = useState('');
@@ -340,6 +341,17 @@ const BillingPage = () => {
 
   // Dashboard Stats
   const [stats, setStats] = useState({
+    totalIpd: 0,
+    activeIpd: 0,
+    totalOpd: 0,
+    todayOpd: 0,
+    totalDischarges: 0,
+    billingPendingCount: 0,
+    billsCompletedToday: 0,
+    paymentReceivedToday: 0,
+    outstandingToday: 0,
+    paymentReceivedMonth: 0,
+    paymentPendingMonth: 0,
     todayCollection: 0,
     monthlyCollection: 0,
     outstandingPayments: 0,
@@ -347,6 +359,9 @@ const BillingPage = () => {
     billCounts: { paid: 0, unpaid: 0, partiallyPaid: 0, cancelled: 0 }
   });
   const [loadingStats, setLoadingStats] = useState(false);
+  const [dashStartDate, setDashStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [dashEndDate, setDashEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [dashFilterPreset, setDashFilterPreset] = useState('today');
 
   // Desk Pagination state
   const [deskPage, setDeskPage] = useState(1);
@@ -386,11 +401,13 @@ const BillingPage = () => {
       .catch(() => {});
   }, []);
 
-  // Fetch dashboard stats
-  const loadDashboardStats = async () => {
+  // Fetch dashboard stats with date-wise parameters
+  const loadDashboardStats = async (start = dashStartDate, end = dashEndDate) => {
     setLoadingStats(true);
     try {
-      const { data } = await client.get('/billing/dashboard-stats');
+      const { data } = await client.get('/billing/dashboard-stats', {
+        params: { startDate: start, endDate: end }
+      });
       if (data) setStats(data);
     } catch (err) {
       console.error(err);
@@ -398,6 +415,32 @@ const BillingPage = () => {
     } finally {
       setLoadingStats(false);
     }
+  };
+
+  const handleApplyDashPreset = (preset) => {
+    setDashFilterPreset(preset);
+    const today = new Date();
+    let s = new Date();
+    let e = new Date();
+
+    if (preset === 'today') {
+      s = today;
+      e = today;
+    } else if (preset === 'yesterday') {
+      const y = new Date();
+      y.setDate(y.getDate() - 1);
+      s = y;
+      e = y;
+    } else if (preset === 'thisMonth') {
+      s = new Date(today.getFullYear(), today.getMonth(), 1);
+      e = today;
+    }
+
+    const startStr = s.toISOString().split('T')[0];
+    const endStr = e.toISOString().split('T')[0];
+    setDashStartDate(startStr);
+    setDashEndDate(endStr);
+    loadDashboardStats(startStr, endStr);
   };
 
   // Fetch Invoices Registry
@@ -1065,6 +1108,9 @@ const BillingPage = () => {
       toast.success('Advance payment recorded successfully');
       setShowAdvanceModal(false);
       loadEligiblePatients(searchQuery);
+      if (selectedPatient && (selectedPatient._id === selectedAdvancePatient._id || selectedPatient.uhid === selectedAdvancePatient.uhid)) {
+        loadPatientUnbilledItems(selectedPatient);
+      }
     } catch (err) {
       toast.error('Failed to record advance');
     } finally {
@@ -1194,43 +1240,7 @@ const BillingPage = () => {
 
   return (
     <div className="space-y-6">
-      {/* Workspace views selector */}
-      {view === 'list' && (
-          <div className="flex bg-orange-50/50 p-1 rounded-xl border border-orange-100 w-fit">
-            <button
-              onClick={() => setActiveTab('billing')}
-              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-all ${
-                activeTab === 'billing' ? 'bg-orange-500 text-white shadow-sm' : 'text-orange-950 hover:bg-orange-100/50'
-              }`}
-            >
-              <Receipt className="h-4 w-4" /> Billing desk
-            </button>
-            <button
-              onClick={() => setActiveTab('registry')}
-              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-all ${
-                activeTab === 'registry' ? 'bg-orange-500 text-white shadow-sm' : 'text-orange-950 hover:bg-orange-100/50'
-              }`}
-            >
-              <History className="h-4 w-4" /> Invoice Registry
-            </button>
-            <button
-              onClick={() => setActiveTab('dashboard')}
-              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-all ${
-                activeTab === 'dashboard' ? 'bg-orange-500 text-white shadow-sm' : 'text-orange-950 hover:bg-orange-100/50'
-              }`}
-            >
-              <LayoutDashboard className="h-4 w-4" /> Dashboard
-            </button>
-            <button
-              onClick={() => setActiveTab('due-recovery')}
-              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-all ${
-                activeTab === 'due-recovery' ? 'bg-orange-500 text-white shadow-sm' : 'text-orange-950 hover:bg-orange-100/50'
-              }`}
-            >
-              <Coins className="h-4 w-4" /> Due Amount Recovery
-            </button>
-          </div>
-        )}
+
 
       {/* ===================== VIEW 1: BILLING WORKSPACE ===================== */}
       {activeTab === 'billing' && (
@@ -1303,7 +1313,26 @@ const BillingPage = () => {
                                 <div className="text-[10px] text-gray-400 mt-0.5">{p.gender} • {p.patientAge ? `${p.patientAge} years` : 'Age N/A'}</div>
                               </div>
                             </td>
-                            <td className="p-4 font-mono font-bold text-orange-700 text-xs">{formatUhid(p.uhid)}</td>
+                            <td className="p-4 space-y-1">
+                              <span className="font-mono font-bold text-orange-700 text-xs block">{formatUhid(p.uhid)}</span>
+                              <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                                {p.ipdNumber && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 text-[9px] font-mono font-extrabold bg-purple-50 text-purple-700 rounded border border-purple-200/60" title="IPD Admission Number">
+                                    IPD: {p.ipdNumber}
+                                  </span>
+                                )}
+                                {p.pidNumber && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 text-[9px] font-mono font-extrabold bg-blue-50 text-blue-700 rounded border border-blue-200/60" title="Patient Registration ID">
+                                    PID: {p.pidNumber}
+                                  </span>
+                                )}
+                                {p.otNumber && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 text-[9px] font-mono font-extrabold bg-emerald-50 text-emerald-700 rounded border border-emerald-200/60" title="Operation Theatre ID">
+                                    OT: {p.otNumber}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
                             <td className="p-4 text-xs text-gray-600">{p.mobile}</td>
                             <td className="p-4">
                               <div className="flex flex-wrap gap-1">
@@ -1342,7 +1371,7 @@ const BillingPage = () => {
                                       }}
                                       className="w-full px-3 py-2 text-xs font-bold text-gray-800 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 text-left transition-colors cursor-pointer"
                                     >
-                                      <FileText className="h-4 w-4 text-orange-600" /> Generate Invoice
+                                      <FileText className="h-4 w-4 text-orange-600" /> Billing
                                     </button>
 
                                     <button
@@ -1397,8 +1426,13 @@ const BillingPage = () => {
             // ===================== GENERATE BILL SCREEN =====================
             <div className="space-y-6 animate-fadeIn">
               <div className="flex items-center gap-3">
-                <button onClick={handleBackToList} className="p-2 hover:bg-orange-50 rounded-lg transition-colors">
-                  <ArrowLeft className="h-5 w-5 text-gray-600" />
+                <button
+                  type="button"
+                  onClick={handleBackToList}
+                  className="p-2 bg-red-600 hover:bg-red-700 text-white rounded-xl transition-all shadow-xs flex items-center justify-center cursor-pointer"
+                  title="Close Invoice Builder"
+                >
+                  <X className="h-5 w-5" />
                 </button>
                 <div>
                   <h2 className="text-xl font-black text-gray-900 tracking-tight">Invoice Builder</h2>
@@ -1406,48 +1440,102 @@ const BillingPage = () => {
                 </div>
               </div>
 
-              {/* Patient Card & IPD Bed Assignment info */}
+              {/* Patient Card & IPD Bed Assignment info Banner */}
               {selectedPatient && (
-                <div className="card p-5 bg-gradient-to-br from-orange-50/30 to-white border border-orange-100 grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div className="md:col-span-2 border-r border-orange-100/50 pr-4">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Patient Demographics</span>
-                      <button
-                        type="button"
-                        onClick={() => setShowCustomChargeModal(true)}
-                        className="btn bg-orange-600 hover:bg-orange-700 text-white text-xs font-black py-1.5 px-3 rounded-xl shadow-xs flex items-center gap-1 cursor-pointer transition-colors"
-                        title="Add extra item or category to invoice"
-                      >
-                        <Plus className="h-3.5 w-3.5" /> Add Extra Category Item
-                      </button>
-                    </div>
-                    <h3 className="text-lg font-black text-gray-900 mt-1">{selectedPatient.patientName}</h3>
-                    <div className="text-xs text-gray-500 mt-1 flex flex-wrap gap-2">
-                      <span className="font-mono font-bold text-orange-700">{formatUhid(selectedPatient.uhid)}</span>
-                      <span>• {selectedPatient.gender}</span>
-                      <span>• {selectedPatient.patientAge ? `${selectedPatient.patientAge} Yrs` : ''}</span>
-                      <span>• {selectedPatient.mobile}</span>
-                    </div>
-                    {selectedPatient.address && <p className="text-[10px] text-gray-400 mt-1">Address: {selectedPatient.address}</p>}
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Billing Context</span>
-                    <div className="text-xs text-gray-700 space-y-1 mt-1">
-                      <p><span className="text-gray-400">Attending Doctor:</span> <span className="font-bold">{selectedPatient.doctorName}</span></p>
-                      <p><span className="text-gray-400">Reg. Date:</span> {selectedPatient.registrationDate || '-'}</p>
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">IPD Bed Assignment Details</span>
-                    {selectedPatient.admissionDetails ? (
-                      <div className="text-xs text-gray-700 space-y-0.5 mt-1 font-semibold">
-                        <p className="text-orange-700">IPD ID: {selectedPatient.admissionDetails.ipdNumber}</p>
-                        <p>Bed: {selectedPatient.admissionDetails.bedNumber} ({selectedPatient.admissionDetails.roomType})</p>
-                        <p>Admitted: {new Date(selectedPatient.admissionDetails.admissionDate).toLocaleDateString('en-IN')}</p>
+                <div className="bg-white p-5 rounded-2xl border border-orange-200/70 shadow-xs flex flex-col xl:flex-row items-start xl:items-center justify-between gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 items-center">
+                    {/* Patient Demographics with Avatar */}
+                    <div className="md:border-r md:border-orange-100 md:pr-6 flex items-start gap-3.5">
+                      <div className="w-12 h-12 rounded-full bg-orange-100/70 border border-orange-200/60 flex items-center justify-center shrink-0 mt-0.5">
+                        <User className="h-6 w-6 text-orange-600" />
                       </div>
-                    ) : (
-                      <p className="text-xs text-gray-400 mt-1">No active admission (OPD patient)</p>
-                    )}
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] text-gray-400 font-extrabold uppercase tracking-wider block">PATIENT DEMOGRAPHICS</span>
+                        <h3 className="text-xl font-black text-gray-900 tracking-tight">{selectedPatient.patientName}</h3>
+                        <div className="text-xs text-gray-600 font-semibold flex flex-wrap items-center gap-1.5 pt-0.5">
+                          <span className="font-mono font-black text-orange-600">{formatUhid(selectedPatient.uhid)}</span>
+                          <span>• {selectedPatient.gender}</span>
+                          <span>• {selectedPatient.patientAge ? `${selectedPatient.patientAge} Yrs` : ''}</span>
+                          <span>• {selectedPatient.mobile}</span>
+                        </div>
+                        {selectedPatient.address && (
+                          <p className="text-[11px] text-gray-500 flex items-center gap-1 pt-0.5">
+                            <MapPin className="h-3 w-3 text-gray-400 shrink-0" /> Address: {selectedPatient.address}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Billing Context */}
+                    <div className="md:border-r md:border-orange-100 md:pr-6 space-y-2">
+                      <span className="text-[10px] text-gray-400 font-extrabold uppercase tracking-wider block">BILLING CONTEXT</span>
+                      <div className="text-xs space-y-2">
+                        <div className="flex items-start gap-2 text-gray-700">
+                          <UserCheck className="h-4 w-4 text-gray-400 shrink-0 mt-0.5" />
+                          <div>
+                            <span className="text-gray-400 block text-[11px]">Attending Doctor:</span>
+                            <span className="font-extrabold text-gray-900">{selectedPatient.doctorName || '-'}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-2 text-gray-700">
+                          <Calendar className="h-4 w-4 text-gray-400 shrink-0 mt-0.5" />
+                          <div>
+                            <span className="text-gray-400 block text-[11px]">Reg. Date:</span>
+                            <span className="font-extrabold text-gray-900">{selectedPatient.registrationDate || '-'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* IPD Bed Assignment Details */}
+                    <div className="space-y-2">
+                      <span className="text-[10px] text-gray-400 font-extrabold uppercase tracking-wider block">IPD BED ASSIGNMENT DETAILS</span>
+                      <div className="flex items-start gap-2.5 text-xs text-gray-600">
+                        <BedDouble className="h-5 w-5 text-gray-400 shrink-0 mt-0.5" />
+                        {selectedPatient.admissionDetails ? (
+                          <div className="space-y-0.5 font-bold">
+                            <p className="text-orange-700">IPD ID: {selectedPatient.admissionDetails.ipdNumber}</p>
+                            <p className="text-gray-800">Bed: {selectedPatient.admissionDetails.bedNumber} ({selectedPatient.admissionDetails.roomType})</p>
+                            <p className="text-gray-500 font-normal text-[11px]">Admitted: {new Date(selectedPatient.admissionDetails.admissionDate).toLocaleDateString('en-IN')}</p>
+                          </div>
+                        ) : (
+                          <div className="pt-0.5">
+                            <p className="text-gray-500 font-medium">No active admission</p>
+                            <p className="text-gray-500 font-medium">(OPD patient)</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3 Action Buttons */}
+                  <div className="shrink-0 xl:pl-6 xl:border-l xl:border-orange-100 flex flex-col gap-2.5 w-full xl:w-56">
+                    <button
+                      type="button"
+                      onClick={() => setShowCustomChargeModal(true)}
+                      className="w-full bg-orange-50/80 hover:bg-orange-500 text-orange-600 hover:text-white border border-orange-200/80 hover:border-orange-500 font-extrabold text-xs py-2.5 px-4 rounded-xl shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap"
+                      title="Add extra item or category to invoice"
+                    >
+                      <Plus className="h-4 w-4" /> Add Extra Category Item
+                    </button>
+                    
+                    <button
+                      type="button"
+                      onClick={() => setShowPaymentModal(true)}
+                      className="w-full bg-orange-50/80 hover:bg-orange-500 text-orange-600 hover:text-white border border-orange-200/80 hover:border-orange-500 font-extrabold text-xs py-2.5 px-4 rounded-xl shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap"
+                      title="Open Final Payment Collection & Ledger popup"
+                    >
+                      <FileText className="h-4 w-4" /> Generate Invoice
+                    </button>
+                    
+                    <button
+                      type="button"
+                      onClick={() => handleOpenAdvanceDrawer(selectedPatient)}
+                      className="w-full bg-orange-50/80 hover:bg-orange-500 text-orange-600 hover:text-white border border-orange-200/80 hover:border-orange-500 font-extrabold text-xs py-2.5 px-4 rounded-xl shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap"
+                      title="Record advance payment for this patient"
+                    >
+                      <CreditCard className="h-4 w-4" /> + Add Advance Payment
+                    </button>
                   </div>
                 </div>
               )}
@@ -1861,180 +1949,7 @@ const BillingPage = () => {
                       </div>
                     </div>
 
-                    {/* Final Payment Mode selector */}
-                    <div className="card p-5 space-y-4">
-                      <h4 className="font-extrabold text-gray-900 text-sm border-b border-orange-100 pb-2">Final Payment Collection & Ledger</h4>
-                      
-                      <div className="space-y-3">
-                        <div>
-                          <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Select Payment Mode *</label>
-                          <select
-                            className="input text-xs font-bold py-2.5"
-                            value={paymentMode}
-                            onChange={(e) => setPaymentMode(e.target.value)}
-                          >
-                            <option value="">-- Select Payment Mode --</option>
-                            {PAYMENT_MODES.map(mode => (
-                              <option key={mode} value={mode}>{mode}</option>
-                            ))}
-                          </select>
-                        </div>
 
-                        {/* Partial Payment Amount Received Input Box */}
-                        <div className="bg-gradient-to-br from-orange-50/60 to-amber-50/40 p-3 rounded-xl border border-orange-200 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <label className="block text-xs font-black uppercase tracking-wider text-gray-700">
-                              Amount Received Now (₹)
-                            </label>
-                            <span className="text-[10px] font-bold text-gray-500">
-                              Net Payable: ₹{netPayable.toFixed(2)}
-                            </span>
-                          </div>
-                          
-                          <div className="flex gap-2 items-center">
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              max={netPayable}
-                              className="input py-2 text-sm font-extrabold text-gray-900 bg-white border-orange-300 focus:border-orange-500 flex-1"
-                              placeholder={netPayable.toFixed(2)}
-                              value={customPaidAmount}
-                              onChange={(e) => setCustomPaidAmount(e.target.value)}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setCustomPaidAmount(String(netPayable))}
-                              className="px-2.5 py-1.5 bg-orange-500 text-white font-extrabold text-[10px] rounded-lg shadow-xs hover:bg-orange-600 transition"
-                            >
-                              Full Pay
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setCustomPaidAmount('0')}
-                              className="px-2.5 py-1.5 bg-gray-200 text-gray-800 font-extrabold text-[10px] rounded-lg hover:bg-gray-300 transition"
-                            >
-                              Unpaid / 0
-                            </button>
-                          </div>
-
-                          {/* Live Balance Summary */}
-                          <div className="grid grid-cols-3 gap-2 pt-2 text-center text-xs border-t border-orange-100/80">
-                            <div className="bg-white p-1.5 rounded-lg border border-orange-100">
-                              <span className="text-[9px] text-gray-400 font-bold uppercase block">Net Payable</span>
-                              <span className="font-bold text-gray-900 text-[11px]">₹{netPayable.toFixed(2)}</span>
-                            </div>
-                            <div className="bg-emerald-50 p-1.5 rounded-lg border border-emerald-200">
-                              <span className="text-[9px] text-emerald-700 font-bold uppercase block">Paid Now</span>
-                              <span className="font-extrabold text-emerald-700 text-[11px]">₹{effectiveAmountPaid.toFixed(2)}</span>
-                            </div>
-                            <div className={`p-1.5 rounded-lg border ${effectiveDueAmount > 0 ? 'bg-red-50 border-red-200 text-red-700' : 'bg-gray-50 border-gray-200 text-gray-700'}`}>
-                              <span className="text-[9px] uppercase font-extrabold block">Due Left</span>
-                              <span className="font-extrabold text-[11px]">₹{effectiveDueAmount.toFixed(2)}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Transaction reference if applicable */}
-                        {paymentMode && paymentMode !== 'Cash' && paymentMode !== 'Mixed Payment' && (
-                          <div className="animate-fadeIn">
-                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Transaction Ref / Cheque No / Card details</label>
-                            <input
-                              className="input text-xs py-2 font-mono"
-                              placeholder="Reference Number..."
-                              value={transactionRef}
-                              onChange={(e) => setTransactionRef(e.target.value)}
-                            />
-                          </div>
-                        )}
-
-                        {/* Mixed payment splits */}
-                        {paymentMode === 'Mixed Payment' && (
-                          <div className="bg-orange-50/20 p-3 rounded-lg border border-orange-100 space-y-2 animate-fadeIn">
-                            <span className="text-[10px] text-gray-400 font-bold block mb-1">Enter Splits (Must sum to ₹{netPayable.toFixed(2)})</span>
-                            <div className="grid grid-cols-3 gap-2">
-                              <div>
-                                <label className="text-[9px] text-gray-400 uppercase font-black">Cash</label>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  className="input text-xs py-1 px-1.5 font-mono font-bold"
-                                  value={cashSplit}
-                                  onChange={(e) => setCashSplit(parseFloat(e.target.value) || 0)}
-                                />
-                              </div>
-                              <div>
-                                <label className="text-[9px] text-gray-400 uppercase font-black">UPI</label>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  className="input text-xs py-1 px-1.5 font-mono font-bold"
-                                  value={upiSplit}
-                                  onChange={(e) => setUpiSplit(parseFloat(e.target.value) || 0)}
-                                />
-                              </div>
-                              <div>
-                                <label className="text-[9px] text-gray-400 uppercase font-black">Card</label>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  className="input text-xs py-1 px-1.5 font-mono font-bold"
-                                  value={cardSplit}
-                                  onChange={(e) => setCardSplit(parseFloat(e.target.value) || 0)}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        <div>
-                          <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Notes / Remarks</label>
-                          <textarea
-                            className="input text-xs"
-                            rows={2}
-                            placeholder="Add invoice notes..."
-                            value={remarks}
-                            onChange={(e) => setRemarks(e.target.value)}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="pt-2 flex flex-col gap-2">
-                        <button
-                          type="button"
-                          onClick={handlePrintOverviewDraft}
-                          className="btn-secondary text-xs py-2.5 flex items-center justify-center gap-1.5 border-dashed border-orange-300 text-orange-700 hover:bg-orange-50"
-                        >
-                          <Printer className="h-4 w-4" /> Print Patient Overview
-                        </button>
-                        {requestAdminDiscount ? (
-                          <button
-                            onClick={handleSaveBillRequest}
-                            disabled={saving}
-                            className="btn text-xs py-2.5 w-full bg-orange-600 hover:bg-orange-700 text-white font-extrabold flex items-center justify-center gap-1.5"
-                          >
-                            <Save className="h-4 w-4" /> Submit Discount Request
-                          </button>
-                        ) : (
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleSaveBill(false)}
-                              disabled={saving}
-                              className="btn-secondary text-xs py-2.5 flex-1"
-                            >
-                              {saving ? 'Saving...' : 'Save Draft'}
-                            </button>
-                            <button
-                              onClick={() => handleSaveBill(true)}
-                              disabled={saving}
-                              className="btn text-xs py-2.5 flex-1"
-                            >
-                              {saving ? 'Processing...' : 'Finalize Invoice'}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
                   </div>
 
                 </div>
@@ -2198,58 +2113,261 @@ const BillingPage = () => {
       {/* ===================== VIEW 3: DASHBOARD ===================== */}
       {activeTab === 'dashboard' && (
         <div className="space-y-6 animate-fadeIn">
+
+
+          {/* Date-Wise Selection Filter Bar */}
+          <div className="bg-white p-3.5 px-4 rounded-2xl border border-orange-200/70 shadow-xs flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 text-gray-700 mr-1">
+                <Calendar className="h-4 w-4 text-orange-500" />
+                <span className="text-xs font-extrabold tracking-wide uppercase text-gray-600">Date Filter:</span>
+              </div>
+              <div className="flex items-center gap-1 bg-orange-50/60 p-1 rounded-xl border border-orange-100">
+                <button
+                  type="button"
+                  onClick={() => handleApplyDashPreset('today')}
+                  className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    dashFilterPreset === 'today' ? 'bg-orange-500 text-white shadow-xs' : 'text-orange-950 hover:bg-orange-100/60'
+                  }`}
+                >
+                  Today
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyDashPreset('yesterday')}
+                  className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    dashFilterPreset === 'yesterday' ? 'bg-orange-500 text-white shadow-xs' : 'text-orange-950 hover:bg-orange-100/60'
+                  }`}
+                >
+                  Yesterday
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyDashPreset('thisMonth')}
+                  className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    dashFilterPreset === 'thisMonth' ? 'bg-orange-500 text-white shadow-xs' : 'text-orange-950 hover:bg-orange-100/60'
+                  }`}
+                >
+                  This Month
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 text-xs text-gray-600 font-bold">
+                <span>From</span>
+                <input
+                  type="date"
+                  className="bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1 text-xs font-bold text-gray-800 focus:bg-white focus:border-orange-500 outline-none"
+                  value={dashStartDate}
+                  onChange={(e) => {
+                    setDashStartDate(e.target.value);
+                    setDashFilterPreset('custom');
+                  }}
+                />
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-gray-600 font-bold">
+                <span>To</span>
+                <input
+                  type="date"
+                  className="bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1 text-xs font-bold text-gray-800 focus:bg-white focus:border-orange-500 outline-none"
+                  value={dashEndDate}
+                  onChange={(e) => {
+                    setDashEndDate(e.target.value);
+                    setDashFilterPreset('custom');
+                  }}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => loadDashboardStats(dashStartDate, dashEndDate)}
+                className="flex items-center gap-1 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-xs transition cursor-pointer"
+              >
+                <Filter className="h-3.5 w-3.5" /> Apply Filter
+              </button>
+            </div>
+          </div>
+
           {loadingStats ? (
-            <div className="card p-4">
-              <SkeletonTable rows={3} columns={4} className="w-full" />
+            <div className="bg-white p-6 rounded-2xl border border-orange-100">
+              <SkeletonTable rows={4} columns={4} className="w-full" />
             </div>
           ) : (
             <>
-              {/* Stats Counters Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="card p-5 bg-gradient-to-br from-orange-500 to-orange-600 text-white space-y-2 shadow-md">
-                  <span className="text-[10px] uppercase font-bold text-orange-100 tracking-wider">Today's Collections</span>
-                  <h3 className="text-2xl font-black">₹{stats.todayCollection.toFixed(2)}</h3>
-                  <p className="text-[10px] text-orange-100">Sum of finalized invoices today</p>
-                </div>
-                
-                <div className="card p-5 bg-white border border-orange-100 space-y-2">
-                  <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Monthly Collections</span>
-                  <h3 className="text-2xl font-black text-gray-900">₹{stats.monthlyCollection.toFixed(2)}</h3>
-                  <p className="text-[10px] text-gray-400">Sum of transactions this month</p>
-                </div>
+              {/* SECTION 1: OPERATIONAL & PATIENT ACTIVITY OVERVIEW (5 Cards including Today Total OPD) */}
+              <div>
+                <h3 className="text-xs font-black uppercase tracking-wider text-gray-700 mb-3 flex items-center gap-1.5">
+                  <User className="h-4 w-4 text-orange-600" /> Patient Activity &amp; Billing Status
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                  {/* Today Total OPD (Date-Wise) */}
+                  <div className="bg-white p-5 rounded-2xl border-l-4 border-l-blue-600 border border-blue-200 shadow-xs hover:shadow-md transition-shadow">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-blue-900">Today Total OPD</span>
+                      <div className="p-2 bg-blue-100 text-blue-700 rounded-xl">
+                        <Users className="h-5 w-5" />
+                      </div>
+                    </div>
+                    <h3 className="text-3xl font-black text-blue-950 mt-2">{stats.todayOpd || 0}</h3>
+                    <p className="text-xs font-bold text-blue-700 mt-1">
+                      OPD Visits ({dashStartDate === dashEndDate ? dashStartDate : `${dashStartDate} to ${dashEndDate}`})
+                    </p>
+                  </div>
 
-                <div className="card p-5 bg-white border border-orange-100 space-y-2">
-                  <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Outstanding Dues</span>
-                  <h3 className="text-2xl font-black text-red-600">₹{stats.outstandingPayments.toFixed(2)}</h3>
-                  <p className="text-[10px] text-gray-400">Sum of unfinalized balances</p>
-                </div>
+                  {/* Total IPD */}
+                  <div className="bg-white p-5 rounded-2xl border-l-4 border-l-purple-600 border border-purple-100 shadow-xs hover:shadow-md transition-shadow">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-gray-600">Total IPD</span>
+                      <div className="p-2 bg-purple-100 text-purple-700 rounded-xl">
+                        <BedDouble className="h-5 w-5" />
+                      </div>
+                    </div>
+                    <h3 className="text-3xl font-black text-gray-900 mt-2">{stats.totalIpd || 0}</h3>
+                    <p className="text-xs font-bold text-purple-700 mt-1">
+                      {stats.activeIpd || 0} currently admitted
+                    </p>
+                  </div>
 
-                <div className="card p-5 bg-white border border-orange-100 space-y-2">
-                  <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Discounts Granted Today</span>
-                  <h3 className="text-2xl font-black text-orange-600">₹{stats.discountSummary.toFixed(2)}</h3>
-                  <p className="text-[10px] text-gray-400">Sum of discounts applied today</p>
+                  {/* Total OPD (All Time) */}
+                  <div className="bg-white p-5 rounded-2xl border-l-4 border-l-cyan-600 border border-cyan-100 shadow-xs hover:shadow-md transition-shadow">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-gray-600">Total OPD (All)</span>
+                      <div className="p-2 bg-cyan-100 text-cyan-700 rounded-xl">
+                        <Stethoscope className="h-5 w-5" />
+                      </div>
+                    </div>
+                    <h3 className="text-3xl font-black text-gray-900 mt-2">{stats.totalOpd || 0}</h3>
+                    <p className="text-xs font-semibold text-gray-600 mt-1">All OPD patient records</p>
+                  </div>
+
+                  {/* Discharge */}
+                  <div className="bg-white p-5 rounded-2xl border-l-4 border-l-emerald-600 border border-emerald-100 shadow-xs hover:shadow-md transition-shadow">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-gray-600">Discharges</span>
+                      <div className="p-2 bg-emerald-100 text-emerald-700 rounded-xl">
+                        <CheckCircle2 className="h-5 w-5" />
+                      </div>
+                    </div>
+                    <h3 className="text-3xl font-black text-gray-900 mt-2">{stats.totalDischarges || 0}</h3>
+                    <p className="text-xs font-bold text-emerald-700 mt-1">Discharged IPD patients</p>
+                  </div>
+
+                  {/* Billing Pending */}
+                  <div className="bg-white p-5 rounded-2xl border-l-4 border-l-amber-600 border border-amber-100 shadow-xs hover:shadow-md transition-shadow">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-gray-600">Billing Pending</span>
+                      <div className="p-2 bg-amber-100 text-amber-700 rounded-xl">
+                        <Clock className="h-5 w-5" />
+                      </div>
+                    </div>
+                    <h3 className="text-3xl font-black text-amber-700 mt-2">{stats.billingPendingCount || 0}</h3>
+                    <p className="text-xs font-bold text-amber-800 mt-1">Patients with unbilled charges</p>
+                  </div>
                 </div>
               </div>
 
-              {/* Status Analysis Counts */}
-              <div className="card p-5 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                <div className="border-r border-orange-100 last:border-0 p-2">
-                  <span className="text-2xl font-black text-green-600">{stats.billCounts.paid}</span>
-                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mt-1">Paid Invoices</p>
+              {/* SECTION 2: TODAY'S FINANCIAL PERFORMANCE (3 Cards) */}
+              <div>
+                <h3 className="text-xs font-black uppercase tracking-wider text-gray-700 mb-3 flex items-center gap-1.5">
+                  <Coins className="h-4 w-4 text-orange-600" /> Today's Financial &amp; Billing Performance
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {/* Total Bills Completed Today */}
+                  <div className="bg-white p-5 rounded-2xl border-2 border-indigo-200 shadow-xs hover:shadow-md transition-shadow space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-extrabold uppercase tracking-wider text-indigo-900">Total Bills Completed Today</span>
+                      <div className="p-2 bg-indigo-100 text-indigo-700 rounded-xl">
+                        <FileCheck className="h-5 w-5" />
+                      </div>
+                    </div>
+                    <h3 className="text-3xl font-black text-indigo-950">{stats.billsCompletedToday || 0}</h3>
+                    <p className="text-xs font-semibold text-gray-600">Finalized invoices created today</p>
+                  </div>
+
+                  {/* Total Payment Received Today */}
+                  <div className="bg-white p-5 rounded-2xl border-2 border-emerald-300 shadow-xs hover:shadow-md transition-shadow space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-900">Payment Received Today</span>
+                      <div className="p-2 bg-emerald-100 text-emerald-700 rounded-xl">
+                        <BadgeIndianRupee className="h-5 w-5" />
+                      </div>
+                    </div>
+                    <h3 className="text-3xl font-black text-emerald-700">₹{(stats.paymentReceivedToday || stats.todayCollection || 0).toFixed(2)}</h3>
+                    <p className="text-xs font-bold text-emerald-800">Collections &amp; advances received today</p>
+                  </div>
+
+                  {/* Total Outstanding Today */}
+                  <div className="bg-white p-5 rounded-2xl border-2 border-rose-300 shadow-xs hover:shadow-md transition-shadow space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-extrabold uppercase tracking-wider text-rose-900">Total Outstanding Today</span>
+                      <div className="p-2 bg-rose-100 text-rose-700 rounded-xl">
+                        <AlertTriangle className="h-5 w-5" />
+                      </div>
+                    </div>
+                    <h3 className="text-3xl font-black text-rose-700">₹{(stats.outstandingToday || 0).toFixed(2)}</h3>
+                    <p className="text-xs font-bold text-rose-800">Due balance generated today</p>
+                  </div>
                 </div>
-                <div className="border-r border-orange-100 last:border-0 p-2">
-                  <span className="text-2xl font-black text-yellow-600">{stats.billCounts.unpaid + stats.billCounts.partiallyPaid}</span>
-                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mt-1">Unpaid / Drafts</p>
+              </div>
+
+              {/* SECTION 3: MONTHLY FINANCIAL HIGHLIGHTS (2 High-Contrast Banners) */}
+              <div>
+                <h3 className="text-xs font-black uppercase tracking-wider text-gray-700 mb-3 flex items-center gap-1.5">
+                  <Receipt className="h-4 w-4 text-orange-600" /> Monthly Financial Overview
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Total Payment Received for Month */}
+                  <div className="bg-white border-2 border-emerald-500 rounded-2xl p-6 shadow-sm space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs uppercase font-extrabold text-emerald-800 tracking-wider">Total Payment Received (Month)</span>
+                      <div className="p-2.5 bg-emerald-100 text-emerald-700 rounded-xl">
+                        <TrendingUp className="h-6 w-6" />
+                      </div>
+                    </div>
+                    <h3 className="text-3xl md:text-4xl font-black text-emerald-900">₹{(stats.paymentReceivedMonth || stats.monthlyCollection || 0).toFixed(2)}</h3>
+                    <p className="text-xs font-semibold text-emerald-700">
+                      Sum of all finalized invoice payments and advance collections this month
+                    </p>
+                  </div>
+
+                  {/* Total Payment Pending for Month */}
+                  <div className="bg-white border-2 border-rose-500 rounded-2xl p-6 shadow-sm space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs uppercase font-extrabold text-rose-800 tracking-wider">Total Payment Pending (Month)</span>
+                      <div className="p-2.5 bg-rose-100 text-rose-700 rounded-xl">
+                        <TrendingDown className="h-6 w-6" />
+                      </div>
+                    </div>
+                    <h3 className="text-3xl md:text-4xl font-black text-rose-900">₹{(stats.paymentPendingMonth || 0).toFixed(2)}</h3>
+                    <p className="text-xs font-semibold text-rose-700">
+                      Sum of all outstanding balances &amp; unfinalized bill amounts for this month
+                    </p>
+                  </div>
                 </div>
-                <div className="border-r border-orange-100 last:border-0 p-2">
-                  <span className="text-2xl font-black text-red-500">{stats.billCounts.cancelled}</span>
-                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mt-1">Cancelled Bills</p>
-                </div>
-                <div className="p-2">
-                  <span className="text-2xl font-black text-orange-600">
-                    {stats.billCounts.paid + stats.billCounts.unpaid + stats.billCounts.partiallyPaid}
-                  </span>
-                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mt-1">Total Active Ledger</p>
+              </div>
+
+              {/* SECTION 4: INVOICE STATUS BREAKDOWN */}
+              <div className="bg-white border border-orange-200/80 rounded-2xl p-5 shadow-xs">
+                <h4 className="text-xs font-black uppercase tracking-wider text-gray-700 mb-4">Invoice Ledger Status Summary</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                  <div className="border-r border-orange-100 last:border-0 p-2">
+                    <span className="text-2xl font-black text-emerald-600">{stats.billCounts.paid}</span>
+                    <p className="text-xs text-gray-600 font-bold uppercase tracking-wider mt-1">Paid Invoices</p>
+                  </div>
+                  <div className="border-r border-orange-100 last:border-0 p-2">
+                    <span className="text-2xl font-black text-amber-600">{stats.billCounts.unpaid + stats.billCounts.partiallyPaid}</span>
+                    <p className="text-xs text-gray-600 font-bold uppercase tracking-wider mt-1">Unpaid / Dues</p>
+                  </div>
+                  <div className="border-r border-orange-100 last:border-0 p-2">
+                    <span className="text-2xl font-black text-rose-600">{stats.billCounts.cancelled}</span>
+                    <p className="text-xs text-gray-600 font-bold uppercase tracking-wider mt-1">Cancelled Bills</p>
+                  </div>
+                  <div className="p-2">
+                    <span className="text-2xl font-black text-orange-600">
+                      {stats.billCounts.paid + stats.billCounts.unpaid + stats.billCounts.partiallyPaid}
+                    </span>
+                    <p className="text-xs text-gray-600 font-bold uppercase tracking-wider mt-1">Total Active Ledger</p>
+                  </div>
                 </div>
               </div>
             </>
@@ -3202,6 +3320,261 @@ const BillingPage = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ============= MODAL: FINAL PAYMENT COLLECTION & LEDGER POPUP ============ */}
+      {showPaymentModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4 border border-orange-100 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-orange-100 pb-3">
+              <div>
+                <h3 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
+                  <Receipt className="h-5 w-5 text-orange-600" /> Final Payment Collection &amp; Ledger
+                </h3>
+                {selectedPatient && (
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Patient: <span className="font-bold text-gray-800">{selectedPatient.patientName}</span> ({formatUhid(selectedPatient.uhid)})
+                  </p>
+                )}
+              </div>
+              <button 
+                type="button"
+                onClick={() => setShowPaymentModal(false)}
+                className="p-1 hover:bg-orange-50 text-gray-400 hover:text-gray-600 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Quick Summary Bar */}
+            <div className="bg-gradient-to-r from-orange-50/70 to-amber-50/70 p-3 rounded-xl border border-orange-200/80 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] text-gray-400 font-bold uppercase block">Net Payable Amount</span>
+                <span className="text-xl font-black text-orange-700">₹{netPayable.toFixed(2)}</span>
+              </div>
+              <div className="text-right text-xs space-y-0.5 text-gray-600">
+                <p>Subtotal: <span className="font-bold">₹{subtotal.toFixed(2)}</span></p>
+                <p>Advance Adjusted: <span className="font-bold text-emerald-600">₹{(advanceToAdjust || 0).toFixed(2)}</span></p>
+              </div>
+            </div>
+
+            <div className="space-y-4 pt-1">
+              <div>
+                <label className="block text-xs font-black uppercase text-gray-600 mb-1">Select Payment Mode *</label>
+                <select
+                  className="input text-xs font-bold py-2.5 cursor-pointer"
+                  value={paymentMode}
+                  onChange={(e) => setPaymentMode(e.target.value)}
+                >
+                  <option value="">-- Select Payment Mode --</option>
+                  {PAYMENT_MODES.map(mode => (
+                    <option key={mode} value={mode}>{mode}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Partial Payment Amount Received Input Box */}
+              <div className="bg-gradient-to-br from-orange-50/60 to-amber-50/40 p-3.5 rounded-xl border border-orange-200 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-black uppercase tracking-wider text-gray-700">
+                    Amount Received Now (₹)
+                  </label>
+                  <span className="text-[10px] font-bold text-gray-500">
+                    Net Payable: ₹{netPayable.toFixed(2)}
+                  </span>
+                </div>
+                
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max={netPayable}
+                    className="input py-2 text-sm font-extrabold text-gray-900 bg-white border-orange-300 focus:border-orange-500 flex-1"
+                    placeholder={netPayable.toFixed(2)}
+                    value={customPaidAmount}
+                    onChange={(e) => setCustomPaidAmount(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setCustomPaidAmount(String(netPayable))}
+                    className="px-3 py-2 bg-orange-500 text-white font-extrabold text-xs rounded-lg shadow-xs hover:bg-orange-600 transition cursor-pointer"
+                  >
+                    Full Pay
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCustomPaidAmount('0')}
+                    className="px-3 py-2 bg-gray-200 text-gray-800 font-extrabold text-xs rounded-lg hover:bg-gray-300 transition cursor-pointer"
+                  >
+                    Unpaid / 0
+                  </button>
+                </div>
+
+                {/* Live Balance Summary */}
+                <div className="grid grid-cols-3 gap-2 pt-2 text-center text-xs border-t border-orange-100/80">
+                  <div className="bg-white p-2 rounded-lg border border-orange-100">
+                    <span className="text-[9px] text-gray-400 font-bold uppercase block">Net Payable</span>
+                    <span className="font-bold text-gray-900 text-xs">₹{netPayable.toFixed(2)}</span>
+                  </div>
+                  <div className="bg-emerald-50 p-2 rounded-lg border border-emerald-200">
+                    <span className="text-[9px] text-emerald-700 font-bold uppercase block">Paid Now</span>
+                    <span className="font-extrabold text-emerald-700 text-xs">₹{effectiveAmountPaid.toFixed(2)}</span>
+                  </div>
+                  <div className={`p-2 rounded-lg border ${effectiveDueAmount > 0 ? 'bg-red-50 border-red-200 text-red-700' : 'bg-gray-50 border-gray-200 text-gray-700'}`}>
+                    <span className="text-[9px] uppercase font-extrabold block">Due Left</span>
+                    <span className="font-extrabold text-xs">₹{effectiveDueAmount.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Transaction reference if applicable */}
+              {paymentMode && paymentMode !== 'Cash' && paymentMode !== 'Mixed Payment' && (
+                <div className="animate-fadeIn">
+                  <label className="block text-xs font-black uppercase text-gray-600 mb-1">Transaction Ref / Cheque No / Card details</label>
+                  <input
+                    className="input text-xs py-2 font-mono"
+                    placeholder="Reference Number..."
+                    value={transactionRef}
+                    onChange={(e) => setTransactionRef(e.target.value)}
+                  />
+                </div>
+              )}
+
+              {/* Mixed payment splits */}
+              {paymentMode === 'Mixed Payment' && (
+                <div className="bg-orange-50/20 p-3 rounded-lg border border-orange-100 space-y-2 animate-fadeIn">
+                  <span className="text-[10px] text-gray-400 font-bold block mb-1">Enter Splits (Must sum to ₹{netPayable.toFixed(2)})</span>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="text-[9px] text-gray-400 uppercase font-black">Cash</label>
+                      <input
+                        type="number"
+                        min="0"
+                        className="input text-xs py-1 px-1.5 font-mono font-bold"
+                        value={cashSplit}
+                        onChange={(e) => setCashSplit(parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] text-gray-400 uppercase font-black">UPI</label>
+                      <input
+                        type="number"
+                        min="0"
+                        className="input text-xs py-1 px-1.5 font-mono font-bold"
+                        value={upiSplit}
+                        onChange={(e) => setUpiSplit(parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] text-gray-400 uppercase font-black">Card</label>
+                      <input
+                        type="number"
+                        min="0"
+                        className="input text-xs py-1 px-1.5 font-mono font-bold"
+                        value={cardSplit}
+                        onChange={(e) => setCardSplit(parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-black uppercase text-gray-600 mb-1">Notes / Remarks</label>
+                <textarea
+                  className="input text-xs"
+                  rows={2}
+                  placeholder="Add invoice notes..."
+                  value={remarks}
+                  onChange={(e) => setRemarks(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-orange-100 flex flex-col gap-2">
+              {/* Warnings if disabled */}
+              {Boolean(selectedPatient?.dischargeBlocked || (selectedPatient?.admissionDetails && selectedPatient?.admissionDetails?.status !== 'Discharged')) && (
+                <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl text-center">
+                  <p className="text-[11px] font-bold text-red-600">
+                    ⚠️ Cannot Finalize Invoice: Patient is currently admitted in IPD and has not been discharged.
+                  </p>
+                </div>
+              )}
+              {!Boolean(selectedPatient?.dischargeBlocked || (selectedPatient?.admissionDetails && selectedPatient?.admissionDetails?.status !== 'Discharged')) && (subtotal <= 0 || selectedItems.length === 0) && (
+                <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-center font-bold">
+                  <p className="text-[11px] text-amber-700">
+                    ⚠️ Cannot Finalize Invoice: OPD/IPD billing subtotal is ₹0.00 or no billable items selected.
+                  </p>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handlePrintOverviewDraft}
+                className="btn-secondary text-xs py-2.5 flex items-center justify-center gap-1.5 border-dashed border-orange-300 text-orange-700 hover:bg-orange-50 cursor-pointer"
+              >
+                <Printer className="h-4 w-4" /> Print Patient Overview
+              </button>
+              {requestAdminDiscount ? (
+                <button
+                  onClick={async () => {
+                    await handleSaveBillRequest();
+                    setShowPaymentModal(false);
+                  }}
+                  disabled={saving}
+                  className="btn text-xs py-2.5 w-full bg-orange-600 hover:bg-orange-700 text-white font-extrabold flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Save className="h-4 w-4" /> Submit Discount Request
+                </button>
+              ) : (
+                <div className="flex gap-2">
+                  <button
+                    onClick={async () => {
+                      await handleSaveBill(false);
+                      setShowPaymentModal(false);
+                    }}
+                    disabled={saving}
+                    className="btn-secondary text-xs py-2.5 flex-1 cursor-pointer"
+                  >
+                    {saving ? 'Saving...' : 'Save Draft'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await handleSaveBill(true);
+                      setShowPaymentModal(false);
+                    }}
+                    disabled={
+                      saving || 
+                      Boolean(selectedPatient?.dischargeBlocked || (selectedPatient?.admissionDetails && selectedPatient?.admissionDetails?.status !== 'Discharged')) ||
+                      subtotal <= 0 || 
+                      selectedItems.length === 0
+                    }
+                    className={`btn text-xs py-2.5 flex-1 font-extrabold transition ${
+                      saving || 
+                      Boolean(selectedPatient?.dischargeBlocked || (selectedPatient?.admissionDetails && selectedPatient?.admissionDetails?.status !== 'Discharged')) ||
+                      subtotal <= 0 || 
+                      selectedItems.length === 0
+                        ? 'bg-gray-200 text-gray-400 cursor-not-allowed border-0'
+                        : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer'
+                    }`}
+                    title={
+                      Boolean(selectedPatient?.dischargeBlocked || (selectedPatient?.admissionDetails && selectedPatient?.admissionDetails?.status !== 'Discharged'))
+                        ? 'Discharge patient from IPD first to finalize invoice'
+                        : subtotal <= 0 || selectedItems.length === 0
+                        ? 'Billing subtotal must be greater than zero to finalize invoice'
+                        : 'Finalize invoice'
+                    }
+                  >
+                    {saving ? 'Processing...' : 'Finalize Invoice'}
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
