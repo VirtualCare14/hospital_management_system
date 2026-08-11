@@ -1,26 +1,82 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --primary-orange: #f97316;
+  --light-orange: #fff7ed;
+  --orange-border: #fed7aa;
+  --background: #f8fafc;
+  --card-bg: #ffffff;
+  --text-main: #1f2937;
+  --text-muted: #64748b;
+  --border-color: #e5e7eb;
 }
 
 @theme inline {
   --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-foreground: var(--text-main);
+  --font-sans: var(--font-inter), system-ui, -apple-system, sans-serif;
 }
 
 body {
   background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--text-main);
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
+
+/* Form Controls & Compact UI styling */
+.lab-input {
+  width: 100%;
+  height: 38px;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  font-size: 0.875rem; /* 14px */
+  color: #1f2937;
+  transition: all 150ms ease-in-out;
+}
+
+.lab-input:focus {
+  outline: none;
+  border-color: #f97316;
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
+}
+
+.lab-input::placeholder {
+  color: #9ca3af;
+}
+
+.lab-label {
+  display: block;
+  font-size: 0.8125rem; /* 13px */
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 0.375rem;
+}
+
+.lab-label-required::after {
+  content: " *";
+  color: #ef4444;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+

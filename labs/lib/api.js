@@ -25,24 +25,24 @@ export const API_BASE_URL = getBaseUrl();
 
 export const getStoredToken = () => {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem('hms_token') || localStorage.getItem('lab_token');
+  return localStorage.getItem('lab_token') || localStorage.getItem('hms_token');
 };
 
 export const setStoredToken = (token) => {
   if (typeof window === 'undefined') return;
   if (token) {
-    localStorage.setItem('hms_token', token);
     localStorage.setItem('lab_token', token);
+    localStorage.setItem('hms_token', token);
   } else {
-    localStorage.removeItem('hms_token');
     localStorage.removeItem('lab_token');
+    localStorage.removeItem('hms_token');
   }
 };
 
 export const getStoredUser = () => {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = localStorage.getItem('hms_user') || localStorage.getItem('lab_user');
+    const raw = localStorage.getItem('lab_user') || localStorage.getItem('hms_user');
     return raw ? JSON.parse(raw) : null;
   } catch (e) {
     return null;
@@ -53,20 +53,20 @@ export const setStoredUser = (user) => {
   if (typeof window === 'undefined') return;
   if (user) {
     const str = JSON.stringify(user);
-    localStorage.setItem('hms_user', str);
     localStorage.setItem('lab_user', str);
+    localStorage.setItem('hms_user', str);
   } else {
-    localStorage.removeItem('hms_user');
     localStorage.removeItem('lab_user');
+    localStorage.removeItem('hms_user');
   }
 };
 
 export const clearStoredAuth = () => {
   if (typeof window === 'undefined') return;
-  localStorage.removeItem('hms_token');
   localStorage.removeItem('lab_token');
-  localStorage.removeItem('hms_user');
+  localStorage.removeItem('hms_token');
   localStorage.removeItem('lab_user');
+  localStorage.removeItem('hms_user');
 };
 
 /**
@@ -120,7 +120,13 @@ export async function apiRequest(endpoint, options = {}) {
       console.error(`API Connection Error [${endpoint}]:`, customErr.message);
       throw customErr;
     }
-    console.error(`API Error [${endpoint}]:`, error.message);
+    
+    // Suppress console.error for expected 401/403 session expiration or invalid token errors
+    if (error.status === 401 || error.status === 403) {
+      console.warn(`API Session Warning [${endpoint}]:`, error.message);
+    } else {
+      console.error(`API Error [${endpoint}]:`, error.message);
+    }
     throw error;
   }
 }

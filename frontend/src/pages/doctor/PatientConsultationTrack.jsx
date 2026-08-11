@@ -1,12 +1,13 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Calendar, FileText, Clock, ChevronDown, ChevronUp, Stethoscope, Plus, Printer, X } from 'lucide-react';
+import { ArrowLeft, Calendar, FileText, Clock, ChevronDown, ChevronUp, Stethoscope, Plus, Printer, X, Globe } from 'lucide-react';
 import client from '../../api/client';
 import { formatDate } from '../../utils/dateFormat';
 import toast from 'react-hot-toast';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import PatientReceipt from '../../components/PatientReceipt';
+import PrintLanguageModal from '../../components/PrintLanguageModal';
 import { sanitizeClonedDocumentForPdf } from '../../utils/pdfUtils';
 
 const ageFromDob = (dob) => {
@@ -27,6 +28,8 @@ const PatientConsultationTrack = () => {
   // States and refs for print helper
   const [printData, setPrintData] = useState(null);
   const printReceiptRef = useRef(null);
+  const [showLangModal, setShowLangModal] = useState(false);
+  const [pendingPrintRx, setPendingPrintRx] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -85,17 +88,35 @@ const PatientConsultationTrack = () => {
     };
   };
 
-  // Helper to trigger prescription print
-  const printSinglePrescription = (consultationObj, prescriptionObj) => {
+  // Trigger Language Modal before print
+  const handleOpenPrintModal = (consultationObj, prescriptionObj) => {
+    const rx = prescriptionObj || getPrescriptionForConsultation(consultationObj);
+    if (!rx) {
+      toast.error('No prescription found to print');
+      return;
+    }
+
+    setPendingPrintRx({
+      consultation: consultationObj,
+      prescription: rx
+    });
+    setShowLangModal(true);
+  };
+
+  const handleConfirmPrintWithLanguage = (chosenLang) => {
+    if (!pendingPrintRx) return;
+    const { consultation: consObj, prescription: rxObj } = pendingPrintRx;
+
     setPrintData({
       prescription: {
-        ...prescriptionObj,
-        diagnosisRemark: consultationObj.diagnosisRemark,
-        symptoms: consultationObj.symptoms,
-        followUpDate: consultationObj.followUpDate,
-        language: prescriptionObj.language || 'English'
+        ...rxObj,
+        diagnosisRemark: consObj?.diagnosisRemark || rxObj.diagnosisRemark,
+        symptoms: consObj?.symptoms || rxObj.symptoms,
+        followUpDate: consObj?.followUpDate || rxObj.followUpDate,
+        language: chosenLang
       }
     });
+    setShowLangModal(false);
   };
 
   useEffect(() => {
@@ -412,7 +433,7 @@ const PatientConsultationTrack = () => {
                             <button 
                               onClick={(e) => {
                                 e.stopPropagation();
-                                printSinglePrescription(consultation, prescription);
+                                handleOpenPrintModal(consultation, prescription);
                               }}
                               className="btn-secondary text-xs flex items-center gap-1 cursor-pointer"
                             >
@@ -430,6 +451,14 @@ const PatientConsultationTrack = () => {
         </div>
       )}
 
+      {/* Language Selection Modal */}
+      <PrintLanguageModal
+        isOpen={showLangModal}
+        onClose={() => setShowLangModal(false)}
+        onConfirm={handleConfirmPrintWithLanguage}
+        initialLanguage={pendingPrintRx?.prescription?.language || 'English'}
+      />
+
       {/* Prescription History Summary */}
       {prescriptions.length > 0 && (
         <div className="card p-5">
@@ -445,7 +474,7 @@ const PatientConsultationTrack = () => {
                   <th className="p-3">Doctor</th>
                   <th className="p-3">Medicines</th>
                   <th className="p-3">Language</th>
-                  <th className="p-3">Last Edited</th>
+                  <th className="p-3">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -454,24 +483,24 @@ const PatientConsultationTrack = () => {
                   return (
                     <tr key={pres._id} className="border-t border-orange-50">
                       <td className="p-3 font-bold text-orange-700">{index + 1}</td>
-                      <td className="p-3 text-xs">
+                      <td className="p-3 text-xs font-bold text-gray-800">
                         {presDt ? `${presDt.date} ${presDt.time}` : '-'}
                       </td>
                       <td className="p-3 text-xs">
                         Dr. {pres.doctorId?.doctorName || pres.doctorId?.username || 'Unknown'}
                       </td>
-                      <td className="p-3 text-xs">
+                      <td className="p-3 text-xs font-semibold text-gray-700">
                         {pres.medicines?.filter(m => m.medicine).map(m => m.medicine).join(', ') || '-'}
                       </td>
-                      <td className="p-3 text-xs">{pres.language || 'English'}</td>
+                      <td className="p-3 text-xs font-bold text-purple-700">{pres.language || 'English'}</td>
                       <td className="p-3 text-xs">
-                        {pres.updatedAt && new Date(pres.updatedAt).getTime() - new Date(pres.createdAt).getTime() > 1000 ? (
-                          <span className="text-orange-600 font-semibold">
-                            {formatDate(pres.updatedAt)} {new Date(pres.updatedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })} by Dr. {pres.doctorId?.doctorName || pres.doctorId?.username || 'Unknown'}
-                          </span>
-                        ) : (
-                          <span className="text-gray-400 font-medium">Never</span>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenPrintModal(null, pres)}
+                          className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-bold flex items-center gap-1 shadow-2xs cursor-pointer"
+                        >
+                          <Printer className="h-3 w-3" /> Print
+                        </button>
                       </td>
                     </tr>
                   );

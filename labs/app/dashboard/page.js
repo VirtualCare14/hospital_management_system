@@ -2,6 +2,7 @@
 
 import { useAuth } from '../../context/AuthContext';
 import ProtectedRoute from '../../components/ProtectedRoute';
+import DashboardLayout from '../../components/DashboardLayout';
 import { 
   FlaskConical, 
   Building2, 
@@ -16,246 +17,462 @@ import {
   Receipt,
   Server,
   Sparkles,
-  ChevronRight
+  ChevronRight,
+  ShieldCheck,
+  Search,
+  Plus,
+  Loader2,
+  X,
+  Edit3,
+  Check,
+  CalendarDays,
+  User,
+  Info
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import api from '../../lib/api';
 
 function DashboardContent() {
   const { user, logout } = useAuth();
-  const [labStats, setLabStats] = useState(null);
-  const [loadingStats, setLoadingStats] = useState(true);
-  const [backendStatus, setBackendStatus] = useState('checking');
+  const router = useRouter();
+
+  // Data States
+  const [labRequests, setLabRequests] = useState([]);
+  const [loadingRequests, setLoadingRequests] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [availableLabTests, setAvailableLabTests] = useState([]);
+
+  // Result Processing Modal State
+  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [showProcessModal, setShowProcessModal] = useState(false);
+  const [parameterValues, setParameterValues] = useState({});
+  const [reportRemarks, setReportRemarks] = useState('');
+  const [savingReport, setSavingReport] = useState(false);
+
+  const loadDashboardData = async () => {
+    setLoadingRequests(true);
+    try {
+      const [reqs, tests] = await Promise.all([
+        api.get('/lab/requests').catch(() => []),
+        api.get('/lab/tests').catch(() => [])
+      ]);
+      setLabRequests(Array.isArray(reqs) ? reqs : []);
+      setAvailableLabTests(Array.isArray(tests) ? tests : []);
+    } catch (err) {
+      console.error('Failed to load lab dashboard data', err);
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
 
   useEffect(() => {
-    async function loadDashboardData() {
-      try {
-        setLoadingStats(true);
-        // Attempt fetching lab dashboard statistics from backend API
-        const stats = await api.get('/lab/dashboard').catch(() => null);
-        if (stats) {
-          setLabStats(stats);
-        }
-        setBackendStatus('connected');
-      } catch (err) {
-        console.error('Failed to load lab statistics', err);
-        setBackendStatus('error');
-      } finally {
-        setLoadingStats(false);
-      }
-    }
     loadDashboardData();
   }, []);
 
+  const handleOpenProcessRequest = (reqItem) => {
+    setSelectedRequest(reqItem);
+    setReportRemarks(reqItem.report?.remarks || reqItem.report?.notes || '');
+    
+    // Find matching tests master to get parameters defined by admin
+    const initialParams = {};
+    const testNames = reqItem.tests || [];
+    
+    testNames.forEach(tName => {
+      const matchedTest = availableLabTests.find(
+        t => (t.title && t.title.toLowerCase() === tName.toLowerCase()) || (t.test && t.test.toLowerCase() === tName.toLowerCase())
+      );
+
+      if (matchedTest && Array.isArray(matchedTest.parameters)) {
+        matchedTest.parameters.forEach(p => {
+          // Check if report already has a saved parameter value
+          const existingParam = reqItem.report?.parameters?.find(ep => ep.name === p.name);
+          initialParams[p.name] = existingParam ? existingParam.value : '';
+        });
+      }
+    });
+
+    // Also copy existing report parameters if any
+    if (Array.isArray(reqItem.report?.parameters)) {
+      reqItem.report.parameters.forEach(p => {
+        if (!initialParams[p.name]) initialParams[p.name] = p.value || '';
+      });
+    }
+
+    setParameterValues(initialParams);
+    setShowProcessModal(true);
+  };
+
+  const handleParamValueChange = (paramName, val) => {
+    setParameterValues({
+      ...parameterValues,
+      [paramName]: val
+    });
+  };
+
+  const handleSaveReport = async (statusToSet = 'completed') => {
+    if (!selectedRequest) return;
+    setSavingReport(true);
+    try {
+      const formattedParameters = Object.entries(parameterValues).map(([pName, pVal]) => {
+        // Look up ref range & unit from available tests
+        let refRange = '';
+        let unit = '';
+        availableLabTests.forEach(t => {
+          if (Array.isArray(t.parameters)) {
+            const found = t.parameters.find(p => p.name === pName);
+            if (found) {
+              refRange = found.referenceRange || '';
+              unit = found.unit || '';
+            }
+          }
+        });
+        return {
+          name: pName,
+          value: pVal,
+          referenceRange: refRange,
+          unit: unit
+        };
+      });
+
+      const endpoint = statusToSet === 'completed'
+        ? `/lab/requests/${selectedRequest._id}/report-generate`
+        : `/lab/requests/${selectedRequest._id}/report-draft`;
+
+      await api.post(endpoint, {
+        parameters: formattedParameters,
+        remarks: reportRemarks,
+        notes: reportRemarks
+      });
+
+      setShowProcessModal(false);
+      loadDashboardData();
+    } catch (err) {
+      alert(err.data?.message || err.message || 'Failed to save test report');
+    } finally {
+      setSavingReport(false);
+    }
+  };
+
+  const filteredRequests = labRequests.filter(r => 
+    (r.patientId?.patientName && r.patientId.patientName.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (r.patientId?.uhid && r.patientId.uhid.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (r.labId && r.labId.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col">
-      {/* Top Header / Navigation Bar */}
-      <header className="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          
-          {/* Left: Brand & Hospital Identity */}
-          <div className="flex items-center space-x-4">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
-              <FlaskConical className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-lg font-bold text-white tracking-tight">Medora 360</h1>
-                <span className="px-2 py-0.5 text-[10px] uppercase font-bold tracking-wider rounded-md bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                  Lab Portal
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
-                <Building2 className="w-3.5 h-3.5 text-cyan-400" />
-                <span className="font-medium text-slate-300">
-                  {user?.hospitalName || 'Hospital Laboratory Module'}
-                </span>
-              </p>
-            </div>
-          </div>
+    <DashboardLayout>
+      <div className="space-y-6 pb-8">
 
-          {/* Right: User Profile & Logout */}
-          <div className="flex items-center space-x-4">
-            <div className="hidden sm:flex items-center space-x-3 bg-slate-950/60 border border-slate-800/80 rounded-xl px-3.5 py-2">
-              <div className="w-8 h-8 rounded-lg bg-cyan-500/10 text-cyan-400 flex items-center justify-center font-bold text-sm">
-                {user?.username?.charAt(0)?.toUpperCase() || 'U'}
-              </div>
-              <div className="text-left text-xs">
-                <p className="font-semibold text-slate-200">{user?.username}</p>
-                <p className="text-slate-400 capitalize">{user?.role || 'Lab Personnel'}</p>
-              </div>
-            </div>
-
-            <button
-              onClick={logout}
-              className="flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 hover:text-red-300 rounded-xl text-xs font-semibold transition-all cursor-pointer"
-              title="Sign Out"
-            >
-              <LogOut className="w-4 h-4" />
-              <span className="hidden sm:inline">Logout</span>
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Workspace Body */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8 space-y-8">
         
         {/* Welcome Banner */}
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-cyan-900/40 via-slate-900 to-slate-900 border border-cyan-500/20 p-8 shadow-xl">
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 border border-orange-400 p-8 shadow-xl shadow-orange-500/15 text-white">
           <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 text-cyan-400 text-xs font-semibold border border-cyan-500/20 mb-3">
-                <Sparkles className="w-3.5 h-3.5" /> Standalone Next.js Lab Service
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/20 text-white text-xs font-bold border border-white/30 backdrop-blur-sm mb-3">
+                <Sparkles className="w-3.5 h-3.5 text-amber-200" /> Laboratory Request & Result Entry
               </div>
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-white">
-                Welcome to Laboratory Management
+              <h2 className="text-2xl sm:text-3xl font-black tracking-tight">
+                Laboratory User Workspace
               </h2>
-              <p className="text-slate-300 text-sm mt-2 max-w-2xl">
-                Connected to hospital <span className="text-cyan-400 font-semibold">{user?.hospitalName || 'Main Hospital'}</span>. You have active access to process test orders, generate reports, manage diagnostic templates, and track test fulfillment.
+              <p className="text-orange-50 text-sm mt-2 max-w-2xl font-medium leading-relaxed opacity-95">
+                Process doctor test requests, input parameter values defined by Lab Admin (<span className="font-bold text-white underline">ravilab</span>), and generate verified patient diagnostic reports.
               </p>
             </div>
 
-            {/* Backend Connection Status Badge */}
-            <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 flex items-center gap-3 shrink-0">
-              <div className="p-3 rounded-xl bg-cyan-500/10 text-cyan-400">
-                <Server className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-xs text-slate-400">Backend API</p>
-                <p className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5 mt-0.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  Active & Connected
-                </p>
-              </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => router.push('/admin')}
+                className="px-5 py-3 bg-white text-orange-600 hover:bg-orange-50 font-black rounded-xl shadow-lg text-xs flex items-center gap-2 transition-all cursor-pointer shrink-0"
+              >
+                <Sliders className="w-4 h-4 text-orange-600" />
+                <span>Lab Admin (Manage Tests)</span>
+              </button>
             </div>
           </div>
         </div>
 
         {/* System Overview Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-          
-          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 hover:border-cyan-500/30 transition-all">
+          <div className="bg-white border border-orange-100 rounded-2xl p-5 shadow-sm">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Hospital ID</span>
-              <div className="p-2 rounded-lg bg-cyan-500/10 text-cyan-400">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Hospital Name</span>
+              <div className="p-2 rounded-lg bg-orange-100 text-orange-600">
                 <Building2 className="w-5 h-5" />
               </div>
             </div>
-            <p className="text-xl font-bold text-white truncate">{user?.hospitalId || 'N/A'}</p>
-            <p className="text-xs text-slate-400 mt-1">Multi-tenant scope</p>
+            <p className="text-xl font-black text-slate-900 truncate">{user?.hospitalName || 'Hospital'}</p>
+            <p className="text-xs font-semibold text-orange-600 mt-1">Multi-tenant Facility</p>
           </div>
 
-          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 hover:border-cyan-500/30 transition-all">
+          <div className="bg-white border border-orange-100 rounded-2xl p-5 shadow-sm">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">User Account</span>
-              <div className="p-2 rounded-lg bg-blue-500/10 text-blue-400">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">User Account</span>
+              <div className="p-2 rounded-lg bg-amber-100 text-amber-700">
                 <UserCheck className="w-5 h-5" />
               </div>
             </div>
-            <p className="text-xl font-bold text-white capitalize">{user?.username}</p>
-            <p className="text-xs text-cyan-400 mt-1 capitalize">Role: {user?.role || 'Admin'}</p>
+            <p className="text-xl font-black text-slate-900 capitalize">{user?.username}</p>
+            <p className="text-xs font-semibold text-amber-700 mt-1 capitalize">Role: {user?.role || 'Lab Personnel'}</p>
           </div>
 
-          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 hover:border-cyan-500/30 transition-all">
+          <div className="bg-white border border-orange-100 rounded-2xl p-5 shadow-sm">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Module Access</span>
-              <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400">
-                <CheckCircle2 className="w-5 h-5" />
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Lab Tests Catalog</span>
+              <div className="p-2 rounded-lg bg-emerald-100 text-emerald-700">
+                <TestTube className="w-5 h-5" />
               </div>
             </div>
-            <p className="text-xl font-bold text-white">Laboratory</p>
-            <p className="text-xs text-slate-400 mt-1">Full Privileges Granted</p>
+            <p className="text-xl font-black text-slate-900">{availableLabTests.length} Tests Defined</p>
+            <p className="text-xs font-semibold text-emerald-700 mt-1">Configured by Lab Admin</p>
           </div>
 
-          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 hover:border-cyan-500/30 transition-all">
+          <div className="bg-white border border-orange-100 rounded-2xl p-5 shadow-sm">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Domain URL</span>
-              <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400">
-                <Activity className="w-5 h-5" />
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Pending Orders</span>
+              <div className="p-2 rounded-lg bg-indigo-100 text-indigo-700">
+                <FileText className="w-5 h-5" />
               </div>
             </div>
-            <p className="text-sm font-bold text-white truncate">labs.medora360.com</p>
-            <p className="text-xs text-slate-400 mt-1">VPS Config Ready</p>
+            <p className="text-xl font-black text-slate-900">{labRequests.length} Active Orders</p>
+            <p className="text-xs font-semibold text-indigo-700 mt-1">Ready for result entry</p>
           </div>
-
         </div>
 
-        {/* Feature Workspace Grid */}
-        <div>
-          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-            <TestTube className="w-5 h-5 text-cyan-400" /> Laboratory Modules & Workflow
-          </h3>
+        {/* Incoming Lab Requests & Parameter Fill Section */}
+        <div className="bg-white border border-orange-100 rounded-3xl p-6 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                <FileText className="w-5 h-5 text-orange-500" /> Incoming Lab Test Requests
+              </h3>
+              <p className="text-xs text-slate-500 font-medium">Select a patient request to fill test parameters and generate reports</p>
+            </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="relative w-full sm:w-72">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search patient, UHID, Lab ID..."
+                className="w-full pl-9 pr-4 py-2 bg-orange-50/20 border border-orange-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="bg-orange-50/60 text-xs font-black uppercase text-slate-600 border-b border-orange-100">
+                  <th className="p-3.5 rounded-l-xl">Lab ID</th>
+                  <th className="p-3.5">Patient Details</th>
+                  <th className="p-3.5">Ordered Tests</th>
+                  <th className="p-3.5">Booking Date</th>
+                  <th className="p-3.5">Status</th>
+                  <th className="p-3.5 text-center rounded-r-xl">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-orange-50 font-medium">
+                {loadingRequests ? (
+                  <tr>
+                    <td colSpan="6" className="p-8 text-center">
+                      <Loader2 className="w-6 h-6 animate-spin text-orange-500 mx-auto" />
+                      <p className="text-xs text-slate-500 font-semibold mt-2">Loading test requests...</p>
+                    </td>
+                  </tr>
+                ) : filteredRequests.length === 0 ? (
+                  <tr>
+                    <td colSpan="6" className="p-8 text-center text-slate-400">
+                      <FlaskConical className="w-10 h-10 mx-auto text-orange-300 mb-2" />
+                      <p className="font-bold text-slate-600">No Test Requests Pending</p>
+                      <p className="text-xs mt-1">Doctor lab orders will appear here automatically.</p>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredRequests.map((req) => (
+                    <tr key={req._id} className="hover:bg-orange-50/30 transition-colors">
+                      <td className="p-3.5 font-mono text-xs font-bold text-orange-700">
+                        {req.labId || 'LAB-REQ'}
+                      </td>
+                      <td className="p-3.5">
+                        <span className="font-extrabold text-slate-900 block">{req.patientId?.patientName || 'Patient'}</span>
+                        <span className="text-[11px] text-slate-500 font-medium">UHID: {req.patientId?.uhid || 'N/A'} • {req.patientId?.gender || ''} {req.patientId?.age ? `(${req.patientId.age}y)` : ''}</span>
+                      </td>
+                      <td className="p-3.5">
+                        <div className="flex flex-wrap gap-1">
+                          {Array.isArray(req.tests) && req.tests.map((tName, i) => (
+                            <span key={i} className="px-2 py-0.5 bg-orange-100 text-orange-800 rounded-md text-xs font-extrabold border border-orange-200">
+                              {tName}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="p-3.5 text-xs text-slate-600">
+                        {req.bookingDate ? new Date(req.bookingDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
+                      </td>
+                      <td className="p-3.5 text-xs">
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
+                          req.reportStatus === 'Completed' || req.status === 'completed'
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            : 'bg-amber-100 text-amber-800 border border-amber-200'
+                        }`}>
+                          {req.reportStatus || req.status || 'Pending'}
+                        </span>
+                      </td>
+                      <td className="p-3.5 text-center">
+                        <button
+                          onClick={() => handleOpenProcessRequest(req)}
+                          className="px-3.5 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-bold shadow-sm flex items-center gap-1.5 mx-auto cursor-pointer"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          <span>Fill Parameters</span>
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      {/* Parameter Entry Modal */}
+      {showProcessModal && selectedRequest && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white border border-orange-100 rounded-3xl p-6 shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto space-y-5 animate-fadeIn">
             
-            {/* Card 1: Lab Orders & Requests */}
-            <div className="bg-slate-900/80 border border-slate-800 hover:border-cyan-500/40 rounded-2xl p-6 transition-all duration-200 group cursor-pointer flex flex-col justify-between">
+            <div className="flex items-center justify-between border-b border-orange-100 pb-4">
               <div>
-                <div className="w-12 h-12 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  <FileText className="w-6 h-6" />
-                </div>
-                <h4 className="text-base font-bold text-white group-hover:text-cyan-400 transition-colors">
-                  Lab Requests & Processing
-                </h4>
-                <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-                  Manage incoming doctor test orders, sample collection, test status, and draft generation.
+                <span className="px-2.5 py-0.5 text-[10px] font-black uppercase bg-orange-100 text-orange-700 rounded-md">
+                  {selectedRequest.labId}
+                </span>
+                <h3 className="text-lg font-black text-slate-900 mt-1">
+                  Fill Test Parameters — {selectedRequest.patientId?.patientName}
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">
+                  Enter test values for parameter fields defined by Lab Admin
                 </p>
               </div>
-              <div className="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between text-xs font-semibold text-cyan-400 group-hover:translate-x-1 transition-transform">
-                <span>View Requests</span>
-                <ChevronRight className="w-4 h-4" />
-              </div>
+              <button onClick={() => setShowProcessModal(false)} className="p-1 text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            {/* Card 2: Test Catalog & Pricing */}
-            <div className="bg-slate-900/80 border border-slate-800 hover:border-cyan-500/40 rounded-2xl p-6 transition-all duration-200 group cursor-pointer flex flex-col justify-between">
-              <div>
-                <div className="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  <Sliders className="w-6 h-6" />
+            {/* Test Fields Form */}
+            <div className="space-y-5">
+              <div className="p-3 bg-orange-50/50 rounded-2xl border border-orange-100 flex items-center justify-between text-xs">
+                <div>
+                  <span className="text-slate-500">Ordered Tests: </span>
+                  <span className="font-bold text-slate-900">{selectedRequest.tests?.join(', ')}</span>
                 </div>
-                <h4 className="text-base font-bold text-white group-hover:text-cyan-400 transition-colors">
-                  Test Catalog & Categories
-                </h4>
-                <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-                  Configure lab tests, reference ranges, unit metrics, test categories, and pricing rules.
-                </p>
-              </div>
-              <div className="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between text-xs font-semibold text-blue-400 group-hover:translate-x-1 transition-transform">
-                <span>Manage Test Directory</span>
-                <ChevronRight className="w-4 h-4" />
-              </div>
-            </div>
-
-            {/* Card 3: Signatories & Lab Staff */}
-            <div className="bg-slate-900/80 border border-slate-800 hover:border-cyan-500/40 rounded-2xl p-6 transition-all duration-200 group cursor-pointer flex flex-col justify-between">
-              <div>
-                <div className="w-12 h-12 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  <Users className="w-6 h-6" />
+                <div>
+                  <span className="text-slate-500">UHID: </span>
+                  <span className="font-bold text-orange-700">{selectedRequest.patientId?.uhid}</span>
                 </div>
-                <h4 className="text-base font-bold text-white group-hover:text-cyan-400 transition-colors">
-                  Signatories & Assistants
-                </h4>
-                <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-                  Maintain authorized pathologists, doctors, lab technicians, signatures, and lab assistants.
-                </p>
               </div>
-              <div className="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between text-xs font-semibold text-purple-400 group-hover:translate-x-1 transition-transform">
-                <span>Manage Staff & Signatures</span>
-                <ChevronRight className="w-4 h-4" />
+
+              {/* Dynamic Parameter Input Fields */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                  Diagnostic Parameter Results
+                </h4>
+
+                {Object.keys(parameterValues).length === 0 ? (
+                  <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2">
+                    <Info className="w-4 h-4 shrink-0" />
+                    <span>No pre-configured parameters found for these tests. You can enter remarks below or add tests in <strong className="cursor-pointer underline" onClick={() => router.push('/admin')}>Lab Admin Portal</strong>.</span>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3">
+                    {Object.keys(parameterValues).map((pName) => {
+                      // Find reference range & unit for helper display
+                      let refRange = '';
+                      let unit = '';
+                      availableLabTests.forEach(t => {
+                        if (Array.isArray(t.parameters)) {
+                          const found = t.parameters.find(p => p.name === pName);
+                          if (found) {
+                            refRange = found.referenceRange || '';
+                            unit = found.unit || '';
+                          }
+                        }
+                      });
+
+                      return (
+                        <div key={pName} className="p-3 bg-white border border-orange-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+                          <div className="sm:w-1/2">
+                            <label className="block text-xs font-bold text-slate-800">{pName}</label>
+                            {(refRange || unit) && (
+                              <span className="text-[11px] text-slate-500">
+                                {refRange ? `Ref: ${refRange}` : ''} {unit ? `(${unit})` : ''}
+                              </span>
+                            )}
+                          </div>
+                          <div className="sm:w-1/2">
+                            <input
+                              type="text"
+                              placeholder={`Enter ${pName} result...`}
+                              value={parameterValues[pName] || ''}
+                              onChange={(e) => handleParamValueChange(pName, e.target.value)}
+                              className="w-full px-3.5 py-2 bg-orange-50/20 border border-orange-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Technician Remarks */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Pathologist / Lab Technician Remarks & Notes
+                </label>
+                <textarea
+                  rows="3"
+                  value={reportRemarks}
+                  onChange={(e) => setReportRemarks(e.target.value)}
+                  placeholder="Enter interpretation, sample condition, or lab notes..."
+                  className="w-full p-3 bg-orange-50/20 border border-orange-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-3 border-t border-orange-100 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowProcessModal(false)}
+                  className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={savingReport}
+                  onClick={() => handleSaveReport('draft')}
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow-md"
+                >
+                  Save Draft
+                </button>
+                <button
+                  type="button"
+                  disabled={savingReport}
+                  onClick={() => handleSaveReport('completed')}
+                  className="px-5 py-2 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white rounded-xl text-xs font-bold shadow-md flex items-center gap-1.5"
+                >
+                  {savingReport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  <span>Generate Report</span>
+                </button>
               </div>
             </div>
-
           </div>
         </div>
+      )}
 
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t border-slate-800 py-6 text-center text-xs text-slate-400 bg-slate-900/50 mt-auto">
-        Medora 360 Laboratory Information Management System • Connected to Backend API
-      </footer>
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }
 
@@ -266,3 +483,4 @@ export default function DashboardPage() {
     </ProtectedRoute>
   );
 }
+

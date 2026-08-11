@@ -677,7 +677,13 @@ const getCompletedConsultationDetails = async (req, res) => {
       consultationId: consultation._id
     })).sort({ updatedAt: -1 });
 
-    res.json({ consultation, patient: consultation.patientId, prescription });
+    const allPrescriptions = await Prescription.find(tenantQuery(req, {
+      patientId: consultation.patientId._id
+    }))
+      .populate('doctorId', 'doctorName username department')
+      .sort({ prescriptionDateTime: -1, createdAt: -1 });
+
+    res.json({ consultation, patient: consultation.patientId, prescription, allPrescriptions });
   } catch (error) {
     console.error('Get Completed Consultation Details Error:', error);
     res.status(500).json({ message: 'Server error' });

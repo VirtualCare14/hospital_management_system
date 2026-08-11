@@ -48,11 +48,11 @@ function LoginForm() {
   };
 
   return (
-    <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-3xl p-8 shadow-2xl shadow-black/50">
+    <div className="bg-white/95 backdrop-blur-xl border border-orange-100 rounded-3xl p-8 shadow-xl shadow-orange-500/10">
       {/* Alerts */}
       {sessionExpired && (
-        <div className="mb-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-sm flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 shrink-0 text-amber-400 mt-0.5" />
+        <div className="mb-6 p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-sm flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 shrink-0 text-amber-600 mt-0.5" />
           <div>
             <p className="font-semibold">Session Expired</p>
             <p className="text-xs opacity-90">Your session has timed out or logged in elsewhere. Please sign in again.</p>
@@ -61,8 +61,8 @@ function LoginForm() {
       )}
 
       {error && (
-        <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-sm flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 shrink-0 text-red-400 mt-0.5" />
+        <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 text-red-900 text-sm flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 shrink-0 text-red-600 mt-0.5" />
           <div>
             <p className="font-semibold">Authentication Error</p>
             <p className="text-xs opacity-90">{error}</p>
@@ -73,7 +73,7 @@ function LoginForm() {
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* Username Field */}
         <div>
-          <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
             Username / Email / Mobile
           </label>
           <div className="relative">
@@ -89,14 +89,14 @@ function LoginForm() {
                 if (error) setError(null);
               }}
               placeholder="Enter lab user ID"
-              className="w-full pl-11 pr-4 py-3 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all duration-200"
+              className="w-full pl-11 pr-4 py-3 bg-orange-50/20 border border-orange-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200 font-medium"
             />
           </div>
         </div>
 
         {/* Password Field */}
         <div>
-          <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
             Password
           </label>
           <div className="relative">
@@ -112,7 +112,7 @@ function LoginForm() {
                 if (error) setError(null);
               }}
               placeholder="••••••••"
-              className="w-full pl-11 pr-4 py-3 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all duration-200"
+              className="w-full pl-11 pr-4 py-3 bg-orange-50/20 border border-orange-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200 font-medium"
             />
           </div>
         </div>
@@ -122,15 +122,15 @@ function LoginForm() {
           <button
             type="button"
             onClick={() => setShowCodeField(!showCodeField)}
-            className="text-xs text-cyan-400 hover:text-cyan-300 font-medium flex items-center gap-1.5 transition-colors focus:outline-none"
+            className="text-xs text-orange-600 hover:text-orange-700 font-bold flex items-center gap-1.5 transition-colors focus:outline-none"
           >
-            <Building2 className="w-3.5 h-3.5" />
+            <Building2 className="w-3.5 h-3.5 text-orange-500" />
             {showCodeField ? '- Remove Hospital Code' : '+ Specify Hospital Access Code (Optional)'}
           </button>
 
           {showCodeField && (
             <div className="mt-3 animate-fadeIn">
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Hospital Unique Code
               </label>
               <input
@@ -138,9 +138,9 @@ function LoginForm() {
                 value={hospitalCode}
                 onChange={(e) => setHospitalCode(e.target.value)}
                 placeholder="e.g. CITYHOSP-01"
-                className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                className="w-full px-4 py-2.5 bg-orange-50/20 border border-orange-200 rounded-xl text-slate-900 placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
               />
-              <p className="text-[11px] text-slate-400 mt-1">
+              <p className="text-[11px] text-slate-500 mt-1">
                 Directly targets a specific hospital instance if your account spans multiple facilities.
               </p>
             </div>
@@ -151,7 +151,7 @@ function LoginForm() {
         <button
           type="submit"
           disabled={submitting}
-          className="w-full py-3.5 px-4 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 active:scale-[0.99] text-white font-semibold rounded-xl shadow-lg shadow-cyan-500/20 flex items-center justify-center gap-2 transition-all duration-200 disabled:opacity-50 cursor-pointer"
+          className="w-full py-3.5 px-4 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 active:scale-[0.99] text-white font-bold rounded-xl shadow-lg shadow-orange-500/20 flex items-center justify-center gap-2 transition-all duration-200 disabled:opacity-50 cursor-pointer"
         >
           {submitting ? (
             <>
@@ -168,8 +168,8 @@ function LoginForm() {
       </form>
 
       {/* Footer note */}
-      <div className="mt-6 pt-6 border-t border-slate-800/80 text-center">
-        <p className="text-xs text-slate-400">
+      <div className="mt-6 pt-6 border-t border-orange-100 text-center">
+        <p className="text-xs text-slate-500 font-medium">
           Connected with Medora 360 Admin Backend.
         </p>
         <p className="text-[11px] text-slate-400 mt-1">
@@ -182,39 +182,39 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen w-full flex flex-col justify-center items-center relative overflow-hidden bg-slate-950 text-slate-100 font-sans selection:bg-cyan-500 selection:text-white">
+    <div className="min-h-screen w-full flex flex-col justify-center items-center relative overflow-hidden bg-gradient-to-br from-orange-50/60 via-white to-amber-50/40 text-slate-900 font-sans selection:bg-orange-500 selection:text-white">
       {/* Background Decorative Gradients */}
-      <div className="absolute -top-40 -left-40 w-96 h-96 bg-cyan-600/20 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-blue-600/20 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -top-40 -left-40 w-96 h-96 bg-orange-400/15 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-amber-400/15 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-orange-200/10 rounded-full blur-3xl pointer-events-none" />
 
       {/* Main Container */}
       <div className="w-full max-w-md px-6 py-8 relative z-10">
         {/* Brand Header */}
         <div className="flex flex-col items-center text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/25 mb-4 border border-white/20">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-orange-500 to-amber-600 flex items-center justify-center shadow-lg shadow-orange-500/25 mb-4 border border-orange-200">
             <FlaskConical className="w-9 h-9 text-white" />
           </div>
-          <h1 className="text-3xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-100 to-slate-400">
+          <h1 className="text-3xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-orange-600 via-amber-600 to-orange-700">
             Medora 360
           </h1>
-          <p className="text-cyan-400 font-medium text-sm tracking-wider uppercase mt-1 flex items-center gap-1.5">
-            <ShieldCheck className="w-4 h-4" /> Dedicated Laboratory Portal
+          <p className="text-orange-600 font-bold text-xs tracking-wider uppercase mt-1 flex items-center gap-1.5">
+            <ShieldCheck className="w-4 h-4 text-orange-500" /> Dedicated Laboratory Portal
           </p>
-          <span className="text-xs text-slate-400 mt-1">labs.medora360.com</span>
+          <span className="text-xs text-slate-500 font-medium mt-1">labs.medora360.com</span>
         </div>
 
         {/* Suspense wrapped login form */}
         <Suspense fallback={
-          <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-8 shadow-2xl flex items-center justify-center py-16">
-            <div className="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
+          <div className="bg-white border border-orange-100 rounded-3xl p-8 shadow-xl flex items-center justify-center py-16">
+            <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
           </div>
         }>
           <LoginForm />
         </Suspense>
 
         {/* Footer */}
-        <div className="text-center mt-8 text-xs text-slate-400">
+        <div className="text-center mt-8 text-xs text-slate-500 font-medium">
           © 2026 Medora 360 Diagnostic Systems. All rights reserved.
         </div>
       </div>

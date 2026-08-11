@@ -105,7 +105,7 @@ function App() {
             <Route path="/doctor/completed" element={<CompletedConsultations />} />
             <Route path="/doctor/completed/:consultationId" element={<CompletedConsultationDetails />} />
             <Route path="/doctor/consultation/:patientId" element={<ConsultationPage />} />
-            <Route path="/doctor/prescription/:patientId" element={<PrescriptionPage />} />
+            <Route path="/doctor/prescription/:patientId" element={<ConsultationPage />} />
             <Route path="/doctor/consultation-track/:patientId" element={<PatientConsultationTrack />} />
             <Route path="/doctor/ot-patients" element={<DoctorOtPatients />} />
             <Route path="/doctor/ot/:id" element={<DoctorOtForm />} />

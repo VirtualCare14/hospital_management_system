@@ -15,6 +15,7 @@ import { durationUnits, languages } from '../../utils/options';
 import { formatDate } from '../../utils/dateFormat';
 import { sanitizeClonedDocumentForPdf } from '../../utils/pdfUtils';
 import PatientReceipt from '../../components/PatientReceipt';
+import PrintLanguageModal from '../../components/PrintLanguageModal';
 
 const calculateQty = (med) => {
   const m = med.morning ? 1 : 0;
@@ -150,21 +151,52 @@ const ConsultationPage = () => {
           client.get(`/prescription/${patientId}`)
         ]);
 
+        let completedConsultation = null;
+        if (consultationsRes.status === 'fulfilled' && consultationsRes.value.data?.length > 0) {
+          completedConsultation = consultationsRes.value.data.find(c => c.consultationStatus === 'completed') || consultationsRes.value.data[0];
+          if (completedConsultation) setPreviousConsultation(completedConsultation);
+        }
+
         if (patientRes.status === 'fulfilled') {
-          setPatient(patientRes.value.data);
+          const patientObj = patientRes.value.data;
+          setPatient(patientObj);
+          
+          const vitalsData = completedConsultation?.vitals || patientObj.demographics || {};
           reset({
-            weight: patientRes.value.data.demographics?.weight || '',
-            height: patientRes.value.data.demographics?.height || '',
-            temperature: patientRes.value.data.demographics?.temperature || '',
-            bloodPressure: patientRes.value.data.demographics?.bloodPressure || '',
-            bmi: patientRes.value.data.demographics?.bmi || '',
-            drugAllergy: patientRes.value.data.demographics?.drugAllergy || ''
+            weight: vitalsData.weight || '',
+            height: vitalsData.height || '',
+            temperature: vitalsData.temperature || '',
+            bloodPressure: vitalsData.bloodPressure || '',
+            bmi: vitalsData.bmi || '',
+            drugAllergy: vitalsData.drugAllergy || ''
           });
         }
 
-        if (consultationsRes.status === 'fulfilled' && consultationsRes.value.data?.length > 0) {
-          const completedConsultation = consultationsRes.value.data.find(c => c.consultationStatus === 'completed');
-          if (completedConsultation) setPreviousConsultation(completedConsultation);
+        if (completedConsultation) {
+          if (completedConsultation.symptoms && completedConsultation.symptoms.length > 0) {
+            setSymptoms(completedConsultation.symptoms.map(s => ({
+              symptom: s.symptom || '',
+              durationDays: s.durationDays || '',
+              durationUnit: s.durationUnit || 'Days',
+              pastHistory: s.pastHistory || '',
+              remarks: s.remarks || ''
+            })));
+          }
+          if (completedConsultation.generalPastHistory) {
+            setGeneralPastHistory(completedConsultation.generalPastHistory);
+          }
+          if (completedConsultation.diagnosisRemark) {
+            setDiagnosisRemark(completedConsultation.diagnosisRemark);
+          }
+          if (completedConsultation.tests && completedConsultation.tests.length > 0) {
+            setSelectedTests(completedConsultation.tests);
+          }
+          if (completedConsultation.followUpDate) {
+            setFollowUpDate(completedConsultation.followUpDate);
+          }
+          if (completedConsultation.followUpRemarks) {
+            setFollowUpRemarks(completedConsultation.followUpRemarks);
+          }
         }
 
         if (visitsRes.status === 'fulfilled' && visitsRes.value.data?.length > 0) {
@@ -178,6 +210,25 @@ const ConsultationPage = () => {
 
           const rxWithMeds = pxList.find(p => Array.isArray(p.medicines) && p.medicines.length > 0) || pxList[0] || null;
           setLatestPastPrescription(rxWithMeds);
+
+          if (rxWithMeds && Array.isArray(rxWithMeds.medicines) && rxWithMeds.medicines.length > 0) {
+            const formattedMeds = rxWithMeds.medicines.map(m => ({
+              medicine: m.medicine || '',
+              dosageForm: m.dosageForm || 'Tablet',
+              strength: m.strength || '',
+              dose: m.dose || '1',
+              morning: m.morning !== undefined ? m.morning : true,
+              afternoon: m.afternoon !== undefined ? m.afternoon : false,
+              night: m.night !== undefined ? m.night : true,
+              duration: String(m.duration || '5'),
+              remarks: m.remarks || 'After food',
+              qty: m.qty || 0
+            }));
+            setMedicines(formattedMeds);
+          }
+          if (rxWithMeds?.language) {
+            setLanguage(rxWithMeds.language);
+          }
         }
       } catch (error) {
         console.error('Error loading data:', error);
@@ -606,7 +657,16 @@ const ConsultationPage = () => {
     }
   };
 
-  const handleSaveAndPrint = async () => {
+  const [showLangModal, setShowLangModal] = useState(false);
+
+  const handleSaveAndPrintClick = () => {
+    setShowLangModal(true);
+  };
+
+  const handleSaveAndPrint = async (selectedLanguage) => {
+    const activeLang = selectedLanguage || (typeof language === 'object' ? language.value : language) || 'English';
+    setLanguage(activeLang);
+
     setSaving(true);
     try {
       const formValues = watch();
@@ -669,7 +729,7 @@ const ConsultationPage = () => {
             ...m,
             qty: calculateQty(m)
           })),
-          language: typeof language === 'object' ? language.value : language
+          language: activeLang
         };
         await client.post('/prescription/create', rxPayload);
       }
@@ -694,7 +754,7 @@ const ConsultationPage = () => {
         handleSendToSameDayOpen();
       }
 
-      toast.success('Consultation saved! Opening print option...');
+      toast.success(`Consultation & Prescription saved (${activeLang})! Opening print option...`);
       setShowPreview(true);
 
       setTimeout(() => {
@@ -778,6 +838,38 @@ const ConsultationPage = () => {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5 pb-12" autoComplete="off">
+      {/* Top Page Header Bar with Close Consultation Button */}
+      <div className="card p-4 bg-white border border-gray-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-orange-100 rounded-2xl text-orange-600">
+            <Stethoscope className="h-6 w-6" />
+          </div>
+          <div>
+            <h1 className="text-xl font-black text-gray-900 flex items-center gap-2">
+              Doctor Consultation & Digital Rx
+              <span className="px-2 py-0.5 bg-orange-100 text-orange-800 rounded-md text-xs font-extrabold">
+                {patient?.uhid}
+              </span>
+            </h1>
+            <p className="text-xs text-gray-500 font-semibold">
+              Patient: <strong className="text-gray-900 font-bold">{patient?.patientName}</strong> ({patient?.gender}, {patient?.mobile})
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => navigate('/doctor')}
+            className="btn bg-red-600 hover:bg-red-700 text-white font-extrabold text-xs py-2.5 px-4 rounded-xl flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
+            title="Close digital prescription and exit consultation"
+          >
+            <X className="h-4 w-4" />
+            <span>Close Consultation</span>
+          </button>
+        </div>
+      </div>
+
       {isReadOnly && !patient?.isDischarged && (
         <div className="card p-4 border border-emerald-200 bg-emerald-50/90 flex items-center justify-between gap-3 shadow-xs">
           <div className="flex items-center gap-2.5">
@@ -1058,22 +1150,50 @@ const ConsultationPage = () => {
                 <div className="relative">
                   <input
                     className="input w-full text-sm font-bold text-gray-900 border-gray-300"
-                    placeholder="Search lab tests..."
+                    placeholder="Search or type custom lab test & press Enter..."
                     value={testQuery}
                     onChange={(e) => setTestQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (testQuery.trim()) {
+                          selectTest(testQuery.trim());
+                        }
+                      }
+                    }}
                   />
-                  {testQuery && (
-                    <div className="absolute z-20 mt-1 w-full bg-white border border-orange-200 rounded-lg shadow-lg max-h-44 overflow-y-auto">
-                      {availableTests.filter((test) => test.toLowerCase().includes(testQuery.toLowerCase()) && !selectedTests.includes(test)).slice(0, 10).map((test) => (
+                  {testQuery.trim() && (
+                    <div className="absolute z-20 mt-1 w-full bg-white border border-orange-200 rounded-xl shadow-xl max-h-56 overflow-y-auto">
+                      {/* Filtered existing tests */}
+                      {availableTests
+                        .filter((test) => test.toLowerCase().includes(testQuery.toLowerCase()) && !selectedTests.includes(test))
+                        .slice(0, 8)
+                        .map((test) => (
+                          <button
+                            key={test}
+                            type="button"
+                            className="w-full text-left px-3 py-2 text-sm font-bold text-gray-800 hover:bg-orange-50 border-b border-gray-50 last:border-b-0 cursor-pointer flex items-center justify-between"
+                            onClick={() => selectTest(test)}
+                          >
+                            <span>{test}</span>
+                            <span className="text-[10px] text-gray-400 font-semibold uppercase">Catalog Test</span>
+                          </button>
+                        ))}
+
+                      {/* Custom Lab Test Add Option */}
+                      {!selectedTests.includes(testQuery.trim()) && (
                         <button
-                          key={test}
                           type="button"
-                          className="w-full text-left px-3 py-2 text-sm font-bold text-gray-800 hover:bg-orange-50 border-b border-gray-50 last:border-b-0 cursor-pointer"
-                          onClick={() => selectTest(test)}
+                          className="w-full text-left px-3 py-2.5 text-xs font-extrabold text-orange-700 hover:bg-orange-100 border-t border-orange-100 cursor-pointer flex items-center justify-between bg-orange-50/80"
+                          onClick={() => selectTest(testQuery.trim())}
                         >
-                          {test}
+                          <span className="flex items-center gap-1.5">
+                            <Plus className="h-4 w-4 text-orange-600 shrink-0" />
+                            <span>Add "<strong className="underline text-orange-900">{testQuery.trim()}</strong>" as custom test</span>
+                          </span>
+                          <span className="text-[10px] bg-orange-200 text-orange-800 px-1.5 py-0.5 rounded font-bold shrink-0">Press Enter</span>
                         </button>
-                      ))}
+                      )}
                     </div>
                   )}
                 </div>
@@ -1113,8 +1233,16 @@ const ConsultationPage = () => {
           <section className="card p-5 bg-white border border-gray-200/80 shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
-                <Pill className="h-5 w-5 text-orange-600" /> Rx Medicines
+                <Pill className="h-5 w-5 text-orange-600" /> Digital Rx / Prescription Medicines
               </h2>
+              <button
+                type="button"
+                onClick={() => navigate('/doctor')}
+                className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-extrabold rounded-lg flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
+                title="Close digital prescription and return to doctor dashboard"
+              >
+                <X className="h-3.5 w-3.5 text-white" /> Close Prescription
+              </button>
             </div>
 
             {/* Medicines List - Single Horizontal Flex Row */}
@@ -1364,15 +1492,33 @@ const ConsultationPage = () => {
 
             {!patient.isDischarged && (
               <div className="flex items-center justify-between gap-4 flex-wrap pt-4 border-t border-gray-100">
-                {/* Single Primary Action Button: Save & Print Prescription */}
-                <button
-                  type="button"
-                  className="btn bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-black py-2.5 px-5 flex items-center gap-2 cursor-pointer shadow-md rounded-xl"
-                  onClick={handleSaveAndPrint}
-                  disabled={saving}
-                >
-                  <Printer className="h-4 w-4" /> {saving ? 'Saving...' : 'Save & Print Prescription'}
-                </button>
+                {/* Action Buttons: Save & Print AND Close Digital Prescription */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    className="btn bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-black py-2.5 px-5 flex items-center gap-2 cursor-pointer shadow-md rounded-xl"
+                    onClick={handleSaveAndPrintClick}
+                    disabled={saving}
+                  >
+                    <Printer className="h-4 w-4" /> {saving ? 'Saving...' : 'Save & Print Prescription'}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn bg-red-600 hover:bg-red-700 text-white font-extrabold text-sm py-2.5 px-5 flex items-center gap-2 cursor-pointer shadow-md rounded-xl transition-colors"
+                    onClick={() => navigate('/doctor')}
+                  >
+                    <X className="h-4 w-4 text-white" /> Close Consultation
+                  </button>
+                </div>
+
+                {/* Print Language Selection Modal */}
+                <PrintLanguageModal
+                  isOpen={showLangModal}
+                  onClose={() => setShowLangModal(false)}
+                  onConfirm={(chosenLang) => handleSaveAndPrint(chosenLang)}
+                  initialLanguage={typeof language === 'object' ? language.value : (language || 'English')}
+                />
 
                 {/* Referral Checkboxes (Single Select Only - Processes on Save & Print) */}
                 <div className="flex items-center gap-4 border-l border-gray-200 pl-4 py-1 flex-wrap">

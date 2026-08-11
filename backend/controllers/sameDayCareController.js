@@ -331,6 +331,7 @@ const getTreatmentsByPatient = async (req, res) => {
     const { patientId } = req.params;
     const records = await SameDayTreatment.find(tenantFilter(req, { patientId }))
       .populate('createdBy', 'username doctorName')
+      .populate('hospitalId', 'name code')
       .sort({ createdAt: -1 });
     res.json(records);
   } catch (error) {
@@ -346,7 +347,8 @@ const getTreatmentById = async (req, res) => {
   try {
     const { id } = req.params;
     const record = await SameDayTreatment.findOne(tenantFilter(req, { _id: id }))
-      .populate('createdBy', 'username doctorName');
+      .populate('createdBy', 'username doctorName')
+      .populate('hospitalId', 'name code');
     if (!record) return res.status(404).json({ message: 'Care record not found' });
     res.json(record);
   } catch (error) {
@@ -385,6 +387,7 @@ const getAllTreatments = async (req, res) => {
 
     const records = await SameDayTreatment.find(query)
       .populate('createdBy', 'username doctorName')
+      .populate('hospitalId', 'name code')
       .sort({ createdAt: -1 });
     res.json(records);
   } catch (error) {
@@ -610,6 +613,7 @@ const getDialysisRecords = async (req, res) => {
 
     const records = await SameDayTreatment.find(query)
       .populate('createdBy', 'username doctorName')
+      .populate('hospitalId', 'name code')
       .sort({ treatmentDate: -1 });
     res.json(records);
   } catch (error) {
@@ -626,7 +630,8 @@ const getDialysisRecordById = async (req, res) => {
     const { id } = req.params;
     const record = await SameDayTreatment.findOne(tenantFilter(req, { _id: id }))
       .populate('createdBy', 'username doctorName')
-      .populate('updatedBy', 'username doctorName');
+      .populate('updatedBy', 'username doctorName')
+      .populate('hospitalId', 'name code');
     if (!record) return res.status(404).json({ message: 'Dialysis record not found' });
     res.json(record);
   } catch (error) {

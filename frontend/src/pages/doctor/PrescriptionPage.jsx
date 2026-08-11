@@ -16,6 +16,7 @@ import { sanitizePatientName, formatUhid } from '../../utils/uhid';
 import { sanitizeClonedDocumentForPdf } from '../../utils/pdfUtils';
 import { translateClinicalText } from '../../utils/prescriptionI18n';
 import PatientReceipt from '../../components/PatientReceipt';
+import PrintLanguageModal from '../../components/PrintLanguageModal';
 
 const calculateQty = (med) => {
   const m = med.morning ? 1 : 0;
@@ -242,55 +243,68 @@ const PrescriptionPage = () => {
     }
   };
 
-  const handleSaveAndPrint = async () => {
-    const savedRx = await handleSavePrescription(false);
-    if (!savedRx && !previousPrescription) return;
+  const [showLangModal, setShowLangModal] = useState(false);
 
-    toast.loading("Generating PDF Receipt...", { id: 'pdf-toast' });
-    setShowPreview(true);
+  const handleSaveAndPrintClick = () => {
+    setShowLangModal(true);
+  };
 
+  const executeSaveAndPrint = async (selectedLanguage) => {
+    if (selectedLanguage) {
+      setLanguage(selectedLanguage);
+    }
+
+    // Allow state to update
     setTimeout(async () => {
-      try {
-        const element = receiptRef.current;
-        if (!element) {
-          toast.error("Print template not ready", { id: 'pdf-toast' });
-          return;
-        }
+      const savedRx = await handleSavePrescription(false);
+      if (!savedRx && !previousPrescription) return;
 
-        const canvas = await html2canvas(element, {
-          scale: 2,
-          useCORS: true,
-          logging: false,
-          onclone: (clonedDoc) => sanitizeClonedDocumentForPdf(clonedDoc)
-        });
+      toast.loading(`Generating PDF Receipt (${selectedLanguage || language})...`, { id: 'pdf-toast' });
+      setShowPreview(true);
 
-        const imgData = canvas.toDataURL('image/png');
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfPageHeight = pdf.internal.pageSize.getHeight();
-        const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+      setTimeout(async () => {
+        try {
+          const element = receiptRef.current;
+          if (!element) {
+            toast.error("Print template not ready", { id: 'pdf-toast' });
+            return;
+          }
 
-        let heightLeft = imgHeight;
-        let position = 0;
+          const canvas = await html2canvas(element, {
+            scale: 2,
+            useCORS: true,
+            logging: false,
+            onclone: (clonedDoc) => sanitizeClonedDocumentForPdf(clonedDoc)
+          });
 
-        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
-        heightLeft -= pdfPageHeight;
+          const imgData = canvas.toDataURL('image/png');
+          const pdf = new jsPDF('p', 'mm', 'a4');
+          const pdfWidth = pdf.internal.pageSize.getWidth();
+          const pdfPageHeight = pdf.internal.pageSize.getHeight();
+          const imgHeight = (canvas.height * pdfWidth) / canvas.width;
 
-        while (heightLeft >= 5) {
-          position = heightLeft - imgHeight;
-          pdf.addPage();
+          let heightLeft = imgHeight;
+          let position = 0;
+
           pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
           heightLeft -= pdfPageHeight;
-        }
 
-        pdf.autoPrint();
-        window.open(pdf.output('bloburl'), '_blank');
-        toast.success("Prescription Receipt ready!", { id: 'pdf-toast' });
-      } catch (err) {
-        console.error("PDF printing failed", err);
-        toast.error("Failed to generate PDF receipt", { id: 'pdf-toast' });
-      }
-    }, 500);
+          while (heightLeft >= 5) {
+            position = heightLeft - imgHeight;
+            pdf.addPage();
+            pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
+            heightLeft -= pdfPageHeight;
+          }
+
+          pdf.autoPrint();
+          window.open(pdf.output('bloburl'), '_blank');
+          toast.success(`Prescription Printed in ${selectedLanguage || language}!`, { id: 'pdf-toast' });
+        } catch (err) {
+          console.error("PDF printing failed", err);
+          toast.error("Failed to generate PDF receipt", { id: 'pdf-toast' });
+        }
+      }, 500);
+    }, 150);
   };
 
   const handleCopyPreviousMedicines = (rxMeds) => {
@@ -737,13 +751,21 @@ const PrescriptionPage = () => {
           <button
             type="button"
             className="btn w-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-extrabold py-3 text-sm shadow-md flex items-center justify-center gap-2 cursor-pointer"
-            onClick={handleSaveAndPrint}
+            onClick={handleSaveAndPrintClick}
             disabled={saving || patient.isDischarged}
           >
             <Printer className="h-4 w-4" />
             Save & Print Receipt (PDF)
           </button>
         </div>
+
+        {/* Print Language Selector Modal */}
+        <PrintLanguageModal
+          isOpen={showLangModal}
+          onClose={() => setShowLangModal(false)}
+          onConfirm={(chosenLang) => executeSaveAndPrint(chosenLang)}
+          initialLanguage={language || 'English'}
+        />
 
         <div className="flex justify-between items-center pt-1 border-t border-gray-100">
           <button

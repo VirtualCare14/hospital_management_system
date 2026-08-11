@@ -21,6 +21,24 @@ const login = async (req, res) => {
     
     let user = await User.findOne(userQuery).populate('hospitalId', 'name isActive');
 
+    // Auto-seed / create ravilab Lab Admin user if not present
+    if (!user && normalizedUsername === 'ravilab' && String(password) === 'raviadmin') {
+      try {
+        const newLabAdmin = new User({
+          username: 'ravilab',
+          password: 'raviadmin',
+          role: 'labadmin',
+          doctorName: 'Ravi (Lab Admin)',
+          moduleAccess: [1, 2, 3, 4, 5, 6, 7, 8],
+          isActive: true
+        });
+        await newLabAdmin.save();
+        user = await User.findOne({ username: 'ravilab' }).populate('hospitalId', 'name isActive');
+      } catch (seedErr) {
+        console.warn('Auto-create ravilab user error:', seedErr.message);
+      }
+    }
+
     if (!user) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
@@ -158,6 +176,18 @@ const hospitalLookup = async (req, res) => {
 // @access  Private
 const verifySession = async (req, res) => {
   try {
+    let hospitalName = 'Hospital';
+    if (req.hospital && req.hospital.name) {
+      hospitalName = req.hospital.name;
+    } else if (req.user.hospitalId && typeof req.user.hospitalId === 'object' && req.user.hospitalId.name) {
+      hospitalName = req.user.hospitalId.name;
+    } else if (req.user.hospitalId) {
+      const hospitalObj = await Hospital.findById(req.user.hospitalId).select('name');
+      if (hospitalObj && hospitalObj.name) {
+        hospitalName = hospitalObj.name;
+      }
+    }
+
     // If request gets past authMiddleware, the session is valid
     res.status(200).json({
       valid: true,
@@ -169,7 +199,8 @@ const verifySession = async (req, res) => {
         doctorName: req.user.doctorName,
         department: req.user.department,
         mobile: req.user.mobile,
-        hospitalId: req.user.hospitalId
+        hospitalId: req.user.hospitalId?._id || req.user.hospitalId,
+        hospitalName: hospitalName
       }
     });
   } catch (error) {
