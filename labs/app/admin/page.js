@@ -33,8 +33,8 @@ import {
 
 function AdminLoginForm() {
   const { login, error, setError } = useAuth();
-  const [username, setUsername] = useState('ravilab');
-  const [password, setPassword] = useState('raviadmin');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e) => {
@@ -56,24 +56,6 @@ function AdminLoginForm() {
 
   return (
     <div className="bg-white/95 backdrop-blur-xl border border-orange-100 rounded-3xl p-8 shadow-xl shadow-orange-500/10 max-w-md w-full">
-      {/* Alert Header */}
-      <div className="mb-6 p-3.5 rounded-xl bg-orange-50 border border-orange-200 text-orange-800 text-xs flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="w-4 h-4 text-orange-600 shrink-0" />
-          <span className="font-semibold">Lab Admin Credentials Ready</span>
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            setUsername('ravilab');
-            setPassword('raviadmin');
-          }}
-          className="px-2 py-1 bg-orange-500 text-white rounded text-[10px] font-bold hover:bg-orange-600 transition-colors"
-        >
-          Auto Fill
-        </button>
-      </div>
-
       {error && (
         <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 text-red-900 text-sm flex items-start gap-3">
           <AlertCircle className="w-5 h-5 shrink-0 text-red-600 mt-0.5" />
@@ -101,7 +83,7 @@ function AdminLoginForm() {
                 setUsername(e.target.value);
                 if (error) setError(null);
               }}
-              placeholder="e.g. ravilab"
+              placeholder="Enter Lab Admin ID"
               className="w-full pl-11 pr-4 py-3 bg-orange-50/20 border border-orange-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500 font-medium"
             />
           </div>
@@ -141,7 +123,7 @@ function AdminLoginForm() {
             </>
           ) : (
             <>
-              <span>Sign In as Lab Admin (ravilab)</span>
+              <span>Sign In as Lab Admin</span>
               <ArrowRight className="w-5 h-5" />
             </>
           )}
@@ -370,7 +352,7 @@ function LabAdminDashboard() {
                 R
               </div>
               <div className="text-left text-xs">
-                <p className="font-extrabold text-slate-900">{user?.username || 'ravilab'}</p>
+                <p className="font-extrabold text-slate-900">{user?.username || 'Lab Admin'}</p>
                 <p className="text-orange-700 font-bold capitalize">Lab Admin</p>
               </div>
             </div>
@@ -397,7 +379,7 @@ function LabAdminDashboard() {
             </div>
             <h2 className="text-2xl font-black tracking-tight">Lab Admin Management Portal</h2>
             <p className="text-orange-50 text-xs font-medium mt-1">
-              Logged in as <span className="font-extrabold underline text-white">ravilab</span> (Lab Administrator). Define test catalog, parameters, units, reference ranges, and diagnostic structures for lab users.
+              Logged in as <span className="font-extrabold underline text-white">{user?.username || 'Lab Admin'}</span> (Lab Administrator). Define test catalog, parameters, units, reference ranges, and diagnostic structures for lab users.
             </p>
           </div>
 
@@ -851,7 +833,7 @@ export default function AdminPage() {
             Lab Admin Portal
           </h1>
           <p className="text-orange-600 font-bold text-xs tracking-wider uppercase mt-1 flex items-center gap-1.5 mb-6">
-            <ShieldCheck className="w-4 h-4 text-orange-500" /> ravilab / raviadmin Sign In
+            <ShieldCheck className="w-4 h-4 text-orange-500" /> Laboratory Admin Authentication
           </p>
 
           <Suspense fallback={<div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />}>

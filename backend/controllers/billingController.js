@@ -1236,7 +1236,7 @@ const generateUniqueInvoiceNo = async (hospitalId) => {
           address: 'Hospital Address'
         }
       },
-      { new: true, upsert: true, runValidators: false }
+      { returnDocument: 'after', upsert: true, runValidators: false }
     );
 
     const prefix = settings?.invoicePrefix || 'HOSP-INV-2026-';

@@ -969,7 +969,7 @@ const updatePatientDiscount = async (req, res) => {
     const patient = await Patient.findOneAndUpdate(
       tenantQuery(req, { _id: id }),
       { $set: { discountPercentage: pct } },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!patient) {

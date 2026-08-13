@@ -15,7 +15,8 @@ const EditPrintRxSettings = () => {
       printSymptomRemarks: true,
       printGeneralPastHistory: true,
       printDiagnosisRemarks: true,
-      printPatientAdvice: true
+      printPatientAdvice: true,
+      printPreviousHistory: false
     };
   });
 
@@ -185,6 +186,19 @@ const EditPrintRxSettings = () => {
                   type="checkbox"
                   checked={printOptions.printPatientAdvice !== false}
                   onChange={(e) => setPrintOptions({ ...printOptions, printPatientAdvice: e.target.checked })}
+                  className="rounded text-orange-600 focus:ring-orange-500 h-5 w-5 cursor-pointer"
+                />
+              </label>
+
+              <label className="flex items-center justify-between cursor-pointer select-none hover:text-orange-600 border-t border-gray-200/80 pt-3">
+                <div>
+                  <span className="block font-bold">Include Previous Prescription / Visit History</span>
+                  <span className="text-[11px] font-normal text-gray-500 block">Print past visits & symptoms history from previous consultations</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={Boolean(printOptions.printPreviousHistory)}
+                  onChange={(e) => setPrintOptions({ ...printOptions, printPreviousHistory: e.target.checked })}
                   className="rounded text-orange-600 focus:ring-orange-500 h-5 w-5 cursor-pointer"
                 />
               </label>

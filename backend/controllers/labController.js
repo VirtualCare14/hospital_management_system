@@ -137,7 +137,7 @@ const ensureCategory = async (req, name) => {
   return LabTestCategory.findOneAndUpdate(
     tenantQuery(req, { nameKey: normalizeKey(trimmed) }),
     { $setOnInsert: { hospitalId: req.user.hospitalId, name: trimmed, nameKey: normalizeKey(trimmed), status: 'Active' } },
-    { new: true, upsert: true, setDefaultsOnInsert: true }
+    { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true }
   );
 };
 
@@ -326,7 +326,7 @@ const saveDiagnosisTemplateForTest = async (req, res) => {
     const saved = await DiagnosisTemplate.findOneAndUpdate(
       filter,
       { $set: update, $setOnInsert: { createdBy: req.user._id } },
-      { new: true, upsert: true, setDefaultsOnInsert: true }
+      { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true }
     );
 
     res.json(saved);
@@ -776,7 +776,7 @@ const saveTest = async (req, res) => {
   };
 
   const test = req.params.id
-    ? await LabTest.findOneAndUpdate(testMasterReadQuery(req, { _id: req.params.id }), payload, { new: true, runValidators: true })
+    ? await LabTest.findOneAndUpdate(testMasterReadQuery(req, { _id: req.params.id }), payload, { returnDocument: 'after', runValidators: true })
     : await LabTest.create(payload);
 
   if (!test) return res.status(404).json({ message: 'Lab test not found' });
@@ -801,7 +801,7 @@ const saveProfile = async (req, res) => {
     delete payload.logoImageData;
   }
   const profile = req.params.id
-    ? await LabProfile.findOneAndUpdate(tenantQuery(req, { _id: req.params.id }), payload, { new: true, runValidators: true })
+    ? await LabProfile.findOneAndUpdate(tenantQuery(req, { _id: req.params.id }), payload, { returnDocument: 'after', runValidators: true })
     : await LabProfile.create(payload);
   if (!profile) return res.status(404).json({ message: 'Lab details not found' });
   res.status(req.params.id ? 200 : 201).json(profile);
@@ -826,7 +826,7 @@ const saveSignatory = async (req, res) => {
     delete payload.signatureImageData;
   }
   const signatory = req.params.id
-    ? await LabSignatory.findOneAndUpdate(tenantQuery(req, { _id: req.params.id }), payload, { new: true, runValidators: true })
+    ? await LabSignatory.findOneAndUpdate(tenantQuery(req, { _id: req.params.id }), payload, { returnDocument: 'after', runValidators: true })
     : await LabSignatory.create(payload);
   if (!signatory) return res.status(404).json({ message: 'Signatory not found' });
   res.status(req.params.id ? 200 : 201).json(signatory);

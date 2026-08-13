@@ -388,82 +388,98 @@ const IpdAdmission = () => {
               background: #ffffff !important;
               color: #111827 !important;
               font-family: Arial, Helvetica, sans-serif;
-              padding: 10mm 15mm;
+              padding: 0;
               margin: 0;
               width: 100%;
-              font-size: 13px;
-              line-height: 1.5;
+              height: 100vh;
+              font-size: 12px;
+              line-height: 1.4;
             }
             .card-container {
               width: 100%;
-              max-width: 100%;
+              height: 100vh;
               margin: 0 auto;
               border: 2px solid #ea580c;
-              border-radius: 14px;
-              padding: 24px;
+              padding: 8mm 10mm;
               background: #ffffff;
+              display: flex;
+              flex-direction: column;
+              justify-content: space-between;
+              box-sizing: border-box;
             }
             .header-banner {
-              text-align: center;
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
               border-bottom: 2px solid #ea580c;
-              padding-bottom: 14px;
-              margin-bottom: 18px;
+              padding-bottom: 10px;
+              margin-bottom: 12px;
+              gap: 14px;
+            }
+            .header-left {
+              display: flex;
+              align-items: center;
+              gap: 14px;
             }
             .logo-img {
-              max-height: 65px;
-              margin: 0 auto 8px auto;
-              display: block;
+              max-height: 60px;
+              max-width: 130px;
               object-fit: contain;
+              display: block;
+            }
+            .hospital-info {
+              text-align: left;
             }
             .hospital-title {
-              font-size: 24px;
+              font-size: 20px;
               font-weight: 900;
               color: #111827;
               text-transform: uppercase;
               letter-spacing: 0.5px;
+              line-height: 1.2;
             }
             .hospital-sub {
-              font-size: 13px;
+              font-size: 11.5px;
               font-weight: 600;
               color: #4b5563;
-              margin-top: 3px;
+              margin-top: 2px;
             }
             .card-badge {
               display: inline-block;
               background: #ea580c;
               color: #ffffff;
               font-weight: 900;
-              font-size: 13px;
-              padding: 6px 20px;
-              border-radius: 20px;
+              font-size: 11px;
+              padding: 6px 14px;
+              border-radius: 16px;
               text-transform: uppercase;
-              letter-spacing: 1px;
-              margin-top: 10px;
+              letter-spacing: 0.5px;
+              white-space: nowrap;
             }
             .id-bar {
               display: flex;
               justify-content: space-around;
               background: #fff7ed;
               border: 2px solid #ffedd5;
-              border-radius: 10px;
-              padding: 14px;
-              margin-bottom: 18px;
+              border-radius: 8px;
+              padding: 10px 14px;
+              margin-bottom: 12px;
               text-align: center;
             }
             .id-box {
               flex: 1;
             }
             .id-label {
-              font-size: 11px;
+              font-size: 10px;
               font-weight: 800;
               color: #6b7280;
               text-transform: uppercase;
               display: block;
-              margin-bottom: 3px;
+              margin-bottom: 2px;
             }
             .id-val {
               font-family: monospace;
-              font-size: 16px;
+              font-size: 15px;
               font-weight: 900;
               color: #111827;
             }
@@ -471,15 +487,15 @@ const IpdAdmission = () => {
             .id-val-orange { color: #c2410c; }
             .section-box {
               border: 1px solid #d1d5db;
-              border-radius: 10px;
-              margin-bottom: 16px;
+              border-radius: 8px;
+              margin-bottom: 12px;
               overflow: hidden;
             }
             .section-header {
               background: #f3f4f6;
-              padding: 8px 14px;
+              padding: 6px 12px;
               font-weight: 900;
-              font-size: 13px;
+              font-size: 12px;
               color: #1f2937;
               text-transform: uppercase;
               letter-spacing: 0.5px;
@@ -488,51 +504,51 @@ const IpdAdmission = () => {
             .grid-2 {
               display: flex;
               flex-wrap: wrap;
-              padding: 12px;
+              padding: 8px 10px;
             }
             .col-2 {
               width: 50%;
-              padding: 6px 10px;
+              padding: 4px 8px;
             }
             .col-12 {
               width: 100%;
-              padding: 6px 10px;
+              padding: 4px 8px;
               border-top: 1px solid #f3f4f6;
-              margin-top: 6px;
-              padding-top: 8px;
+              margin-top: 4px;
+              padding-top: 6px;
             }
             .label {
-              font-size: 11px;
+              font-size: 10px;
               font-weight: 800;
               color: #6b7280;
               text-transform: uppercase;
               display: block;
-              margin-bottom: 2px;
+              margin-bottom: 1px;
             }
             .val {
-              font-size: 14px;
+              font-size: 13px;
               font-weight: 700;
               color: #111827;
             }
             .val-bold {
-              font-size: 15px;
+              font-size: 14px;
               font-weight: 900;
               color: #111827;
             }
-            .val-orange { color: #c2410c; font-weight: 900; font-size: 15px; }
-            .val-green { color: #047857; font-weight: 900; font-size: 15px; }
+            .val-orange { color: #c2410c; font-weight: 900; font-size: 14px; }
+            .val-green { color: #047857; font-weight: 900; font-size: 14px; }
             .footer-sigs {
               display: flex;
               justify-content: space-between;
-              margin-top: 45px;
-              padding-top: 10px;
+              margin-top: 20px;
+              padding-top: 8px;
               text-align: center;
             }
             .sig-box {
-              width: 45%;
+              width: 42%;
               border-top: 2px dashed #9ca3af;
               padding-top: 6px;
-              font-size: 13px;
+              font-size: 12px;
               font-weight: 800;
               color: #374151;
             }
@@ -540,23 +556,28 @@ const IpdAdmission = () => {
         </head>
         <body>
           <div class="card-container">
-            <div class="header-banner">
-              ${hospitalLogo ? `<img src="${hospitalLogo}" class="logo-img" alt="Hospital Logo" />` : ''}
-              ${hospitalName ? `<div class="hospital-title">${hospitalName}</div>` : ''}
-              ${hospitalAddress ? `<div class="hospital-sub">${hospitalAddress}</div>` : ''}
-              ${(hospitalMobile || hospitalEmail) ? `
-                <div class="hospital-sub">
-                  ${hospitalMobile ? `Phone: ${hospitalMobile}` : ''} ${hospitalEmail ? ` | Email: ${hospitalEmail}` : ''}
+            <div>
+              <div class="header-banner">
+                <div class="header-left">
+                  ${hospitalLogo ? `<img src="${hospitalLogo}" class="logo-img" alt="Hospital Logo" />` : ''}
+                  <div class="hospital-info">
+                    ${hospitalName ? `<div class="hospital-title">${hospitalName}</div>` : ''}
+                    ${hospitalAddress ? `<div class="hospital-sub">${hospitalAddress}</div>` : ''}
+                    ${(hospitalMobile || hospitalEmail) ? `
+                      <div class="hospital-sub">
+                        ${hospitalMobile ? `Phone: ${hospitalMobile}` : ''} ${hospitalEmail ? ` | Email: ${hospitalEmail}` : ''}
+                      </div>
+                    ` : ''}
+                  </div>
                 </div>
-              ` : ''}
-              <div class="card-badge">IPD Patient Admission Card</div>
-            </div>
-
-            <div class="id-bar">
-              <div class="id-box">
-                <span class="id-label">UHID Number</span>
-                <span class="id-val">${uhid}</span>
+                <div class="card-badge">IPD Patient Admission Card</div>
               </div>
+
+              <div class="id-bar">
+                <div class="id-box">
+                  <span class="id-label">UHID Number</span>
+                  <span class="id-val">${uhid}</span>
+                </div>
               <div class="id-box">
                 <span class="id-label">Admission ID (PID)</span>
                 <span class="id-val id-val-blue">${pid}</span>
@@ -636,6 +657,7 @@ const IpdAdmission = () => {
                 </div>
               </div>
             </div>
+          </div>
 
             <div class="footer-sigs">
               <div class="sig-box">Patient / Relative Signature</div>

@@ -99,7 +99,7 @@ const createConsultation = async (req, res) => {
           await Symptom.findOneAndUpdate(
             { name: symptomName },
             { name: symptomName },
-            { upsert: true, new: true }
+            { upsert: true, returnDocument: 'after' }
           );
         }
       }

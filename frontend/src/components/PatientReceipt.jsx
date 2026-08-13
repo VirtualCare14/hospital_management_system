@@ -24,6 +24,34 @@ const amountInWords = (num) => {
   return `Rupees ${inWords(n)} Only`;
 };
 
+const formatHospitalPhoneNumbers = (hospital) => {
+  if (!hospital) return 'N/A';
+  
+  if (Array.isArray(hospital.phoneNumbers) && hospital.phoneNumbers.length > 0) {
+    const valid = hospital.phoneNumbers.filter(p => p && p.number && String(p.number).trim().length > 0);
+    if (valid.length > 0) {
+      return valid.map(p => p.name ? `${p.name}: ${p.number}` : p.number).join(' | ');
+    }
+  }
+  
+  if (Array.isArray(hospital.mobileNumbers) && hospital.mobileNumbers.length > 0) {
+    const valid = hospital.mobileNumbers.filter(n => n && String(n).trim().length > 0);
+    if (valid.length > 0) {
+      return valid.join(' | ');
+    }
+  }
+
+  if (typeof hospital.mobileNumbers === 'string' && hospital.mobileNumbers.trim()) {
+    return hospital.mobileNumbers.trim();
+  }
+
+  if (hospital.alternateMobileNumber) {
+    return hospital.alternateMobileNumber;
+  }
+
+  return 'N/A';
+};
+
 const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, language, mode = 'all', printOptions: propPrintOptions }, ref) => {
   const activeLang = language || prescription?.language || 'English';
   const [hospital, setHospital] = useState(null);
@@ -87,8 +115,8 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
       <div ref={ref} className="a4-receipt" style={{
         width: '100%',
         maxWidth: '210mm',
-        minHeight: '297mm',
-        padding: '6mm 8mm 12mm 8mm',
+        minHeight: 'auto',
+        padding: '6mm 8mm 8mm 8mm',
         margin: '0 auto',
         backgroundColor: '#ffffff',
         color: '#000000',
@@ -101,28 +129,67 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
         <div style={{
           display: 'flex',
           justify: 'space-between',
-          alignItems: 'flex-start',
-          borderBottom: '2px solid #000',
-          paddingBottom: '12px',
-          marginBottom: '10px'
+          alignItems: 'center',
+          borderBottom: '2.5px solid #000',
+          paddingBottom: '14px',
+          marginBottom: '14px'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, paddingRight: '15px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, paddingRight: '20px' }}>
             {hospital?.logoUrl && (
-              <img src={hospital.logoUrl} alt="Logo" style={{ maxHeight: '65px', maxWidth: '65px' }} />
+              <img src={hospital.logoUrl} alt="Logo" style={{ maxHeight: '75px', maxWidth: '75px', objectFit: 'contain', flexShrink: 0 }} />
             )}
             <div>
-              <h1 style={{ fontSize: '18px', fontWeight: 'bold', margin: '0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              <h1 style={{ fontSize: '22px', fontWeight: '800', margin: '0', textTransform: 'uppercase', letterSpacing: '0.8px', color: '#111827' }}>
                 {hospital?.hospitalName || 'Hospital Name'}
               </h1>
               {hospital?.hospitalHeading && (
-                <p style={{ fontSize: '10px', margin: '2px 0 0 0', color: '#333' }}>{hospital.hospitalHeading}</p>
+                <p style={{ fontSize: '11px', margin: '3px 0 0 0', color: '#4b5563', fontWeight: '500' }}>{hospital.hospitalHeading}</p>
               )}
             </div>
           </div>
-          <div style={{ textAlign: 'right', fontSize: '10px', color: '#222', lineHeight: '1.4', maxWidth: '290px' }}>
-            <p style={{ margin: '0' }}><strong>Address:</strong> {hospital?.address || 'Hospital Address'}</p>
-            <p style={{ margin: '2px 0 0 0' }}><strong>Number:</strong> {hospital?.mobileNumbers?.join(' | ') || 'N/A'}</p>
-            <p style={{ margin: '2px 0 0 0' }}><strong>Email ID:</strong> {hospital?.email || 'N/A'}</p>
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '4px',
+            textAlign: 'left',
+            fontSize: '11px',
+            color: '#111827',
+            lineHeight: '1.4',
+            maxWidth: '400px',
+            width: '100%',
+            alignItems: 'flex-start'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+              <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+              </svg>
+              <div><strong>Address:</strong> {hospital?.address || 'Hospital Address'}</div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+              <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
+                <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/>
+              </svg>
+              <div><strong>Contact No:</strong> {formatHospitalPhoneNumbers(hospital)}</div>
+            </div>
+
+            {(hospital?.emailAddress || hospital?.email) && (
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+                </svg>
+                <div><strong>Email ID:</strong> {hospital.emailAddress || hospital.email}</div>
+              </div>
+            )}
+
+            {hospital?.website && (
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                </svg>
+                <div><strong>Website:</strong> {hospital.website}</div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -196,16 +263,15 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
           <strong>Amount in Words:</strong> {amountInWords(netFee)}
         </div>
 
-        <div style={{
-          position: 'absolute',
-          bottom: '6mm',
-          left: '8mm',
-          right: '8mm',
+        <div style={{ 
+          position: 'relative',
+          marginTop: '20px',
           textAlign: 'center',
           fontSize: '9px',
           color: '#666',
           borderTop: '1px solid #ccc',
-          paddingTop: '8px'
+          paddingTop: '8px',
+          pageBreakInside: 'avoid'
         }}>
           <p style={{ margin: '0' }}>This is a computer-generated receipt. Thank you.</p>
           <p style={{ margin: '2px 0 0 0' }}>Printed on: {documentDateTime}</p>
@@ -218,8 +284,8 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
     <div ref={ref} className="a4-receipt" style={{
       width: '100%',
       maxWidth: '210mm',
-      minHeight: '297mm',
-      padding: '6mm 8mm 12mm 8mm',
+      minHeight: 'auto',
+      padding: '6mm 8mm 8mm 8mm',
       margin: '0 auto',
       backgroundColor: '#ffffff',
       color: '#000000',
@@ -231,44 +297,87 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
     }}>
       <div style={{
         display: 'flex',
+        justify: 'space-between',
         alignItems: 'center',
-        gap: '15px',
-        paddingBottom: '15px',
-        borderBottom: '2px solid #000',
-        marginBottom: '18px'
+        borderBottom: '2.5px solid #000',
+        paddingBottom: '14px',
+        marginBottom: '14px'
       }}>
-        {hospital?.logoUrl && (
-          <div style={{ flexShrink: 0 }}>
-            <img
-              src={hospital.logoUrl}
-              alt="Hospital Logo"
-              style={{ maxHeight: '70px', maxWidth: '70px' }}
-            />
-          </div>
-        )}
-        <div style={{ flex: 1 }}>
-          <h1 style={{ fontSize: '20px', fontWeight: 'bold', margin: '0 0 5px 0', textTransform: 'uppercase', letterSpacing: '1px' }}>
-            {hospital?.hospitalName || 'Hospital Name'}
-          </h1>
-          {hospital?.hospitalHeading && (
-            <p style={{ fontSize: '10px', margin: '0 0 3px 0', color: '#444' }}>{hospital.hospitalHeading}</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, paddingRight: '20px' }}>
+          {hospital?.logoUrl && (
+            <div style={{ flexShrink: 0 }}>
+              <img
+                src={hospital.logoUrl}
+                alt="Hospital Logo"
+                style={{ maxHeight: '75px', maxWidth: '75px', objectFit: 'contain' }}
+              />
+            </div>
           )}
-          <p style={{ fontSize: '10px', margin: '0', color: '#444' }}>
-            <strong>Address:</strong> {hospital?.address || 'Hospital Address'}
-          </p>
-          <p style={{ fontSize: '10px', margin: '3px 0 0 0', color: '#444' }}>
-            <strong>Mobile Number:</strong> {hospital?.mobileNumbers?.join(' | ') || 'Mobile Number'}
-          </p>
+          <div style={{ flex: 1 }}>
+            <h1 style={{ fontSize: '22px', fontWeight: '800', margin: '0', textTransform: 'uppercase', letterSpacing: '0.8px', color: '#111827' }}>
+              {hospital?.hospitalName || 'Hospital Name'}
+            </h1>
+            {hospital?.hospitalHeading && (
+              <p style={{ fontSize: '11px', margin: '3px 0 0 0', color: '#4b5563', fontWeight: '500' }}>{hospital.hospitalHeading}</p>
+            )}
+          </div>
+        </div>
+
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '4px',
+          textAlign: 'left',
+          fontSize: '11px',
+          color: '#111827',
+          lineHeight: '1.4',
+          maxWidth: '400px',
+          width: '100%',
+          alignItems: 'flex-start'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+            <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+            </svg>
+            <div><strong>Address:</strong> {hospital?.address || 'Hospital Address'}</div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+            <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
+              <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/>
+            </svg>
+            <div><strong>Contact No:</strong> {formatHospitalPhoneNumbers(hospital)}</div>
+          </div>
+
+          {(hospital?.emailAddress || hospital?.email) && (
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+              <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
+                <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+              </svg>
+              <div><strong>Email ID:</strong> {hospital.emailAddress || hospital.email}</div>
+            </div>
+          )}
+
+          {hospital?.website && (
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+              <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+              </svg>
+              <div><strong>Website:</strong> {hospital.website}</div>
+            </div>
+          )}
         </div>
       </div>
 
       <h2 style={{ 
-        fontSize: '16px', 
+        fontSize: '15px', 
         fontWeight: 'bold', 
         margin: '0 0 15px 0', 
         textAlign: 'center',
-        textDecoration: 'underline',
-        letterSpacing: '2px'
+        textTransform: 'uppercase',
+        letterSpacing: '2px',
+        borderBottom: '1px solid #000',
+        paddingBottom: '4px'
       }}>
         {documentTitle}
       </h2>
@@ -566,15 +675,14 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
       )}
 
       <div style={{ 
-        position: 'absolute',
-        bottom: '15mm',
-        left: '18mm',
-        right: '18mm',
+        position: 'relative',
+        marginTop: '25px',
         textAlign: 'center', 
         fontSize: '9px', 
         color: '#666', 
         borderTop: '1px solid #ccc', 
-        paddingTop: '10px' 
+        paddingTop: '10px',
+        pageBreakInside: 'avoid'
       }}>
         <p style={{ margin: '0' }}>This is a computer-generated document. No signature required.</p>
         <p style={{ margin: '3px 0 0 0' }}>

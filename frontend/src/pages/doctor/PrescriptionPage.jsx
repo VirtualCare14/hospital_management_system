@@ -44,6 +44,19 @@ const PrescriptionPage = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [language, setLanguage] = useState('English');
+  const [printOptions, setPrintOptions] = useState(() => {
+    const saved = localStorage.getItem('doctor_print_options');
+    return saved ? JSON.parse(saved) : {
+      printVitals: true,
+      printLabTests: true,
+      printSymptomHistory: true,
+      printSymptomRemarks: true,
+      printGeneralPastHistory: true,
+      printDiagnosisRemarks: true,
+      printPatientAdvice: true,
+      printPreviousHistory: false
+    };
+  });
 
   const [medicines, setMedicines] = useState([
     { medicine: '', dosageForm: 'Tablet', strength: '', dose: '1', morning: true, afternoon: false, night: true, duration: '5', remarks: 'After food', qty: 0 }
@@ -788,7 +801,7 @@ const PrescriptionPage = () => {
           <h3 className="text-xs font-extrabold text-gray-700 uppercase tracking-wider">A4 Printable Receipt Preview</h3>
           <div className="bg-white p-3 border border-gray-300 rounded shadow-xs overflow-x-auto">
             <div ref={receiptRef}>
-              <PatientReceipt patient={patient} prescription={buildPrescriptionDataForPrint()} />
+              <PatientReceipt patient={patient} prescription={buildPrescriptionDataForPrint()} printOptions={printOptions} />
             </div>
           </div>
         </div>
@@ -798,7 +811,7 @@ const PrescriptionPage = () => {
       {!showPreview && (
         <div className="hidden">
           <div ref={receiptRef}>
-            <PatientReceipt patient={patient} prescription={buildPrescriptionDataForPrint()} />
+            <PatientReceipt patient={patient} prescription={buildPrescriptionDataForPrint()} printOptions={printOptions} />
           </div>
         </div>
       )}

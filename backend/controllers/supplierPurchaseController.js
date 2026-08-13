@@ -135,7 +135,7 @@ const updateSupplier = async (req, res) => {
     const supplier = await Supplier.findOneAndUpdate(
       { _id: id, hospitalId },
       { $set: updateData },
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     );
 
     if (!supplier) {

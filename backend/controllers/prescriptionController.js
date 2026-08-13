@@ -89,7 +89,7 @@ const createPrescription = async (req, res) => {
           consultationCompletedDate: new Date(),
           consultationDateTime: new Date()
         },
-        { sort: { createdAt: -1 }, new: true }
+        { sort: { createdAt: -1 }, returnDocument: 'after' }
       );
       if (consultation) {
         consultationId = consultation._id;

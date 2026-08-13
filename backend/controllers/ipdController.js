@@ -114,7 +114,7 @@ const admitPatient = async (req, res) => {
     let settings = await IpdAdminSettings.findOneAndUpdate(
       { hospitalId: req.user.hospitalId },
       { $inc: { ipdCurrentNumber: 1, pidCurrentNumber: 1 } },
-      { new: true, upsert: true }
+      { returnDocument: 'after', upsert: true }
     );
 
     // Get sequential values before the increment

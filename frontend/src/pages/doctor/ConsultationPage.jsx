@@ -87,7 +87,8 @@ const ConsultationPage = () => {
       printSymptomRemarks: true,
       printGeneralPastHistory: true,
       printDiagnosisRemarks: true,
-      printPatientAdvice: true
+      printPatientAdvice: true,
+      printPreviousHistory: false
     };
   });
   const [pharmacyMedicines, setPharmacyMedicines] = useState([]);
@@ -439,7 +440,7 @@ const ConsultationPage = () => {
     };
 
     const mergedSymptoms = [
-      ...(previousConsultation?.symptoms || []),
+      ...(printOptions.printPreviousHistory ? (previousConsultation?.symptoms || []) : []),
       ...symptoms.filter((item) => item.symptom).map((item) => ({ 
         symptom: item.symptom, 
         durationDays: item.durationDays || 0,
@@ -448,6 +449,21 @@ const ConsultationPage = () => {
         remarks: item.remarks
       }))
     ];
+
+    const mergedDiagnosisRemark = [
+      diagnosisRemark ? `Diagnosis/Remark: ${diagnosisRemark}` : null,
+      patientAdvice ? `Advice: ${patientAdvice}` : null,
+      printOptions.printPreviousHistory ? previousConsultation?.diagnosisRemark : null
+    ].filter(Boolean).join('\n\n');
+
+    const mergedTests = [
+      ...(printOptions.printPreviousHistory ? (previousConsultation?.tests || []) : []),
+      ...selectedTests
+    ];
+
+    const mergedPastHistory = printOptions.printPreviousHistory
+      ? [previousConsultation?.generalPastHistory, generalPastHistory].filter(Boolean).join('\n')
+      : generalPastHistory;
 
     return {
       _id: 'draft-rx',
@@ -458,12 +474,9 @@ const ConsultationPage = () => {
       medicines: validMeds,
       vitals: mergedVitals,
       symptoms: mergedSymptoms,
-      diagnosisRemark: [
-        diagnosisRemark ? `Diagnosis/Remark: ${diagnosisRemark}` : null,
-        patientAdvice ? `Advice: ${patientAdvice}` : null
-      ].filter(Boolean).join('\n\n') || (diagnosisRemark || patientAdvice || previousConsultation?.diagnosisRemark || ''),
-      tests: [...(previousConsultation?.tests || []), ...selectedTests],
-      pastHistory: generalPastHistory,
+      diagnosisRemark: mergedDiagnosisRemark,
+      tests: mergedTests,
+      pastHistory: mergedPastHistory,
       followUpDate: followUpDate || previousConsultation?.followUpDate,
       followUpRemarks: followUpRemarks || previousConsultation?.followUpRemarks,
       printOptions,
@@ -584,7 +597,7 @@ const ConsultationPage = () => {
     setSaving(true);
     try {
       const mergedSymptoms = [
-        ...(previousConsultation?.symptoms || []),
+        ...(printOptions.printPreviousHistory ? (previousConsultation?.symptoms || []) : []),
         ...symptoms.filter((item) => item.symptom).map((item) => ({ 
           symptom: item.symptom, 
           durationDays: item.durationDays || 0,
@@ -594,15 +607,13 @@ const ConsultationPage = () => {
         }))
       ];
 
-      const mergedPastHistory = [
-        previousConsultation?.generalPastHistory,
-        generalPastHistory
-      ].filter(Boolean).join('\n');
+      const mergedPastHistory = printOptions.printPreviousHistory
+        ? [previousConsultation?.generalPastHistory, generalPastHistory].filter(Boolean).join('\n')
+        : generalPastHistory;
 
-      const mergedDiagnosisRemark = [
-        previousConsultation?.diagnosisRemark,
-        diagnosisRemark
-      ].filter(Boolean).join('\n');
+      const mergedDiagnosisRemark = printOptions.printPreviousHistory
+        ? [previousConsultation?.diagnosisRemark, diagnosisRemark].filter(Boolean).join('\n')
+        : diagnosisRemark;
 
       const mergedVitals = {
         weight: data.weight || previousConsultation?.vitals?.weight,
@@ -614,7 +625,7 @@ const ConsultationPage = () => {
       };
 
       const mergedTests = [
-        ...(previousConsultation?.tests || []),
+        ...(printOptions.printPreviousHistory ? (previousConsultation?.tests || []) : []),
         ...selectedTests
       ];
 
@@ -671,7 +682,7 @@ const ConsultationPage = () => {
     try {
       const formValues = watch();
       const mergedSymptoms = [
-        ...(previousConsultation?.symptoms || []),
+        ...(printOptions.printPreviousHistory ? (previousConsultation?.symptoms || []) : []),
         ...symptoms.filter((item) => item.symptom).map((item) => ({ 
           symptom: item.symptom, 
           durationDays: item.durationDays || 0,
@@ -681,15 +692,13 @@ const ConsultationPage = () => {
         }))
       ];
 
-      const mergedPastHistory = [
-        previousConsultation?.generalPastHistory,
-        generalPastHistory
-      ].filter(Boolean).join('\n');
+      const mergedPastHistory = printOptions.printPreviousHistory
+        ? [previousConsultation?.generalPastHistory, generalPastHistory].filter(Boolean).join('\n')
+        : generalPastHistory;
 
-      const mergedDiagnosisRemark = [
-        previousConsultation?.diagnosisRemark,
-        diagnosisRemark
-      ].filter(Boolean).join('\n');
+      const mergedDiagnosisRemark = printOptions.printPreviousHistory
+        ? [previousConsultation?.diagnosisRemark, diagnosisRemark].filter(Boolean).join('\n')
+        : diagnosisRemark;
 
       const mergedVitals = {
         weight: formValues.weight || previousConsultation?.vitals?.weight,
@@ -701,7 +710,7 @@ const ConsultationPage = () => {
       };
 
       const mergedTests = [
-        ...(previousConsultation?.tests || []),
+        ...(printOptions.printPreviousHistory ? (previousConsultation?.tests || []) : []),
         ...selectedTests
       ];
 
@@ -1846,6 +1855,19 @@ const ConsultationPage = () => {
                     className="rounded text-orange-600 focus:ring-orange-500 h-4.5 w-4.5 cursor-pointer"
                   />
                 </label>
+
+                <label className="flex items-center justify-between cursor-pointer select-none hover:text-orange-600 border-t border-gray-200/60 pt-2">
+                  <div>
+                    <span className="block font-bold">Include Previous Prescription / Visit History</span>
+                    <span className="text-[11px] font-normal text-gray-500 block">Print past visits & symptoms history from previous consultations</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(printOptions.printPreviousHistory)}
+                    onChange={(e) => setPrintOptions({ ...printOptions, printPreviousHistory: e.target.checked })}
+                    className="rounded text-orange-600 focus:ring-orange-500 h-4.5 w-4.5 cursor-pointer"
+                  />
+                </label>
               </div>
             </div>
 
@@ -1975,6 +1997,7 @@ const ConsultationPage = () => {
                   patient={buildPatientDataForReceipt()}
                   prescription={buildPrescriptionDataForPrint()}
                   language={language}
+                  printOptions={printOptions}
                 />
               </div>
             </div>

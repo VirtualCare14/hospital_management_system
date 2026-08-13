@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
-import { Building2, Save, Upload, X, Loader2, Info, Percent, Settings, ShieldAlert, FileText, Globe, Mail, PhoneCall } from 'lucide-react';
+import { Building2, Save, Upload, X, Loader2, Info, Percent, Settings, ShieldAlert, FileText, Globe, Mail, PhoneCall, Plus, Trash2 } from 'lucide-react';
 import client from '../../api/client';
 import SkeletonCard from '../../components/Skeleton/SkeletonCard';
 import SkeletonInput from '../../components/Skeleton/SkeletonInput';
@@ -13,6 +13,7 @@ const HospitalSettings = () => {
   const [uploading, setUploading] = useState(false);
   const [previewLogo, setPreviewLogo] = useState(null);
   const [activeTab, setActiveTab] = useState('profile'); // 'profile', 'invoice', 'gst-discount'
+  const [phoneNumbersList, setPhoneNumbersList] = useState([{ name: '', number: '' }]);
 
   // Discount requests state
   const [discountRequests, setDiscountRequests] = useState([]);
@@ -106,11 +107,48 @@ const HospitalSettings = () => {
     loadSettings();
   }, []);
 
+  const handleAddPhoneNumber = () => {
+    setPhoneNumbersList(prev => [...prev, { name: '', number: '' }]);
+  };
+
+  const handleRemovePhoneNumber = (index) => {
+    if (phoneNumbersList.length <= 1) {
+      toast.error('At least one phone number entry is required');
+      return;
+    }
+    setPhoneNumbersList(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handlePhoneChange = (index, field, value) => {
+    setPhoneNumbersList(prev => {
+      const next = [...prev];
+      next[index] = { ...next[index], [field]: value };
+      return next;
+    });
+  };
+
   const loadSettings = async () => {
     try {
       const { data } = await client.get('/admin/hospital-settings');
       if (data.exists && data.data) {
         setSettings(data.data);
+
+        if (data.data.phoneNumbers && Array.isArray(data.data.phoneNumbers) && data.data.phoneNumbers.length > 0) {
+          setPhoneNumbersList(data.data.phoneNumbers);
+        } else if (data.data.mobileNumbers && Array.isArray(data.data.mobileNumbers) && data.data.mobileNumbers.length > 0) {
+          const parsed = data.data.mobileNumbers.map(item => {
+            const str = String(item).trim();
+            if (str.includes(':')) {
+              const parts = str.split(':');
+              return { name: parts[0].trim(), number: parts.slice(1).join(':').trim() };
+            }
+            return { name: '', number: str };
+          });
+          setPhoneNumbersList(parsed);
+        } else {
+          setPhoneNumbersList([{ name: '', number: '' }]);
+        }
+
         reset({
           hospitalName: data.data.hospitalName,
           mobileNumbers: data.data.mobileNumbers.join(', '),
@@ -207,17 +245,18 @@ const HospitalSettings = () => {
     }
   };
 
-   const onSubmit = async (data) => {
+  const onSubmit = async (data) => {
     try {
-      const mobileNumbers = data.mobileNumbers
-        .split(',')
-        .map(num => num.trim())
-        .filter(num => num.length > 0);
+      const validPhoneNumbers = phoneNumbersList
+        .map(p => ({ name: (p.name || '').trim(), number: (p.number || '').trim() }))
+        .filter(p => p.number.length > 0);
 
-      if (mobileNumbers.length === 0) {
-        toast.error('At least one mobile number is required');
+      if (validPhoneNumbers.length === 0) {
+        toast.error('At least one valid mobile number is required');
         return;
       }
+
+      const mobileNumbers = validPhoneNumbers.map(p => p.name ? `${p.name}: ${p.number}` : p.number);
 
       const discountReasons = (data.discountReasons || 'Patient-Specific Discount')
         .split(',')
@@ -226,6 +265,7 @@ const HospitalSettings = () => {
 
       const payload = {
         hospitalName: data.hospitalName,
+        phoneNumbers: validPhoneNumbers,
         mobileNumbers,
         address: data.address,
         hospitalHeading: data.hospitalHeading || '',
@@ -403,22 +443,64 @@ const HospitalSettings = () => {
                 />
               </div>
 
-              {/* Mobile Numbers */}
-              <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1 flex items-center gap-1">
-                  <PhoneCall className="h-3.5 w-3.5 text-gray-400" /> Mobile Numbers (Primary) <span className="text-red-500">*</span>
-                </label>
-                <input
-                  className="input"
-                  placeholder="e.g. 9876543210"
-                  {...register('mobileNumbers', { required: true })}
-                />
+              {/* Dynamic Contact Phone Numbers */}
+              <div className="md:col-span-2 bg-orange-50/30 p-4 rounded-xl border border-orange-100 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <PhoneCall className="h-4 w-4 text-orange-500" /> Hospital Contact Numbers (Single / Multiple with Specific Name) <span className="text-red-500">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleAddPhoneNumber}
+                    className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 bg-white hover:bg-orange-50 border border-orange-200 px-3 py-1.5 rounded-lg shadow-2xs transition-all"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add Phone Number
+                  </button>
+                </div>
+                <p className="text-[11px] text-gray-500">
+                  Optionally give each number a specific name (e.g. "Emergency", "Reception", "Billing", "Pharmacy", "Helpdesk") or leave name empty for plain numbers. All entered numbers will print on OPD Slips and Prescriptions.
+                </p>
+
+                <div className="space-y-2 pt-1">
+                  {phoneNumbersList.map((item, index) => (
+                    <div key={index} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-white p-2 rounded-lg border border-gray-200 shadow-2xs">
+                      <div className="w-full sm:w-2/5">
+                        <input
+                          type="text"
+                          className="input text-xs"
+                          placeholder="Name / Dept (e.g. Emergency, Reception)"
+                          value={item.name}
+                          onChange={(e) => handlePhoneChange(index, 'name', e.target.value)}
+                        />
+                      </div>
+                      <div className="flex-1 flex items-center gap-2">
+                        <input
+                          type="text"
+                          className="input text-xs flex-1"
+                          placeholder="Phone Number (e.g. 9876543210) *"
+                          value={item.number}
+                          onChange={(e) => handlePhoneChange(index, 'number', e.target.value)}
+                        />
+                        {phoneNumbersList.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePhoneNumber(index)}
+                            className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors shrink-0"
+                            title="Remove number"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
-              {/* Alternate Mobile */}
+              {/* Alternate Mobile (Optional) */}
               <div>
                 <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1 flex items-center gap-1">
-                  <PhoneCall className="h-3.5 w-3.5 text-gray-400" /> Alternate Mobile (Optional)
+                  <PhoneCall className="h-3.5 w-3.5 text-gray-400" /> Additional Mobile (Optional)
                 </label>
                 <input
                   className="input"

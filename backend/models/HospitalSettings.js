@@ -14,6 +14,10 @@ const hospitalSettingsSchema = new mongoose.Schema({
       message: 'At least one mobile number is required'
     }
   },
+  phoneNumbers: [{
+    name: { type: String, trim: true, default: '' },
+    number: { type: String, trim: true, default: '' }
+  }],
   address: {
     type: String,
     required: true,

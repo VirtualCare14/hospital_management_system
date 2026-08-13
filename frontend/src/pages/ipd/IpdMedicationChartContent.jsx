@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
+import { useHeader } from '../../context/HeaderContext';
 import client from '../../api/client';
 import { formatUhid } from '../../utils/uhid';
 
@@ -335,6 +336,16 @@ const IpdMedicationChartContent = ({ admissionId }) => {
   const isDischarged = admission?.status === 'Discharged';
   const isDoctorOrAdmin = (user?.role === 'doctor' || user?.role === 'admin') && !isDischarged;
   const isNurseOrAdmin = (user?.role === 'ipd' || user?.role === 'admin' || user?.role === 'nursing') && !isDischarged;
+
+  useHeader({
+    title: admission?.patientId?.patientName 
+      ? `IPD Medication Chart – ${admission.patientId.patientName}` 
+      : 'IPD Medication Chart',
+    subtitle: admission?.patientId?.uhid 
+      ? `UHID: ${formatUhid(admission.patientId.uhid)} | Room: ${admission.roomId?.roomType || 'N/A'} - Bed ${admission.bedId?.bedNumber || 'N/A'}`
+      : 'Record drug administrations, nurse dosage logs, and daily inpatient medication schedules.',
+    onRefresh: () => loadData(true)
+  });
 
   const [pharmacyMedicines, setPharmacyMedicines] = useState([]);
   useEffect(() => {
@@ -834,7 +845,7 @@ const IpdMedicationChartContent = ({ admissionId }) => {
               <div key={idx} className="bg-red-50 border border-red-300 text-red-900 px-4 py-3 rounded-2xl flex items-start gap-3 shadow-md animate-pulse">
                 <span className="text-lg">🚨</span>
                 <div className="flex-1">
-                  <span className="font-extrabold uppercase text-[9px] tracking-wider bg-red-650 text-white px-2 py-0.5 rounded mr-2">Missed Medication</span>
+                  <span className="font-extrabold uppercase text-[10px] tracking-wider bg-red-600 text-white px-2.5 py-0.5 rounded-md shadow-xs mr-2">Missed Medication</span>
                   <span className="font-bold text-red-950">{d.medicineName}</span> scheduled for <span className="font-bold">{d.scheduledTime}</span> was missed today!
                   <div className="text-xs text-red-700 mt-1">
                     Current Delay: {d.delayMins > 0 ? `${Math.floor(d.delayMins / 60)}h ${d.delayMins % 60}m` : 'N/A'}
@@ -915,7 +926,7 @@ const IpdMedicationChartContent = ({ admissionId }) => {
                   <span className="block text-xl font-black text-amber-700 mt-1">{stats.dueSoon}</span>
                 </div>
                 <div className="p-3 bg-red-50 border border-red-150 rounded-xl text-center animate-pulse">
-                  <span className="block text-[9px] uppercase font-extrabold tracking-wider text-red-650">Overdue</span>
+                  <span className="block text-[9px] uppercase font-extrabold tracking-wider text-red-700">Overdue</span>
                   <span className="block text-xl font-black text-red-700 mt-1">{stats.overdue}</span>
                 </div>
                 <div className="p-3 bg-red-950 text-white rounded-xl text-center animate-pulse">
@@ -1552,28 +1563,30 @@ const IpdMedicationChartContent = ({ admissionId }) => {
 
       {/* MODAL: Place / Edit Medication Order (Doctor-Only validation in backend) */}
       {showOrderModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-orange-950/20 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl border border-orange-100 overflow-hidden transform scale-100 transition-all">
-            <div className="p-5 bg-gradient-to-r from-orange-500 to-amber-500 text-white flex justify-between items-center">
-              <h3 className="font-extrabold tracking-tight">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-orange-950/30 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-2xl w-full max-w-2xl sm:max-w-3xl max-h-[90vh] shadow-2xl border border-orange-100 flex flex-col overflow-hidden transform scale-100 transition-all">
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-orange-500 to-amber-500 text-white flex justify-between items-center shrink-0">
+              <h3 className="font-extrabold tracking-tight text-base sm:text-lg">
                 {editingOrder ? 'Edit Medication Order' : 'Add Medication Order'}
               </h3>
               <button 
+                type="button"
                 onClick={() => setShowOrderModal(false)}
-                className="text-white hover:bg-white/10 rounded-lg p-1 transition-colors animate-fade-in"
+                className="text-white hover:bg-white/20 rounded-lg p-1.5 transition-colors cursor-pointer"
+                title="Close modal"
               >
                 ✕
               </button>
             </div>
             
-            <form onSubmit={handleSaveOrder} className="p-5 space-y-4">
+            <form onSubmit={handleSaveOrder} className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
               <div>
                 <label className="block mb-1 text-xs font-bold text-gray-600 uppercase">Medicine Name *</label>
                 <input
                   type="text"
                   required
                   list="medication-order-medicines"
-                  placeholder="e.g. Paracetamol"
+                  placeholder="e.g. Paracetamol 100mg"
                   className="input text-sm"
                   value={orderForm.medicineName}
                   onChange={(e) => setOrderForm(prev => ({ ...prev, medicineName: e.target.value }))}
@@ -1591,13 +1604,13 @@ const IpdMedicationChartContent = ({ admissionId }) => {
                 </datalist>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block mb-1 text-xs font-bold text-gray-600 uppercase">Dose *</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. 500 mg"
+                    placeholder="e.g. 1 or 500 mg"
                     className="input text-sm"
                     value={orderForm.dose}
                     onChange={(e) => setOrderForm(prev => ({ ...prev, dose: e.target.value }))}
@@ -1606,7 +1619,7 @@ const IpdMedicationChartContent = ({ admissionId }) => {
                 <div>
                   <label className="block mb-1 text-xs font-bold text-gray-600 uppercase">Route *</label>
                   <select
-                    className="input text-sm"
+                    className="input text-sm bg-white"
                     value={orderForm.route}
                     onChange={(e) => setOrderForm(prev => ({ ...prev, route: e.target.value }))}
                   >
@@ -1620,7 +1633,7 @@ const IpdMedicationChartContent = ({ admissionId }) => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block mb-1 text-xs font-bold text-gray-600 uppercase">Start Date *</label>
                   <input
@@ -1647,7 +1660,7 @@ const IpdMedicationChartContent = ({ admissionId }) => {
               </div>
 
               {orderForm.scheduleType !== 'One-Time' && (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block mb-1 text-xs font-bold text-gray-600 uppercase">Duration Prescribed</label>
                     <select
@@ -1678,48 +1691,49 @@ const IpdMedicationChartContent = ({ admissionId }) => {
                 </div>
               )}
 
-              <div>
-                <label className="block mb-1 text-xs font-bold text-gray-600 uppercase">Frequency *</label>
-                <select
-                  className="input text-sm bg-white"
-                  required
-                  value={orderForm.frequency}
-                  onChange={(e) => handleFrequencyChange(e.target.value)}
-                >
-                  <option value="Once (STAT)">Once (STAT)</option>
-                  <option value="Once Daily (OD)">Once Daily (OD)</option>
-                  <option value="Twice Daily (BD)">Twice Daily (BD)</option>
-                  <option value="Three Times Daily (TDS)">Three Times Daily (TDS)</option>
-                  <option value="Four Times Daily (QID)">Four Times Daily (QID)</option>
-                  <option value="Every 2 Hours">Every 2 Hours</option>
-                  <option value="Every 4 Hours">Every 4 Hours</option>
-                  <option value="Every 6 Hours">Every 6 Hours</option>
-                  <option value="Every 8 Hours">Every 8 Hours</option>
-                  <option value="Every 12 Hours">Every 12 Hours</option>
-                  <option value="Every 24 Hours">Every 24 Hours</option>
-                  <option value="SOS (As Needed)">SOS (As Needed)</option>
-                  <option value="Custom">Custom</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block mb-1 text-xs font-bold text-gray-600 uppercase">Schedule Type *</label>
-                <select
-                  className="input text-xs py-2 bg-white"
-                  value={orderForm.scheduleType}
-                  onChange={(e) => setOrderForm(prev => ({ ...prev, scheduleType: e.target.value }))}
-                >
-                  <option value="Fixed Shift">Option 1 – Fixed Shift</option>
-                  <option value="Every X Hours">Option 2 – Every X Hours</option>
-                  <option value="Custom Time">Option 3 – Custom Time</option>
-                  <option value="One-Time">Option 4 – One-Time (STAT)</option>
-                </select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block mb-1 text-xs font-bold text-gray-600 uppercase">Frequency *</label>
+                  <select
+                    className="input text-sm bg-white"
+                    required
+                    value={orderForm.frequency}
+                    onChange={(e) => handleFrequencyChange(e.target.value)}
+                  >
+                    <option value="Once (STAT)">Once (STAT)</option>
+                    <option value="Once Daily (OD)">Once Daily (OD)</option>
+                    <option value="Twice Daily (BD)">Twice Daily (BD)</option>
+                    <option value="Three Times Daily (TDS)">Three Times Daily (TDS)</option>
+                    <option value="Four Times Daily (QID)">Four Times Daily (QID)</option>
+                    <option value="Every 2 Hours">Every 2 Hours</option>
+                    <option value="Every 4 Hours">Every 4 Hours</option>
+                    <option value="Every 6 Hours">Every 6 Hours</option>
+                    <option value="Every 8 Hours">Every 8 Hours</option>
+                    <option value="Every 12 Hours">Every 12 Hours</option>
+                    <option value="Every 24 Hours">Every 24 Hours</option>
+                    <option value="SOS (As Needed)">SOS (As Needed)</option>
+                    <option value="Custom">Custom</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block mb-1 text-xs font-bold text-gray-600 uppercase">Schedule Type *</label>
+                  <select
+                    className="input text-xs py-2 bg-white"
+                    value={orderForm.scheduleType}
+                    onChange={(e) => setOrderForm(prev => ({ ...prev, scheduleType: e.target.value }))}
+                  >
+                    <option value="Fixed Shift">Option 1 – Fixed Shift</option>
+                    <option value="Every X Hours">Option 2 – Every X Hours</option>
+                    <option value="Custom Time">Option 3 – Custom Time</option>
+                    <option value="One-Time">Option 4 – One-Time (STAT)</option>
+                  </select>
+                </div>
               </div>
 
               {orderForm.scheduleType === 'Fixed Shift' && (
                 <div>
                   <label className="block mb-1.5 text-xs font-bold text-gray-600 uppercase">Fixed Shift Options</label>
-                  <div className="grid grid-cols-4 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {[
                       { key: 'morning', label: '🌅 Morn' },
                       { key: 'afternoon', label: '☀️ Aft' },
@@ -1728,7 +1742,7 @@ const IpdMedicationChartContent = ({ admissionId }) => {
                     ].map(schedule => (
                       <label 
                         key={schedule.key}
-                        className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold cursor-pointer transition-all ${
+                        className={`flex items-center justify-center gap-1.5 p-2 rounded-xl border text-xs font-bold cursor-pointer transition-all ${
                           orderForm[schedule.key]
                             ? 'border-orange-500 bg-orange-50 text-orange-700 shadow-sm'
                             : 'border-orange-100 hover:bg-orange-50/50 text-gray-500'
@@ -1786,24 +1800,26 @@ const IpdMedicationChartContent = ({ admissionId }) => {
               <div>
                 <label className="block mb-1 text-xs font-bold text-gray-600 uppercase">Doctor Remarks</label>
                 <textarea
+                  rows={2}
                   placeholder="e.g. Give after food"
-                  className="input text-sm min-h-[60px]"
+                  className="input text-sm min-h-[50px]"
                   value={orderForm.doctorRemark}
                   onChange={(e) => setOrderForm(prev => ({ ...prev, doctorRemark: e.target.value }))}
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-4 border-t border-orange-50">
+              {/* Action Buttons Footer (Pinned to bottom) */}
+              <div className="flex justify-end gap-3 pt-3 border-t border-orange-100 shrink-0 bg-white sticky bottom-0">
                 <button
                   type="button"
                   onClick={() => setShowOrderModal(false)}
-                  className="btn-secondary py-2 px-4 text-xs font-bold cursor-pointer"
+                  className="btn-secondary py-2 px-5 text-xs font-bold cursor-pointer rounded-xl"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="btn py-2 px-5 text-xs font-bold shadow-md cursor-pointer"
+                  className="btn py-2 px-6 text-xs font-bold shadow-md cursor-pointer rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:from-orange-600 hover:to-amber-600"
                 >
                   {editingOrder ? 'Update Order' : 'Place Order'}
                 </button>
@@ -1815,21 +1831,22 @@ const IpdMedicationChartContent = ({ admissionId }) => {
 
       {/* MODAL: Nurse Log Administration (Given/Hold/Refused/etc.) */}
       {showAdministerModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-orange-950/20 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl border border-orange-100 overflow-hidden transform scale-100">
-            <div className="p-5 bg-gradient-to-r from-orange-500 to-amber-500 text-white flex justify-between items-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-orange-950/30 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] shadow-2xl border border-orange-100 flex flex-col overflow-hidden transform scale-100">
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-orange-500 to-amber-500 text-white flex justify-between items-center shrink-0">
               <h3 className="font-extrabold tracking-tight">
                 Log Medication Administration
               </h3>
               <button 
+                type="button"
                 onClick={() => setShowAdministerModal(false)}
-                className="text-white hover:bg-white/10 rounded-lg p-1 transition-colors"
+                className="text-white hover:bg-white/20 rounded-lg p-1.5 transition-colors cursor-pointer"
               >
                 ✕
               </button>
             </div>
             
-            <form onSubmit={handleSaveAdministration} className="p-5 space-y-4">
+            <form onSubmit={handleSaveAdministration} className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
               <div className="bg-orange-50/50 p-3 rounded-xl border border-orange-100">
                 <p className="text-[10px] font-bold text-orange-500 uppercase">Selected Medicine</p>
                 <p className="font-extrabold text-orange-950">{selectedOrderForAdmin?.medicineName}</p>
@@ -1925,7 +1942,7 @@ const IpdMedicationChartContent = ({ admissionId }) => {
                         </span>
                       </div>
                       {preview.warning && (
-                        <div className="text-[10px] font-bold text-red-650 bg-red-50 p-2.5 rounded-lg border border-red-200 mt-2">
+                        <div className="text-[10px] font-bold text-red-700 bg-red-50 p-2.5 rounded-lg border border-red-200 mt-2">
                           {preview.warning}
                         </div>
                       )}
@@ -1958,7 +1975,7 @@ const IpdMedicationChartContent = ({ admissionId }) => {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-4 border-t border-orange-50">
+              <div className="flex justify-end gap-2 pt-3 border-t border-orange-100 shrink-0 bg-white sticky bottom-0">
                 <button
                   type="button"
                   onClick={() => setShowAdministerModal(false)}
@@ -1980,21 +1997,22 @@ const IpdMedicationChartContent = ({ admissionId }) => {
 
       {/* MODAL: Nurse Edit Administration Record */}
       {showEditAdminModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-orange-950/20 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl border border-orange-100 overflow-hidden transform scale-100">
-            <div className="p-5 bg-gradient-to-r from-orange-500 to-amber-500 text-white flex justify-between items-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-orange-950/30 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] shadow-2xl border border-orange-100 flex flex-col overflow-hidden transform scale-100">
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-orange-500 to-amber-500 text-white flex justify-between items-center shrink-0">
               <h3 className="font-extrabold tracking-tight">
                 Edit Drug Administration Record
               </h3>
               <button 
+                type="button"
                 onClick={() => setShowEditAdminModal(false)}
-                className="text-white hover:bg-white/10 rounded-lg p-1 transition-colors"
+                className="text-white hover:bg-white/20 rounded-lg p-1.5 transition-colors cursor-pointer"
               >
                 ✕
               </button>
             </div>
             
-            <form onSubmit={handleUpdateAdministration} className="p-5 space-y-4">
+            <form onSubmit={handleUpdateAdministration} className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
               <div className="bg-orange-50/50 p-3 rounded-xl border border-orange-100">
                 <p className="text-[10px] font-bold text-orange-500 uppercase">Selected Medicine</p>
                 <p className="font-extrabold text-orange-950">{editingAdminRecord?.medicineName}</p>
@@ -2059,7 +2077,7 @@ const IpdMedicationChartContent = ({ admissionId }) => {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-4 border-t border-orange-50">
+              <div className="flex justify-end gap-2 pt-3 border-t border-orange-100 shrink-0 bg-white sticky bottom-0">
                 <button
                   type="button"
                   onClick={() => setShowEditAdminModal(false)}

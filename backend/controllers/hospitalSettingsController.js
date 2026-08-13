@@ -41,7 +41,7 @@ const getHospitalSettings = asyncHandler(async (req, res) => {
 const createOrUpdateHospitalSettings = asyncHandler(async (req, res) => {
   try {
     const { 
-      hospitalName, mobileNumbers, address, hospitalHeading, logoUrl, logoPublicId,
+      hospitalName, mobileNumbers, phoneNumbers, address, hospitalHeading, logoUrl, logoPublicId,
       alternateMobileNumber, emailAddress, website, gstNumber, panNumber, registrationNumber, dlNumber, invoiceFooterMessage,
       invoicePrefix, invoiceCounter, invoiceFormat,
       gstEnabled, gstPercentage, gstRules,
@@ -51,8 +51,24 @@ const createOrUpdateHospitalSettings = asyncHandler(async (req, res) => {
       medicationGracePeriod, medicationMissedThreshold
     } = req.body;
     
+    // Process phoneNumbers structured list if provided
+    let formattedPhoneNumbers = [];
+    if (Array.isArray(phoneNumbers) && phoneNumbers.length > 0) {
+      formattedPhoneNumbers = phoneNumbers
+        .filter(p => p && p.number && String(p.number).trim().length > 0)
+        .map(p => ({
+          name: (p.name || '').trim(),
+          number: String(p.number).trim()
+        }));
+    }
+
+    let mobNums = Array.isArray(mobileNumbers) ? mobileNumbers.map(n => String(n).trim()).filter(n => n.length > 0) : [];
+    if (formattedPhoneNumbers.length > 0) {
+      mobNums = formattedPhoneNumbers.map(p => p.name ? `${p.name}: ${p.number}` : p.number);
+    }
+
     // Validate required fields
-    if (!hospitalName || !mobileNumbers || !Array.isArray(mobileNumbers) || mobileNumbers.length === 0 || !address) {
+    if (!hospitalName || (mobNums.length === 0 && formattedPhoneNumbers.length === 0) || !address) {
       return res.status(400).json({ 
         message: 'Hospital name, at least one mobile number, and address are required' 
       });
@@ -69,7 +85,8 @@ const createOrUpdateHospitalSettings = asyncHandler(async (req, res) => {
     
     const settingsData = {
       hospitalName,
-      mobileNumbers,
+      mobileNumbers: mobNums,
+      phoneNumbers: formattedPhoneNumbers,
       address,
       hospitalHeading: hospitalHeading || '',
       logoUrl: newLogoData ? newLogoData.url : (settings ? settings.logoUrl : ''),
@@ -139,7 +156,7 @@ const createOrUpdateHospitalSettings = asyncHandler(async (req, res) => {
       settings = await HospitalSettings.findByIdAndUpdate(
         settings._id,
         settingsData,
-        { new: true, runValidators: true }
+        { returnDocument: 'after', runValidators: true }
       );
       
       res.status(200).json({

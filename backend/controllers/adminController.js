@@ -101,7 +101,7 @@ const createOrUpdateHospitalSettings = async (req, res) => {
       settings = await HospitalSettings.findByIdAndUpdate(
         settings._id,
         updateData,
-        { new: true, runValidators: true }
+        { returnDocument: 'after', runValidators: true }
       );
       
       res.status(200).json({

@@ -15,6 +15,7 @@ const ROUTE_HEADER_MAP = [
   { path: '/ipd/patient/', title: 'Inpatient Clinical Summary', subtitle: 'Detailed inpatient profile, bed transfer history, active medications, and care plan.' },
   { path: '/ipd/discharge/', title: 'IPD Discharge Clearance', subtitle: 'Prepare medical discharge summary notes, prescription advice, and billing clearance.' },
   { path: '/ipd/chart/', title: 'IPD Medication Chart', subtitle: 'Record drug administrations, nurse dosage logs, and daily inpatient medication schedules.' },
+  { path: '/doctor/ipd-chart/', title: 'IPD Medication Chart', subtitle: 'Record drug administrations, nurse dosage logs, and daily inpatient medication schedules.' },
   { path: '/ipd/ot-flow/', title: 'OT Patient Flow Tracker', subtitle: 'Track real-time surgical patient movements from pre-op preparation to recovery.' },
   { path: '/ipd/ot/', title: 'IPD OT Surgery Booking', subtitle: 'Schedule operation theatre procedures and assign surgical teams for inpatients.' },
 
@@ -83,7 +84,11 @@ export const getDefaultHeaderForPath = (pathname) => {
   // Fallback formatting for any unmapped route
   const segments = pathname.split('/').filter(Boolean);
   if (segments.length > 0) {
-    const lastSeg = segments[segments.length - 1];
+    let lastSeg = segments[segments.length - 1];
+    // If last segment is a raw MongoDB ObjectId (24 hex chars) or long hex string, fallback to preceding module segment
+    if (/^[0-9a-fA-F]{24}$/.test(lastSeg) || /^[0-9a-fA-F]{12,}$/.test(lastSeg)) {
+      lastSeg = segments.length > 1 ? segments[segments.length - 2] : 'Hospital Management System';
+    }
     const formattedTitle = lastSeg
       .replace(/[-_]/g, ' ')
       .replace(/\b\w/g, c => c.toUpperCase());
