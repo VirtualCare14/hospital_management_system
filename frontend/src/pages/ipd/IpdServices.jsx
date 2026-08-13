@@ -70,18 +70,7 @@ const IpdServices = () => {
   const [receivedMedicines, setReceivedMedicines] = useState([]);
   const [selectedReceivedMed, setSelectedReceivedMed] = useState(null);
   const [medicineForm, setMedicineForm] = useState({ medicineName: '', quantity: '1', unitPrice: '', gst: '', baseUnitPrice: '' });
-
-
-
-  // Lab Test states
-  const [labTests, setLabTests] = useState([]);
-  const [labTestsLoading, setLabTestsLoading] = useState(false);
-  const [showAddLabTest, setShowAddLabTest] = useState(false);
-  const [labTestForm, setLabTestForm] = useState({ testName: '', testCategory: '', testPrice: '' });
-  const [labTestSearch, setLabTestSearch] = useState('');
-  const [availableLabTests, setAvailableLabTests] = useState([]);
-  const [labTestCategoryFilter, setLabTestCategoryFilter] = useState('');
-  const [labTestCategories, setLabTestCategories] = useState([]);
+  const [medicationOrdersCount, setMedicationOrdersCount] = useState(0);
 
   // Load admitted patients
   const loadAdmissions = useCallback(async () => {
@@ -124,12 +113,24 @@ const IpdServices = () => {
     loadAvailableLabTests();
   }, [loadAdmissions, loadAdminSettings, loadAvailableLabTests]);
 
+  // Load medication orders count to check if medicines were requested
+  const loadMedicationOrders = useCallback(async () => {
+    if (!selectedAdmission) return;
+    try {
+      const { data } = await client.get(`/ipd/medication-orders/${selectedAdmission._id}`);
+      setMedicationOrdersCount((data || []).length);
+    } catch (err) {
+      console.error(err);
+    }
+  }, [selectedAdmission]);
+
   // Load services when a patient is selected
   useEffect(() => {
     if (!selectedAdmission) return;
     loadConsumables();
     loadMedicines();
     loadReceivedMedicines();
+    loadMedicationOrders();
     loadLabTests();
   }, [selectedAdmission]);
 
@@ -491,16 +492,23 @@ const IpdServices = () => {
               </div>
 
               {/* Service Category Tabs */}
-              <div className="flex gap-2 overflow-x-auto">
-                {SERVICE_CATEGORIES.map(cat => (
-                  <button key={cat.id} onClick={() => setServiceCategory(cat.id)}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${
-                      serviceCategory === cat.id ? 'bg-orange-500 text-white shadow-md' : 'bg-white border border-orange-200 text-gray-600 hover:bg-orange-50'
-                    }`}>
-                    <cat.icon className="h-4 w-4" /> {cat.label}
-                  </button>
-                ))}
-              </div>
+              {(() => {
+                const hasRequestedMedicines = (medicines && medicines.length > 0) || (receivedMedicines && receivedMedicines.length > 0) || (medicationOrdersCount > 0);
+                const availableCategories = SERVICE_CATEGORIES.filter(cat => cat.id !== 'medicines' || hasRequestedMedicines);
+                
+                return (
+                  <div className="flex gap-2 overflow-x-auto">
+                    {availableCategories.map(cat => (
+                      <button key={cat.id} onClick={() => setServiceCategory(cat.id)}
+                        className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${
+                          serviceCategory === cat.id ? 'bg-orange-500 text-white shadow-md' : 'bg-white border border-orange-200 text-gray-600 hover:bg-orange-50'
+                        }`}>
+                        <cat.icon className="h-4 w-4" /> {cat.label}
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
 
               {/* CONSUMABLES SECTION */}
               {serviceCategory === 'consumables' && (
