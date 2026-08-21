@@ -55,7 +55,10 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    verifySession();
+    const timer = setTimeout(() => {
+      verifySession();
+    }, 0);
+    return () => clearTimeout(timer);
   }, [verifySession]);
 
   // Handle unauthorized event dispatched by API client
@@ -114,7 +117,11 @@ export function AuthProvider({ children }) {
       setToken(response.token);
       setUser(normalizedUser);
 
-      router.push('/dashboard');
+      if (normalizedUser.role === 'labadmin' || normalizedUser.role === 'lab_admin') {
+        router.push('/admin');
+      } else {
+        router.push('/dashboard');
+      }
       return normalizedUser;
     } catch (err) {
       const msg = err.data?.message || err.message || 'Login failed. Please check your credentials.';

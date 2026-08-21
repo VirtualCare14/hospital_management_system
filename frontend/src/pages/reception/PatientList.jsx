@@ -8,6 +8,7 @@ import { useHeader } from '../../context/HeaderContext';
 import PatientReceipt from '../../components/PatientReceipt';
 import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 import { formatUhid } from '../../utils/uhid';
+import { openPdfPrintWindow } from '../../utils/pdfUtils';
 
 const DEPARTMENTS = ['General', 'Cardiology', 'Orthopedics', 'Pediatrics', 'Neurology', 'Dermatology', 'ENT', 'Ophthalmology', 'Psychiatry'];
 
@@ -340,7 +341,7 @@ const PatientList = () => {
           const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
           pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
           pdf.autoPrint();
-          window.open(pdf.output('bloburl'), '_blank');
+          openPdfPrintWindow(pdf, 'Patient Receipt');
         } catch (error) {
           toast.error('Error printing document. Please try again.');
         }

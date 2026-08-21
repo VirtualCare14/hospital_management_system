@@ -8,6 +8,7 @@ const {
   listTests,
   listTestCategories,
   saveTestCategory,
+  deleteTestCategory,
   saveTest,
   deleteTest,
   listProfiles,
@@ -61,6 +62,7 @@ router.post('/diagnosis-templates/test/:testId', authMiddleware, saveDiagnosisTe
 router.get('/tests', authMiddleware, listTests);
 router.get('/test-categories', authMiddleware, listTestCategories);
 router.post('/test-categories', authMiddleware, saveTestCategory);
+router.delete('/test-categories/:name', authMiddleware, deleteTestCategory);
 router.post('/tests', authMiddleware, saveTest);
 router.put('/tests/:id', authMiddleware, saveTest);
 router.delete('/tests/:id', authMiddleware, deleteTest);

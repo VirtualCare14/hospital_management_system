@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
@@ -42,28 +42,33 @@ export default function Sidebar({ mobileOpen, closeMobileSidebar }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { user } = useAuth();
-  const isAdminUser = user?.role === 'admin' || user?.role === 'lab_admin' || user?.role === 'superadmin';
+  const isAdminUser = user?.role === 'admin' || user?.role === 'lab_admin' || user?.role === 'labadmin' || user?.role === 'superadmin';
 
   const currentView = searchParams.get('view');
 
   // Currently hovered menu id
   const [hoveredMenu, setHoveredMenu] = useState(null);
 
-  // Manual click override expanded state
-  const [expandedMenus, setExpandedMenus] = useState({
-    business: false,
-    cases: false,
-    lab: false,
-    usg: false,
-    xray: false,
-    manage: false
-  });
+  // Manual click override expanded state - empty initially, defaults computed dynamically
+  const [expandedMenus, setExpandedMenus] = useState({});
+ 
+  // Reset overrides when pathname changes (render-time derived state update)
+  const [prevPathname, setPrevPathname] = useState(pathname);
+  if (pathname !== prevPathname) {
+    setPrevPathname(pathname);
+    setExpandedMenus({});
+  }
 
   const toggleExpand = (menuKey) => {
-    setExpandedMenus(prev => ({
-      ...prev,
-      [menuKey]: !prev[menuKey]
-    }));
+    setExpandedMenus(prev => {
+      const item = navItems.find(i => i.id === menuKey);
+      const isDefaultOpen = item ? (hasActiveSubItem(item) || hoveredMenu === menuKey) : false;
+      const currentVal = prev[menuKey] !== undefined ? prev[menuKey] : isDefaultOpen;
+      return {
+        ...prev,
+        [menuKey]: !currentVal
+      };
+    });
   };
 
   const navItems = [
@@ -80,14 +85,14 @@ export default function Sidebar({ mobileOpen, closeMobileSidebar }) {
       icon: Briefcase,
       isExpandable: true,
       subItems: [
-        { label: 'Daily business', icon: CalendarDays, href: '/dashboard' },
-        { label: 'Expenses', icon: Wallet, href: '/dashboard' },
+        { label: 'Daily business', icon: CalendarDays, href: '/dashboard?view=daily-business' },
+        { label: 'Expenses', icon: Wallet, href: '/dashboard?view=expenses' },
         { label: 'Due reports', icon: FileText, href: '/dashboard?view=due-reports' },
-        { label: 'Activities', icon: Bell, href: '/dashboard' },
-        { label: 'Referral business', icon: UserCheck, href: '/dashboard' },
-        { label: 'Case wise report', icon: ClipboardList, href: '/dashboard' },
-        { label: 'Business analysis', icon: TrendingUp, href: '/dashboard' },
-        { label: 'Data export', icon: Download, href: '/dashboard' }
+        { label: 'Activities', icon: Bell, href: '/dashboard?view=activities' },
+        { label: 'Referral business', icon: UserCheck, href: '/dashboard?view=referral-business' },
+        { label: 'Case wise report', icon: ClipboardList, href: '/dashboard?view=case-wise-report' },
+        { label: 'Business analysis', icon: TrendingUp, href: '/dashboard?view=business-analysis' },
+        { label: 'Data export', icon: Download, href: '/dashboard?view=data-export' }
       ]
     },
     {
@@ -96,13 +101,13 @@ export default function Sidebar({ mobileOpen, closeMobileSidebar }) {
       icon: FolderOpen,
       isExpandable: true,
       subItems: [
-        { label: 'Bills', icon: Receipt, href: '/dashboard' },
-        { label: 'Outsource cases', icon: Globe, href: '/dashboard' },
-        { label: 'Ct scan cases', icon: Scan, href: '/dashboard' },
-        { label: 'Patients', icon: Users, href: '/dashboard' },
-        { label: 'Transactions', icon: ArrowLeftRight, href: '/dashboard' },
-        { label: 'Referral Doctors', icon: UserCheck, href: '/dashboard' },
-        { label: 'Agents', icon: Syringe, href: '/dashboard' }
+        { label: 'Bills', icon: Receipt, href: '/dashboard?view=bills' },
+        { label: 'Outsource cases', icon: Globe, href: '/dashboard?view=outsource-cases' },
+        { label: 'Ct scan cases', icon: Scan, href: '/dashboard?view=ct-scan-cases' },
+        { label: 'Patients', icon: Users, href: '/dashboard?view=patients' },
+        { label: 'Transactions', icon: ArrowLeftRight, href: '/dashboard?view=transactions' },
+        { label: 'Referral Doctors', icon: UserCheck, href: '/dashboard?view=referral-doctors' },
+        { label: 'Agents', icon: Syringe, href: '/dashboard?view=agents' }
       ]
     },
     {
@@ -111,14 +116,17 @@ export default function Sidebar({ mobileOpen, closeMobileSidebar }) {
       icon: FlaskConical,
       isExpandable: true,
       subItems: [
-        { label: "Today's reports", icon: FileText, href: '/dashboard' },
-        { label: 'Search reports', icon: Search, href: '/dashboard' },
+        { label: "Today's reports", icon: FileText, href: '/dashboard?view=todays-reports' },
+        { label: 'Search reports', icon: Search, href: '/dashboard?view=search-reports' },
         { label: 'Test packages', icon: Package, href: '/admin' },
         { label: 'Test panels', icon: Layers, href: '/admin' },
         { label: 'Test categories', icon: Grid, href: '/admin' },
         { label: 'Test database', icon: Database, href: '/admin' },
         { label: 'Interpretations', icon: AlignLeft, href: '/admin' },
-        { label: 'Test counts', icon: FlaskConical, href: '/dashboard' }
+        { label: 'Test counts', icon: FlaskConical, href: '/dashboard?view=test-counts' },
+        { label: 'Add signature', icon: UserCheck, href: '/dashboard?view=signatories' },
+        { label: 'Panels', icon: Layers, href: '/setup/ratelist' },
+        { label: 'Proofread', icon: ClipboardList, href: '/setup/ratelist' }
       ]
     },
     {
@@ -127,8 +135,8 @@ export default function Sidebar({ mobileOpen, closeMobileSidebar }) {
       icon: Activity,
       isExpandable: true,
       subItems: [
-        { label: 'USG Bookings', icon: CalendarDays, href: '/new-bill' },
-        { label: 'USG Reports', icon: FileText, href: '/dashboard' }
+        { label: 'USG Bookings', icon: CalendarDays, href: '/new-bill?service=USG' },
+        { label: 'USG Reports', icon: FileText, href: '/dashboard?view=usg-reports' }
       ]
     },
     {
@@ -137,8 +145,8 @@ export default function Sidebar({ mobileOpen, closeMobileSidebar }) {
       icon: Scan,
       isExpandable: true,
       subItems: [
-        { label: 'X-ray Orders', icon: CalendarDays, href: '/new-bill' },
-        { label: 'Completed Scans', icon: FileText, href: '/dashboard' }
+        { label: 'X-ray Orders', icon: CalendarDays, href: '/new-bill?service=X-RAY' },
+        { label: 'Completed Scans', icon: FileText, href: '/dashboard?view=xray-scans' }
       ]
     },
     {
@@ -148,22 +156,46 @@ export default function Sidebar({ mobileOpen, closeMobileSidebar }) {
       isExpandable: true,
       subItems: [
         { label: 'Test Catalog', icon: Grid, href: '/admin' },
-        { label: 'Referrers', icon: UserCheck, href: '/new-bill' },
-        { label: 'Collection Centres', icon: Building, href: '/new-bill' }
+        { label: 'Referrers', icon: UserCheck, href: '/new-bill?manage=referrers' },
+        { label: 'Collection Centres', icon: Building, href: '/new-bill?manage=collection-centres' }
       ]
     }
   ];
 
+  // Helper: check if a specific subitem is currently active
+  const checkSubActive = (sub) => {
+    if (!sub || !sub.href) return false;
+    
+    if (sub.href.includes('?')) {
+      const [subPath, subQueryStr] = sub.href.split('?');
+      const subParams = new URLSearchParams(subQueryStr);
+      const subView = subParams.get('view');
+      const subService = subParams.get('service');
+      const subManage = subParams.get('manage');
+      
+      if (subView) {
+        return pathname === subPath && currentView === subView;
+      }
+      if (subService) {
+        return pathname === subPath && searchParams.get('service') === subService;
+      }
+      if (subManage) {
+        return pathname === subPath && searchParams.get('manage') === subManage;
+      }
+      return pathname === subPath && searchParams.toString() === subParams.toString();
+    }
+    
+    // For non-query paths like /admin or /new-bill
+    if (sub.href !== '/dashboard') {
+      return pathname === sub.href && !currentView && !searchParams.toString();
+    }
+    return false;
+  };
+
   // Helper: check if a menu contains the currently active subitem
   const hasActiveSubItem = (item) => {
     if (!item.subItems) return false;
-    return item.subItems.some(sub => {
-      const isDueReportsActive = sub.href.includes('view=due-reports') && currentView === 'due-reports';
-      const isSubActive = isDueReportsActive || (pathname === sub.href && !currentView && (
-        item.id === 'lab' && sub.href === '/new-bill' ? pathname === '/new-bill' : false
-      ));
-      return isSubActive;
-    });
+    return item.subItems.some(sub => checkSubActive(sub));
   };
 
   return (
@@ -203,12 +235,12 @@ export default function Sidebar({ mobileOpen, closeMobileSidebar }) {
           {navItems.map((item) => {
             const Icon = item.icon;
             const containsActive = hasActiveSubItem(item);
-            const isHovered = hoveredMenu === item.id;
             
             // Expand rule:
-            // 1. Hovered menu opens on hover (and closes on mouse out)
-            // 2. If no menu is hovered (hoveredMenu === null), the menu holding the selected active subitem stays open!
-            const isExpanded = isHovered || (hoveredMenu === null && containsActive) || (hoveredMenu === null && expandedMenus[item.id]);
+            // Expands if it contains the active subitem, hovered, default open lab, or user has manually toggled it
+            const isHovered = hoveredMenu === item.id;
+            const isDefaultOpen = containsActive;
+            const isExpanded = isHovered || (expandedMenus[item.id] !== undefined ? expandedMenus[item.id] : isDefaultOpen);
             const isActiveDirect = item.href && pathname === item.href && !currentView && !item.isExpandable;
 
             if (!item.isExpandable) {
@@ -243,13 +275,13 @@ export default function Sidebar({ mobileOpen, closeMobileSidebar }) {
                   type="button"
                   onClick={() => toggleExpand(item.id)}
                   className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-[14px] font-semibold transition-colors cursor-pointer ${
-                    containsActive && hoveredMenu === null
+                    containsActive
                       ? 'text-orange-600 bg-orange-50/60 font-bold'
                       : 'text-slate-800 hover:bg-slate-100/80'
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <Icon className={`w-4.5 h-4.5 ${containsActive && hoveredMenu === null ? 'text-orange-500' : 'text-slate-500'}`} />
+                    <Icon className={`w-4.5 h-4.5 ${containsActive ? 'text-orange-500' : 'text-slate-500'}`} />
                     <span>{item.label}</span>
                   </div>
                   {isExpanded ? (
@@ -266,10 +298,7 @@ export default function Sidebar({ mobileOpen, closeMobileSidebar }) {
                       .filter(sub => isAdminUser || sub.href !== '/admin')
                       .map((sub, idx) => {
                         const SubIcon = sub.icon;
-                        const isDueReportsActive = sub.href.includes('view=due-reports') && currentView === 'due-reports';
-                        const isSubActive = isDueReportsActive || (pathname === sub.href && !currentView && (
-                          item.id === 'lab' && sub.href === '/new-bill' ? pathname === '/new-bill' : false
-                        ));
+                        const isSubActive = checkSubActive(sub);
 
                         return (
                           <Link

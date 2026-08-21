@@ -5,7 +5,22 @@ const labParameterSchema = new mongoose.Schema({
   description: { type: String, default: '' },
   referenceRange: { type: String, default: '' },
   unit: { type: String, default: '' },
-  status: { type: String, enum: ['Active', 'Inactive'], default: 'Active' }
+  gender: { type: String, enum: ['Both', 'Male', 'Female'], default: 'Both' },
+  status: { type: String, enum: ['Active', 'Inactive'], default: 'Active' },
+  referenceRules: [{
+    sex: { type: String, enum: ['Any', 'Male', 'Female'], default: 'Any' },
+    minAge: { type: Number, default: 0 },
+    minAgeUnit: { type: String, enum: ['Days', 'Months', 'Years'], default: 'Years' },
+    maxAge: { type: Number, default: 100 },
+    maxAgeUnit: { type: String, enum: ['Days', 'Months', 'Years'], default: 'Years' },
+    lowerValue: { type: String, default: '' },
+    upperValue: { type: String, default: '' },
+    displayedValue: { type: String, default: '' }
+  }],
+  valueOptions: [{
+    value: { type: String, required: true },
+    isAbnormal: { type: Boolean, default: false }
+  }]
 }, { _id: true });
 
 const labTestSchema = new mongoose.Schema({
@@ -17,10 +32,13 @@ const labTestSchema = new mongoose.Schema({
   title: { type: String, required: true, trim: true },
   description: { type: String, default: '' },
   notes: { type: String, default: '' },
+  interpretation: { type: String, default: '' },
   basePrice: { type: Number, default: 0 },
   taxPercentage: { type: Number, default: 0 },
   totalAmount: { type: Number, default: 0 },
   isManualTotal: { type: Boolean, default: false },
+  revenueShare: { type: Number, default: 0 },
+  forGender: { type: String, enum: ['Both', 'Female', 'Male'], default: 'Both' },
   signatoryId: { type: mongoose.Schema.Types.ObjectId, ref: 'LabSignatory', required: false },
   parameters: [labParameterSchema],
   status: { type: String, enum: ['Active', 'Inactive'], default: 'Active' }

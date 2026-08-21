@@ -6,18 +6,22 @@ import { useEffect } from 'react';
 import { Loader2, FlaskConical } from 'lucide-react';
 
 export default function Home() {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, user } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (!loading) {
       if (isAuthenticated) {
-        router.replace('/dashboard');
+        if (user?.role === 'labadmin' || user?.role === 'lab_admin') {
+          router.replace('/admin');
+        } else {
+          router.replace('/dashboard');
+        }
       } else {
         router.replace('/login');
       }
     }
-  }, [isAuthenticated, loading, router]);
+  }, [isAuthenticated, loading, router, user]);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-orange-50 via-white to-amber-50 text-slate-900">

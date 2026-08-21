@@ -36,6 +36,22 @@ const hospitalSettingsSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  letterheadImageUrl: {
+    type: String,
+    default: ''
+  },
+  letterheadImagePublicId: {
+    type: String,
+    default: ''
+  },
+  letterheadHeaderHeight: {
+    type: Number,
+    default: 4.60
+  },
+  letterheadFooterHeight: {
+    type: Number,
+    default: 3.40
+  },
   hospitalId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Hospital',

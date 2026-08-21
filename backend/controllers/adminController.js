@@ -43,11 +43,15 @@ cloudinary.config({
 // @access  Private/Admin
 const getHospitalSettings = async (req, res) => {
   try {
-    // Check if settings exist for this hospital
-    let settings = await HospitalSettings.findOne({ hospitalId: req.user.hospitalId });
+    let settings = null;
+    if (req.user && req.user.hospitalId) {
+      settings = await HospitalSettings.findOne({ hospitalId: req.user.hospitalId });
+    }
+    if (!settings) {
+      settings = await HospitalSettings.findOne({});
+    }
     
     if (!settings) {
-      // Return empty settings if none exist
       return res.status(200).json({
         exists: false,
         data: null

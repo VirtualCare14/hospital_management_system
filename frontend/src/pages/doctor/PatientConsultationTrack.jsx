@@ -8,7 +8,7 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import PatientReceipt from '../../components/PatientReceipt';
 import PrintLanguageModal from '../../components/PrintLanguageModal';
-import { sanitizeClonedDocumentForPdf } from '../../utils/pdfUtils';
+import { sanitizeClonedDocumentForPdf, openPdfPrintWindow } from '../../utils/pdfUtils';
 
 const ageFromDob = (dob) => {
   if (!dob) return '-';
@@ -140,7 +140,7 @@ const PatientConsultationTrack = () => {
           pdf.addImage(imgData, 'PNG', padding, padding, width - (padding * 2), height);
           
           pdf.autoPrint();
-          window.open(pdf.output('bloburl'), '_blank');
+          openPdfPrintWindow(pdf, 'Patient Consultation Receipt');
           toast.dismiss(toastId);
           toast.success('Print dialog opened');
         } catch (error) {

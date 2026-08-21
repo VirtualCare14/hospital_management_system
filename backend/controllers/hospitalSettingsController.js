@@ -14,11 +14,15 @@ cloudinary.config({
 // @access  Private/Admin
 const getHospitalSettings = asyncHandler(async (req, res) => {
   try {
-    // Check if settings exist for this hospital
-    let settings = await HospitalSettings.findOne({ hospitalId: req.user.hospitalId });
+    let settings = null;
+    if (req.user && req.user.hospitalId) {
+      settings = await HospitalSettings.findOne({ hospitalId: req.user.hospitalId });
+    }
+    if (!settings) {
+      settings = await HospitalSettings.findOne({});
+    }
     
     if (!settings) {
-      // Return empty settings if none exist
       return res.status(200).json({
         exists: false,
         data: null
@@ -48,7 +52,8 @@ const createOrUpdateHospitalSettings = asyncHandler(async (req, res) => {
       discountEnabled, discountReasons,
       discountPercentage, discountFixedAmount, patientSpecificDiscounts,
       sdtPricingInBilling, accessDiscount, receptionSeePatientDue, dueModificationEnabled,
-      medicationGracePeriod, medicationMissedThreshold
+      medicationGracePeriod, medicationMissedThreshold,
+      letterheadImageUrl, letterheadImagePublicId, letterheadHeaderHeight, letterheadFooterHeight
     } = req.body;
     
     // Process phoneNumbers structured list if provided
@@ -91,6 +96,10 @@ const createOrUpdateHospitalSettings = asyncHandler(async (req, res) => {
       hospitalHeading: hospitalHeading || '',
       logoUrl: newLogoData ? newLogoData.url : (settings ? settings.logoUrl : ''),
       logoPublicId: newLogoData ? newLogoData.publicId : (settings ? settings.logoPublicId : ''),
+      letterheadImageUrl: letterheadImageUrl !== undefined ? letterheadImageUrl : (settings ? settings.letterheadImageUrl : ''),
+      letterheadImagePublicId: letterheadImagePublicId !== undefined ? letterheadImagePublicId : (settings ? settings.letterheadImagePublicId : ''),
+      letterheadHeaderHeight: letterheadHeaderHeight !== undefined ? Number(letterheadHeaderHeight) : (settings ? settings.letterheadHeaderHeight : 4.60),
+      letterheadFooterHeight: letterheadFooterHeight !== undefined ? Number(letterheadFooterHeight) : (settings ? settings.letterheadFooterHeight : 3.40),
       alternateMobileNumber: alternateMobileNumber || '',
       emailAddress: emailAddress || '',
       website: website || '',

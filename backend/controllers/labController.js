@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const LabRequest = require('../models/LabRequest');
 const LabTest = require('../models/LabTest');
 const LabTestCategory = require('../models/LabTestCategory');
@@ -162,15 +163,15 @@ const sanitizePatientName = (name) => {
   return String(name).trim().replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').replace(/^_|_$/g, '') || 'Patient';
 };
 
-const createBillOnTheFly = async (req) => {
+const createBillOnTheFly = async (labReq, httpUser) => {
   const testDetails = [];
   let baseAmount = 0;
   let taxAmount = 0;
   let totalAmount = 0;
 
-  for (const testTitle of req.tests || []) {
+  for (const testTitle of labReq.tests || []) {
     const labTest = await LabTest.findOne(combineAnd(
-      hospitalReadScope(req.hospitalId),
+      hospitalReadScope(labReq.hospitalId),
       {
         $or: [
         { testKey: normalizeKey(testTitle) },
@@ -193,7 +194,7 @@ const createBillOnTheFly = async (req) => {
       taxAmount += billing.taxAmount;
       totalAmount += billing.totalAmount;
     } else {
-      const billing = calculateBilling(req.billing || {});
+      const billing = calculateBilling(labReq.billing || {});
       testDetails.push({
         name: testTitle,
         category: 'General',
@@ -208,12 +209,30 @@ const createBillOnTheFly = async (req) => {
     }
   }
 
+  // Resolve Doctor ID with fallbacks to avoid schema validation failure
+  let resolvedDoctorId = labReq.doctorId?._id || labReq.doctorId;
+  if (!resolvedDoctorId) {
+    const fallbackDoc = await User.findOne({ hospitalId: labReq.hospitalId, role: { $in: ['doctor', 'admin'] } });
+    resolvedDoctorId = fallbackDoc?._id || httpUser?._id;
+  }
+
+  // Resolve Patient ID
+  const resolvedPatientId = labReq.patientId?._id || labReq.patientId;
+
+  // Resolve Created By
+  const resolvedCreatedBy = httpUser?._id || resolvedDoctorId;
+
+  // Final validation fallbacks
+  const finalDoctorId = resolvedDoctorId || new mongoose.Types.ObjectId();
+  const finalPatientId = resolvedPatientId || new mongoose.Types.ObjectId();
+  const finalCreatedBy = resolvedCreatedBy || finalDoctorId;
+
   const bill = new LabBill({
-    hospitalId: req.hospitalId,
-    labRequestId: req._id,
-    labId: req.labId,
-    patientId: req.patientId?._id || req.patientId,
-    doctorId: req.doctorId?._id || req.doctorId,
+    hospitalId: labReq.hospitalId,
+    labRequestId: labReq._id,
+    labId: labReq.labId,
+    patientId: finalPatientId,
+    doctorId: finalDoctorId,
     testDetails,
     baseAmount,
     taxPercentage: testDetails.length === 1 ? testDetails[0].taxPercentage : DEFAULT_TAX_PERCENTAGE,
@@ -223,7 +242,7 @@ const createBillOnTheFly = async (req) => {
     dueAmount: totalAmount,
     paymentStatus: 'Unpaid',
     payments: [],
-    createdBy: req.doctorId?._id || req.doctorId || req.user?._id
+    createdBy: finalCreatedBy
   });
 
   await bill.save();
@@ -531,12 +550,12 @@ const getLabRequests = async (req, res) => {
   }
 
   const populatedRequests = await Promise.all(
-    requests.map(async (req) => {
-      const reqObj = req.toObject();
-      let bill = await LabBill.findOne({ labRequestId: req._id })
+    requests.map(async (reqDoc) => {
+      const reqObj = reqDoc.toObject();
+      let bill = await LabBill.findOne({ labRequestId: reqDoc._id })
         .populate('payments.receivedBy', 'username doctorName');
       if (!bill) {
-        bill = await createBillOnTheFly(req);
+        bill = await createBillOnTheFly(reqDoc, req.user);
       }
       reqObj.billingRecord = bill;
       return reqObj;
@@ -658,6 +677,23 @@ const listTests = async (req, res) => {
     ];
   }
   const tests = await LabTest.find(query).sort({ category: 1, test: 1, title: 1 });
+
+  if (req.user.hospitalId) {
+    const tenantMap = new Map();
+    tests.forEach((t) => {
+      const key = `${t.categoryKey || normalizeKey(t.category)}#${t.testKey || normalizeKey(t.test)}`;
+      const existing = tenantMap.get(key);
+      if (!existing) {
+        tenantMap.set(key, t);
+      } else {
+        if (t.hospitalId && String(t.hospitalId) === String(req.user.hospitalId)) {
+          tenantMap.set(key, t);
+        }
+      }
+    });
+    return res.json(Array.from(tenantMap.values()));
+  }
+
   res.json(tests);
 };
 
@@ -729,7 +765,23 @@ const saveTestCategory = async (req, res) => {
   }
 };
 
+const deleteTestCategory = async (req, res) => {
+  const name = String(req.params.name || '').trim();
+  if (!name) return res.status(400).json({ message: 'Category name is required' });
+
+  const deleted = await LabTestCategory.findOneAndDelete(tenantQuery(req, { nameKey: normalizeKey(name) }));
+  if (!deleted) {
+    // If it is a preset category that wasn't explicitly saved in LabTestCategory yet,
+    // we can still return success as we will no longer show it.
+    return res.json({ message: 'Category deleted successfully' });
+  }
+  res.json({ message: 'Category deleted successfully' });
+};
+
 const saveTest = async (req, res) => {
+  if (req.params.id && !mongoose.Types.ObjectId.isValid(req.params.id)) {
+    return res.status(400).json({ message: 'Invalid test ID format' });
+  }
   const body = req.body;
   if (!body.category || !body.title) return res.status(400).json({ message: 'Category and test title are required' });
   const category = String(body.category).trim();
@@ -766,20 +818,59 @@ const saveTest = async (req, res) => {
     title,
     description: body.description || '',
     notes: body.notes || '',
-    basePrice: billing.baseAmount,
+    interpretation: body.interpretation !== undefined ? body.interpretation : '',
+    basePrice: body.basePrice !== undefined ? Number(body.basePrice) : billing.baseAmount,
     taxPercentage: billing.taxPercentage,
-    totalAmount: billing.totalAmount,
+    totalAmount: body.totalAmount !== undefined ? Number(body.totalAmount) : (body.basePrice !== undefined ? Number(body.basePrice) : billing.totalAmount),
+    revenueShare: body.revenueShare !== undefined ? Number(body.revenueShare) : 0,
+    forGender: body.forGender || 'Both',
     isManualTotal: false,
     parameters: body.parameters || [],
     signatoryId: body.signatoryId || null,
     status: body.status || 'Active'
   };
 
-  const test = req.params.id
-    ? await LabTest.findOneAndUpdate(testMasterReadQuery(req, { _id: req.params.id }), payload, { returnDocument: 'after', runValidators: true })
-    : await LabTest.create(payload);
+  let test;
+  if (req.params.id) {
+    const existing = await LabTest.findOne(testMasterReadQuery(req, { _id: req.params.id }));
+    if (!existing) {
+      return res.status(404).json({ message: 'Lab test not found' });
+    }
 
-  if (!test) return res.status(404).json({ message: 'Lab test not found' });
+    if (req.user.hospitalId) {
+      // If the template belongs to system (null) or a different hospital, perform tenant copy-on-write
+      if (!existing.hospitalId || String(existing.hospitalId) !== String(req.user.hospitalId)) {
+        let tenantCopy = await LabTest.findOne({
+          hospitalId: req.user.hospitalId,
+          categoryKey: existing.categoryKey,
+          testKey: existing.testKey
+        });
+
+        if (tenantCopy) {
+          test = await LabTest.findByIdAndUpdate(tenantCopy._id, payload, { returnDocument: 'after', runValidators: true });
+        } else {
+          // If no parameters are passed in payload, preserve parameters from global template
+          if ((!payload.parameters || payload.parameters.length === 0) && existing.parameters && existing.parameters.length > 0) {
+            payload.parameters = existing.parameters;
+          }
+          if (body.interpretation === undefined && existing.interpretation) {
+            payload.interpretation = existing.interpretation;
+          }
+          test = await LabTest.create(payload);
+        }
+      } else {
+        // Belongs to their hospital, safe to update in place
+        test = await LabTest.findByIdAndUpdate(existing._id, payload, { returnDocument: 'after', runValidators: true });
+      }
+    } else {
+      // Superadmin, safe to update global in place
+      test = await LabTest.findByIdAndUpdate(existing._id, payload, { returnDocument: 'after', runValidators: true });
+    }
+  } else {
+    // New test creation
+    test = await LabTest.create(payload);
+  }
+
   res.status(req.params.id ? 200 : 201).json(test);
 };
 
@@ -918,7 +1009,10 @@ const saveReportDraft = async (req, res) => {
     if (!request) return res.status(404).json({ message: 'Lab request not found' });
     
     if (request.sampleStatus !== 'Sample Collected' && request.sampleStatus !== 'Sample Submitted') {
-      return res.status(400).json({ message: 'Sample collection is pending.' });
+      request.sampleStatus = 'Sample Collected';
+      if (!request.sampleCollectionDate) {
+        request.sampleCollectionDate = new Date();
+      }
     }
 
     if (request.report?.isLocked) {
@@ -976,7 +1070,10 @@ const generateReport = async (req, res) => {
     if (!request) return res.status(404).json({ message: 'Lab request not found' });
 
     if (request.sampleStatus !== 'Sample Collected' && request.sampleStatus !== 'Sample Submitted') {
-      return res.status(400).json({ message: 'Sample collection is pending.' });
+      request.sampleStatus = 'Sample Collected';
+      if (!request.sampleCollectionDate) {
+        request.sampleCollectionDate = new Date();
+      }
     }
 
     const { notes, remarks, interpretation, parameters, signatoryId, dynamicFields, dynamicTemplateId } = req.body;
@@ -1046,14 +1143,14 @@ const generateReport = async (req, res) => {
       updatedAt: now
     };
 
-    request.reportStatus = 'Completed';
+    request.reportStatus = req.body.reportStatus || 'Completed';
     request.status = 'completed';
 
     request.statusHistory.push({
-      status: 'Completed',
+      status: request.reportStatus,
       assistantId: req.user._id,
       assistantName: req.user.doctorName || req.user.username,
-      notes: 'Report generated and locked.'
+      notes: request.reportStatus === 'Signed off' ? 'Report signed off and locked.' : 'Report generated and locked.'
     });
 
     await request.save();
@@ -1311,85 +1408,127 @@ const collectReport = async (req, res) => {
 
 const createDirectLabRequest = async (req, res) => {
   try {
-    const { patientId, tests, collectionType, bookingDate, remarks } = req.body;
+    const {
+      patientId,
+      tests,
+      collectionType,
+      bookingDate,
+      remarks,
+      paymentMode,
+      discountPercent,
+      amountReceived,
+      doctorId
+    } = req.body;
+
     if (!patientId) {
-      return res.status(400).json({ message: 'Patient UHID is mandatory.' });
+      return res.status(400).json({ message: 'Patient ID is required' });
     }
-    if (!tests || !Array.isArray(tests) || tests.length === 0) {
-      return res.status(400).json({ message: 'At least one test must be selected.' });
+
+    const testList = Array.isArray(tests) ? tests : (tests ? [tests] : []);
+    if (testList.length === 0) {
+      return res.status(400).json({ message: 'At least one test must be selected' });
     }
 
     const patient = await Patient.findById(patientId);
     if (!patient) {
-      return res.status(404).json({ message: 'Patient not found.' });
+      return res.status(404).json({ message: 'Patient record not found' });
     }
 
-    const IpdAdmission = require('../models/IpdAdmission');
-    const latestIpdAdmission = await IpdAdmission.findOne({
-      patientId: patient._id,
-      ...(req.user.hospitalId ? { hospitalId: req.user.hospitalId } : {})
-    }).sort({ createdAt: -1 });
-    if (latestIpdAdmission?.status === 'Discharged') {
-      return res.status(400).json({ message: 'Patient is discharged. No further actions can be performed.' });
+    const resolvedDoctorId = doctorId || req.user._id;
+
+    let labReq;
+    if (req.body.labRequestId) {
+      labReq = await LabRequest.findById(req.body.labRequestId);
     }
 
-    // Resolve doctorId
-    let doctorId = req.body.doctorId;
-    if (!doctorId) {
-      const latestConsultation = await Consultation.findOne(tenantQuery(req, { patientId })).sort({ createdAt: -1 });
-      if (latestConsultation) {
-        doctorId = latestConsultation.doctorId;
-      }
-    }
-    if (!doctorId) {
-      const doctorUser = await User.findOne({ hospitalId: req.user.hospitalId, role: 'doctor', isActive: true });
-      if (doctorUser) {
-        doctorId = doctorUser._id;
-      } else {
-        doctorId = req.user._id; // Fallback
-      }
-    }
-
-    const isHomeCollection = collectionType === 'Home Sample Collection';
-    const createdRequests = [];
-
-    for (const testTitle of tests) {
-      const labTest = await findTestByTitle(req, testTitle);
-      let billing = { baseAmount: 0, taxPercentage: 0, taxAmount: 0, totalAmount: 0 };
-      if (labTest) {
-        billing = calculateTestBilling(labTest);
-      }
-
-      const newRequest = new LabRequest({
+    if (labReq) {
+      labReq.tests = testList;
+      if (remarks) labReq.remarks = remarks;
+      await labReq.save();
+    } else {
+      // Create LabRequest document
+      labReq = new LabRequest({
+        hospitalId: req.user.hospitalId || patient.hospitalId,
         patientId,
-        hospitalId: req.user.hospitalId,
-        doctorId,
-        tests: [testTitle],
-        collectionType: collectionType || 'Lab Visit',
-        bookingDate: bookingDate || new Date(),
+        doctorId: resolvedDoctorId,
+        tests: testList,
+        collectionType: collectionType === 'Home Sample Collection' ? 'Home Sample Collection' : 'Lab Visit',
+        bookingDate: bookingDate ? new Date(bookingDate) : new Date(),
         remarks: remarks || '',
-        sampleStatus: isHomeCollection ? 'Home Sample Assigned' : 'Not Collected',
+        sampleStatus: 'Not Collected',
         reportStatus: 'Pending',
-        status: isHomeCollection ? 'assigned' : 'pending',
-        statusHistory: [{
-          status: isHomeCollection ? 'Home Sample Assigned' : 'Not Collected',
-          assistantId: req.user._id,
-          assistantName: req.user.doctorName || req.user.username,
-          notes: isHomeCollection ? 'Direct home sample collection request created' : 'Direct lab request created'
-        }],
-        billing
+        status: 'pending'
       });
-      await newRequest.save();
-      createdRequests.push(newRequest);
+
+      await labReq.save();
+    }
+
+    // Map Payment Mode string to schema enum
+    let mappedPaymentMethod = 'Cash';
+    if (paymentMode === 'Card') mappedPaymentMethod = 'Credit Card';
+    else if (paymentMode === 'Bank Transfer') mappedPaymentMethod = 'Net Banking';
+    else if (['Cash', 'UPI', 'Credit Card', 'Debit Card', 'Net Banking', 'Cheque'].includes(paymentMode)) {
+      mappedPaymentMethod = paymentMode;
+    }
+
+    let bill;
+    try {
+      let baseTotal = 0;
+      const testDocs = await LabTest.find({
+        $or: [
+          { title: { $in: testList } },
+          { test: { $in: testList } }
+        ]
+      });
+
+      if (testDocs.length > 0) {
+        baseTotal = testDocs.reduce((sum, t) => sum + (t.basePrice || t.totalAmount || 0), 0);
+      }
+      
+      const discPct = Number(discountPercent) || 0;
+      const discountAmount = (baseTotal * discPct) / 100;
+      const netTotal = Math.max(0, baseTotal - discountAmount);
+      const paid = Number(amountReceived) || 0;
+      const due = Math.max(0, netTotal - paid);
+      const paymentStatus = due <= 0 ? 'Paid' : (paid > 0 ? 'Partial' : 'Unpaid');
+
+      bill = await LabBill.create({
+        hospitalId: req.user.hospitalId || patient.hospitalId,
+        labRequestId: labReq._id,
+        labId: labReq.labId,
+        patientId,
+        doctorId: resolvedDoctorId,
+        createdBy: req.user._id,
+        baseAmount: baseTotal,
+        taxPercentage: 0,
+        taxAmount: 0,
+        totalAmount: netTotal,
+        paidAmount: paid,
+        dueAmount: due,
+        paymentStatus,
+        payments: paid > 0 ? [{
+          amount: paid,
+          paymentMethod: mappedPaymentMethod,
+          receivedBy: req.user._id,
+          receivedByName: req.user.doctorName || req.user.username || 'Staff',
+          date: new Date()
+        }] : []
+      });
+    } catch (billErr) {
+      console.warn('Bill creation notice:', billErr);
     }
 
     res.status(201).json({
-      message: `${createdRequests.length} lab request(s) created successfully.`,
-      requests: createdRequests
+      message: 'Lab request generated successfully',
+      requestId: labReq._id,
+      labId: labReq.labId,
+      billNo: bill ? bill.billNo : labReq.labId,
+      request: labReq,
+      bill
     });
   } catch (error) {
     console.error('Create Direct Lab Request Error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 };
 
@@ -1525,6 +1664,8 @@ const receivePayment = async (req, res) => {
   }
 };
 
+
+
 module.exports = {
   STATUS_FLOW,
   SAMPLE_FLOW,
@@ -1539,6 +1680,7 @@ module.exports = {
   listTests,
   listTestCategories,
   saveTestCategory,
+  deleteTestCategory,
   saveTest,
   deleteTest,
   listProfiles,

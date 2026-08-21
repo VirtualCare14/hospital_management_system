@@ -9,13 +9,17 @@ import {
   PlayCircle, 
   Bell, 
   Menu, 
-  X 
+  X,
+  Sliders,
+  FileText,
+  Building2
 } from 'lucide-react';
 import Link from 'next/link';
 import ProfileDropdown from './ProfileDropdown';
 
 export default function Header({ toggleMobileSidebar }) {
   const [searchVal, setSearchVal] = useState('');
+  const [showSetupMenu, setShowSetupMenu] = useState(false);
 
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-slate-200 h-16 px-4 md:px-6 flex items-center justify-between shadow-xs">
@@ -71,15 +75,69 @@ export default function Header({ toggleMobileSidebar }) {
           <span>Help</span>
         </button>
 
-        {/* Setup */}
-        <button
-          type="button"
-          className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:bg-orange-50 hover:text-orange-600 transition-colors cursor-pointer"
-          title="System Setup"
-        >
-          <Settings className="w-4 h-4 text-slate-400" />
-          <span>Setup</span>
-        </button>
+        {/* Setup Dropdown */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowSetupMenu(!showSetupMenu)}
+            className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:bg-orange-50 hover:text-orange-600 transition-colors cursor-pointer"
+            title="System Setup"
+          >
+            <Settings className="w-4 h-4 text-slate-400" />
+            <span>Setup</span>
+          </button>
+
+          {showSetupMenu && (
+            <div 
+              className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1.5 animate-in fade-in zoom-in-95"
+              onMouseLeave={() => setShowSetupMenu(false)}
+            >
+              <div className="px-3 py-1.5 text-[10px] font-extrabold uppercase text-slate-400 tracking-wider border-b border-slate-100">
+                Setup Menu
+              </div>
+              <Link 
+                href="/setup/ratelist" 
+                onClick={() => setShowSetupMenu(false)}
+                className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-orange-50 hover:text-orange-600 transition-colors"
+              >
+                <Sliders className="w-4 h-4 text-orange-500" />
+                <span>Ratelist</span>
+              </Link>
+              <Link 
+                href="/setup/letterhead" 
+                onClick={() => setShowSetupMenu(false)}
+                className="flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                <FileText className="w-4 h-4 text-slate-400" />
+                <span>Letterhead</span>
+              </Link>
+              <Link 
+                href="/admin?tab=casereg" 
+                onClick={() => setShowSetupMenu(false)}
+                className="flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                <FileText className="w-4 h-4 text-slate-400" />
+                <span>Case reg. no.</span>
+              </Link>
+              <Link 
+                href="/admin?tab=panels" 
+                onClick={() => setShowSetupMenu(false)}
+                className="flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                <FlaskConical className="w-4 h-4 text-slate-400" />
+                <span>Panels</span>
+              </Link>
+              <Link 
+                href="/admin?tab=proofread" 
+                onClick={() => setShowSetupMenu(false)}
+                className="flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                <HelpCircle className="w-4 h-4 text-slate-400" />
+                <span>Proofread</span>
+              </Link>
+            </div>
+          )}
+        </div>
 
         {/* Watch Video */}
         <button

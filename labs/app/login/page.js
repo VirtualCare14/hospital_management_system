@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { FlaskConical, Building2, User, Lock, ArrowRight, AlertCircle, ShieldCheck } from 'lucide-react';
 
 function LoginForm() {
-  const { login, isAuthenticated, error, setError } = useAuth();
+  const { login, isAuthenticated, user, error, setError } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -19,13 +19,18 @@ function LoginForm() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      router.push('/dashboard');
+      if (user?.role === 'labadmin' || user?.role === 'lab_admin') {
+        router.push('/admin');
+      } else {
+        router.push('/dashboard');
+      }
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, router, user]);
 
   useEffect(() => {
     if (searchParams.get('expired') === '1') {
-      setSessionExpired(true);
+      const timer = setTimeout(() => setSessionExpired(true), 0);
+      return () => clearTimeout(timer);
     }
   }, [searchParams]);
 

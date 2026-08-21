@@ -61,7 +61,7 @@ const labRequestSchema = new mongoose.Schema({
   },
   reportStatus: {
     type: String,
-    enum: ['Pending', 'In Progress', 'Ready', 'Completed', 'Delivered', 'Closed'],
+    enum: ['Pending', 'In Progress', 'Ready', 'Completed', 'Delivered', 'Closed', 'Signed off'],
     default: 'Pending'
   },
   remarks: {
@@ -135,7 +135,24 @@ const labRequestSchema = new mongoose.Schema({
       name: String,
       value: String,
       referenceRange: String,
-      unit: String
+      unit: String,
+      gender: { type: String, enum: ['Both', 'Male', 'Female'], default: 'Both' },
+      remarks: { type: String, default: '' },
+      referenceRules: [{
+        sex: String,
+        minAge: Number,
+        minAgeUnit: String,
+        maxAge: Number,
+        maxAgeUnit: String,
+        lowerValue: String,
+        upperValue: String,
+        displayedValue: String
+      }],
+      valueOptions: [{
+        value: String,
+        isAbnormal: { type: Boolean, default: false }
+      }],
+      isAbnormal: { type: Boolean, default: false }
     }],
     // Diagnosis templates: dynamicFields is a flexible JSON payload that stores
     // values entered against the Diagnosis Template Designer structure.

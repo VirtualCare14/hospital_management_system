@@ -12,6 +12,7 @@ import client from '../../api/client';
 import PatientReceipt from '../../components/PatientReceipt';
 import SkeletonInput from '../../components/Skeleton/SkeletonInput';
 import { formatUhid } from '../../utils/uhid';
+import { openPdfPrintWindow } from '../../utils/pdfUtils';
 import { generateTimeSlots, filterSlotsForDate } from '../../utils/timeSlots';
 
 const Field = ({ label, required = false, icon: Icon, children, className = '', error, hint }) => (
@@ -302,7 +303,7 @@ const PatientRegistration = () => {
         const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
         pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
         pdf.autoPrint();
-        window.open(pdf.output('bloburl'), '_blank');
+        openPdfPrintWindow(pdf, 'Patient Registration Slip');
       } catch (error) {
         console.error('Print receipt error:', error);
         toast.error('Error generating receipt. Please try again.');

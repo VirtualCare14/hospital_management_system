@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { 
   CreditCard, 
   Receipt, 
@@ -21,14 +22,28 @@ export default function PaymentDetails({
   const discountPercent = Number(paymentData.discountPercent) || 0;
   const discountAmount = (totalAmount * discountPercent) / 100;
   const netTotal = Math.max(0, totalAmount - discountAmount);
-  const amountReceived = Number(paymentData.amountReceived) || 0;
-  const balance = netTotal - amountReceived;
+
+  // Auto-fill amountReceived with netTotal whenever total amount or discount changes (unless manually edited)
+  useEffect(() => {
+    if (!paymentData.isManualAmountReceived) {
+      setPaymentData(prev => ({
+        ...prev,
+        amountReceived: String(netTotal)
+      }));
+    }
+  }, [netTotal, paymentData.isManualAmountReceived, setPaymentData]);
+
+  const amountReceived = paymentData.amountReceived !== undefined && paymentData.amountReceived !== '' 
+    ? Number(paymentData.amountReceived) 
+    : netTotal;
+  const balance = Math.max(0, netTotal - amountReceived);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setPaymentData(prev => ({
       ...prev,
-      [name]: value
+      [name]: value,
+      ...(name === 'amountReceived' ? { isManualAmountReceived: true } : {})
     }));
   };
 

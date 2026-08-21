@@ -8,7 +8,7 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import PatientReceipt from '../../components/PatientReceipt';
 import PrintLanguageModal from '../../components/PrintLanguageModal';
-import { sanitizeClonedDocumentForPdf } from '../../utils/pdfUtils';
+import { sanitizeClonedDocumentForPdf, openPdfPrintWindow } from '../../utils/pdfUtils';
 
 const ageFromDob = (dob) => {
   if (!dob) return '-';
@@ -87,7 +87,7 @@ const CompletedConsultationDetails = () => {
         pdf.addImage(imgData, 'PNG', padding, padding, width - (padding * 2), height);
         
         pdf.autoPrint();
-        window.open(pdf.output('bloburl'), '_blank');
+        openPdfPrintWindow(pdf, 'Prescription / Consultation Receipt');
         toast.dismiss(toastId);
         toast.success(`Prescription Printed in ${chosenLang}!`);
       } catch (error) {

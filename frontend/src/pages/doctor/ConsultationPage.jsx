@@ -770,10 +770,12 @@ const ConsultationPage = () => {
         try {
           window.print();
         } catch (printErr) {
-          console.warn("Direct window.print() failed, falling back to PDF generation", printErr);
+          console.warn("Direct window.print() failed", printErr);
         }
         if (!sendToSameDayChecked) {
-          navigate('/doctor');
+          setTimeout(() => {
+            navigate('/doctor');
+          }, 1000);
         }
       }, 500);
 

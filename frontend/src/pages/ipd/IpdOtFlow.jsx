@@ -373,7 +373,13 @@ const IpdOtFlow = () => {
       : new Date().toLocaleDateString('en-IN');
 
     const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Popup blocked! Please allow popups to print consultation.');
+      return;
+    }
+
     printWindow.document.write(`
+      <!DOCTYPE html>
       <html>
         <head>
           <title>${heading}</title>
@@ -397,7 +403,7 @@ const IpdOtFlow = () => {
             .patient-grid span.label { font-weight: bold; color: #64748b; width: 140px; flex-shrink: 0; }
             .patient-grid span.val { color: #1e293b; }
 
-            .consent-content { font-size: 14px; color: #0f172a; margin-bottom: 50px; text-align: justify; }
+            .consent-content { font-size: 14px; color: #0f172a; margin-bottom: 50px; text-align: justify; white-space: pre-wrap; }
             
             .footer-section { margin-top: 60px; border-top: 1px solid #e2e8f0; padding-top: 20px; font-size: 13px; }
             .signature-grid { display: grid; grid-template-cols: 1fr 1fr; gap: 40px; margin-bottom: 20px; }
@@ -441,15 +447,20 @@ const IpdOtFlow = () => {
           </div>
 
           <script>
-            window.onload = function() {
+            setTimeout(function() {
               window.print();
-              window.onafterprint = function() { window.close(); };
-            };
+            }, 300);
           </script>
         </body>
       </html>
     `);
     printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      try {
+        printWindow.print();
+      } catch (e) {}
+    }, 400);
   };
 
   const handleScheduleSuccess = async (booking) => {

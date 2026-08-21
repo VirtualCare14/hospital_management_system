@@ -1,18 +1,26 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import ProtectedRoute from '../../components/ProtectedRoute';
 import DashboardLayout from '../../components/DashboardLayout';
 import PatientDetails from '../../components/PatientDetails';
 import CaseDetails from '../../components/CaseDetails';
 import ServiceSelector from '../../components/ServiceSelector';
 import PaymentDetails from '../../components/PaymentDetails';
+import LabBillReceipt from '../../components/LabBillReceipt';
+import { useAuth } from '../../context/AuthContext';
 import api from '../../lib/api';
-import { CheckCircle, AlertCircle, ArrowLeft, Receipt } from 'lucide-react';
+import { CheckCircle, AlertCircle, ArrowLeft, Printer } from 'lucide-react';
 
 function NewBillContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const { user } = useAuth();
+
+  // Receipt Modal State
+  const [createdBillReceiptData, setCreatedBillReceiptData] = useState(null);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
 
   // Patient state
   const [patientData, setPatientData] = useState({
@@ -54,6 +62,53 @@ function NewBillContent() {
     remarks: ''
   });
 
+  // Auto-fill from query params (e.g. when redirected from OPD Lab Request)
+  useEffect(() => {
+    if (!searchParams) return;
+    const pid = searchParams.get('patientId');
+    const uhid = searchParams.get('uhid');
+    const fn = searchParams.get('firstName');
+    const ln = searchParams.get('lastName');
+    const mobile = searchParams.get('mobile');
+    const gender = searchParams.get('gender');
+    const age = searchParams.get('age');
+    const tests = searchParams.get('tests');
+    const ref = searchParams.get('ref');
+
+    if (fn || uhid || tests) {
+      const timer = setTimeout(() => {
+        setPatientData(prev => ({
+          ...prev,
+          patientId: pid || prev.patientId,
+          uhid: uhid || prev.uhid,
+          firstName: fn || prev.firstName,
+          lastName: ln || prev.lastName,
+          mobileNumber: mobile || prev.mobileNumber,
+          gender: gender || prev.gender,
+          ageYears: age || prev.ageYears
+        }));
+
+        if (ref) {
+          setCaseData(prev => ({
+            ...prev,
+            referredBy: ref
+          }));
+        }
+
+        if (tests) {
+          const testArray = tests.split(',').filter(Boolean).map((t, idx) => ({
+            id: `opd_test_${idx}`,
+            title: t.trim(),
+            category: 'LAB',
+            price: 100
+          }));
+          setSelectedServices(testArray);
+        }
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, [searchParams]);
+
   const [submitting, setSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
@@ -72,6 +127,16 @@ function NewBillContent() {
 
   const handleRemoveService = (service) => {
     setSelectedServices(prev => prev.filter(s => !(s.id === service.id || s.title === service.title)));
+  };
+
+  const handleUpdateServicePrice = (test, newPrice) => {
+    setSelectedServices(prev =>
+      prev.map(s =>
+        (s.id && s.id === test.id) || (s.title && s.title === test.title)
+          ? { ...s, price: Number(newPrice) }
+          : s
+      )
+    );
   };
 
   // Submit Handler: Create Bill / Direct Request
@@ -96,30 +161,31 @@ function NewBillContent() {
       // 1. Create or ensure patient exists if no patientId is linked yet
       if (!resolvedPatientId) {
         try {
+          const birthYear = new Date().getFullYear() - (Number(patientData.ageYears) || 30);
+          const calculatedDob = `${birthYear}-01-01`;
+
           const patientPayload = {
-            title: patientData.title,
             patientName: `${patientData.firstName.trim()} ${patientData.lastName.trim()}`.trim(),
             gender: patientData.gender,
-            age: Number(patientData.ageYears) || 30,
-            mobileNumber: patientData.mobileNumber || '9999999999',
+            dob: calculatedDob,
+            mobile: patientData.mobileNumber || '9999999999',
             email: patientData.email || '',
             address: patientData.address || '',
-            aadhaarNumber: patientData.aadhaar || ''
+            aadhaar: patientData.aadhaar || '',
+            isEmergency: true
           };
 
-          const newPatientRes = await api.post('/patient/create', patientPayload);
+          const newPatientRes = await api.post('/patients/create', patientPayload);
           if (newPatientRes && (newPatientRes._id || newPatientRes.patient?._id)) {
             resolvedPatientId = newPatientRes._id || newPatientRes.patient._id;
           }
         } catch (patientErr) {
-          // If creation fails (e.g. duplicate mobile), query lookup
           console.warn('Patient creation response:', patientErr);
         }
       }
 
-      // If still no patientId, query first existing patient fallback or direct call
       if (!resolvedPatientId) {
-        const lookup = await api.get('/patient/registrations/list').catch(() => []);
+        const lookup = await api.get('/patients/registrations/list').catch(() => []);
         if (Array.isArray(lookup) && lookup.length > 0) {
           resolvedPatientId = lookup[0]._id;
         }
@@ -133,6 +199,7 @@ function NewBillContent() {
       const testNames = selectedServices.map(s => s.title);
       const billPayload = {
         patientId: resolvedPatientId,
+        labRequestId: searchParams.get('requestId') || undefined,
         tests: testNames,
         collectionType: caseData.collectionCentre,
         bookingDate: new Date(),
@@ -144,11 +211,39 @@ function NewBillContent() {
 
       const response = await api.post('/lab/requests/direct', billPayload);
 
+      // Build receipt payload
+      const totalAmt = selectedServices.reduce((sum, s) => sum + (Number(s.price) || 0), 0);
+      const discAmt = (totalAmt * (Number(paymentData.discountPercent) || 0)) / 100;
+      const netAmt = Math.max(0, totalAmt - discAmt);
+      const paidAmt = Number(paymentData.amountReceived) || netAmt;
+
+      const staffName = user?.doctorName || user?.name || user?.username || (typeof window !== 'undefined' && JSON.parse(localStorage.getItem('hms_lab_user') || '{}')?.doctorName) || 'Staff';
+
+      const receiptPayload = {
+        billNo: response.labId || response.billNo || String(Math.floor(1000 + Math.random() * 9000)),
+        categoryBadge: selectedCategory === 'LAB' ? 'L1' : selectedCategory,
+        patientName: `${patientData.title} ${patientData.firstName} ${patientData.lastName}`.trim(),
+        ageSex: `${patientData.ageYears || '25'} YRS / ${patientData.gender === 'Female' ? 'F' : 'M'}`,
+        mobileNumber: patientData.mobileNumber || 'N/A',
+        referredBy: caseData.referredBy || 'Self',
+        date: new Date().toLocaleDateString('en-GB'),
+        receivedBy: staffName,
+        investigations: selectedServices.map((s, idx) => ({
+          sno: idx + 1,
+          name: s.title,
+          amount: Number(s.price) || 0
+        })),
+        totalAmount: netAmt,
+        amountPaid: paidAmt
+      };
+
+      setCreatedBillReceiptData(receiptPayload);
+      setShowReceiptModal(true);
+
       setSuccessMessage(
         `Bill created successfully! ${response.message || 'Lab request generated.'}`
       );
       
-      // Scroll top
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       console.error('Create bill error:', err);
@@ -181,6 +276,8 @@ function NewBillContent() {
     setSelectedServices([]);
     setSuccessMessage(null);
     setErrorMessage(null);
+    setCreatedBillReceiptData(null);
+    setShowReceiptModal(false);
   };
 
   return (
@@ -231,14 +328,21 @@ function NewBillContent() {
             </div>
             <div className="flex items-center gap-2">
               <button
+                onClick={() => setShowReceiptModal(true)}
+                className="px-3 py-1 bg-orange-500 text-white rounded-md text-xs font-bold shadow-xs hover:bg-orange-600 flex items-center gap-1 cursor-pointer"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Print Bill Receipt</span>
+              </button>
+              <button
                 onClick={resetForm}
-                className="px-3 py-1 bg-emerald-600 text-white rounded-md text-xs font-bold shadow-xs hover:bg-emerald-700"
+                className="px-3 py-1 bg-emerald-600 text-white rounded-md text-xs font-bold shadow-xs hover:bg-emerald-700 cursor-pointer"
               >
                 Create Another Bill
               </button>
               <button
                 onClick={() => router.push('/dashboard')}
-                className="px-3 py-1 border border-emerald-300 text-emerald-800 rounded-md text-xs font-bold hover:bg-emerald-100"
+                className="px-3 py-1 border border-emerald-300 text-emerald-800 rounded-md text-xs font-bold hover:bg-emerald-100 cursor-pointer"
               >
                 Go to Dashboard
               </button>
@@ -272,6 +376,8 @@ function NewBillContent() {
           selectedCategory={selectedCategory}
           selectedServices={selectedServices}
           onToggleService={handleToggleService}
+          onRemoveService={handleRemoveService}
+          onUpdateServicePrice={handleUpdateServicePrice}
         />
 
         {/* SECTION 3 — PAYMENT DETAILS */}
@@ -283,6 +389,17 @@ function NewBillContent() {
           onCreateBill={handleCreateBill}
           submitting={submitting}
         />
+
+        {/* Bill Receipt Modal */}
+        {showReceiptModal && createdBillReceiptData && (
+          <LabBillReceipt
+            billData={createdBillReceiptData}
+            onClose={() => {
+              setShowReceiptModal(false);
+              router.push('/dashboard?view=todays-reports');
+            }}
+          />
+        )}
       </div>
     </DashboardLayout>
   );

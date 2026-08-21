@@ -13,7 +13,7 @@ import { useAuth } from '../../context/AuthContext';
 import { languages } from '../../utils/options';
 import { formatDate } from '../../utils/dateFormat';
 import { sanitizePatientName, formatUhid } from '../../utils/uhid';
-import { sanitizeClonedDocumentForPdf } from '../../utils/pdfUtils';
+import { sanitizeClonedDocumentForPdf, openPdfPrintWindow } from '../../utils/pdfUtils';
 import { translateClinicalText } from '../../utils/prescriptionI18n';
 import PatientReceipt from '../../components/PatientReceipt';
 import PrintLanguageModal from '../../components/PrintLanguageModal';
@@ -310,7 +310,7 @@ const PrescriptionPage = () => {
           }
 
           pdf.autoPrint();
-          window.open(pdf.output('bloburl'), '_blank');
+          openPdfPrintWindow(pdf, 'Prescription Receipt');
           toast.success(`Prescription Printed in ${selectedLanguage || language}!`, { id: 'pdf-toast' });
         } catch (err) {
           console.error("PDF printing failed", err);

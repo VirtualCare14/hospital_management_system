@@ -31,7 +31,7 @@ export default function PatientDetails({ patientData, setPatientData }) {
     if (!patientData.mobileNumber || patientData.mobileNumber.length < 5) return;
     setSearching(true);
     try {
-      const res = await api.get(`/patient/lookup?query=${encodeURIComponent(patientData.mobileNumber)}`);
+      const res = await api.get(`/patients/lookup?mobile=${encodeURIComponent(patientData.mobileNumber)}`);
       if (res && res.patient) {
         const p = res.patient;
         setPatientData(prev => ({
@@ -105,7 +105,7 @@ export default function PatientDetails({ patientData, setPatientData }) {
 
         {/* Title */}
         <div className="md:col-span-2">
-          <label className="lab-label">Title</label>
+          <label className="lab-label">Title*</label>
           <select
             name="title"
             value={patientData.title || 'Mr.'}
@@ -114,10 +114,24 @@ export default function PatientDetails({ patientData, setPatientData }) {
           >
             <option value="Mr.">Mr.</option>
             <option value="Mrs.">Mrs.</option>
-            <option value="Ms.">Ms.</option>
-            <option value="Dr.">Dr.</option>
-            <option value="Baby">Baby</option>
+            <option value="Smt.">Smt.</option>
+            <option value="Kumari">Kumari</option>
+            <option value="Shri.">Shri.</option>
+            <option value="Miss.">Miss.</option>
             <option value="Master">Master</option>
+            <option value="Mohd.">Mohd.</option>
+            <option value="Baby">Baby</option>
+            <option value="Baby of">Baby of</option>
+            <option value="Wife of">Wife of</option>
+            <option value="Mother of">Mother of</option>
+            <option value="Son of">Son of</option>
+            <option value="Daughter of">Daughter of</option>
+            <option value="Ms.">Ms.</option>
+            <option value="Miss./Mrs.">Miss./Mrs.</option>
+            <option value="Selvi">Selvi</option>
+            <option value="Sk.">Sk.</option>
+            <option value="PROF">PROF</option>
+            <option value="Dr.">Dr.</option>
           </select>
         </div>
 
@@ -233,20 +247,7 @@ export default function PatientDetails({ patientData, setPatientData }) {
         </div>
       </div>
 
-      {/* Online report requested Checkbox */}
-      <div className="flex items-center gap-2 pt-1">
-        <input
-          type="checkbox"
-          id="onlineReport"
-          name="onlineReport"
-          checked={patientData.onlineReport || false}
-          onChange={handleChange}
-          className="w-4 h-4 text-orange-500 rounded border-slate-300 focus:ring-orange-500 cursor-pointer accent-orange-500"
-        />
-        <label htmlFor="onlineReport" className="text-xs text-slate-700 font-medium cursor-pointer">
-          Online report requested (Send SMS / WhatsApp link)
-        </label>
-      </div>
+
 
       {/* Expandable chips for additional details */}
       <div className="pt-2 border-t border-slate-100">

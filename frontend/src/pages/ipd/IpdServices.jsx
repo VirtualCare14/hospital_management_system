@@ -72,6 +72,16 @@ const IpdServices = () => {
   const [medicineForm, setMedicineForm] = useState({ medicineName: '', quantity: '1', unitPrice: '', gst: '', baseUnitPrice: '' });
   const [medicationOrdersCount, setMedicationOrdersCount] = useState(0);
 
+  // Lab Test states
+  const [labTests, setLabTests] = useState([]);
+  const [labTestsLoading, setLabTestsLoading] = useState(false);
+  const [showAddLabTest, setShowAddLabTest] = useState(false);
+  const [labTestForm, setLabTestForm] = useState({ testName: '', testCategory: '', testPrice: '' });
+  const [labTestSearch, setLabTestSearch] = useState('');
+  const [availableLabTests, setAvailableLabTests] = useState([]);
+  const [labTestCategoryFilter, setLabTestCategoryFilter] = useState('');
+  const [labTestCategories, setLabTestCategories] = useState([]);
+
   // Load admitted patients
   const loadAdmissions = useCallback(async () => {
     setLoading(true);

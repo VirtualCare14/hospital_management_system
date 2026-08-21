@@ -84,7 +84,7 @@ export default function ProfileDropdown() {
               <span>Profile</span>
             </button>
 
-            {userRole === 'admin' || userRole === 'lab_admin' ? (
+            {userRole === 'admin' || userRole === 'lab_admin' || userRole === 'labadmin' ? (
               <button
                 onClick={() => {
                   setIsOpen(false);
