@@ -7,6 +7,7 @@ const labParameterSchema = new mongoose.Schema({
   unit: { type: String, default: '' },
   gender: { type: String, enum: ['Both', 'Male', 'Female'], default: 'Both' },
   status: { type: String, enum: ['Active', 'Inactive'], default: 'Active' },
+  fieldType: { type: String, default: 'Number' },
   referenceRules: [{
     sex: { type: String, enum: ['Any', 'Male', 'Female'], default: 'Any' },
     minAge: { type: Number, default: 0 },
