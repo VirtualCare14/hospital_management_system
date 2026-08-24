@@ -11,6 +11,8 @@ build/
 .env.*.local
 *.env
 backend/.env
+backend/env
+env
 
 # Uploads and temporary directories
 .uploads/

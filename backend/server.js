@@ -7,13 +7,16 @@ const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 
 // Load environment variables
 dotenv.config({ path: path.join(__dirname, '.env') });
+if (!process.env.MONGO_URI) {
+  dotenv.config({ path: path.join(__dirname, 'env') });
+}
 
-// Connect to Database
-connectDB();
-
-// Start Medication grace period background checker
 const { startMedicationScheduler } = require('./utils/medicationScheduler');
-startMedicationScheduler();
+
+// Connect to Database, then start database-backed background work.
+connectDB().then(() => {
+  startMedicationScheduler();
+});
 
 const app = express();
 
