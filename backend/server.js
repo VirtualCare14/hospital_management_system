@@ -7,6 +7,7 @@ const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 
 // Load environment variables
 dotenv.config({ path: path.join(__dirname, '.env') });
+dotenv.config({ path: path.join(__dirname, 'env') });
 
 // Connect to Database
 connectDB();

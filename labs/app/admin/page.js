@@ -3186,6 +3186,1832 @@ NB: Very high (> 100 mm/1st hour) ESR is found in autoimmune disease, malignancy
           }
         ]
       });
+    } else if (presetType === 'FLUID_EXAMINATION') {
+      setReportForm({
+        title: 'Fluid Examination (Physical, Chemical & Microscopic)',
+        test: 'Fluid Examination',
+        category: 'LAB',
+        basePrice: 500,
+        taxPercentage: 0,
+        sampleType: 'Body Fluid (Pleural / Ascitic / Synovial / Pericardial / CSF)',
+        turnaroundTime: 'Same Day',
+        description: 'Comprehensive physical, chemical, and microscopic examination of serous body fluids (Pleural, Ascitic, Peritoneal, Synovial, Pericardial) for transudate vs. exudate differentiation, infection, and cellularity.',
+        interpretation: `Clinical Significance & Interpretation:
+Body fluid examination (Ascitic, Pleural, Peritoneal, Pericardial, Synovial) is crucial for differentiating transudative effusions from exudative effusions.
+
+1. Transudate vs. Exudate Differentiation (Light's Criteria):
+• Transudative Fluid: Non-inflammatory effusion caused by hydrostatic pressure imbalance or decreased plasma oncotic pressure (e.g., Congestive Heart Failure, Cirrhosis, Nephrotic Syndrome, Malnutrition).
+  - Appearance: Clear, straw-colored, no coagulum.
+  - Protein: < 3.0 g/dl (< 3000 mg%), Fluid/Serum Protein ratio < 0.5.
+  - Glucose: Equivalent to serum glucose (> 60 mg%).
+  - Total Leukocyte Count (TLC): < 1,000 cells/cumm with predominantly mononuclear / lymphocytes.
+  - Specific Gravity: < 1.015.
+
+• Exudative Fluid: Inflammatory or malignant effusion caused by increased vascular permeability or impaired lymphatic drainage (e.g., Bacterial Pneumonia/Parapneumonic, Tuberculosis, Malignancy, Pulmonary Embolism, Pancreatitis).
+  - Appearance: Turbid, cloudy, hemorrhagic, or purulent; may form spontaneous fibrinous coagulum.
+  - Protein: ≥ 3.0 g/dl (≥ 3000 mg%), Fluid/Serum Protein ratio > 0.5.
+  - Glucose: Often decreased (< 60 mg%), especially in bacterial empyema, TB, or rheumatoid effusion.
+  - Total Leukocyte Count (TLC): ≥ 1,000 cells/cumm (often > 10,000 in acute bacterial infection).
+  - Differential: Neutrophil predominance (> 50%) indicates acute bacterial infection; Lymphocyte predominance (> 50%) suggests Tuberculosis, chronic inflammation, or malignancy.
+
+2. Diagnostic Notes:
+• Hemorrhagic fluid: May indicate malignancy, pulmonary infarction, trauma, or traumatic tap.
+• Presence of atypical cells requires cytopathological examination (cell block / Papanicolaou staining).`,
+        parameters: [
+          {
+            name: 'Sample Type',
+            referenceRange: 'Pleural / Ascitic / Synovial / Pericardial / CSF',
+            unit: '',
+            fieldType: 'Text',
+            gender: 'Both',
+            valueOptions: [
+              { value: 'Pleural Fluid', isAbnormal: false },
+              { value: 'Ascitic / Peritoneal Fluid', isAbnormal: false },
+              { value: 'Synovial Fluid', isAbnormal: false },
+              { value: 'Pericardial Fluid', isAbnormal: false },
+              { value: 'Cerebrospinal Fluid (CSF)', isAbnormal: false },
+              { value: 'Cystic Fluid', isAbnormal: false }
+            ]
+          },
+          {
+            name: 'Coagulum',
+            referenceRange: 'Absent',
+            unit: '',
+            fieldType: 'Text',
+            gender: 'Both',
+            valueOptions: [
+              { value: 'Absent / No Clot Formed', isAbnormal: false },
+              { value: 'Present (Cobweb / Fibrinous Coagulum)', isAbnormal: true },
+              { value: 'Fine Coagulum', isAbnormal: true },
+              { value: 'Gross Clot Formed', isAbnormal: true }
+            ]
+          },
+          {
+            name: 'Volume',
+            referenceRange: '',
+            unit: 'ml',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'Appearance',
+            referenceRange: 'Clear',
+            unit: '',
+            fieldType: 'Text',
+            gender: 'Both',
+            valueOptions: [
+              { value: 'Clear / Transparent', isAbnormal: false },
+              { value: 'Slightly Hazy / Opalescent', isAbnormal: true },
+              { value: 'Turbid / Cloudy', isAbnormal: true },
+              { value: 'Purulent', isAbnormal: true },
+              { value: 'Hemorrhagic / Sanguinous', isAbnormal: true },
+              { value: 'Milky / Chylous', isAbnormal: true }
+            ]
+          },
+          {
+            name: 'Colour',
+            referenceRange: 'Pale Yellow',
+            unit: '',
+            fieldType: 'Text',
+            gender: 'Both',
+            valueOptions: [
+              { value: 'Pale Yellow / Straw', isAbnormal: false },
+              { value: 'Yellow', isAbnormal: false },
+              { value: 'Amber', isAbnormal: false },
+              { value: 'Reddish / Hemorrhagic', isAbnormal: true },
+              { value: 'Brownish / Dark', isAbnormal: true },
+              { value: 'Turbid White', isAbnormal: true }
+            ]
+          },
+          {
+            name: 'pH (Reaction)',
+            referenceRange: '7.35 - 7.45',
+            unit: '',
+            fieldType: 'Text',
+            gender: 'Both',
+            valueOptions: [
+              { value: 'Alkaline (7.35 - 7.45)', isAbnormal: false },
+              { value: 'Acidic (< 7.30)', isAbnormal: true },
+              { value: 'Neutral (7.0 - 7.3)', isAbnormal: false }
+            ]
+          },
+          {
+            name: 'Protein',
+            referenceRange: 'Transudate < 3000 mg% | Exudate >= 3000 mg%',
+            unit: 'mg%',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'Glucose',
+            referenceRange: '60 - 100',
+            unit: 'mg%',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'Total Leukocyte Count',
+            referenceRange: 'Transudate < 1000 cumm | Exudate >= 1000 cumm',
+            unit: 'cumm',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'Neutrophils',
+            referenceRange: '< 50',
+            unit: '%',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'Lymphocyte',
+            referenceRange: '> 50',
+            unit: '%',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'RBCs',
+            referenceRange: 'Nil / Occasional',
+            unit: '',
+            fieldType: 'Text',
+            gender: 'Both',
+            valueOptions: [
+              { value: 'Nil / Absent', isAbnormal: false },
+              { value: 'Occasional (0 - 5 / HPF)', isAbnormal: false },
+              { value: 'Plenty / Numerous', isAbnormal: true },
+              { value: 'Heavily Hemorrhagic', isAbnormal: true }
+            ]
+          },
+          {
+            name: 'Others (Optional)',
+            referenceRange: 'Nil',
+            unit: '',
+            fieldType: 'Text',
+            gender: 'Both',
+            valueOptions: [
+              { value: 'No atypical or malignant cells seen', isAbnormal: false },
+              { value: 'Mesothelial cells present', isAbnormal: false },
+              { value: 'Atypical / Malignant cells noted (Advise Cytology / Cell Block)', isAbnormal: true },
+              { value: 'Gram stain / AFB negative', isAbnormal: false }
+            ]
+          }
+        ]
+      });
+    } else if (presetType === 'FNAC') {
+      setReportForm({
+        title: 'FNAC (Fine Needle Aspiration)',
+        test: 'FNAC',
+        category: 'LAB',
+        basePrice: 850,
+        taxPercentage: 0,
+        sampleType: 'Aspirate Smear (Fine Needle Aspiration Cytology)',
+        turnaroundTime: '24 - 48 Hours',
+        description: 'Cytopathological evaluation of fine needle aspirates from palpable and non-palpable lesions (Thyroid, Breast, Lymph nodes, Salivary glands, Soft tissue) to diagnose benign, inflammatory, and malignant pathologies.',
+        interpretation: `FNAC Reporting Protocol & Cytological Guidelines:
+
+1. Specimen Adequacy Criteria:
+• Adequate / Satisfactory for evaluation: Presence of sufficient diagnostic cellular material with well-preserved cytomorphological details.
+• Unsatisfactory / Inadequate: Scanty cellularity, excessive blood/crush artifact, or drying artifacts precluding definitive cytological evaluation (repeat aspiration recommended).
+
+2. General Diagnostic Categorization:
+• Category I (Unsatisfactory / Non-diagnostic): Insufficient diagnostic cells.
+• Category II (Benign / Negative for Malignancy): Inflammatory, reactive, hyperplastic, or typical benign cytological features.
+• Category III (Atypia of Undetermined Significance / AUS): Cytological atypia insufficient to diagnose neoplasm or malignancy.
+• Category IV (Suspicious for Neoplasm / Follicular Neoplasm): Cellular features suggestive of neoplasm.
+• Category V (Suspicious for Malignancy): Marked cellular and nuclear atypia strongly suggestive of malignancy.
+• Category VI (Malignant / Positive for Malignancy): Definitive cytological criteria of carcinoma, lymphoma, melanoma, or sarcoma.
+
+3. Clinical & Histopathological Correlation:
+FNAC is a rapid and highly accurate screening/diagnostic cytological modality. Histopathological examination (core needle biopsy or surgical excision) is recommended for definitive histological typing, grading, surgical margin assessment, and immunohistochemistry (IHC) profiling.`,
+        parameters: [
+          {
+            name: 'SPECIMEN',
+            referenceRange: 'As indicated',
+            unit: '',
+            fieldType: 'Text',
+            gender: 'Both',
+            valueOptions: [
+              { value: 'FNAC - Thyroid Gland', isAbnormal: false },
+              { value: 'FNAC - Breast Lump / Mass', isAbnormal: false },
+              { value: 'FNAC - Lymph Node (Cervical / Axillary / Inguinal)', isAbnormal: false },
+              { value: 'FNAC - Salivary Gland (Parotid / Submandibular)', isAbnormal: false },
+              { value: 'FNAC - Soft Tissue Swelling / Subcutaneous Nodule', isAbnormal: false },
+              { value: 'FNAC - Testicular / Epididymal Swelling', isAbnormal: false }
+            ]
+          },
+          {
+            name: 'MICROSCOPIC EXAMINATION',
+            referenceRange: 'Descriptive cytomorphological evaluation',
+            unit: '',
+            fieldType: 'Text',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'IMPRESSION',
+            referenceRange: 'Cytological Impression',
+            unit: '',
+            fieldType: 'Text',
+            gender: 'Both',
+            valueOptions: [
+              { value: 'Category II: Negative for Malignant Cells (Benign Cytology)', isAbnormal: false },
+              { value: 'Category I: Unsatisfactory / Inadequate Smear (Scanty Cellularity)', isAbnormal: true },
+              { value: 'Category III: Atypia of Undetermined Significance (AUS)', isAbnormal: true },
+              { value: 'Category IV: Follicular Neoplasm / Suspicious for Neoplasm', isAbnormal: true },
+              { value: 'Category V: Suspicious for Malignancy', isAbnormal: true },
+              { value: 'Category VI: Malignant (Positive for Malignancy)', isAbnormal: true }
+            ]
+          },
+          {
+            name: 'NOTE',
+            referenceRange: 'Histopathological correlation advised',
+            unit: '',
+            fieldType: 'Text',
+            gender: 'Both',
+            valueOptions: [
+              { value: 'Histopathological examination & tissue biopsy is advised for definitive histological grading and staging.', isAbnormal: false },
+              { value: 'Repeat aspiration under ultrasound guidance or core needle biopsy recommended if clinical suspicion persists.', isAbnormal: false },
+              { value: 'Clinical and radiological (USG/Mammography/CT) correlation recommended.', isAbnormal: false }
+            ]
+          }
+        ]
+      });
+    } else if (presetType === 'DIRECT_COOMBS_TEST') {
+      setReportForm({
+        title: "Direct Coomb's Test (DAT - Direct Antiglobulin Test)",
+        test: 'Direct Coombs Test',
+        category: 'LAB',
+        basePrice: 350,
+        taxPercentage: 0,
+        sampleType: 'Whole Blood (EDTA / Heparin / Clotted Cord Blood)',
+        turnaroundTime: 'Same Day',
+        description: 'Hemagglutination assay (Direct Antiglobulin Test / DAT) to detect in vivo sensitization of erythrocytes with antibodies (IgG) and/or complement components (C3d).',
+        interpretation: `Clinical Significance & Interpretation:
+The Direct Antiglobulin Test (DAT / Direct Coombs Test) detects in vivo coating of red blood cells with immunoglobulins (IgG) and/or complement components (C3d).
+
+1. Negative Result:
+• Indicates the absence of detectable cell-bound IgG antibodies or complement on the patient's red blood cells.
+
+2. Positive Result (Graded 1+ to 4+):
+A positive DAT indicates in vivo sensitization of erythrocytes and is observed in:
+• Autoimmune Hemolytic Anemia (AIHA):
+  - Warm Antibody AIHA (predominantly IgG ± C3d, often idiopathic, SLE, CLL, lymphoma)
+  - Cold Agglutinin Disease / Cold AIHA (predominantly C3d, Mycoplasma pneumoniae, EBV, lymphoproliferative disorders)
+  - Paroxysmal Cold Hemoglobinuria (PCH / Donath-Landsteiner antibody)
+• Hemolytic Disease of the Fetus and Newborn (HDFN):
+  - Maternal IgG antibodies (Anti-D, Anti-c, Anti-Kell, ABO incompatibility) crossing placenta and coating fetal RBCs.
+• Immune-Mediated Hemolytic Transfusion Reactions (Acute or Delayed):
+  - Recipient antibodies coating transfused incompatible donor RBCs.
+• Drug-Induced Immune Hemolytic Anemia (DIIHA):
+  - Drugs such as Cephalosporins (Ceftriaxone), Penicillins, Methyldopa, Quinidine, NSAIDs acting via drug-adsorption, immune complex, or autoantibody mechanisms.
+
+Diagnostic Notes:
+1. A positive DAT must always be interpreted in conjunction with clinical findings, reticulocyte count, serum LDH, indirect bilirubin, and serum haptoglobin levels.
+2. In cases of a positive polyspecific DAT, monospecific anti-IgG and anti-C3d testing with eluate evaluation is recommended.`,
+        parameters: [
+          {
+            name: "Direct Coomb's Test",
+            referenceRange: 'Negative',
+            unit: '',
+            fieldType: 'Text',
+            gender: 'Both',
+            valueOptions: [
+              { value: 'Negative (No Agglutination)', isAbnormal: false },
+              { value: 'Positive 1+ (Weak Agglutination)', isAbnormal: true },
+              { value: 'Positive 2+ (Moderate Agglutination)', isAbnormal: true },
+              { value: 'Positive 3+ (Strong Agglutination)', isAbnormal: true },
+              { value: 'Positive 4+ (Solid Agglutination Clump)', isAbnormal: true }
+            ]
+          }
+        ]
+      });
+    } else if (presetType === 'DLC_3_PARTS') {
+      setReportForm({
+        title: 'Differential Leucocyte Count, 3-Part (DLC 3 Parts)',
+        test: 'DLC 3 Parts',
+        category: 'LAB',
+        basePrice: 150,
+        taxPercentage: 0,
+        sampleType: 'Whole Blood (EDTA)',
+        turnaroundTime: 'Same Day',
+        description: 'Automated 3-part differential leukocyte count measuring absolute numbers and relative percentages of Granulocytes, Lymphocytes, and Mid-sized cells (Monocytes, Eosinophils, Basophils).',
+        interpretation: `Clinical Significance of 3-Part Differential:
+Automated 3-part hematology analyzers classify circulating leukocytes into three distinct volumetric cell clusters:
+
+1. Granulocytes (Gran # / Gran %):
+• Primarily comprises segmented neutrophils, band forms, eosinophils, and basophils.
+• Granulocytosis (Elevated Gran # / Gran %): Acute bacterial infections, systemic inflammation, tissue necrosis, metabolic intoxications (uremia, DKA), acute hemorrhage, corticosteroid therapy, myeloproliferative disorders.
+• Granulocytopenia (Decreased Gran # / Gran %): Bone marrow suppression (chemotherapy, radiation), severe overwhelming sepsis, aplastic anemia, drug-induced agranulocytosis.
+
+2. Lymphocytes (Lym # / Lym %):
+• Represents circulating T-cells, B-cells, and natural killer (NK) cells.
+• Lymphocytosis (Elevated Lym # / Lym %): Acute viral infections (infectious mononucleosis, CMV, viral hepatitis), pertussis, chronic lymphocytic leukemia (CLL), autoimmune conditions.
+• Lymphopenia (Decreased Lym # / Lym %): Acute stress, advanced HIV/AIDS, immunosuppressive therapy, systemic lupus erythematosus (SLE), radiation exposure.
+
+3. Mid-Sized Cells (Mid # / Mid % - Monocytes, Eosinophils & Basophils):
+• Encompasses monocytes, eosinophils, basophils, and precursor cells of intermediate size.
+• Elevated Mid-Cell Fraction: Chronic inflammatory conditions, tuberculosis, allergic reactions/asthma, parasitic infestations, convalescent stage of acute infections, myelomonocytic neoplasms (CMML).`,
+        parameters: [
+          {
+            name: 'Gran #',
+            referenceRange: '2 - 7',
+            unit: 'x10^3/µL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'Lym #',
+            referenceRange: '1 - 3',
+            unit: 'x10^3/µL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'Mid #',
+            referenceRange: '0.2 - 1.2',
+            unit: 'x10^3/µL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'Gran %',
+            referenceRange: '40 - 75',
+            unit: '%',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'Lym %',
+            referenceRange: '20 - 40',
+            unit: '%',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'Mid %',
+            referenceRange: '2 - 10',
+            unit: '%',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'DOUBLE_MARKER') {
+      setReportForm({
+        title: 'Double Marker, Maternal Screen - 2 tests',
+        test: 'Double Marker, Maternal Screen - 2 tests',
+        category: 'LAB',
+        basePrice: 2200,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum (Plain / Gel Tube)',
+        turnaroundTime: '24 - 48 Hours',
+        description: 'First trimester maternal serum biochemical screening assay measuring Pregnancy-Associated Plasma Protein-A (PAPP-A) and Free Beta hCG to assess fetal risk for Trisomies 21 (Down syndrome), 18 (Edwards syndrome), and 13 (Patau syndrome).',
+        interpretation: `Clinical Significance & Interpretation (First Trimester Maternal Screen / Double Marker):
+The Double Marker Test is a prenatal screening tool performed between 11 weeks 0 days and 13 weeks 6 days of gestation (Crown-Rump Length CRL 45 to 84 mm) to assess the statistical risk of fetal chromosomal aneuploidies:
+• Trisomy 21 (Down Syndrome)
+• Trisomy 18 (Edwards Syndrome)
+• Trisomy 13 (Patau Syndrome)
+
+1. Biochemical Markers Measured:
+• Pregnancy-Associated Plasma Protein-A (PAPP-A): A large zinc metalloproteinase produced by the syncytiotrophoblast.
+• Free Beta human Chorionic Gonadotropin (Free β-hCG): The beta subunit of human chorionic gonadotropin secreted by the placenta.
+
+2. Typical Risk Pattern in Fetal Aneuploidies:
+• Down Syndrome (Trisomy 21): Significantly elevated Free β-hCG (median ~2.0 MoM) and decreased PAPP-A (median ~0.4 MoM).
+• Edwards Syndrome (Trisomy 18) & Patau Syndrome (Trisomy 13): Markedly decreased Free β-hCG (< 0.5 MoM) and markedly decreased PAPP-A (< 0.3 MoM).
+
+3. Multiple of Median (MoM) & Risk Calculation:
+Raw analyte concentrations are converted into gestational age-adjusted Multiples of the Median (MoM), corrected for maternal weight, ethnicity, smoking status, IVF, and diabetes. Combined risk assessment incorporates maternal age, Ultrasound Nuchal Translucency (NT), and nasal bone visualization.
+
+4. Important Clinical Notes:
+• Screening Test Only: A "Screen Negative / Low Risk" result reduces but does not eliminate the risk of aneuploidy. A "Screen Positive / High Risk" (cutoff typically ≥ 1:250) indicates an increased statistical probability and warrants genetic counseling, cell-free DNA (NIPT), or definitive invasive diagnostic testing (Chorionic Villus Sampling CVS or Amniocentesis).
+• Isolated Low PAPP-A (< 0.4 MoM) with normal chromosomes is an independent predictive marker for adverse pregnancy outcomes including pre-eclampsia, fetal growth restriction (FGR/IUGR), and preterm delivery.`,
+        parameters: [
+          {
+            name: 'PAPPA Level',
+            referenceRange: '0.5 - 2.5 MoM (11 - 13+6 Weeks)',
+            unit: 'ng/mL',
+            fieldType: 'Number',
+            gender: 'Female',
+            valueOptions: []
+          },
+          {
+            name: 'HCG Level',
+            referenceRange: '0.5 - 2.5 MoM (11 - 13+6 Weeks)',
+            unit: 'mIU/mL',
+            fieldType: 'Female',
+            gender: 'Female',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'FASTING_BLOOD_SUGAR') {
+      setReportForm({
+        title: 'Fasting Blood Sugar',
+        test: 'Fasting Blood Sugar',
+        category: 'LAB',
+        basePrice: 80,
+        taxPercentage: 0,
+        sampleType: 'Plasma (Fluoride) / Serum (Fasting 8-12 hrs)',
+        turnaroundTime: 'Same Day',
+        description: 'Quantitative determination of plasma glucose concentration after an overnight fast (8-12 hours) to diagnose and monitor diabetes mellitus and impaired fasting glucose.',
+        interpretation: `Clinical Notes
+Elevated glucose levels (hyperglycemia) are most often encountered clinically in the setting of diabetes mellitus, but they may also occur with pancreatic neoplasms, hyperthyroidism, and adrenocortical dysfunction. Decreased glucose levels (hypoglycemia) may result from endogenous or exogenous insulin excess, prolonged starvation, or liver disease.
+
+Fasting Glucose (mg/dL) | 2 hours PP Glucose (mg/dL) | Diagnosis
+• < 100                 | < 140                      | Normal
+• 100 to 125            | 140 to 199                 | Pre-Diabetes
+• > 126                 | > 200                      | Diabetes
+
+A level of 126 mg/dL or above, confirmed by repeating the test on another day, means a person has diabetes.
+IGT (2 hrs Post meal), means a person has an increased risk of developing type 2 diabetes but does not have it yet.
+A 2-hour glucose level of 200 mg/dL or above, confirmed by repeating the test on another day, means a person has diabetes.`,
+        parameters: [
+          {
+            name: 'Fasting Blood Sugar',
+            referenceRange: '70 - 100',
+            unit: 'mg/dl',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'FASTING_INSULIN') {
+      setReportForm({
+        title: 'Fasting Insulin (Serum Insulin, Fasting)',
+        test: 'Fasting Insulin',
+        category: 'LAB',
+        basePrice: 650,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum (Fasting 8-12 hrs)',
+        turnaroundTime: 'Same Day',
+        description: 'Chemiluminescence Immunoassay (CLIA) for quantitative measurement of fasting serum insulin to evaluate insulin resistance, metabolic syndrome, beta-cell secretory capacity, and hyperinsulinemic hypoglycemia.',
+        interpretation: `Clinical Significance & Interpretation (Fasting Insulin):
+Insulin is a peptide hormone synthesized and secreted by the beta cells of pancreatic islets of Langerhans. It regulates glucose homeostasis by promoting peripheral glucose uptake into muscle and adipose tissue and suppressing hepatic gluconeogenesis.
+
+1. Reference Interval (Fasting):
+• Normal Fasting Insulin: 2.0 - 25.0 µIU/mL (Optimal metabolic fasting insulin is typically < 10.0 µIU/mL).
+
+2. Elevated Fasting Insulin (Hyperinsulinemia):
+• Insulin Resistance Syndrome & Metabolic Syndrome
+• Type 2 Diabetes Mellitus (early/compensatory hyperinsulinemic phase)
+• Polycystic Ovarian Syndrome (PCOS)
+• Insulinoma (pancreatic islet beta-cell tumor)
+• Obesity and excessive visceral adiposity
+• Cushing's Syndrome & Acromegaly
+• Exogenous insulin administration / Sulfonylurea use
+
+3. Decreased Fasting Insulin (Hypoinsulinemia):
+• Type 1 Diabetes Mellitus (absolute autoimmune beta-cell deficiency)
+• Late-stage / End-stage Type 2 Diabetes (beta-cell exhaustion)
+• Pancreatectomy, severe chronic pancreatitis, or cystic fibrosis
+• Hypopituitarism
+
+4. Assessment of Insulin Resistance (HOMA-IR):
+Fasting insulin paired with fasting blood sugar enables the calculation of Homeostatic Model Assessment for Insulin Resistance:
+• HOMA-IR = [Fasting Glucose (mg/dL) × Fasting Insulin (µIU/mL)] / 405
+• HOMA-IR < 2.0: Normal Insulin Sensitivity
+• HOMA-IR ≥ 2.5: Significant Insulin Resistance`,
+        parameters: [
+          {
+            name: 'Fasting Insulin',
+            referenceRange: '2 - 25',
+            unit: 'µIU/mL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'TORCH_PROFILE') {
+      setReportForm({
+        title: 'TORCH Profile (Toxoplasma, Rubella, CMV, HSV-1/2)',
+        test: 'TORCH Profile',
+        category: 'LAB',
+        basePrice: 2000,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum (Plain / Gel Tube)',
+        turnaroundTime: '24 - 48 Hours',
+        description: 'Comprehensive Chemiluminescence / ELISA immunoassay panel for detecting IgG and IgM antibodies against Toxoplasma gondii, Rubella virus, Cytomegalovirus (CMV), and Herpes Simplex Viruses (HSV 1 & 2) in maternal antenatal screening.',
+        interpretation: `Clinical Significance & Interpretation (TORCH Panel / Profile):
+The TORCH profile is a serological panel designed to detect antibodies against Toxoplasma gondii, Rubella virus, Cytomegalovirus (CMV), and Herpes Simplex Virus (HSV-1 and HSV-2), primarily used during preconception and antenatal screening to prevent congenital infections.
+
+1. Serological Pattern Interpretation:
+• IgG Negative (-) & IgM Negative (-): No evidence of past exposure or current infection; Patient is susceptible to primary infection. Preventive counseling and hygiene advised.
+• IgG Positive (+) & IgM Negative (-): Indicates past infection and acquired immunity (protective against primary maternal infection for Rubella and Toxoplasma). Low fetal risk.
+• IgG Negative (-) & IgM Positive (+): Suggestive of acute primary / early infection or false positive IgM. Advise repeat testing in 2-3 weeks for IgG seroconversion. High risk of vertical transmission.
+• IgG Positive (+) & IgM Positive (+): Possible acute recent infection, persistent IgM, or secondary reactivation. IgG avidity testing is recommended to differentiate recent primary infection (< 3-4 months) from remote infection (> 4 months).
+
+2. Pathogen Specific Notes:
+• Toxoplasma gondii: Primary infection in pregnancy carries risk of congenital toxoplasmosis (hydrocephalus, intracranial calcifications, chorioretinitis).
+• Rubella Virus: Acute primary infection during first trimester causes Congenital Rubella Syndrome (CRS - cataract, cardiac defects, sensorineural deafness).
+• Cytomegalovirus (CMV): Most common congenital viral infection causing sensorineural hearing loss, microcephaly, and developmental delay.
+• Herpes Simplex Virus (HSV 1/2): High risk of neonatal transmission during vaginal delivery if active maternal genital lesions or primary infection are present near term.`,
+        parameters: [
+          {
+            name: 'Toxo IgG',
+            referenceRange: '< 2 IU/mL',
+            unit: 'IU/mL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'Toxo IgM',
+            referenceRange: 'Neg. < 2 AU/mL | Grey Zone 2 - 2.6 AU/mL | Pos. > 2.6 AU/mL',
+            unit: 'AU/mL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'Rubella IgG',
+            referenceRange: '< 2 IU/mL',
+            unit: 'IU/mL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'Rubella IgM',
+            referenceRange: 'Neg. < 2 AU/mL | Grey Zone 2 - 3 AU/mL | Pos. > 3 AU/mL',
+            unit: 'AU/mL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'CMV IgG',
+            referenceRange: '< 2 AU/mL',
+            unit: 'AU/mL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'CMV IgM',
+            referenceRange: 'Neg. < 2.0 AU/mL | Grey Zone 2 - 4.2 AU/mL | Pos. > 4.2 AU/mL',
+            unit: 'AU/mL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'HSV-1/2 IgG',
+            referenceRange: '< 2.0 AU/mL',
+            unit: 'AU/mL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'HSV-1/2 IgM',
+            referenceRange: 'Neg. < 2 AU/mL | Grey Zone 2 - 4 AU/mL | Pos. >= 4 AU/mL',
+            unit: 'AU/mL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'HSV-2 IgG',
+            referenceRange: '< 2.0 AU/mL',
+            unit: 'AU/mL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'HSV-2 IgM',
+            referenceRange: 'Neg. < 2.0 AU/mL | Grey Zone 2 - 4.0 AU/mL | Pos. >= 4.0 AU/mL',
+            unit: 'AU/mL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'TLC') {
+      setReportForm({
+        title: 'Total Leukocyte Count (TLC)',
+        test: 'TLC',
+        category: 'LAB',
+        basePrice: 100,
+        taxPercentage: 0,
+        sampleType: 'Whole Blood (EDTA)',
+        turnaroundTime: 'Same Day',
+        description: 'Automated quantitative enumeration of total circulating white blood cells (WBC / Leukocytes) in peripheral whole blood to screen for infection, inflammation, bone marrow disorders, and leukemia.',
+        interpretation: `Physiological basis
+The WBC count and differential determine the total number of white blood cells as well as the percentage and absolute number of each type of white cell in a blood sample. It is typically generated by an automated laboratory hematology analyzer as part of the CBC panel.
+
+Interpretation
+Increased in: Acute infections, inflammatory disorders, acute and chronic leukemias, myeloproliferative disorders, solid tumor (paraneoplastic reaction), circulating lymphoma, tissue injury/necrosis, G-CSF stimulation, various drugs, corticosteroids, allergies, hypersensitivity reactions, stress, smoking.
+
+Decreased in: Infections, constitutional and acquired myeloid hypoplasia, myelosuppression (eg, chemotherapy, radiation, various drugs), myelodysplasia, collagen vascular diseases, hypersplenism, cyclic neutropenia, autoimmune neutropenia, alcoholism.
+
+Comments
+There are five types of white cells, each with different functions: neutrophils, lymphocytes, monocytes, eosinophils, and basophils. Absolute counts for individual cell populations can be calculated from a combination of the WBC count and the percentage of each cell type from the differential.`,
+        parameters: [
+          {
+            name: 'Total Leukocyte Count',
+            referenceRange: '4,800 - 10,800',
+            unit: 'cumm',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'TG_HDL') {
+      setReportForm({
+        title: 'TG / HDL (Triglycerides / HDL Cholesterol Ratio)',
+        test: 'TG / HDL',
+        category: 'LAB',
+        basePrice: 100,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum / Plasma (Fasting 10-12 hrs)',
+        turnaroundTime: 'Same Day',
+        description: 'Calculated ratio of serum triglycerides to high-density lipoprotein cholesterol (TG/HDL-C), serving as a powerful surrogate marker for insulin resistance, atherogenic small dense LDL particles, and cardiometabolic risk.',
+        interpretation: `Clinical Significance & Interpretation (TG / HDL Ratio):
+The Triglycerides to HDL-Cholesterol ratio (TG/HDL-C) is a powerful, non-invasive surrogate biomarker of insulin resistance, cardiometabolic risk, and the presence of atherogenic small dense low-density lipoprotein (sdLDL) particles.
+
+1. Reference Interval & Risk Stratification:
+• < 2.0 (Ideal / Low Risk): Indicates optimal insulin sensitivity, low atherogenic particle burden, and minimal cardiometabolic risk.
+• 2.0 - 4.0 (Borderline / Moderate Risk): Indicates emerging insulin resistance, early atherogenic dyslipidemia, and moderate cardiovascular risk.
+• > 4.0 (High Risk): Strongly associated with significant insulin resistance, metabolic syndrome, non-alcoholic fatty liver disease (NAFLD/MASLD), and elevated risk for coronary artery disease (CAD).
+
+2. Pathophysiological Insights:
+• sdLDL Proxy: A high TG/HDL ratio closely mirrors high circulating levels of small, dense, easily oxidized LDL particles even when standard LDL-C levels appear normal.
+• Insulin Resistance & Metabolic Health: TG/HDL ratio > 3.0 in males or > 2.5 in females correlates strongly with hyperinsulinemia and visceral adiposity.
+• Lifestyle & Therapeutic Interventions: Dietary carbohydrate restriction, weight optimization, regular aerobic and resistance exercise, and omega-3 fatty acid supplementation effectively reduce the TG/HDL ratio.`,
+        parameters: [
+          {
+            name: 'TG / HDL',
+            referenceRange: '< 2.0 (Desirable) | 2.0 - 4.0 (Borderline) | > 4.0 (High Risk)',
+            unit: 'Ratio',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'TESTOSTERONE_TOTAL') {
+      setReportForm({
+        title: 'Testosterone Total',
+        test: 'Testosterone Total',
+        category: 'LAB',
+        basePrice: 550,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum (Morning 7-10 AM preferred)',
+        turnaroundTime: 'Same Day',
+        description: 'Quantitative measurement of total serum testosterone (bound and free fractions) via Chemiluminescence Immunoassay (CLIA) to assess gonadal function, hypogonadism, hirsutism, and endocrine disorders.',
+        interpretation: `Physiological basis
+Testosterone is the principal male sex hormone, produced by the Leydig cells of the testes. Dehydroepiandrosterone (DHEA) is produced in the adrenal cortex, testes, and ovaries and is the main precursor for serum testosterone in women. In normal males after puberty, the testosterone level is twice as high as all androgens in females. In serum, it is largely bound to albumin (38%) and to a specific steroid hormone-binding globulin (SHBG) (60%), but it is the free hormone (2%) that is physiologically active. The total testosterone level measures both bound and free testosterone in the serum (by immunoassay). Free or bioavailable testosterone may be calculated or measured.
+
+Interpretation
+Increased in: Idiopathic sexual precocity (in boys, levels may be in adult range), adrenal hyperplasia (boys), adrenocortical tumors, trophoblastic disease during pregnancy, idiopathic hirsutism, virilizing ovarian tumors, arrhenoblastoma, virilizing luteoma, testicular feminization (normal or moderately elevated), cirrhosis (through increased SHBG), hyperthyroidism. Drugs: anticonvulsants, barbiturates, estrogens, oral contraceptives (through increased SHBG).
+Decreased in: Hypogonadism (primary and secondary, orchidectomy, Klinefelter syndrome, uremia, hemodialysis, hepatic insufficiency, ethanol [men]). Drugs: digoxin, spironolactone, acarbose.
+
+Comments
+Diurnal variation is present in adult males with highest levels in the early morning (around 8 AM) and lowest levels in the evening (around 8 PM). Early morning collection is recommended.`,
+        parameters: [
+          {
+            name: 'Testosterone Total',
+            referenceRange: 'Males: 240 - 870 | Females: 15 - 70',
+            unit: 'ng/dl',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'TESTOSTERONE_FREE') {
+      setReportForm({
+        title: 'Testosterone Free',
+        test: 'Testosterone Free',
+        category: 'LAB',
+        basePrice: 750,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum (Morning 7-10 AM preferred)',
+        turnaroundTime: '24 - 48 Hours',
+        description: 'Quantitative determination of unbound, biologically active free testosterone in serum via enzyme immunoassay (ELISA) / equilibrium dialysis to assess functional androgen activity in conditions of altered SHBG binding.',
+        interpretation: `Clinical Use
+1. As a secondary test to investigate alterations in physiologically active testosterone levels.
+2. To evaluate androgen status in cases with suspected or established abnormalities in sex hormone-binding globulin (SHBG).
+3. To assess functional serum testosterone levels in early pubertal males and older adult men.
+4. To measure functional circulating testosterone in females presenting with symptoms or signs of hyperandrogenism despite having normal total testosterone concentrations.
+
+Comments
+Testosterone circulates in the blood bound to three proteins: sex hormone-binding globulin (SHBG) (60-80%), albumin, and cortisol-binding globulin. Approximately 1-2% of circulating testosterone remains unbound or free. Measuring free testosterone provides an estimate of the biologically active hormone. This is particularly useful to account for variations in transport proteins that can affect total testosterone levels. Elevated SHBG levels, which can occur with conditions like obesity or advanced age, might obscure a true testosterone deficiency. In conditions such as Polycystic Ovary Syndrome (PCOS), where insulin resistance is prevalent and SHBG levels are often reduced, free or bioavailable testosterone levels may be significantly elevated.`,
+        parameters: [
+          {
+            name: 'Testosterone Free',
+            referenceRange: 'Males: 4.5 - 25.0 | Females: 0.1 - 4.1',
+            unit: 'pg/mL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'CUSTOM_TEST') {
+      setReportForm({
+        title: 'test',
+        test: 'test',
+        category: 'LAB',
+        basePrice: 100,
+        taxPercentage: 0,
+        sampleType: 'Biological Specimen',
+        turnaroundTime: 'Same Day',
+        description: 'Custom laboratory test panel containing quantitative measurement parameter AAA and multi-option selection parameter BBB.',
+        interpretation: '',
+        parameters: [
+          {
+            name: 'AAA',
+            referenceRange: '5.4 - 8',
+            unit: '',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'BBB',
+            referenceRange: '',
+            unit: '',
+            fieldType: 'Select',
+            gender: 'Both',
+            valueOptions: ['Normal', 'Abnormal', 'Positive', 'Negative']
+          }
+        ]
+      });
+    } else if (presetType === 'T4') {
+      setReportForm({
+        title: 'Serum thyroxine, T4',
+        test: 'T4',
+        category: 'LAB',
+        basePrice: 200,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum (Plain / Gel Tube)',
+        turnaroundTime: 'Same Day',
+        description: 'Quantitative immunoassay measurement of total circulating serum thyroxine (T4) to evaluate thyroid metabolic function, hyperthyroidism, and hypothyroidism.',
+        interpretation: `Clinical Significance & Interpretation (Serum Thyroxine, Total T4):
+Thyroxine (T4) is the major circulating thyroid hormone synthesized and secreted by the follicular cells of the thyroid gland under the regulatory control of Pituitary Thyroid Stimulating Hormone (TSH). More than 99.9% of circulating T4 is bound to plasma transport proteins (predominantly Thyroxine-Binding Globulin [TBG], transthyretin, and albumin), while the remaining unbound fraction represents free T4 (FT4).
+
+1. Clinical Indications & Diagnostics:
+• Increased in (Hyperthyroidism / Thyrotoxicosis): Graves' disease, toxic multinodular goiter, toxic adenoma, subacute thyroiditis (early release phase), exogenous thyroid hormone administration, elevated TBG states (pregnancy, estrogen therapy, oral contraceptives, acute hepatitis).
+• Decreased in (Hypothyroidism): Primary hypothyroidism (Hashimoto's thyroiditis, post-ablative, post-surgical, iodine deficiency), secondary/central hypothyroidism (pituitary or hypothalamic insufficiency), severe non-thyroidal illness (euthyroid sick syndrome), decreased TBG states (nephrotic syndrome, protein-losing enteropathy, major hepatic failure, androgen/anabolic steroid use).
+
+2. Diagnostic Guidance:
+Total T4 levels reflect both bound and unbound hormone. Conditions altering TBG concentrations may alter Total T4 without impacting thyroid metabolic status. Assessing Free T4 (FT4) and TSH is recommended for definitive diagnosis when binding protein abnormalities are suspected.`,
+        parameters: [
+          {
+            name: 'Serum thyroxine, T4',
+            referenceRange: '52 - 127',
+            unit: 'ng/mL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'T3') {
+      setReportForm({
+        title: 'Serum Triiodothyronine, T3',
+        test: 'T3',
+        category: 'LAB',
+        basePrice: 200,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum (Plain / Gel Tube)',
+        turnaroundTime: 'Same Day',
+        description: 'Quantitative immunoassay determination of total circulating serum triiodothyronine (T3) for assessing thyroid hyperactivity, T3 thyrotoxicosis, and peripheral thyroid hormone status.',
+        interpretation: `Physiologic Basis
+T3 is the primary active thyroid hormone. Approximately 80% of T3 is produced by extrathyroidal deiodination of T4 and the rest by thyroid gland. Total T3 is influenced by levels of thyroxine binding proteins.
+
+Interpretation
+Increased in: Hyperthyroidism (some) Increased thyroid binding globulin.
+Decreased in: Hypothyroidism, nonthyroidal illness, decreased thyroid binding globulin. Drugs: Amiodarone.
+
+Comments
+T3 may be increased in approximately 5% of hyperthyroid patients in whom free T4 is normal (T3 toxicosis). Therefore, the test is indicated when hyperthyroidism is suspected and free T4 value is normal. Test is of no value in the diagnosis and treatment of primary hypothyroidism.`,
+        parameters: [
+          {
+            name: 'Serum Triiodothyronine, T3',
+            referenceRange: '0.69 - 2.15',
+            unit: 'ng/mL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'STOOL_ROUTINE') {
+      setReportForm({
+        title: 'Stool Routine Examination (Routine & Microscopy)',
+        test: 'Stool Routine Examination',
+        category: 'LAB',
+        basePrice: 150,
+        taxPercentage: 0,
+        sampleType: 'Fresh Stool / Feces (Sterile Container)',
+        turnaroundTime: 'Same Day',
+        description: 'Comprehensive physical, chemical, and microscopic examination of fecal specimens to evaluate gastrointestinal disorders, intestinal parasites, dysentery, occult bleeding, and malabsorption.',
+        interpretation: `Clinical Significance & Interpretation (Stool Routine Examination):
+Stool Routine & Microscopic Examination is a vital diagnostic evaluation of gastrointestinal health, intestinal infections, malabsorption disorders, and gastrointestinal bleeding.
+
+1. Macroscopic Findings:
+• Colour: Normal stool colour ranges from light to dark brown due to stercobilin. Pale/Clay-coloured stool suggests biliary obstruction (lack of urobilinogen). Black/Tarry stool (melena) indicates upper GI bleeding. Red/Bloody stool (hematochezia) suggests lower GI bleeding, hemorrhoids, or fissures.
+• Consistency: Watery or loose stools reflect hypermotility or secretory/osmotic diarrhea. Hard stools indicate delayed transit/constipation. Mucoid stools suggest colonic inflammation, irritable bowel syndrome, or infectious enteritis.
+• Occult Blood: Positive occult blood is an indicator of asymptomatic colorectal bleeding, polyps, inflammatory bowel disease (IBD), ulcers, or early colorectal neoplasia.
+
+2. Microscopic Findings:
+• Pus Cells (Leukocytes) & RBCs: Presence of significant pus cells (> 5/HPF) with RBCs indicates invasive or inflammatory bacterial infection (e.g., Shigella, Salmonella, Campylobacter, invasive E. coli) or active IBD (Ulcerative Colitis / Crohn's Disease).
+• Cysts & Trophozoites: Detection of Entamoeba histolytica (amebiasis) or Giardia lamblia (giardiasis) cysts/trophozoites confirms parasitic intestinal protozoal infection.
+• Helminthic Ova: Identification of ova (Ascaris, Hookworm, Trichuris, Taenia) confirms helminthic infestation requiring targeted anthelmintic therapy.
+• Undigested Food & Macrophages: Excessive undigested meat fibers/starch or macrophages suggests maldigestion, pancreatic exocrine insufficiency, or severe mucosal inflammation.`,
+        parameters: [
+          {
+            name: 'Colour',
+            referenceRange: 'Yellowish Brown / Brown',
+            unit: '',
+            fieldType: 'Select',
+            gender: 'Both',
+            valueOptions: ['Brown', 'Yellowish Brown', 'Dark Brown', 'Clay Coloured', 'Black / Tarry', 'Greenish', 'Red / Bloody']
+          },
+          {
+            name: 'Consistency',
+            referenceRange: 'Formed / Semi-formed',
+            unit: '',
+            fieldType: 'Select',
+            gender: 'Both',
+            valueOptions: ['Formed', 'Semi-formed', 'Soft', 'Loose / Watery', 'Hard', 'Mucoid']
+          },
+          {
+            name: 'Mucus',
+            referenceRange: 'Absent / NIL',
+            unit: '',
+            fieldType: 'Select',
+            gender: 'Both',
+            valueOptions: ['NIL', 'Present', 'Trace', 'Moderate', 'Copious']
+          },
+          {
+            name: 'Blood',
+            referenceRange: 'Absent / NIL',
+            unit: '',
+            fieldType: 'Select',
+            gender: 'Both',
+            valueOptions: ['NIL', 'Present', 'Trace', 'Occasional', 'Gross Blood Present']
+          },
+          {
+            name: 'Occult Blood',
+            referenceRange: 'Negative',
+            unit: '',
+            fieldType: 'Select',
+            gender: 'Both',
+            valueOptions: ['Negative', 'Positive', 'Weakly Positive', 'Trace']
+          },
+          {
+            name: 'Parasites',
+            referenceRange: 'Not Seen / NIL',
+            unit: '',
+            fieldType: 'Select',
+            gender: 'Both',
+            valueOptions: ['Not Seen', 'NIL', 'Present', 'Adult Worm / Segment Seen']
+          },
+          {
+            name: 'Undigested Food Particles',
+            referenceRange: 'Absent / Occasional',
+            unit: '',
+            fieldType: 'Select',
+            gender: 'Both',
+            valueOptions: ['Absent', 'NIL', 'Present', 'Occasional', 'Moderate Amount']
+          },
+          {
+            name: 'OVA',
+            referenceRange: 'NIL / Not Seen',
+            unit: '',
+            fieldType: 'Select',
+            gender: 'Both',
+            valueOptions: ['NIL', 'Not Seen', 'Ascaris lumbricoides seen', 'Hookworm ova seen', 'Trichuris trichiura seen', 'Taenia ova seen', 'Enterobius vermicularis seen']
+          },
+          {
+            name: 'Cysts',
+            referenceRange: 'NIL / Not Seen',
+            unit: '',
+            fieldType: 'Select',
+            gender: 'Both',
+            valueOptions: ['NIL', 'Not Seen', 'E. histolytica cyst seen', 'Giardia lamblia cyst seen', 'E. coli cyst seen', 'Balantidium coli cyst seen', 'Blastocystis hominis seen']
+          },
+          {
+            name: 'Pus Cells',
+            referenceRange: '0 - 2 /HPF',
+            unit: '/HPF',
+            fieldType: 'Select',
+            gender: 'Both',
+            valueOptions: ['NIL', '0 - 2', '2 - 4', '5 - 10', '10 - 20', 'Plenty / Numerous']
+          },
+          {
+            name: 'Red Blood Cells',
+            referenceRange: 'NIL /HPF',
+            unit: '/HPF',
+            fieldType: 'Select',
+            gender: 'Both',
+            valueOptions: ['NIL', '0 - 1', '1 - 2', '2 - 5', '5 - 10', 'Plenty / Numerous']
+          },
+          {
+            name: 'Macrophages',
+            referenceRange: 'Absent / NIL',
+            unit: '',
+            fieldType: 'Select',
+            gender: 'Both',
+            valueOptions: ['NIL', 'Absent', 'Present', 'Occasional', 'Few']
+          }
+        ]
+      });
+    } else if (presetType === 'STOOL_REDUCING_SUBSTANCES') {
+      setReportForm({
+        title: 'Stool Reducing Substances (Fecal Reducing Substances)',
+        test: 'Stool reducing substances',
+        category: 'LAB',
+        basePrice: 150,
+        taxPercentage: 0,
+        sampleType: 'Fresh Stool Specimen (Sterile Container)',
+        turnaroundTime: 'Same Day',
+        description: 'Semi-quantitative chemical screening test (Benedict’s / Clinitest method) to detect reducing carbohydrates (lactose, glucose, galactose, fructose) in stool for diagnosing carbohydrate malabsorption and disaccharidase deficiency.',
+        interpretation: `Clinical Significance & Interpretation (Stool Reducing Substances):
+Fecal reducing substances testing (Benedict's / Clinitest method) is a critical diagnostic screening tool for carbohydrate malabsorption and disaccharidase deficiencies in infants and young children presenting with chronic watery diarrhea, perianal excoriation, abdominal distension, and failure to thrive.
+
+1. Reference Interval & Grading:
+• Negative (< 0.25% or < 0.25 g/dL): Normal carbohydrate absorption without significant fecal loss of reducing sugars.
+• Borderline / Suspicious (0.25% - 0.5%): Questionable or mild malabsorption; repeat testing after dietary challenge may be warranted.
+• Positive (> 0.5% or > 0.5 g/dL): Clinically significant carbohydrate malabsorption.
+
+2. Clinical Etiologies of Positive Results:
+• Primary / Congenital Disaccharidase Deficiencies: Congenital lactase deficiency, sucrase-isomaltase deficiency, glucose-galactose malabsorption.
+• Secondary / Acquired Intestinal Malabsorption: Post-rotaviral / post-gastroenteritis mucosal brush border injury, cow's milk protein allergy, celiac disease, short bowel syndrome, or small intestinal bacterial overgrowth (SIBO).
+
+3. Correlative Biomarkers & Pre-analytical Notes:
+• Fecal pH: Malabsorbed carbohydrates are fermented by colonic flora into short-chain fatty acids, reducing stool pH to acidic levels (< 5.5).
+• Non-reducing Sugars (Sucrose): Sucrose is not a reducing sugar unless acid hydrolyzed. If sucrose malabsorption is suspected, acid hydrolysis prior to testing is required.
+• Sample Handling: Feces must be collected fresh and processed immediately to prevent bacterial consumption of sugars prior to analysis.`,
+        parameters: [
+          {
+            name: 'Stool reducing substances',
+            referenceRange: 'Negative (< 0.25%)',
+            unit: '%',
+            fieldType: 'Select',
+            gender: 'Both',
+            valueOptions: ['Negative (< 0.25%)', 'Borderline (0.25% - 0.5%)', 'Positive (> 0.5%)', 'Strongly Positive (> 1.0%)']
+          }
+        ]
+      });
+    } else if (presetType === 'SKIN_TEST_LEPROSY') {
+      setReportForm({
+        title: 'Skin test for Leprosy (Lepromin Test)',
+        test: 'Skin test for Leprosy',
+        category: 'LAB',
+        basePrice: 350,
+        taxPercentage: 0,
+        sampleType: 'Intradermal Antigen (Lepromin)',
+        turnaroundTime: '48 Hours (Fernandez) / 21-28 Days (Mitsuda)',
+        description: 'Delayed-type hypersensitivity skin test using Lepromin antigen to assess cell-mediated immunity (CMI) against Mycobacterium leprae for classification, prognostication, and host resistance evaluation.',
+        interpretation: `Clinical Significance & Interpretation (Skin Test for Leprosy / Lepromin Test):
+The Lepromin test (Mitsuda and Fernandez reactions) is a delayed-type hypersensitivity skin test used to assess cell-mediated immunity (CMI) to Mycobacterium leprae. It is primarily used for classification and prognosis of leprosy rather than initial diagnosis.
+
+1. Reaction Types & Interpretation:
+• Fernandez Reaction (Early Reaction, read at 48 hours): Erythema and induration > 10 mm indicates pre-existing delayed hypersensitivity to soluble M. leprae antigens.
+• Mitsuda Reaction (Late Reaction, read at 21-28 days): Nodular induration > 5 mm indicates intact, functional cell-mediated immunity against M. leprae antigens.
+
+2. Immunological & Prognostic Significance:
+• Positive Mitsuda Test: Indicates strong cell-mediated immunity. Associated with Tuberculoid Leprosy (TT) or Borderline Tuberculoid (BT), characterized by low bacterial index (paucibacillary), localized granulomas, and favorable clinical prognosis.
+• Negative Mitsuda Test: Indicates deficient cell-mediated immunity to M. leprae. Associated with Lepromatous Leprosy (LL) or Borderline Lepromatous (BL), characterized by high bacterial burden (multibacillary), diffuse skin infiltration, and high transmission potential.
+• Note: Healthy non-exposed individuals and BCG-vaccinated persons may exhibit a positive Mitsuda reaction due to cross-reactive mycobacterial immunity.`,
+        parameters: [
+          {
+            name: 'Skin test for Leprosy',
+            referenceRange: 'Negative',
+            unit: '',
+            fieldType: 'Select',
+            gender: 'Both',
+            valueOptions: ['Negative', 'Positive (+)', 'Strongly Positive (++)', 'Equivocal / Doubtful']
+          }
+        ]
+      });
+    } else if (presetType === 'STOOL_CS') {
+      setReportForm({
+        title: 'Stool Culture and Sensitivity (Stool C/S)',
+        test: 'Stool/cs',
+        category: 'LAB',
+        basePrice: 600,
+        taxPercentage: 0,
+        sampleType: 'Fresh Stool / Feces (Sterile Container / Cary-Blair Transport)',
+        turnaroundTime: '48 - 72 Hours',
+        description: 'Microbiological culture, pathogen identification, and antibiotic susceptibility testing on stool specimens to isolate bacterial causes of acute gastroenteritis and dysentery.',
+        interpretation: `Clinical Significance & Interpretation (Stool Culture & Sensitivity - Stool C/S):
+Stool culture is performed to isolate and identify enteric bacterial pathogens responsible for infectious gastroenteritis, food poisoning, and bacterial dysentery, followed by antibiotic sensitivity testing.
+
+1. Common Enteric Pathogens Isolated:
+• Salmonella species (S. enterica, S. typhi): Causes acute enterocolitis, enteric fever.
+• Shigella species (S. dysenteriae, S. flexneri, S. sonnei): Causes classic bacillary dysentery with bloody, mucoid stools.
+• Vibrio cholerae: Causes severe secretory rice-water diarrhea and life-threatening dehydration.
+• Campylobacter jejuni: Common cause of bacterial gastroenteritis and inflammatory enterocolitis.
+• Enteropathogenic / Enterohemorrhagic E. coli (EPEC/EHEC): Associated with epidemic infantile diarrhea and Hemolytic Uremic Syndrome (HUS).
+
+2. Clinical Guidance:
+Isolation of normal commensal colonic flora is reported as "Normal Colonic Flora Grown / No Enteric Pathogen Isolated". In positive cultures, antimicrobial susceptibility testing (AST) guides targeted antibiotic therapy.`,
+        parameters: [
+          {
+            name: 'Growth / Pathogen Isolated',
+            referenceRange: 'No enteric pathogen isolated',
+            unit: '',
+            fieldType: 'Select',
+            gender: 'Both',
+            valueOptions: ['Normal Colonic Flora Grown', 'No Pathogenic Organisms Isolated', 'Salmonella species isolated', 'Shigella species isolated', 'Vibrio cholerae isolated', 'Campylobacter jejuni isolated', 'Enteropathogenic E. coli isolated']
+          },
+          {
+            name: 'Antibiotic Sensitivity',
+            referenceRange: 'Sensitive to reported antibiotics',
+            unit: '',
+            fieldType: 'Text',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'SGPT') {
+      setReportForm({
+        title: 'SGPT (ALT) - Alanine Aminotransferase',
+        test: 'SGPT',
+        category: 'LAB',
+        basePrice: 150,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum (Plain / Gel Tube)',
+        turnaroundTime: 'Same Day',
+        description: 'Enzyme biomarker test measuring Serum Glutamic Pyruvic Transaminase (SGPT/ALT) to evaluate hepatic cellular integrity, parenchymal liver damage, and monitor hepatotoxic therapies.',
+        interpretation: `Physiological basis
+Intracellular enzyme involved in amino acid metabolism. Present in large concentrations in liver, kidney; in smaller amounts, in skeletal muscle and heart. Released with tissue damage, particularly liver injury.
+
+Interpretation
+Increased in: Acute viral hepatitis (ALT > AST), biliary tract obstruction (cholangitis, choledocholithiasis), alcoholic hepatitis and cirrhosis (AST > ALT), liver abscess, metastatic or primary liver cancer; nonalcoholic steatohepatitis; right heart failure, ischemia or hypoxia, injury to liver ("shock liver"), extensive trauma; drugs that cause cholestasis or hepatotoxicity.
+Decreased in: Pyridoxine (vitamin B6) deficiency.
+
+Comments
+ALT is the preferred enzyme for evaluation of liver injury.`,
+        parameters: [
+          {
+            name: 'SGPT (ALT)',
+            referenceRange: '13 - 40',
+            unit: 'U/l',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'SGOT') {
+      setReportForm({
+        title: 'SGOT (AST) - Aspartate Aminotransferase',
+        test: 'SGOT',
+        category: 'LAB',
+        basePrice: 150,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum (Plain / Gel Tube)',
+        turnaroundTime: 'Same Day',
+        description: 'Enzyme biomarker test measuring Serum Glutamic Oxaloacetic Transaminase (SGOT/AST) to evaluate hepatic and muscular cellular integrity, parenchymal tissue damage, and AST/ALT de Ritis ratio.',
+        interpretation: `Physiological basis:
+Intracellular enzyme involved in amino acid metabolism. Present in large concentrations in liver, skeletal muscle, brain, red cells, and heart. Released into the bloodstream when tissue is damaged, especially in liver injury.
+
+Interpretation
+Increased in: Acute viral hepatitis (ALT > AST), biliary tract obstruction (cholangitis, choledocholithiasis), alcoholic hepatitis and cirrhosis (AST > ALT), liver abscess, metastatic or primary liver cancer; right heart failure, ischemic or hypoxic injury to liver ("shock liver"), extensive trauma. Drugs that cause cholestasis or hepatotoxicity.
+Decreased in: Pyridoxine (vitamin B6) deficiency
+
+Comments
+Test is not indicated for diagnosis of myocardial infarction.
+AST/ALT ratio >1 suggests cirrhosis in patients with hepatitis C`,
+        parameters: [
+          {
+            name: 'SGOT (AST)',
+            referenceRange: '0 - 37',
+            unit: 'U/l',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'SERUM_ZINC') {
+      setReportForm({
+        title: 'Serum Zinc (Trace Element)',
+        test: 'Serum Zinc',
+        category: 'LAB',
+        basePrice: 900,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum (Trace Element-Free Plain / Royal Blue Tube)',
+        turnaroundTime: '24 - 48 Hours',
+        description: 'Trace element biomarker quantitative assay measuring serum zinc levels to diagnose zinc nutritional deficiency, acrodermatitis enteropathica, chronic malabsorption, and monitor trace element therapy.',
+        interpretation: `Clinical Significance & Interpretation (Serum Zinc):
+Zinc (Zn) is an essential trace element and vital cofactor for more than 300 metalloenzymes (including carbonic anhydrase, alkaline phosphatase, RNA/DNA polymerases, and superoxide dismutase). It plays crucial roles in cellular growth, DNA synthesis, protein metabolism, wound healing, immune function, and spermatogenesis.
+
+1. Reference Interval:
+• Normal Serum Zinc: 70 - 120 µg/dL
+
+2. Clinical Implications of Decreased Levels (< 70 µg/dL):
+• Inadequate Dietary Intake & Malnutrition: Protein-energy malnutrition, total parenteral nutrition (TPN) without trace element supplementation, anorexia nervosa.
+• Gastrointestinal Malabsorption: Celiac disease, Crohn's disease, short bowel syndrome, chronic diarrhea, bariatric surgery.
+• Acrodermatitis Enteropathica: Rare autosomal recessive genetic disorder causing severe zinc malabsorption, characterized by periorificial dermatitis, alopecia, chronic diarrhea, and delayed development.
+• Increased Losses & Increased Demand: Chronic alcoholism (increased urinary excretion), severe thermal burns, chronic kidney disease (hemodialysis), pregnancy, and lactation.
+• Clinical Manifestations of Deficiency: Impaired wound healing, recurrent infections, growth retardation, hypogonadism, skin lesions, alopecia, impaired taste (hypogeusia) and smell (hyposmia), night blindness, and neuropsychiatric disturbances.
+
+3. Clinical Implications of Elevated Levels (> 120 µg/dL):
+• Occupational / Industrial Inhalation (Zinc Fume Fever): Inhalation of zinc oxide fumes during welding or metal galvanization.
+• Excessive Supplementation / Toxicity: Ingestion of high-dose zinc supplements or zinc-containing dental adhesives, which can induce secondary copper deficiency, sideroblastic anemia, and neutropenia.
+
+4. Pre-analytical Considerations:
+• Diurnal Variation: Serum zinc levels peak in the morning (by ~10-15%) and decrease in the evening. Fasting morning collection is recommended.
+• Contamination Avoidance: Use trace element-free collection tubes (e.g., Royal Blue top) to prevent environmental zinc contamination. Hemolysis must be avoided as erythrocytes contain high concentrations of zinc.`,
+        parameters: [
+          {
+            name: 'Serum Zinc',
+            referenceRange: '70 - 120',
+            unit: 'µg/dl',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'SERUM_UREA') {
+      setReportForm({
+        title: 'Serum Urea (Blood Urea Nitrogen / Urea)',
+        test: 'Serum Urea',
+        category: 'LAB',
+        basePrice: 150,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum / Plasma (Plain / Gel / Heparin Tube)',
+        turnaroundTime: 'Same Day',
+        description: 'Renal function biomarker measuring serum urea concentration to assess glomerular filtration, nitrogenous waste clearance, hydration status, and monitor renal disease progression.',
+        interpretation: `Interpretation:
+Urea is derived in the liver from amino acids and therefore from protein, whether originating from the diet or from tissues. The normal kidney can excrete large amounts of urea. If the rate of production exceeds the rate of clearance, plasma concentrations rise. The rate of production is accelerated by:
+- a high-protein diet
+- absorption of amino acids and peptides from digested blood after hemorrhage into the gastrointestinal lumen or soft tissues
+- increased catabolism due to starvation, tissue damage, sepsis or steroid treatment.
+In catabolic states, glomerular function is often impaired due to circulatory factors and this contributes more to the uraemia than does increased production. Conversely, the plasma urea concentration may be lower than 1.0 mmol/L, the causes of which include the following:
+
+Due to increased GFR or haemodilution:
+• Pregnancy
+• Overenthusiastic intravenous infusion
+• 'Inappropriate' ADH secretion (SIADH)
+
+Due to decreased synthesis:
+• Use of amino acids for protein anabolism during growth, especially in children
+• Low protein intake, very severe liver disease
+• Inborn errors of the urea cycle are rare and usually only occur in infants.`,
+        parameters: [
+          {
+            name: 'Serum Urea',
+            referenceRange: '19 - 45',
+            unit: 'mg/dl',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'SERUM_SODIUM') {
+      setReportForm({
+        title: 'Serum Sodium (Na+)',
+        test: 'Serum Sodium',
+        category: 'LAB',
+        basePrice: 150,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum / Heparin Plasma (Plain / Gel / Lithium Heparin Tube)',
+        turnaroundTime: 'Same Day',
+        description: 'Quantitative electrolyte assay measuring serum sodium concentration to assess fluid and electrolyte balance, osmolality, hydration status, and renal/endocrine disorders.',
+        interpretation: `Physiologic Basis
+Sodium is the predominant extracellular cation. The serum sodium level is primarily determined by the volume status of the individual. Hyponatremia can be divided into hypovolemia, euvolemia, and hypervolemia categories.
+
+Interpretation
+Increased in: Dehydration (excessive sweating, severe vomiting, or diarrhea), polyuria (diabetes mellitus, diabetes insipidus), hyperaldosteronism, inadequate water intake (coma, hypothalamic disease).
+Drugs: steroids, licorice, oral contraceptives.
+Decreased in: CHF, cirrhosis, vomiting, diarrhea, exercise, excessive sweating (with replacement of water but not salt, eg, marathon running), salt-losing nephropathy, adrenal insufficiency, nephrotic syndrome, water intoxication, syndrome of inappropriate antidiuretic hormone (SIADH), AIDS.
+Drugs: thiazides, diuretics, ACE inhibitors, chlorpropamide, carbamazepine, antidepressants (SSRI), antipsychotics.
+
+Comments
+Hyponatremia in a normovolemic patient with urine osmolality higher than serum (or plasma) osmolality suggests the possibility of SIADH, myxedema, hypopituitarism, or reset osmostat. Treatment of disorders of sodium balance relies on clinical assessment of the patient's extracellular fluid volume rather than the serum sodium.`,
+        parameters: [
+          {
+            name: 'Serum Sodium',
+            referenceRange: '136 - 146',
+            unit: 'mmol/L',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'SERUM_PROTEIN') {
+      setReportForm({
+        title: 'Serum Protein (Total Protein)',
+        test: 'Serum Protein',
+        category: 'LAB',
+        basePrice: 150,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum (Plain / Gel Tube)',
+        turnaroundTime: 'Same Day',
+        description: 'Quantitative assay measuring total serum protein concentration (albumin and globulins) to evaluate nutritional status, hepatic synthesis capacity, renal protein loss, and monoclonal gammopathies.',
+        interpretation: `Physiological basis
+Plasma protein concentration is determined by nutritional state, hepatic function, renal function, hydration, and various disease states. Plasma protein concentration determines the colloidal osmotic pressure.
+
+Interpretation
+Increased in: Polyclonal or monoclonal gammopathies, marked dehydration. Drugs: anabolic steroids, androgens, corticosteroids, epinephrine.
+Decreased in: Protein-losing enteropathies, acute burns, nephrotic syndrome, severe dietary protein deficiency, chronic liver disease, malabsorption syndrome, agammaglobulinemia, cancer cachexia.
+
+Comments
+Serum total protein consists primarily of albumin and globulin. Serum globulin level is calculated as total protein minus albumin. Hypoproteinemia usually indicates hypoalbuminemia, because albumin is the major serum protein`,
+        parameters: [
+          {
+            name: 'Serum Protein',
+            referenceRange: '6.4 - 8.3',
+            unit: 'g/dl',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'SERUM_POTASSIUM') {
+      setReportForm({
+        title: 'Serum Potassium (K+)',
+        test: 'Serum Potassium',
+        category: 'LAB',
+        basePrice: 150,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum / Heparin Plasma (Plain / Gel / Lithium Heparin Tube)',
+        turnaroundTime: 'Same Day',
+        description: 'Quantitative electrolyte assay measuring serum potassium concentration to evaluate neuromuscular excitability, cardiac conduction, acid-base homeostasis, and renal excretion disorders.',
+        interpretation: `Physiologic Basis
+Potassium is predominantly an intracellular cation whose plasma level is regulated by renal excretion. Elevated or depressed potassium concentrations interfere with muscle contraction.
+
+Interpretation
+Increased in: Massive hemolysis, severe tissue damage, rhabdomyolysis, acidosis, dehydration, acute or chronic renal failure, Addison disease, renal tubular acidosis type IV (hyporeninemic) hypoaldosteronism, (hyperkalemic) familial periodic paralysis, exercise (transient).
+Drugs: potassium salts, potassium-sparing diuretics (eg, spironolactone, triamterene, eplerenone), nonsteroidal anti-inflammatory drugs, β-blockers, ACE inhibitors, ACE-receptor blockers, high-dose trimethoprim-sulfamethoxazole.
+Decreased in: Low potassium intake, prolonged vomiting or diarrhea, renal tubular acidosis types I and II, hyperaldosteronism, Cushing syndrome, osmotic diuresis (eg, hyperglycemia), alkalosis, (hypokalemic) familial periodic paralysis, trauma (transient), subarachnoid hemorrhage, genetic hypokalemic salt-losing tubulopathies such as Gitelman syndrome (familial hypokalemia- hypocalcemia-hypomagnesemia).
+Drugs: adrenergic agents (isoproterenol), diuretics.
+
+Comments
+Spurious hyperkalemia can occur with hemolysis of a sample, delayed separation of serum from erythrocytes, prolonged fist clenching during blood drawing, and prolonged tourniquet application.`,
+        parameters: [
+          {
+            name: 'Serum Potassium',
+            referenceRange: '3.5 - 5.1',
+            unit: 'mmol/L',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'SERUM_PHOSPHORUS') {
+      setReportForm({
+        title: 'Serum Phosphorus (Inorganic Phosphate)',
+        test: 'Serum Phosphorus',
+        category: 'LAB',
+        basePrice: 150,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum (Plain / Gel Tube)',
+        turnaroundTime: 'Same Day',
+        description: 'Quantitative assay measuring serum inorganic phosphorus (phosphate) to evaluate mineral and bone metabolism, parathyroid disorders, vitamin D status, and renal tubular function.',
+        interpretation: `Physiologic Basis
+The plasma concentration of inorganic phosphate is determined by parathyroid gland function, action of vitamin D, intestinal absorption, renal function, bone metabolism, and nutrition. Serum phosphorus concentrations have a circadian rhythm (highest level in late morning, lowest in evening) and are subject to rapid change secondary to environmental factors such as diet (carbohydrate), phosphate binding antacids, and fluctuations in GH, insulin, and renal function.
+
+Interpretation
+Increased in:
+Renal failure, Massive blood transfusion, hypoparathyroidism, neoplasms, adrenal insufficiency, hypervitaminosis D, osteolytic metastases to bone, leukemia, Pseudohypoparathyroidism, Cirrhosis, lactic acidosis.
+Drugs: phosphate infusions or enemas, anabolic steroids, ergocalciferol, furosemide, hydrochlorothiazide, clonidine, verapamil, potassium supplements
+
+Decreased in:
+Hyperparathyroidism, hypovitaminosis D, starvation or cachexia, refeeding syndrome, bone marrow transplantation, GH deficiency, chronic alcoholism, Severe diarrhea, acute pancreatitis, severe hypercalcemia, acid-base disturbances, hypokalemia, hemodialysis.
+Drugs: acetazolamide, phosphate-binding antacids, anticonvulsants, β-adrenergic agonists, catecholamines, estrogens, isoniazid, oral contraceptives, prolonged use of thiazides, glucose infusion, insulin therapy, salicylates (toxicity).`,
+        parameters: [
+          {
+            name: 'Serum Phosphorus',
+            referenceRange: '2.5 - 4.5',
+            unit: 'mg/dl',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'SERUM_LDH') {
+      setReportForm({
+        title: 'Serum LDH (Lactate Dehydrogenase)',
+        test: 'Serum LDH',
+        category: 'LAB',
+        basePrice: 300,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum (Plain / Gel Tube - Non-hemolyzed)',
+        turnaroundTime: 'Same Day',
+        description: 'Enzyme quantitative assay measuring serum lactate dehydrogenase (LDH) activity to assess tissue turnover, hemolysis, myocardial/pulmonary injury, and monitor hematologic malignancies/lymphomas.',
+        interpretation: `Clinical Significance & Interpretation (Serum Lactate Dehydrogenase - LDH):
+Lactate dehydrogenase (LDH) is an intracellular zinc metalloenzyme that catalyzes the reversible interconversion of lactate and pyruvate in anaerobic glycolysis. LDH is widely distributed in nearly all major body tissues, with highest concentrations in myocardium, erythrocytes, liver, kidneys, skeletal muscle, lungs, and lymphoreticular system.
+
+1. Reference Interval:
+• Normal Serum LDH: 140 - 280 U/L
+
+2. Clinical Implications of Elevated Serum LDH (> 280 U/L):
+• Hematologic & Hemolytic Disorders: Intravascular hemolysis, megaloblastic anemia (B12 / folate deficiency — marked elevation due to ineffective erythropoiesis), sickle cell crisis, autoimmune hemolytic anemia, thrombotic thrombocytopenic purpura (TTP).
+• Malignancies & Tumor Marker Role: Non-Hodgkin lymphoma, Hodgkin lymphoma, acute and chronic leukemias, germ cell tumors (seminoma, dysgerminoma), metastatic carcinoma, neuroblastoma, melanoma. Serum LDH correlates with overall tumor burden, growth kinetics, and cellular turnover.
+• Cardiac & Tissue Ischemia: Acute myocardial infarction (peaks at 48-72 hours, remains elevated 10-14 days), pulmonary embolism, renal infarction, mesenteric ischemia.
+• Hepatic & Muscle Pathology: Acute viral hepatitis, toxic/ischemic hepatitis, rhabdomyolysis, progressive muscular dystrophy, extensive polymyositis.
+• Infectious & Pulmonary Diseases: Severe pneumonia, Pneumocystis jirovecii pneumonia (PCP in immunocompromised patients), sepsis, severe COVID-19/ARDS (reflecting systemic inflammatory damage).
+
+3. Pre-analytical Considerations & Pitfalls:
+• Hemolysis: Erythrocytes contain ~150-fold higher LDH concentration than serum. Even minor in vitro hemolysis causes false elevation (spurious hyper-LDH).
+• Specimen Handling: Serum must be promptly separated from the clot. Avoid freezing/thawing or extreme temperatures.`,
+        parameters: [
+          {
+            name: 'Serum LDH',
+            referenceRange: '140 - 280',
+            unit: 'U/L',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'SERUM_IGM') {
+      setReportForm({
+        title: 'Serum IgM (Immunoglobulin M)',
+        test: 'Serum IgM',
+        category: 'LAB',
+        basePrice: 650,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum (Plain / Gel Tube)',
+        turnaroundTime: 'Same Day',
+        description: 'Quantitative nephelometric/turbidimetric immunoassay measuring serum Immunoglobulin M (IgM) to evaluate acute immune response, humoral immunodeficiencies, Waldenström macroglobulinemia, and congenital or autoimmune disorders.',
+        interpretation: `Clinical Significance & Interpretation (Serum Immunoglobulin M - IgM):
+Immunoglobulin M (IgM) is a high molecular weight pentameric antibody and the primary immunoglobulin synthesized during the early initial immune response to antigenic challenge. It provides early-phase protective humoral immunity against bacterial, viral, and parasitic bloodstream pathogens.
+
+1. Reference Interval:
+• Normal Serum IgM: 400 - 2,500 µg/mL (40 - 250 mg/dL)
+
+2. Clinical Implications of Elevated Serum IgM (> 2,500 µg/mL):
+• Monoclonal Gammopathy: Waldenström's macroglobulinemia (monoclonal IgM spike producing hyperviscosity syndrome), IgM-MGUS (Monoclonal Gammopathy of Undetermined Significance), non-Hodgkin lymphoma.
+• Acute & Recent Infections: Viral hepatitis (HAV, HBV, HCV), infectious mononucleosis (EBV), Cytomegalovirus (CMV), Mycoplasma pneumoniae, Toxoplasmosis, Rubella, acute bacterial bacteremia.
+• Autoimmune & Inflammatory Diseases: Primary biliary cholangitis (PBC / primary biliary cirrhosis - classic polyclonal IgM elevation), rheumatoid arthritis (rheumatoid factor is primarily IgM), systemic lupus erythematosus (SLE).
+• Congenital / Neonatal Infection: Elevated cord blood IgM indicates intrauterine congenital infection (TORCH panel pathogens).
+
+3. Clinical Implications of Decreased Serum IgM (< 400 µg/mL):
+• Primary Immunodeficiency Disorders: Selective IgM deficiency, Common Variable Immunodeficiency (CVID), severe combined immunodeficiency (SCID), X-linked agammaglobulinemia (Bruton's).
+• Secondary Hypogammaglobulinemia: Multiple myeloma (IgG/IgA types with suppressed non-involved IgM), chronic lymphocytic leukemia (CLL), amyloidosis, severe protein loss (nephrotic syndrome, protein-losing enteropathy), immunosuppressive/cytotoxic therapy.`,
+        parameters: [
+          {
+            name: 'Serum IgM',
+            referenceRange: '400 - 2,500',
+            unit: 'µg/mL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'SERUM_ELECTROLYTE') {
+      setReportForm({
+        title: 'Serum Electrolyte (Serum Electrolytes - Na+, K+)',
+        test: 'Serum Electrolyte',
+        category: 'LAB',
+        basePrice: 300,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum / Heparin Plasma (Plain / Gel / Lithium Heparin Tube)',
+        turnaroundTime: 'Same Day',
+        description: 'Quantitative electrolyte panel measuring serum sodium and potassium concentrations to evaluate fluid-electrolyte balance, renal function, hydration status, and neuromuscular homeostasis.',
+        interpretation: `SERUM SODIUM (Na+):
+Physiologic Basis
+Sodium is the predominant extracellular cation. The serum sodium level is primarily determined by the volume status of the individual. Hyponatremia can be divided into hypovolemia, euvolemia, and hypervolemia categories.
+
+Interpretation
+Increased in: Dehydration (excessive sweating, severe vomiting, or diarrhea), polyuria (diabetes mellitus, diabetes insipidus), hyperaldosteronism, inadequate water intake (coma, hypothalamic disease).
+Drugs: steroids, licorice, oral contraceptives.
+Decreased in: CHF, cirrhosis, vomiting, diarrhea, exercise, excessive sweating (with replacement of water but not salt, eg, marathon running), salt-losing nephropathy, adrenal insufficiency, nephrotic syndrome, water intoxication, syndrome of inappropriate antidiuretic hormone (SIADH), AIDS.
+Drugs: thiazides, diuretics, ACE inhibitors, chlorpropamide, carbamazepine, antidepressants (SSRI), antipsychotics.
+
+Comments
+Hyponatremia in a normovolemic patient with urine osmolality higher than serum (or plasma) osmolality suggests the possibility of SIADH, myxedema, hypopituitarism, or reset osmostat. Treatment of disorders of sodium balance relies on clinical assessment of the patient's extracellular fluid volume rather than the serum sodium.
+
+--------------------------------------------------
+
+SERUM POTASSIUM (K+):
+Physiologic Basis
+Potassium is predominantly an intracellular cation whose plasma level is regulated by renal excretion. Elevated or depressed potassium concentrations interfere with muscle contraction.
+
+Interpretation
+Increased in: Massive hemolysis, severe tissue damage, rhabdomyolysis, acidosis, dehydration, acute or chronic renal failure, Addison disease, renal tubular acidosis type IV (hyporeninemic) hypoaldosteronism, (hyperkalemic) familial periodic paralysis, exercise (transient).
+Drugs: potassium salts, potassium-sparing diuretics (eg, spironolactone, triamterene, eplerenone), nonsteroidal anti-inflammatory drugs, β-blockers, ACE inhibitors, ACE-receptor blockers, high-dose trimethoprim-sulfamethoxazole.
+Decreased in: Low potassium intake, prolonged vomiting or diarrhea, renal tubular acidosis types I and II, hyperaldosteronism, Cushing syndrome, osmotic diuresis (eg, hyperglycemia), alkalosis, (hypokalemic) familial periodic paralysis, trauma (transient), subarachnoid hemorrhage, genetic hypokalemic salt-losing tubulopathies such as Gitelman syndrome (familial hypokalemia- hypocalcemia-hypomagnesemia).
+Drugs: adrenergic agents (isoproterenol), diuretics.
+
+Comments
+Spurious hyperkalemia can occur with hemolysis of a sample, delayed separation of serum from erythrocytes, prolonged fist clenching during blood drawing, and prolonged tourniquet placement. Very high white blood cell or platelet counts may cause spurious elevation of serum potassium, but plasma potassium levels are normal.`,
+        parameters: [
+          {
+            name: 'Serum Sodium',
+            referenceRange: '136 - 146',
+            unit: 'mmol/L',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'Serum Potassium',
+            referenceRange: '3.5 - 5.1',
+            unit: 'mmol/L',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'SERUM_ALBUMIN') {
+      setReportForm({
+        title: 'Serum Albumin',
+        test: 'Serum Albumin',
+        category: 'LAB',
+        basePrice: 150,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum (Plain / Gel Tube)',
+        turnaroundTime: 'Same Day',
+        description: 'Quantitative assay measuring serum albumin concentration to evaluate hepatic synthesis capacity, nutritional status, renal protein-losing nephropathies, and oncotic pressure regulation.',
+        interpretation: `Physiologic Basis
+Major components of plasma proteins are influenced by nutritional state, hepatic function, renal function, and various diseases. It is a major binding protein, although there are more than 50 different genetic variants (alloalbumins), only occasionally does a mutation cause abnormal binding (eg, in familial dysalbuminemic hyperthyroxinemia).
+
+Interpretation
+Increased in: Dehydration, shock, hemoconcentration.
+Decreased in: Decreased hepatic synthesis (chronic liver disease, malnutrition, malabsorption, malignancy, congenital analbuminemia [rare]). Increased losses (nephrotic syndrome, burns, trauma, hemorrhage with fluid replacement, fistulas, enteropathy, acute or chronic glomerulonephritis). Hemodilution (pregnancy, CHF). Drugs: estrogens.
+
+Comments
+Serum albumin indicates severity in chronic liver disease.
+Useful in nutritional assessment if there is no impairment in production or increased loss of albumin. Independent risk factor for all-cause mortality in the elderly (age >70) and for complications in hospitalized and post-surgical patients.
+There is a 10% reduction in serum albumin level in late pregnancy (related to hemodilution).`,
+        parameters: [
+          {
+            name: 'Serum Albumin',
+            referenceRange: '3.5 - 5.2',
+            unit: 'g/dl',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'SERUM_ALKALINE_PHOSPHATASE') {
+      setReportForm({
+        title: 'Serum Alkaline Phosphatase (ALP)',
+        test: 'Serum Alkaline Phosphatase',
+        category: 'LAB',
+        basePrice: 150,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum (Plain / Gel Tube)',
+        turnaroundTime: 'Same Day',
+        description: 'Enzyme assay measuring serum alkaline phosphatase (ALP) activity to evaluate hepatobiliary obstructive disorders, bone diseases with osteoblastic activity, and monitor bone metastases.',
+        interpretation: `Physiologic Basis:
+Alkaline phosphatases are primarily found in liver, bone, intestines, kidney, and placenta. Test is used to detect liver disease and bone disorders.
+
+Interpretation:
+Increased in: Obstructive hepatobiliary disease, bone disease (physiologic bone growth, Paget disease, osteomalacia, osteogenic sarcoma, bone metastases), hyperparathyroidism, rickets, benign familial hyperphosphatasemia, pregnancy (third trimester), GI disease (perforated ulcer or bowel infarct), hepatotoxic drugs.
+Decreased in: Hypophosphatasia.
+
+Comment:
+Alkaline phosphatase performs well in measuring the extent of bone metastases in prostate cancer. Alkaline phosphatase isoenzyme separation by electrophoresis or differential heat inactivation is unreliable. Use γ-glutamyl transpeptidase, which increases in hepatobiliary disease but not in bone disease, to infer the origin of increased alkaline phosphatase.`,
+        parameters: [
+          {
+            name: 'Serum Alkaline Phosphatase',
+            referenceRange: '30 - 120',
+            unit: 'U/l',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'SERUM_AMYLASE') {
+      setReportForm({
+        title: 'Serum Amylase',
+        test: 'Serum Amylase',
+        category: 'LAB',
+        basePrice: 250,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum (Plain / Gel Tube)',
+        turnaroundTime: 'Same Day',
+        description: 'Enzyme quantitative assay measuring serum amylase activity to diagnose and monitor acute pancreatitis, pancreatic duct obstruction, and other abdominal/salivary pathologies.',
+        interpretation: `Physiological basis
+Amylase hydrolyzes complex carbohydrates. Serum amylase is derived primarily from pancreas and salivary glands and is increased with inflammation or obstruction of these glands. Other tissues have some amylase activity, including ovaries, small and large intestine, and skeletal muscle.
+
+Interpretation
+Increased in:
+Acute pancreatitis (70–95%), pancreatic pseudocyst, pancreatic duct obstruction (cholecystitis, choledocholithiasis, pancreatic carcinoma, stone, stricture, duct sphincter spasm), bowel obstruction and infarction, mumps, parotitis, diabetic keto- acidosis, penetrating peptic ulcer, peritonitis, ruptured ectopic pregnancy, macroamylasemia.
+Drugs: azathioprine, hydrochlorothiazide.
+
+Decreased in:
+Pancreatic insufficiency, cystic fibrosis. Usually normal or low in chronic pancreatitis.
+
+Comments
+Macroamylasemia is indicated by high serum but low urine amylase. Serum or plasma lipase is an alternative test for acute pancreatitis. It has clinical sensitivity equivalent to that of amylase but with better specificity.`,
+        parameters: [
+          {
+            name: 'Serum Amylase',
+            referenceRange: '0 - 120',
+            unit: 'IU/L',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'SERUM_BILIRUBIN_DIRECT') {
+      setReportForm({
+        title: 'Serum Bilirubin (Direct) (Conjugated Bilirubin)',
+        test: 'Serum Bilirubin (Direct)',
+        category: 'LAB',
+        basePrice: 120,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum (Plain / Gel Tube - Light Protected)',
+        turnaroundTime: 'Same Day',
+        description: 'Photometric diazo assay measuring direct (conjugated) serum bilirubin to differentiate intrahepatic and post-hepatic obstructive jaundice from pre-hepatic hemolytic hyperbilirubinemia.',
+        interpretation: `Physiological basis
+Bilirubin is the orange-yellow pigment derived from the breakdown of hemoglobin (heme). The majority of bilirubin comes from senescent red cells. It is biotransformed in the liver and excreted in bile and urine. Some conjugated bilirubin is bound to serum albumin, so-called D (delta) bilirubin.
+
+Interpretation
+Increased in: Acute or chronic hepatitis, cirrhosis, biliary tract obstruction, toxic hepatitis, neonatal jaundice (neonatal hyperbilirubinemia), congenital liver enzyme abnormalities (Dubin-Johnson, Rotor, Gilbert, Crigler-Najjar syndromes), fasting, hemolytic disorders. Hepatotoxic drugs.
+
+Comments
+Assay of total bilirubin includes conjugated (direct) and unconjugated (indirect) bilirubin. Only conjugated bilirubin appears in the urine, and it is indicative of liver disease and biliary tract obstruction. Hemolysis is associated with increased unconjugated bilirubin. Unbound (free) serum or plasma bilirubin level correlates better than total bilirubin with CNS bilirubin concentrations and bilirubin encephalopathy (kernicterus) in newborn jaundice.`,
+        parameters: [
+          {
+            name: 'Serum Bilirubin (Direct)',
+            referenceRange: '0 - 0.3',
+            unit: 'mg/dl',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'SERUM_BILIRUBIN_INDIRECT') {
+      setReportForm({
+        title: 'Serum Bilirubin (Indirect) (Unconjugated Bilirubin)',
+        test: 'Serum Bilirubin (Indirect)',
+        category: 'LAB',
+        basePrice: 120,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum (Plain / Gel Tube - Light Protected)',
+        turnaroundTime: 'Same Day',
+        description: 'Quantitative assay calculating indirect (unconjugated) serum bilirubin (Total Bilirubin minus Direct Bilirubin) to evaluate hemolytic anemias, neonatal physiologic jaundice, and congenital glucuronyl transferase deficiencies.',
+        interpretation: `Physiological basis
+Bilirubin is the orange-yellow pigment derived from the breakdown of hemoglobin (heme). The majority of bilirubin comes from senescent red cells. It is biotransformed in the liver and excreted in bile and urine. Some conjugated bilirubin is bound to serum albumin, so-called D (delta) bilirubin.
+
+Interpretation
+Increased in: Acute or chronic hepatitis, cirrhosis, biliary tract obstruction, toxic hepatitis, neonatal jaundice (neonatal hyperbilirubinemia), congenital liver enzyme abnormalities (Dubin-Johnson, Rotor, Gilbert, Crigler-Najjar syndromes), fasting, hemolytic disorders. Hepatotoxic drugs.
+
+Comments
+Assay of total bilirubin includes conjugated (direct) and unconjugated (indirect) bilirubin. Only conjugated bilirubin appears in the urine, and it is indicative of liver disease and biliary tract obstruction. Hemolysis is associated with increased unconjugated bilirubin. Unbound (free) serum or plasma bilirubin level correlates better than total bilirubin with CNS bilirubin concentrations and bilirubin encephalopathy (kernicterus) in newborn jaundice.`,
+        parameters: [
+          {
+            name: 'Serum Bilirubin (Indirect)',
+            referenceRange: '0.2 - 1',
+            unit: 'mg/dl',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'SERUM_CALCIUM') {
+      setReportForm({
+        title: 'Serum Calcium (Total Calcium)',
+        test: 'Serum Calcium',
+        category: 'LAB',
+        basePrice: 150,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum (Plain / Gel Tube)',
+        turnaroundTime: 'Same Day',
+        description: 'Colorimetric assay measuring total serum calcium (bound and ionized) to evaluate parathyroid function, bone metabolism, vitamin D disorders, and hypercalcemia of malignancy.',
+        interpretation: `Physiological basis
+Serum calcium is the sum of ionized calcium plus complex calcium and calcium bound to proteins (mostly albumin). Level of ionized calcium is regulated by parathyroid hormone and vitamin D.
+
+Interpretation
+Common causes of Hypocalcemia:
+1. Chronic renal failure
+2. Hypomagnesemia
+3. Hypoalbuminemia
+
+Causes of Hypercalcemia:
+1. Increased intestinal absorption (vitamin d intoxication)
+2. Increased skeletal resorption
+3. Primary hyperparathyroidism
+
+Primary hyperparathyroidism and malignancy account for 90–95% of cases of hypercalcemia.
+
+Comments
+Need to know serum albumin to interpret calcium level. For every decrease in albumin by 1mg/dL, calcium should be corrected upward by 0.8 mg/dL. In 10% of patients with malignancies, hypercalcemia is attributable to coexistent hyperparathyroidism, suggesting that serum PTH levels should be measured at the initial presentation of all hypercalcemic patients.`,
+        parameters: [
+          {
+            name: 'Serum Calcium',
+            referenceRange: '8.8 - 10.6',
+            unit: 'mg/dl',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'SERUM_CORTISOL') {
+      setReportForm({
+        title: 'Serum Cortisol (Morning Cortisol)',
+        test: 'Serum Cortisol',
+        category: 'LAB',
+        basePrice: 450,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum (Plain / Gel Tube - Morning 8 AM preferred)',
+        turnaroundTime: 'Same Day',
+        description: 'Chemiluminescent immunoassay (CLIA) measuring serum cortisol levels to diagnose adrenal dysfunction, Cushing syndrome, Addison disease, and secondary adrenocortical insufficiency.',
+        interpretation: `Physiological basis
+Cortisol is the major glucocorticoid hormone secreted by the adrenal cortex under the stimulation of pituitary ACTH. Cortisol displays a marked diurnal / circadian rhythm, with highest levels in early morning (8:00 AM) and lowest levels around midnight. It plays a critical role in glucose metabolism, vascular reactivity, immune system suppression, and stress response.
+
+Reference Ranges (Diurnal Variation):
+- Morning (7:00 AM - 9:00 AM): 5.27 - 22.45 µg/dl
+- Afternoon (3:00 PM - 5:00 PM): 3.0 - 16.0 µg/dl
+- Midnight: < 5.0 µg/dl
+
+Interpretation:
+Increased in (Hypercortisolemia / Cushing's syndrome):
+- Cushing syndrome (pituitary ACTH-secreting adenoma - Cushing disease)
+- Adrenal adenoma or carcinoma (ACTH-independent)
+- Ectopic ACTH secretion (e.g., small cell lung carcinoma)
+- Physiological stress (severe illness, trauma, surgery, sepsis, depression, acute hypoglycemia)
+- Pregnancy and oral contraceptive / estrogen therapy (increased cortisol-binding globulin)
+
+Decreased in (Hypocortisolemia / Adrenal Insufficiency):
+- Primary adrenal insufficiency (Addison disease - autoimmune adrenalitis, tuberculosis, adrenal hemorrhage)
+- Secondary adrenal insufficiency (pituitary ACTH deficiency, hypopituitarism)
+- Tertiary adrenal insufficiency (hypothalamic CRH deficiency, abrupt withdrawal of prolonged exogenous corticosteroid therapy)
+- Congenital adrenal hyperplasia (CAH - e.g., 21-hydroxylase deficiency)
+
+Comments:
+- A single random cortisol level is often insufficient for definitive diagnosis of Cushing syndrome or Addison disease due to diurnal fluctuation and stress sensitivity.
+- Dynamic endocrine testing is recommended: Low-dose / High-dose Dexamethasone suppression test for hypercortisolism, and ACTH (Cosyntropin) stimulation test for suspected adrenal insufficiency.
+- Midnight salivary cortisol or 24-hour urinary free cortisol (UFC) provides high diagnostic specificity for loss of diurnal rhythm in Cushing syndrome.`,
+        parameters: [
+          {
+            name: 'Serum Cortisol',
+            referenceRange: '5.27 - 22.45',
+            unit: 'µg/dl',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'RUBELLA_IGM') {
+      setReportForm({
+        title: 'Rubella IgM (Rubella Virus Antibody IgM)',
+        test: 'Rubella IgM',
+        category: 'LAB',
+        basePrice: 450,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum (Plain / Gel Tube)',
+        turnaroundTime: 'Same Day',
+        description: 'Chemiluminescent immunoassay (CLIA) / ELISA for quantitative/semi-quantitative detection of IgM antibodies to Rubella virus to diagnose acute or recent German measles infection during pregnancy and congenital evaluation.',
+        interpretation: `Clinical Interpretation:
+Rubella IgM antibodies indicate recent or acute infection with the Rubella virus (German measles) or recent vaccination. Rubella is an acute contagious viral infection characterized by rash, fever, and lymphadenopathy. Primary infection during early pregnancy poses high risk of Congenital Rubella Syndrome (CRS) resulting in congenital heart defects, cataracts, sensorineural deafness, and microcephaly.
+
+Interpretation Guide:
+- Negative (< 2.0 AU/mL): No detectable Rubella IgM antibodies. No evidence of acute or recent infection.
+- Equivocal / Grey Zone (2.0 - 3.0 AU/mL): Borderline antibody level. Repeat testing with a fresh sample collected 7-14 days later is recommended to assess seroconversion or rising titer.
+- Positive (> 3.0 AU/mL): Detectable Rubella IgM antibodies suggestive of acute or recent Rubella virus infection or recent immunization.`,
+        parameters: [
+          {
+            name: 'Rubella IgM',
+            referenceRange: 'Neg. < 2 AU/mL\nGrey Zone 2-3 AU/mL\nPos. > 3 AU/mL',
+            unit: 'AU/mL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'SCRUB_TYPHUS') {
+      setReportForm({
+        title: 'Scrub Typhus (Orientia tsutsugamushi Antibodies - IgG & IgM)',
+        test: 'Scrub Typhus',
+        category: 'LAB',
+        basePrice: 600,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum (Plain / Gel Tube)',
+        turnaroundTime: 'Same Day',
+        description: 'Rapid immunochromatographic assay / ELISA for qualitative detection of IgG and IgM antibodies against Orientia tsutsugamushi in human serum to aid in the diagnosis of acute and recent Scrub Typhus.',
+        interpretation: `Clinical Interpretation:
+Scrub Typhus (also known as bush typhus) is an acute febrile zoonotic disease caused by Orientia tsutsugamushi (formerly Rickettsia tsutsugamushi), transmitted to humans through the bite of infected larval mites (chiggers - Leptotrombidium deliense). Common clinical manifestations include acute high-grade fever, chills, severe headache, myalgia, generalized lymphadenopathy, maculopapular rash, and the characteristic diagnostic 'eschar' (cigarette-burn like lesion at the bite site).
+
+Interpretation Guide:
+- IgM Positive: Indicates acute / current or recent active Scrub Typhus infection. IgM antibodies appear by the end of the 1st week of fever and peak during the 2nd–3rd week.
+- IgG Positive: Indicates past exposure, secondary immune response, or convalescent phase. A 4-fold rise in IgG titer in paired sera confirms active infection.
+- IgM & IgG Negative: No detectable antibodies to Orientia tsutsugamushi. If clinical suspicion is high and sample was collected within the first 5-7 days of illness, repeat testing after 5-7 days is advised.`,
+        parameters: [
+          {
+            name: 'IgG',
+            referenceRange: 'Negative',
+            unit: '',
+            fieldType: 'Select',
+            gender: 'Both',
+            valueOptions: ['Negative', 'Positive', 'Equivocal']
+          },
+          {
+            name: 'IgM',
+            referenceRange: 'Negative',
+            unit: '',
+            fieldType: 'Select',
+            gender: 'Both',
+            valueOptions: ['Negative', 'Positive', 'Equivocal']
+          }
+        ]
+      });
+    } else if (presetType === 'SERUM_CHLORIDE') {
+      setReportForm({
+        title: 'Serum Chloride (Cl-)',
+        test: 'Serum Chloride',
+        category: 'LAB',
+        basePrice: 150,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum (Plain / Gel Tube)',
+        turnaroundTime: 'Same Day',
+        description: 'Ion-selective electrode (ISE) assay measuring serum chloride concentration to assess electrolyte balance, acid-base equilibrium, hydration status, and renal tubular function.',
+        interpretation: `Physiological Basis
+Chloride, the principal inorganic anion of extracellular fluid, is important in maintaining proper body water distribution, osmotic pressure, and normal acid-base balance. If chloride is lost (as HCl or NH4Cl), alkalosis ensues; if chloride is ingested or retained, acidosis ensues.
+
+Interpretation
+Increased in: Renal failure, nephrotic syndrome, renal tubular acidosis, dehydration, overtreatment with saline, hyperparathyroidism, diabetes insipidus, metabolic acidosis from diarrhea (loss of HCO3–), respiratory alkalosis, hyperadrenocorticism.
+Drugs: acetazolamide (hyperchloremic acidosis), androgens, hydrochlorothiazide, salicylates (intoxication).
+
+Decreased in: Vomiting, diarrhea, gastrointestinal suction, renal failure combined with salt deprivation, over-treatment with diuretics, chronic respiratory acidosis, diabetic ketoacidosis, excessive sweating, SIADH, salt-losing nephropathy, acute intermittent porphyria, water intoxication, expansion of extracellular fluid volume, adrenal insufficiency, hyperaldosteronism, metabolic alkalosis.
+Drugs: chronic laxative or bicarbonate ingestion, corticosteroids, diuretics.
+
+Comments
+Test is helpful in assessing normal and increased anion gap metabolic acidosis. It is somewhat helpful in distinguishing hypercalcemia due to primary hyperparathyroidism (high serum chloride) from that due to malignancy (normal serum chloride).`,
+        parameters: [
+          {
+            name: 'Serum Chloride',
+            referenceRange: '98 - 107',
+            unit: 'mmol/l',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
+    } else if (presetType === 'RHEUMATOID_FACTOR_QUANTITATIVE') {
+      setReportForm({
+        title: 'Rheumatoid Factor, RA (Quantitative) (RF Quantitative)',
+        test: 'Rheumatoid Factor, RA (Quantitative)',
+        category: 'LAB',
+        basePrice: 350,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum (Plain / Gel Tube)',
+        turnaroundTime: 'Same Day',
+        description: 'Turbidimetric / Nephelometric immunoassay for quantitative determination of Rheumatoid Factor (IgM-class autoantibodies) in human serum to assist in diagnosis and prognosis of Rheumatoid Arthritis.',
+        interpretation: `Physiologic Basis
+Rheumatoid factor (RF) consists of heterogeneous autoantibodies usually of the IgM class that react against the Fc region of human IgG. Most methods detect only IgM-class RF.
+
+Interpretation
+Positive in: Rheumatoid arthritis (75–90%), Sjögren syndrome (80–90%), scleroderma, dermatomyositis, SLE (30%), sarcoidosis, Waldenström macroglobulinemia, chronic infection.
+Drugs: methyldopa, others.
+Low-titers of RF (eg, ≤1:80) are questionable and can be found in healthy older patients (20%), in 1–4% of normal individuals, and in a variety of acute immune responses (eg, viral infections, including infectious mononucleosis and viral hepatitis), chronic bacterial infections (tuberculosis, leprosy, subacute infective endocarditis), and chronic active hepatitis.
+
+Comments
+Rheumatoid factor can be useful in differentiating rheumatoid arthritis from other chronic inflammatory arthritides. However, a positive RF test is only one of several criteria needed to make the diagnosis of rheumatoid arthritis.
+RF must be ordered selectively because its predictive value is low (34%) if it is used as a screening test. The test has poor positive predictive value because of its lack of specificity. The subset of patients with seronegative rheumatic disease limits its sensitivity and negative predictive value.`,
+        parameters: [
+          {
+            name: 'Rheumatoid Factor, RA (Quantitative)',
+            referenceRange: '0 - 20',
+            unit: 'IU/mL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      });
     }
   };
 
@@ -4123,6 +5949,293 @@ NB: Very high (> 100 mm/1st hour) ESR is found in autoimmune disease, malignancy
                   className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
                 >
                   ESR(Wintrobe)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('FLUID_EXAMINATION')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Fluid Examination
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('FNAC')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  FNAC
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('DIRECT_COOMBS_TEST')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Direct Coombs Test
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('DLC_3_PARTS')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  DLC 3 Parts
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('DOUBLE_MARKER')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Double Marker
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('FASTING_BLOOD_SUGAR')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Fasting Blood Sugar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('FASTING_INSULIN')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Fasting Insulin
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('TORCH_PROFILE')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  TORCH Profile
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('TLC')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  TLC
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('TG_HDL')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  TG / HDL
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('TESTOSTERONE_TOTAL')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Testosterone Total
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('TESTOSTERONE_FREE')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Testosterone Free
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('CUSTOM_TEST')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  test
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('T4')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  T4
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('T3')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  T3
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('STOOL_ROUTINE')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Stool Routine Examination
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('STOOL_REDUCING_SUBSTANCES')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Stool reducing substances
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('SKIN_TEST_LEPROSY')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Skin test for Leprosy
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('STOOL_CS')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Stool/cs
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('SGPT')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  SGPT
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('SGOT')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  SGOT
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('SERUM_ZINC')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Serum Zinc
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('SERUM_UREA')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Serum Urea
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('SERUM_SODIUM')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Serum Sodium
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('SERUM_PROTEIN')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Serum Protein
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('SERUM_POTASSIUM')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Serum Potassium
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('SERUM_PHOSPHORUS')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Serum Phosphorus
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('SERUM_LDH')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Serum LDH
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('SERUM_IGM')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Serum IgM
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('SERUM_ELECTROLYTE')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Serum Electrolyte
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('SERUM_ALBUMIN')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Serum Albumin
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('SERUM_ALKALINE_PHOSPHATASE')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Serum Alkaline Phosphatase
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('SERUM_AMYLASE')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Serum Amylase
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('SERUM_BILIRUBIN_DIRECT')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Serum Bilirubin (Direct)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('SERUM_BILIRUBIN_INDIRECT')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Serum Bilirubin (Indirect)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('SERUM_CALCIUM')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Serum Calcium
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('SERUM_CORTISOL')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Serum Cortisol
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('RUBELLA_IGM')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Rubella IgM
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('SCRUB_TYPHUS')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Scrub Typhus
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('SERUM_CHLORIDE')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Serum Chloride
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('RHEUMATOID_FACTOR_QUANTITATIVE')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs cursor-pointer border border-blue-200"
+                >
+                  Rheumatoid Factor (RA) Quant.
                 </button>
               </div>
             </div>
