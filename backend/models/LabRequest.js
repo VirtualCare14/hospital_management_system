@@ -152,6 +152,11 @@ const labRequestSchema = new mongoose.Schema({
         value: String,
         isAbnormal: { type: Boolean, default: false }
       }],
+      formula: String,
+      isCalculated: { type: Boolean, default: false },
+      fieldType: { type: String, default: 'Number' },
+      group: String,
+      displayName: String,
       isAbnormal: { type: Boolean, default: false }
     }],
     // Diagnosis templates: dynamicFields is a flexible JSON payload that stores

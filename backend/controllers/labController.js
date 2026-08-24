@@ -1104,14 +1104,13 @@ const generateReport = async (req, res) => {
       }
     } else {
       if (!resolvedParameters || !Array.isArray(resolvedParameters) || resolvedParameters.length === 0) {
-        return res.status(400).json({ message: 'Test parameters are missing.' });
+        resolvedParameters = Array.isArray(request.report?.parameters) ? request.report.parameters : [];
       }
 
-      for (const param of resolvedParameters) {
-        if (param.value === undefined || param.value === null || param.value.toString().trim() === '') {
-          return res.status(400).json({ message: `Please enter result value for parameter: ${param.name}` });
-        }
-      }
+      resolvedParameters = resolvedParameters.map(param => ({
+        ...param,
+        value: (param.value !== undefined && param.value !== null && param.value.toString().trim() !== '') ? param.value : '-'
+      }));
     }
 
     let signatoryObj = null;

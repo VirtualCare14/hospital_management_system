@@ -6427,6 +6427,386 @@ RF must be ordered selectively because its predictive value is low (34%) if it i
         status: 'Active'
       }
     ]
+  },
+  {
+    category: 'LAB',
+    test: 'HbA1c (Glycosylated Hemoglobin)',
+    title: 'HbA1c (Glycosylated Hemoglobin)',
+    basePrice: 500,
+    taxPercentage: 0,
+    sampleType: 'Whole Blood (EDTA)',
+    turnaroundTime: '4 Hours',
+    description: 'Quantitative measurement of HbA1c (Glycated Hemoglobin) and Estimated Average Glucose (eAG) to evaluate long-term glycemic control.',
+    notes: `Interpretation as per American Diabetes Association (ADA) Guidelines\n\nReference Group | Non-Diabetic adults >= 18 years | At Risk (Prediabetes) | Diagnosing Diabetes | Therapeutic goals for glycemic control\nHbA1c in % | 4.0-5.6 | 5.7-6.4 | >= 6.5 | <7.0\n\nClinical significance:\nHemoglobin A1c (HbA1c) level reflects the mean glucose concentration over the previous period (approximately 8-12 weeks). The following ranges may be used for interpretation of results. However, factors such as duration of diabetes, adherence to therapy and the age of the patient should also be considered in assessing the degree of blood glucose control.\n\nHaemoglobin A1c (%) NSGP | mmol/mol/IFCC Unit | eAG (mg/dl) | Degree of Glucose Control Unit\n>8 | >63.9 | >183 | Action Suggested*\n7-8 | 53.0 - 63.9 | 154-183 | Fair Control\n<7 | <63.9 | <154 | Goal**\n6-7 | 42.1 - 63.9 | 126-154 | Near-normal glycemia\n<6 | <42.1 | <126 | Non-Diabetic level\n\n*High risk of developing long term complications such as Retinopathy, Nephropathy, Neuropathy etc.\n\n**Some danger of hypoglycemic reaction in Type 1 diabetics. Some glucose intolerant individuals and "subclinical" diabetics may demonstrate HbA1c levels in this area.`,
+    interpretation: `Interpretation as per American Diabetes Association (ADA) Guidelines\n\nReference Group | Non-Diabetic adults >= 18 years | At Risk (Prediabetes) | Diagnosing Diabetes | Therapeutic goals for glycemic control\nHbA1c in % | 4.0-5.6 | 5.7-6.4 | >= 6.5 | <7.0\n\nClinical significance:\nHemoglobin A1c (HbA1c) level reflects the mean glucose concentration over the previous period (approximately 8-12 weeks). The following ranges may be used for interpretation of results. However, factors such as duration of diabetes, adherence to therapy and the age of the patient should also be considered in assessing the degree of blood glucose control.\n\nHaemoglobin A1c (%) NSGP | mmol/mol/IFCC Unit | eAG (mg/dl) | Degree of Glucose Control Unit\n>8 | >63.9 | >183 | Action Suggested*\n7-8 | 53.0 - 63.9 | 154-183 | Fair Control\n<7 | <63.9 | <154 | Goal**\n6-7 | 42.1 - 63.9 | 126-154 | Near-normal glycemia\n<6 | <42.1 | <126 | Non-Diabetic level\n\n*High risk of developing long term complications such as Retinopathy, Nephropathy, Neuropathy etc.\n\n**Some danger of hypoglycemic reaction in Type 1 diabetics. Some glucose intolerant individuals and "subclinical" diabetics may demonstrate HbA1c levels in this area.`,
+    parameters: [
+      {
+        name: 'HbA1c',
+        referenceRange: '4.0 - 5.6',
+        unit: '%',
+        gender: 'Both',
+        valueOptions: [],
+        status: 'Active'
+      },
+      {
+        name: 'Estimated average glucose',
+        referenceRange: '< 126',
+        unit: 'mg/dL',
+        gender: 'Both',
+        valueOptions: [],
+        status: 'Active'
+      }
+    ]
+  },
+  {
+    category: 'LAB',
+    test: 'BT & CT',
+    title: 'BT & CT',
+    basePrice: 200,
+    taxPercentage: 0,
+    sampleType: 'Capillary Blood / Whole Blood',
+    turnaroundTime: '1 Hour',
+    description: 'Estimation of Bleeding Time (BT) and Clotting Time (CT) to assess primary and secondary hemostatic function.',
+    notes: `The bleeding time test assesses primary hemostasis (vascular and platelet components) and is dependent on adequate functioning of platelets and blood vessels.\n\nCauses of prolongation of bleeding time:\n1. Thrombocytopenia\n2. Disorders of platelet function\n3. Von Willebrand disease\n4. Disorders of blood vessels\n\nClotting time measures the time required for the blood to clot in a glass test tube kept at 37°C. Prolongation of clotting time only occurs in severe deficiency of a clotting factor and is normal in mild or moderate deficiency.\nNote: Recommended test is Prothrombin Time (PT) and Activated Partial Thromboplastin time (APTT)`,
+    interpretation: `The bleeding time test assesses primary hemostasis (vascular and platelet components) and is dependent on adequate functioning of platelets and blood vessels.\n\nCauses of prolongation of bleeding time:\n1. Thrombocytopenia\n2. Disorders of platelet function\n3. Von Willebrand disease\n4. Disorders of blood vessels\n\nClotting time measures the time required for the blood to clot in a glass test tube kept at 37°C. Prolongation of clotting time only occurs in severe deficiency of a clotting factor and is normal in mild or moderate deficiency.\nNote: Recommended test is Prothrombin Time (PT) and Activated Partial Thromboplastin time (APTT)`,
+    parameters: [
+      {
+        name: 'Bleeding Time',
+        referenceRange: '2 - 7',
+        unit: 'min',
+        gender: 'Both',
+        valueOptions: [],
+        status: 'Active'
+      },
+      {
+        name: 'Clotting Time',
+        referenceRange: '4 - 9',
+        unit: 'min',
+        gender: 'Both',
+        valueOptions: [],
+        status: 'Active'
+      }
+    ]
+  },
+  {
+    category: 'LAB',
+    test: 'Complete Blood Count (CBC)',
+    title: 'Complete Blood Count (CBC)',
+    basePrice: 350,
+    taxPercentage: 0,
+    sampleType: 'Whole Blood (EDTA)',
+    turnaroundTime: '2 Hours',
+    description: 'Complete Blood Count (CBC) including Automated Differential Leucocyte Count and Red Blood Cell Indices with auto-calculation.',
+    notes: `Clinical Notes:\nA complete blood count (CBC) is used to evaluate overall health and detect a wide range of disorders, including anemia, infection, and leukemia. There have been some reports of WBC and platelet counts being lower in venous blood than in capillary blood samples, although still within these reference ranges.\n\nPossible causes of abnormal parameters:\n\n | High | Low\nRBC, Hb, or HCT | Dehydration, polycythemia, shock, chronic hypoxia | Anemia, thalassemia, and other hemoglobinopathies\nMCV | Macrocytic anemia, liver disease | Microcytic anemia\nWBC | Acute stress, infection, malignancies | Sepsis, marrow hypoplasia\nPlatelets | Risk of thrombosis | Risk of bleeding`,
+    interpretation: `Clinical Notes:\nA complete blood count (CBC) is used to evaluate overall health and detect a wide range of disorders, including anemia, infection, and leukemia. There have been some reports of WBC and platelet counts being lower in venous blood than in capillary blood samples, although still within these reference ranges.\n\nPossible causes of abnormal parameters:\n\n | High | Low\nRBC, Hb, or HCT | Dehydration, polycythemia, shock, chronic hypoxia | Anemia, thalassemia, and other hemoglobinopathies\nMCV | Macrocytic anemia, liver disease | Microcytic anemia\nWBC | Acute stress, infection, malignancies | Sepsis, marrow hypoplasia\nPlatelets | Risk of thrombosis | Risk of bleeding`,
+    parameters: [
+      { name: 'Hemoglobin', referenceRange: '13 - 17', unit: 'g/dl', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Total Leukocyte Count', referenceRange: '4,800 - 10,800', unit: 'cumm', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Neutrophils', group: 'Differential Leucocyte Count', referenceRange: '40 - 80', unit: '%', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Lymphocyte', group: 'Differential Leucocyte Count', referenceRange: '20 - 40', unit: '%', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Eosinophils', group: 'Differential Leucocyte Count', referenceRange: '1 - 6', unit: '%', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Monocytes', group: 'Differential Leucocyte Count', referenceRange: '2 - 10', unit: '%', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Basophils', group: 'Differential Leucocyte Count', referenceRange: '< 2', unit: '%', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Platelet Count', referenceRange: '1.5 - 4.1', unit: 'lakhs/cumm', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Total RBC Count', referenceRange: '4.5 - 5.5', unit: 'million/cumm', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Hematocrit Value, Hct', referenceRange: '40 - 50', unit: '%', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Mean Corpuscular Volume, MCV', referenceRange: '83 - 101', unit: 'fL', gender: 'Both', formula: 'Formula: MCV = (Hct * 10) / RBC in millions', isCalculated: true, valueOptions: [], status: 'Active' },
+      { name: 'Mean Cell Haemoglobin, MCH', referenceRange: '27 - 32', unit: 'Pg', gender: 'Both', formula: 'Formula: MCH = (Hb * 10) / RBC in millions', isCalculated: true, valueOptions: [], status: 'Active' },
+      { name: 'Mean Cell Haemoglobin CON, MCHC', referenceRange: '31.5 - 34.5', unit: '%', gender: 'Both', formula: 'Formula: MCHC = (Hb * 100) / Hct', isCalculated: true, valueOptions: [], status: 'Active' },
+      { name: 'Mean Platelet Volume, MPV (Optional)', referenceRange: '6.5 - 12', unit: 'fL', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'R.D.W. - SD (Optional)', referenceRange: '39 - 46', unit: 'fL', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'R.D.W. - CV (Optional)', referenceRange: '11.6 - 14', unit: '%', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'P-LCR (Optional)', referenceRange: '19.7 - 42.4', unit: '%', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'P.D.W. (Optional)', referenceRange: '9.6 - 15.2', unit: 'fL', gender: 'Both', valueOptions: [], status: 'Active' }
+    ]
+  },
+  {
+    category: 'LAB',
+    test: 'CBC (with absolute counts)',
+    title: 'CBC (with absolute counts)',
+    basePrice: 400,
+    taxPercentage: 0,
+    sampleType: 'Whole Blood (EDTA)',
+    turnaroundTime: '2 Hours',
+    description: 'Complete Blood Count (CBC) with Absolute Leukocyte Counts and Red Blood Cell Indices with auto-calculation.',
+    notes: `Clinical Notes:\nA complete blood count (CBC) is used to evaluate overall health and detect a wide range of disorders, including anemia, infection, and leukemia. There have been some reports of WBC and platelet counts being lower in venous blood than in capillary blood samples, although still within these reference ranges.\n\nPossible causes of abnormal parameters:\n\n | High | Low\nRBC, Hb, or HCT | Dehydration, polycythemia, shock, chronic hypoxia | Anemia, thalassemia, and other hemoglobinopathies\nMCV | Macrocytic anemia, liver disease | Microcytic anemia\nWBC | Acute stress, infection, malignancies | Sepsis, marrow hypoplasia\nPlatelets | Risk of thrombosis | Risk of bleeding`,
+    interpretation: `Clinical Notes:\nA complete blood count (CBC) is used to evaluate overall health and detect a wide range of disorders, including anemia, infection, and leukemia. There have been some reports of WBC and platelet counts being lower in venous blood than in capillary blood samples, although still within these reference ranges.\n\nPossible causes of abnormal parameters:\n\n | High | Low\nRBC, Hb, or HCT | Dehydration, polycythemia, shock, chronic hypoxia | Anemia, thalassemia, and other hemoglobinopathies\nMCV | Macrocytic anemia, liver disease | Microcytic anemia\nWBC | Acute stress, infection, malignancies | Sepsis, marrow hypoplasia\nPlatelets | Risk of thrombosis | Risk of bleeding`,
+    parameters: [
+      { name: 'Hemoglobin', referenceRange: '13 - 17', unit: 'g/dl', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Total Leukocyte Count', referenceRange: '4,800 - 10,800', unit: 'cumm', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Neutrophils', group: 'Differential Leucocyte Count', referenceRange: '40 - 80', unit: '%', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Lymphocyte', group: 'Differential Leucocyte Count', referenceRange: '20 - 40', unit: '%', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Eosinophils', group: 'Differential Leucocyte Count', referenceRange: '1 - 6', unit: '%', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Monocytes', group: 'Differential Leucocyte Count', referenceRange: '2 - 10', unit: '%', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Basophils', group: 'Differential Leucocyte Count', referenceRange: '< 2', unit: '%', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Absolute Neutrophils Count', displayName: 'Neutrophils', group: 'Differential Leukocyte Count (Absolute count)', referenceRange: '2 - 7', unit: 'x10^3/µL', gender: 'Both', formula: 'Formula: (TLC * Neutrophil percent / 1000)', isCalculated: true, valueOptions: [], status: 'Active' },
+      { name: 'Absolute Lymphocyte Count', displayName: 'Lymphocytes', group: 'Differential Leukocyte Count (Absolute count)', referenceRange: '1 - 3', unit: 'x10^3/µL', gender: 'Both', formula: 'Formula: (TLC * Lymphocyte percent / 1000)', isCalculated: true, valueOptions: [], status: 'Active' },
+      { name: 'Absolute Eosinophils Count', displayName: 'Eosinophils', group: 'Differential Leukocyte Count (Absolute count)', referenceRange: '0.02 - 0.5', unit: 'x10^3/µL', gender: 'Both', formula: 'Formula: (TLC * Eosinophils percent / 1000)', isCalculated: true, valueOptions: [], status: 'Active' },
+      { name: 'Absolute Monocytes Count', displayName: 'Monocytes', group: 'Differential Leukocyte Count (Absolute count)', referenceRange: '0.1 - 1', unit: 'x10^3/µL', gender: 'Both', formula: 'Formula: (TLC * Monocytes percent / 1000)', isCalculated: true, valueOptions: [], status: 'Active' },
+      { name: 'Absolute Basophils Count', displayName: 'Basophils', group: 'Differential Leukocyte Count (Absolute count)', referenceRange: '0.02 - 0.1', unit: 'x10^3/µL', gender: 'Both', formula: 'Formula: (TLC * Basophils percent / 1000)', isCalculated: true, valueOptions: [], status: 'Active' },
+      { name: 'Neutrophil Lymphocyte Ratio', displayName: 'Neutrophil Lymphocyte Ratio', referenceRange: '', unit: '', gender: 'Both', formula: 'Formula: Neutrophil Lymphocyte Ratio (NLR) = Absolute Neutrophil count / absolute Lymphocyte count', isCalculated: true, valueOptions: [], status: 'Active' },
+      { name: 'Platelet Count', referenceRange: '1.5 - 4.1', unit: 'lakhs/cumm', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Total RBC Count', referenceRange: '4.5 - 5.5', unit: 'million/cumm', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Hematocrit Value, Hct', referenceRange: '40 - 50', unit: '%', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Mean Corpuscular Volume, MCV', referenceRange: '83 - 101', unit: 'fL', gender: 'Both', formula: 'Formula: MCV = (Hct * 10) / RBC in millions', isCalculated: true, valueOptions: [], status: 'Active' },
+      { name: 'Mean Cell Haemoglobin, MCH', referenceRange: '27 - 32', unit: 'Pg', gender: 'Both', formula: 'Formula: MCH = (Hb * 10) / RBC in millions', isCalculated: true, valueOptions: [], status: 'Active' },
+      { name: 'Mean Cell Haemoglobin CON, MCHC', referenceRange: '31.5 - 34.5', unit: '%', gender: 'Both', formula: 'Formula: MCHC = (Hb * 100) / Hct', isCalculated: true, valueOptions: [], status: 'Active' },
+      { name: 'Mean Platelet Volume, MPV (Optional)', referenceRange: '6.5 - 12', unit: 'fL', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'R.D.W. - CV (Optional)', referenceRange: '11.6 - 14', unit: '%', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'R.D.W. - SD (Optional)', referenceRange: '39 - 46', unit: 'fL', gender: 'Both', valueOptions: [], status: 'Active' }
+    ]
+  },
+  {
+    category: 'LAB',
+    test: 'CBC with ESR',
+    title: 'CBC with ESR',
+    basePrice: 400,
+    taxPercentage: 0,
+    sampleType: 'Whole Blood (EDTA)',
+    turnaroundTime: '2 Hours',
+    description: 'Complete Blood Count (CBC) with Erythrocyte Sedimentation Rate (ESR) and Red Blood Cell Indices with auto-calculation.',
+    notes: `Clinical Notes:\nA complete blood count (CBC) with ESR is used to evaluate overall health and detect disorders including anemia, infection, inflammation, and leukemia.\n\nPossible causes of abnormal parameters:\n\n | High | Low\nRBC, Hb, or HCT | Dehydration, polycythemia, shock, chronic hypoxia | Anemia, thalassemia, and other hemoglobinopathies\nMCV | Macrocytic anemia, liver disease | Microcytic anemia\nWBC | Acute stress, infection, malignancies | Sepsis, marrow hypoplasia\nPlatelets | Risk of thrombosis | Risk of bleeding\nESR | Infection, inflammatory disease, autoimmune disorders, malignancy | Polycythemia, sickle cell anemia, severe leukocytosis`,
+    interpretation: `Clinical Notes:\nA complete blood count (CBC) with ESR is used to evaluate overall health and detect disorders including anemia, infection, inflammation, and leukemia.\n\nPossible causes of abnormal parameters:\n\n | High | Low\nRBC, Hb, or HCT | Dehydration, polycythemia, shock, chronic hypoxia | Anemia, thalassemia, and other hemoglobinopathies\nMCV | Macrocytic anemia, liver disease | Microcytic anemia\nWBC | Acute stress, infection, malignancies | Sepsis, marrow hypoplasia\nPlatelets | Risk of thrombosis | Risk of bleeding\nESR | Infection, inflammatory disease, autoimmune disorders, malignancy | Polycythemia, sickle cell anemia, severe leukocytosis`,
+    parameters: [
+      { name: 'Hemoglobin', referenceRange: '13 - 17', unit: 'g/dl', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Total Leukocyte Count', referenceRange: '4,800 - 10,800', unit: 'cumm', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Neutrophils', group: 'Differential Leucocyte Count', referenceRange: '40 - 80', unit: '%', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Lymphocyte', group: 'Differential Leucocyte Count', referenceRange: '20 - 40', unit: '%', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Eosinophils', group: 'Differential Leucocyte Count', referenceRange: '1 - 6', unit: '%', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Monocytes', group: 'Differential Leucocyte Count', referenceRange: '2 - 10', unit: '%', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Basophils', group: 'Differential Leucocyte Count', referenceRange: '< 2', unit: '%', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Platelet Count', referenceRange: '1.5 - 4.1', unit: 'lakhs/cumm', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Total RBC Count', referenceRange: '4.5 - 5.5', unit: 'million/cumm', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Hematocrit Value, Hct', referenceRange: '40 - 50', unit: '%', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Mean Corpuscular Volume, MCV', referenceRange: '83 - 101', unit: 'fL', gender: 'Both', formula: 'Formula: MCV = (Hct * 10) / RBC in millions', isCalculated: true, valueOptions: [], status: 'Active' },
+      { name: 'Mean Cell Haemoglobin, MCH', referenceRange: '27 - 32', unit: 'Pg', gender: 'Both', formula: 'Formula: MCH = (Hb * 10) / RBC in millions', isCalculated: true, valueOptions: [], status: 'Active' },
+      { name: 'Mean Cell Haemoglobin CON, MCHC', referenceRange: '31.5 - 34.5', unit: '%', gender: 'Both', formula: 'Formula: MCHC = (Hb * 100) / Hct', isCalculated: true, valueOptions: [], status: 'Active' },
+      { name: 'Mean Platelet Volume, MPV (Optional)', referenceRange: '6.5 - 12', unit: 'fL', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'R.D.W. - SD (Optional)', referenceRange: '39 - 46', unit: 'fL', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'R.D.W. - CV (Optional)', referenceRange: '11.6 - 14', unit: '%', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'P-LCR (Optional)', referenceRange: '19.7 - 42.4', unit: '%', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'P.D.W. (Optional)', referenceRange: '9.6 - 15.2', unit: 'fL', gender: 'Both', valueOptions: [], status: 'Active' },
+      { name: 'Erythrocyte Sedimentation Rate (Wintrobe)', referenceRange: '0 - 9', unit: 'mm for 1st hour', gender: 'Both', valueOptions: [], status: 'Active' }
+    ]
+  },
+  {
+    category: 'LAB',
+    test: 'Widal Test (Slide Method)',
+    title: 'Widal Test (Slide Method)',
+    basePrice: 250,
+    taxPercentage: 0,
+    sampleType: 'Serum',
+    turnaroundTime: '2 Hours',
+    department: 'SEROLOGY & IMMUNOLOGY',
+    description: 'Widal slide agglutination test for qualitative and semi-quantitative detection of Salmonella antibodies (S. Typhi O, H and S. Paratyphi AH, BH).',
+    notes: `Note:
+1. Titres ≥1:80 of "O" antigen & ≥1:160 of "H" antigen for Salmonella typhi and titres ≥1:80 of "H" antigen for Salmonella paratyphi A & B are significant.
+2. Reactive results indicate ongoing or recent infection by Salmonella species and it will vary with stage of the disease with appearance in 1st week to increase in titres till end of 4th week post which it starts decreasing.
+3. False positive - Past enteric infection during unrelated fevers like Malaria, Influenzae etc. in the form of transient rise in H antibody in Widal test.
+4. False negative - Sample collected early in the course of disease (1st week) and immunosuppression.
+
+Uses of widal test
+1. To diagnose infection due to Salmonella species (Enteric fever).
+2. To monitor the progression of disease.
+3. To assess the response to therapy (decreasing titres) in patients being treated for Enteric fever.`,
+    interpretation: `Note:
+1. Titres ≥1:80 of "O" antigen & ≥1:160 of "H" antigen for Salmonella typhi and titres ≥1:80 of "H" antigen for Salmonella paratyphi A & B are significant.
+2. Reactive results indicate ongoing or recent infection by Salmonella species and it will vary with stage of the disease with appearance in 1st week to increase in titres till end of 4th week post which it starts decreasing.
+3. False positive - Past enteric infection during unrelated fevers like Malaria, Influenzae etc. in the form of transient rise in H antibody in Widal test.
+4. False negative - Sample collected early in the course of disease (1st week) and immunosuppression.
+
+Uses of widal test
+1. To diagnose infection due to Salmonella species (Enteric fever).
+2. To monitor the progression of disease.
+3. To assess the response to therapy (decreasing titres) in patients being treated for Enteric fever.`,
+    parameters: [
+      {
+        name: "Salmonella Typhi 'O'",
+        displayName: "Salmonella Typhi 'O'",
+        unit: '',
+        referenceRange: '',
+        fieldType: 'Text',
+        gender: 'Both',
+        valueOptions: [
+          { value: 'Non-Reactive', isAbnormal: false },
+          { value: '1:20', isAbnormal: false },
+          { value: '1:40', isAbnormal: false },
+          { value: '1:80', isAbnormal: true },
+          { value: '1:160', isAbnormal: true },
+          { value: '1:320', isAbnormal: true },
+          { value: 'Reactive', isAbnormal: true }
+        ],
+        status: 'Active'
+      },
+      {
+        name: "Salmonella Typhi 'H'",
+        displayName: "Salmonella Typhi 'H'",
+        unit: '',
+        referenceRange: '',
+        fieldType: 'Text',
+        gender: 'Both',
+        valueOptions: [
+          { value: 'Non-Reactive', isAbnormal: false },
+          { value: '1:20', isAbnormal: false },
+          { value: '1:40', isAbnormal: false },
+          { value: '1:80', isAbnormal: false },
+          { value: '1:160', isAbnormal: true },
+          { value: '1:320', isAbnormal: true },
+          { value: 'Reactive', isAbnormal: true }
+        ],
+        status: 'Active'
+      },
+      {
+        name: "Salmonella Typhi 'AH'",
+        displayName: "Salmonella Typhi 'AH'",
+        unit: '',
+        referenceRange: '',
+        fieldType: 'Text',
+        gender: 'Both',
+        valueOptions: [
+          { value: 'Non-Reactive', isAbnormal: false },
+          { value: '1:20', isAbnormal: false },
+          { value: '1:40', isAbnormal: false },
+          { value: '1:80', isAbnormal: true },
+          { value: '1:160', isAbnormal: true },
+          { value: '1:320', isAbnormal: true },
+          { value: 'Reactive', isAbnormal: true }
+        ],
+        status: 'Active'
+      },
+      {
+        name: "Salmonella Typhi 'BH'",
+        displayName: "Salmonella Typhi 'BH'",
+        unit: '',
+        referenceRange: '',
+        fieldType: 'Text',
+        gender: 'Both',
+        valueOptions: [
+          { value: 'Non-Reactive', isAbnormal: false },
+          { value: '1:20', isAbnormal: false },
+          { value: '1:40', isAbnormal: false },
+          { value: '1:80', isAbnormal: true },
+          { value: '1:160', isAbnormal: true },
+          { value: '1:320', isAbnormal: true },
+          { value: 'Reactive', isAbnormal: true }
+        ],
+        status: 'Active'
+      },
+      {
+        name: 'Result',
+        displayName: 'Result',
+        unit: '',
+        referenceRange: '',
+        fieldType: 'Text',
+        gender: 'Both',
+        valueOptions: [
+          { value: 'Negative', isAbnormal: false },
+          { value: 'Non-Reactive', isAbnormal: false },
+          { value: 'Positive', isAbnormal: true },
+          { value: 'Reactive', isAbnormal: true },
+          { value: 'Significant titre of TO and TH antibodies', isAbnormal: true },
+          { value: 'No significant titre of Salmonella antibodies detected', isAbnormal: false }
+        ],
+        status: 'Active'
+      }
+    ]
+  },
+  {
+    category: 'LAB',
+    test: 'Widal (Tube Method)',
+    title: 'Widal (Tube Method)',
+    basePrice: 350,
+    taxPercentage: 0,
+    sampleType: 'Serum',
+    turnaroundTime: '4 Hours',
+    department: 'SEROLOGY & IMMUNOLOGY',
+    description: 'Tube agglutination test for Salmonella group of organisms reveal following titers.',
+    notes: 'Tube agglutination test for Salmonella group of organisms reveal following titers.',
+    interpretation: `Antibody titre of 1:120 or higher suggests infection. A marked rise in the titre to one serotype to (above 1:120) or paired sample collected at 5 to 7 days interval is regarded as diagnostically significant. However persons who have received TAB vaccine may show high titre of antibodies to each of the salmonellae.`,
+    parameters: [
+      {
+        name: 'S TYPHI "O"',
+        displayName: 'S TYPHI "O"',
+        unit: '',
+        referenceRange: '',
+        fieldType: 'Text',
+        gender: 'Both',
+        valueOptions: [
+          { value: '1:120 (+)', isAbnormal: true },
+          { value: '1:240 (+)', isAbnormal: true },
+          { value: '1:480 (+)', isAbnormal: true },
+          { value: '1:60 (+)', isAbnormal: false },
+          { value: '1:30 (+)', isAbnormal: false },
+          { value: 'Non-Reactive', isAbnormal: false }
+        ],
+        status: 'Active'
+      },
+      {
+        name: 'S TYPHI "H"',
+        displayName: 'S TYPHI "H"',
+        unit: '',
+        referenceRange: '',
+        fieldType: 'Text',
+        gender: 'Both',
+        valueOptions: [
+          { value: '1:120 (+)', isAbnormal: false },
+          { value: '1:240 (+)', isAbnormal: true },
+          { value: '1:480 (+)', isAbnormal: true },
+          { value: '1:60 (+)', isAbnormal: false },
+          { value: '1:30 (+)', isAbnormal: false },
+          { value: 'Non-Reactive', isAbnormal: false }
+        ],
+        status: 'Active'
+      },
+      {
+        name: 'S PARATYPHI "AH"',
+        displayName: 'S PARATYPHI "AH"',
+        unit: '',
+        referenceRange: '',
+        fieldType: 'Text',
+        gender: 'Both',
+        valueOptions: [
+          { value: '1:120 (+)', isAbnormal: true },
+          { value: '1:240 (+)', isAbnormal: true },
+          { value: '1:480 (+)', isAbnormal: true },
+          { value: '1:60 (+)', isAbnormal: false },
+          { value: '1:30 (+)', isAbnormal: false },
+          { value: 'Non-Reactive', isAbnormal: false }
+        ],
+        status: 'Active'
+      },
+      {
+        name: 'S PARATYPHI "BH"',
+        displayName: 'S PARATYPHI "BH"',
+        unit: '',
+        referenceRange: '',
+        fieldType: 'Text',
+        gender: 'Both',
+        valueOptions: [
+          { value: '1:120 (+)', isAbnormal: true },
+          { value: '1:240 (+)', isAbnormal: true },
+          { value: '1:480 (+)', isAbnormal: true },
+          { value: '1:60 (+)', isAbnormal: false },
+          { value: '1:30 (+)', isAbnormal: false },
+          { value: 'Non-Reactive', isAbnormal: false }
+        ],
+        status: 'Active'
+      },
+      {
+        name: 'Result',
+        displayName: 'Comment',
+        unit: '',
+        referenceRange: '',
+        fieldType: 'Text',
+        gender: 'Both',
+        valueOptions: [
+          { value: 'WIDAL TEST POSITIVE', isAbnormal: true },
+          { value: 'WIDAL TEST NEGATIVE', isAbnormal: false },
+          { value: 'WIDAL TEST <POSITIVE/NEGATIVE>', isAbnormal: false }
+        ],
+        status: 'Active'
+      }
+    ]
   }
 ];
 

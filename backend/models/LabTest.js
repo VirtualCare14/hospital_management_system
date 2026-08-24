@@ -21,7 +21,12 @@ const labParameterSchema = new mongoose.Schema({
   valueOptions: [{
     value: { type: String, required: true },
     isAbnormal: { type: Boolean, default: false }
-  }]
+  }],
+  formula: { type: String, default: '' },
+  isCalculated: { type: Boolean, default: false },
+  group: { type: String, default: '' },
+  displayName: { type: String, default: '' },
+  fieldType: { type: String, default: 'Number' }
 }, { _id: true });
 
 const labTestSchema = new mongoose.Schema({

@@ -28,12 +28,86 @@ import {
   UserCheck,
   Trash2,
   Receipt,
-  Wallet
+  Wallet,
+  Save
 } from 'lucide-react';
 import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import api from '../../lib/api';
 import { useToast } from '../../context/ToastContext';
+
+const STANDARD_MORPHOLOGY_TEMPLATES = {
+  'RBC Morphology': [
+    'Normocytic normochromic red cells with normal morphology.',
+    'Microcytic hypochromic red blood cells with mild to moderate anisopoikilocytosis.',
+    'Macrocytic RBCs with occasional ovalocytes and target cells.',
+    'Dimorphic red cell picture with both normocytic and microcytic populations.'
+  ],
+  'WBC Morphology': [
+    'Total and differential counts are within normal limits. Normal mature morphology.',
+    'Neutrophilic leukocytosis with mild toxic granulation.',
+    'Lymphocytosis with reactive morphology.',
+    'Leukopenia with normal cell morphology. No immature or atypical cells seen.'
+  ],
+  'Platelet Morphology': [
+    'Adequate in number on smear examination. Normal morphology and clump formation.',
+    'Reduced on smear (Thrombocytopenia). Platelet morphology appears normal.',
+    'Abundant in number (Thrombocytosis) with normal granularity and clump formation.',
+    'Giant platelets seen occasionally.'
+  ]
+};
+
+const WIDAL_DEFAULT_ANTIGENS = [
+  'S TYPHI "O"',
+  'S TYPHI "H"',
+  'S PARATYPHI "AH"',
+  'S PARATYPHI "BH"'
+];
+
+const WIDAL_SLIDE_DILUTIONS = ['1/20', '1/40', '1/80', '1/160', '1/320'];
+const WIDAL_TUBE_DILUTIONS = ['1:30', '1:60', '1:120', '1:240', '1:480'];
+
+const WIDAL_SLIDE_GRID = {
+  'S TYPHI "O"': { '1/20': '+', '1/40': '+', '1/80': '+', '1/160': '-', '1/320': '-' },
+  'S TYPHI "H"': { '1/20': '+', '1/40': '+', '1/80': '+', '1/160': '-', '1/320': '-' },
+  'S PARATYPHI "AH"': { '1/20': '+', '1/40': '+', '1/80': '-', '1/160': '-', '1/320': '-' },
+  'S PARATYPHI "BH"': { '1/20': '+', '1/40': '+', '1/80': '-', '1/160': '-', '1/320': '-' }
+};
+
+const WIDAL_TUBE_GRID = {
+  'S TYPHI "O"': { '1:30': '+', '1:60': '+', '1:120': '+', '1:240': '-', '1:480': '-' },
+  'S TYPHI "H"': { '1:30': '+', '1:60': '+', '1:120': '+', '1:240': '-', '1:480': '-' },
+  'S PARATYPHI "AH"': { '1:30': '+', '1:60': '+', '1:120': '-', '1:240': '-', '1:480': '-' },
+  'S PARATYPHI "BH"': { '1:30': '+', '1:60': '+', '1:120': '-', '1:240': '-', '1:480': '-' }
+};
+
+const getWidalDilutions = (testName = '') => {
+  return String(testName).toLowerCase().includes('tube') ? WIDAL_TUBE_DILUTIONS : WIDAL_SLIDE_DILUTIONS;
+};
+
+const getWidalDefaultGrid = (testName = '') => {
+  return String(testName).toLowerCase().includes('tube') ? WIDAL_TUBE_GRID : WIDAL_SLIDE_GRID;
+};
+
+const getWidalNote = (testName = '') => {
+  const isTube = String(testName).toLowerCase().includes('tube');
+  const cutoff = isTube ? '1:120' : '1:80';
+  return `Antibody titre of ${cutoff} or higher suggests infection. A marked rise in the titre to one serotype to (above ${cutoff}) or paired sample collected at 5 to 7 days interval is regarded as diagnostically significant. However persons who have received TAB vaccine may show high titre of antibodies to each of the salmonellae.`;
+};
+
+const getWidalGridFromParams = (paramVals, testName = '') => {
+  const fallback = getWidalDefaultGrid(testName);
+  if (!paramVals) return fallback;
+  if (paramVals['widal_matrix_json']) {
+    try {
+      const parsed = typeof paramVals['widal_matrix_json'] === 'string' 
+        ? JSON.parse(paramVals['widal_matrix_json']) 
+        : paramVals['widal_matrix_json'];
+      if (parsed && typeof parsed === 'object') return parsed;
+    } catch (e) {}
+  }
+  return fallback;
+};
 
 function DashboardContent() {
   const { user } = useAuth();
@@ -44,6 +118,9 @@ function DashboardContent() {
   const isTodaysReportsView = searchParams.get('view') === 'todays-reports';
   const isSearchReportsView = searchParams.get('view') === 'search-reports';
   const isSignatoriesView = searchParams.get('view') === 'signatories';
+
+  // Morphology template picker state
+  const [activeMorphologyTemplatePicker, setActiveMorphologyTemplatePicker] = useState('');
 
   // Data States
   const [labRequests, setLabRequests] = useState([]);
@@ -123,6 +200,12 @@ function DashboardContent() {
   const [selectedReportForPrint, setSelectedReportForPrint] = useState(null);
   const [showReportSavedModal, setShowReportSavedModal] = useState(false);
   const [savedReportRequest, setSavedReportRequest] = useState(null);
+
+  // Field Edit Mode & Interpretation Printing States
+  const [isEditLayoutMode, setIsEditLayoutMode] = useState(false);
+  const [skippedParameters, setSkippedParameters] = useState({});
+  const [customFieldDisplayNames, setCustomFieldDisplayNames] = useState({});
+  const [printInterpretation, setPrintInterpretation] = useState(true);
 
   // Payment Collection Modal State
   const [selectedBillForPayment, setSelectedBillForPayment] = useState(null);
@@ -324,6 +407,64 @@ function DashboardContent() {
       showToast('Popup blocker prevented opening the print window. Please allow popups for this site.', 'error');
       return;
     }
+
+    const formatInterpretationToHtml = (text) => {
+      if (!text) return '';
+      const lines = text.split('\n');
+      let result = '';
+      let inTable = false;
+      let tableRows = [];
+
+      const flushTable = () => {
+        if (tableRows.length > 0) {
+          result += `<table style="width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 9.5px; border: 1px solid #475569;">`;
+          tableRows.forEach((row, rIdx) => {
+            const isHeader = rIdx === 0;
+            const cellTag = isHeader ? 'th' : 'td';
+            const bg = isHeader ? 'background-color: #f8fafc; font-weight: 800;' : '';
+            result += `<tr>`;
+            row.forEach((cell, cIdx) => {
+              const firstColBold = (!isHeader && cIdx === 0) ? 'font-weight: 800; color: #0f172a;' : '';
+              result += `<${cellTag} style="border: 1px solid #475569; padding: 4px 8px; text-align: left; ${bg} ${firstColBold}">${cell.trim()}</${cellTag}>`;
+            });
+            result += `</tr>`;
+          });
+          result += `</table>`;
+          tableRows = [];
+        }
+      };
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (line.includes('|')) {
+          const isSeparator = line.replace(/[\s|:-]/g, '').length === 0;
+          if (!isSeparator) {
+            const rawCells = line.split('|').map(c => c.trim());
+            const cleanedCells = rawCells.filter((c, idx) => {
+              if ((idx === 0 || idx === rawCells.length - 1) && c === '') return false;
+              return true;
+            });
+            tableRows.push(cleanedCells.length > 0 ? cleanedCells : rawCells);
+            inTable = true;
+          }
+        } else {
+          if (inTable) {
+            flushTable();
+            inTable = false;
+          }
+          if (line.trim()) {
+            const isBold = line.trim().endsWith(':') || line.trim().startsWith('Clinical Notes:') || line.trim().startsWith('Possible causes');
+            result += `<div style="margin-bottom: 3px; font-weight: ${isBold ? 'bold' : 'normal'}; color: ${isBold ? '#0f172a' : '#334155'}; font-size: 10px;">${line}</div>`;
+          } else {
+            result += `<div style="height: 4px;"></div>`;
+          }
+        }
+      }
+      if (inTable) {
+        flushTable();
+      }
+      return result;
+    };
     
     let letterheadHtml = '';
     if (hospitalSettings?.letterheadImageUrl) {
@@ -365,6 +506,57 @@ function DashboardContent() {
         </tr>
       `;
 
+      if (String(tName || '').toLowerCase().includes('widal')) {
+        const dilutions = getWidalDilutions(tName);
+        let widalGrid = getWidalDefaultGrid(tName);
+        const widalJsonParam = reportData.report?.parameters?.find(rp => rp.name === 'widal_matrix_json');
+        if (widalJsonParam && widalJsonParam.value) {
+          try {
+            widalGrid = typeof widalJsonParam.value === 'string' ? JSON.parse(widalJsonParam.value) : widalJsonParam.value;
+          } catch(e) {}
+        }
+        const widalCommentParam = reportData.report?.parameters?.find(rp => rp.name === 'widal_comment' || rp.name === 'Result' || rp.name === 'Comment');
+        let widalCommentVal = widalCommentParam?.value ? widalCommentParam.value.replace(/^WIDAL TEST\s*/i, '').trim() : 'POSITIVE';
+        if (!widalCommentVal) widalCommentVal = 'POSITIVE';
+        const noteText = getWidalNote(tName);
+
+        rowsHtml += `
+          <tr>
+            <td colspan="4" style="padding: 10px 16px; border-bottom: 1px solid #cbd5e1;">
+              <p style="font-size: 11px; font-weight: 600; color: #334155; margin: 0 0 8px 0;">Tube agglutination test for Salmonella group of organisms reveal following titers.</p>
+              <table style="width: 100%; border-collapse: collapse; text-align: center; font-size: 10.5px; border: 1px solid #475569; margin-bottom: 8px;">
+                <thead>
+                  <tr style="background-color: #f8fafc; font-weight: 800; border-bottom: 1px solid #475569;">
+                    <th style="padding: 6px 12px; text-align: left; border: 1px solid #475569; width: 30%;">Antigen</th>
+                    ${dilutions.map(dil => `<th style="padding: 6px 8px; border: 1px solid #475569; width: 14%;">${dil}</th>`).join('')}
+                  </tr>
+                </thead>
+                <tbody>
+                  ${WIDAL_DEFAULT_ANTIGENS.map(antigen => `
+                    <tr style="border-bottom: 1px solid #cbd5e1;">
+                      <td style="padding: 6px 12px; text-align: left; font-weight: 800; border: 1px solid #475569;">${antigen}</td>
+                      ${dilutions.map(dil => {
+                        const cellVal = widalGrid[antigen]?.[dil] || '-';
+                        const isPos = cellVal === '+' || String(cellVal).includes('+');
+                        return `<td style="padding: 6px 8px; border: 1px solid #475569; font-weight: ${isPos ? '900; color: #dc2626;' : '500; color: #334155;'}">${cellVal}</td>`;
+                      }).join('')}
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+              <div style="margin: 8px 0 6px 0; font-size: 11px; font-weight: 800; color: #0f172a;">
+                Comment: WIDAL TEST ${widalCommentVal}
+              </div>
+              <div style="font-size: 9.5px; line-height: 1.5; color: #475569; padding-top: 4px; border-top: 1px solid #e2e8f0;">
+                ${noteText}
+              </div>
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      let currentPrintGroup = '';
       testParams.filter((p) => {
         const patientGender = patient?.gender?.toLowerCase() || '';
         const pGender = (p.gender || 'both').toLowerCase();
@@ -372,6 +564,19 @@ function DashboardContent() {
         if (pGender === 'female' && patientGender !== 'female') return false;
         return true;
       }).forEach(p => {
+        if (p.group && p.group !== currentPrintGroup) {
+          currentPrintGroup = p.group;
+          rowsHtml += `
+            <tr style="background: #f8fafc; border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0;">
+              <td colspan="4" style="padding: 6px 16px; font-weight: 800; font-size: 10px; color: #0f172a; text-transform: uppercase;">
+                ${p.group}
+              </td>
+            </tr>
+          `;
+        } else if (!p.group) {
+          currentPrintGroup = '';
+        }
+
         const rVal = reportData.report?.parameters?.find(rp => rp.name === p.name);
         const valText = rVal ? rVal.value : '';
         const isBad = isOutOfRange(p.name, valText) || (rVal && rVal.isAbnormal);
@@ -385,7 +590,7 @@ function DashboardContent() {
 
         rowsHtml += `
           <tr style="border-bottom: 1px solid #f1f5f9;">
-            <td style="padding: 8px 16px; font-weight: bold; color: #334155; text-transform: uppercase; width: 40%;">${p.name}</td>
+            <td style="padding: 8px 16px ${p.group ? '; padding-left: 36px' : ''}; font-weight: bold; color: ${p.group ? '#475569' : '#334155'}; text-transform: uppercase; width: 40%;">${p.displayName || p.name}</td>
             <td style="padding: 8px 16px; font-weight: ${isBad ? '900' : 'bold'}; color: ${isBad ? '#ef4444' : '#0f172a'}; width: 20%;">${valText}${statusSuffix}</td>
             <td style="padding: 8px 16px; font-weight: 600; color: #64748b; width: 20%;">${p.unit || '—'}</td>
             <td style="padding: 8px 16px; font-weight: bold; color: #334155; width: 20%;">${p.referenceRange || 'As per standards'}</td>
@@ -413,9 +618,9 @@ function DashboardContent() {
               color: #1e293b;
             }
             .container {
-              padding: 24px;
-              padding-top: ${hospitalSettings?.letterheadHeaderHeight || 0}cm;
-              padding-bottom: ${hospitalSettings?.letterheadFooterHeight || 0}cm;
+              padding: 0 24px 24px 24px;
+              padding-top: ${hospitalSettings?.letterheadImageUrl ? `${hospitalSettings.letterheadHeaderHeight || 0}cm` : '5px'};
+              padding-bottom: ${hospitalSettings?.letterheadImageUrl ? `${hospitalSettings.letterheadFooterHeight || 0}cm` : '0px'};
               max-width: 800px;
               margin: 0 auto;
               box-sizing: border-box;
@@ -517,8 +722,16 @@ function DashboardContent() {
 
             <div style="padding: 8px 0; text-align: center; border-bottom: 1px solid #e2e8f0;">
               <h3 style="font-size: 12px; font-weight: 900; letter-spacing: 2px; color: #0f172a; margin: 0; text-transform: uppercase;">
-                ${reportData.category || 'BIOCHEMISTRY'}
+                ${(() => {
+                  const firstTest = testList.length > 0 ? findMatchedTest(testList[0]) : null;
+                  return firstTest?.department || reportData.category || 'BIOCHEMISTRY';
+                })()}
               </h3>
+              ${testList.length > 0 ? `
+                <div style="font-size: 11px; font-weight: 800; color: #334155; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px;">
+                  ${testList.join(', ')}
+                </div>
+              ` : ''}
             </div>
 
             <div class="table-box">
@@ -541,10 +754,10 @@ function DashboardContent() {
             ${reportData.report?.remarks ? `<div class="italic-box"><b>Remarks:</b> ${reportData.report.remarks}</div>` : ''}
             ${reportData.report?.advice ? `<div class="italic-box"><b>Advice:</b> ${reportData.report.advice}</div>` : ''}
             
-            ${!isInterpretationEmpty ? `
+            ${(!isInterpretationEmpty && printInterpretation && reportData.printInterpretation !== false) ? `
               <div style="margin-top: 16px; border-top: 1px solid #e2e8f0; padding-top: 12px;">
                 <h4 style="font-size: 11px; font-weight: 900; margin: 0 0 6px 0; text-transform: uppercase;">Interpretation</h4>
-                <div style="font-size: 10px; line-height: 1.5; color: #334155; white-space: pre-line;">${reportData.report.interpretation}</div>
+                <div style="font-size: 10px; line-height: 1.5; color: #334155;">${formatInterpretationToHtml(reportData.report.interpretation)}</div>
               </div>
             ` : ''}
 
@@ -631,13 +844,22 @@ function DashboardContent() {
     let statusTag = 'New';
     let statusCategory = 'new';
 
-    if (req.reportStatus === 'Completed' || req.status === 'completed') {
+    const reportStatusLower = String(req.reportStatus || '').toLowerCase();
+    const statusLower = String(req.status || '').toLowerCase();
+
+    if (reportStatusLower === 'completed' || reportStatusLower === 'final' || statusLower === 'completed') {
       statusTag = 'Final';
       statusCategory = 'final';
-    } else if (req.reportStatus === 'Signed off') {
+    } else if (reportStatusLower === 'signed off' || reportStatusLower === 'signed_off') {
       statusTag = 'Signed off';
       statusCategory = 'signed_off';
-    } else if (req.reportStatus === 'Draft' || req.reportStatus === 'In progress') {
+    } else if (
+      reportStatusLower === 'draft' ||
+      reportStatusLower === 'in progress' ||
+      reportStatusLower === 'in_progress' ||
+      statusLower === 'testing_in_progress' ||
+      (req.report && (Array.isArray(req.report.parameters) && req.report.parameters.length > 0))
+    ) {
       statusTag = 'In progress';
       statusCategory = 'in_progress';
     } else if (needsBill) {
@@ -849,6 +1071,10 @@ function DashboardContent() {
     setReportAdvice(reqItem.report?.advice || '');
     setReportInterpretation(reqItem.report?.interpretation || '');
     setShowReportEntryTab('');
+    setIsEditLayoutMode(false);
+    setSkippedParameters({});
+    setCustomFieldDisplayNames({});
+    setPrintInterpretation(reqItem.report?.printInterpretation !== false);
 
     const initialParams = {};
     const initialRemarks = {};
@@ -894,6 +1120,40 @@ function DashboardContent() {
       });
     }
 
+    // Initialize Widal matrix data if Widal test is present
+    const widalTestName = testNames.find(t => normalizeString(t).includes('widal'));
+    if (widalTestName) {
+      const isTube = normalizeString(widalTestName).includes('tube');
+      const defaultGrid = getWidalDefaultGrid(widalTestName);
+      if (!initialParams['widal_matrix_json']) {
+        initialParams['widal_matrix_json'] = JSON.stringify(defaultGrid);
+      }
+      if (!initialParams['widal_comment']) {
+        initialParams['widal_comment'] = initialParams['Result'] || initialParams['Comment'] || 'POSITIVE';
+      }
+      const typhiDefault = isTube ? '1:120 (+)' : '1:80 (+)';
+      const paratyphiDefault = isTube ? '1:60 (+)' : '1:40 (+)';
+      if (!initialParams['S TYPHI "O"'] && !initialParams["Salmonella Typhi 'O'"]) {
+        initialParams['S TYPHI "O"'] = typhiDefault;
+        initialParams["Salmonella Typhi 'O'"] = typhiDefault;
+      }
+      if (!initialParams['S TYPHI "H"'] && !initialParams["Salmonella Typhi 'H'"]) {
+        initialParams['S TYPHI "H"'] = typhiDefault;
+        initialParams["Salmonella Typhi 'H'"] = typhiDefault;
+      }
+      if (!initialParams['S PARATYPHI "AH"'] && !initialParams["Salmonella Typhi 'AH'"]) {
+        initialParams['S PARATYPHI "AH"'] = paratyphiDefault;
+        initialParams["Salmonella Typhi 'AH'"] = paratyphiDefault;
+      }
+      if (!initialParams['S PARATYPHI "BH"'] && !initialParams["Salmonella Typhi 'BH'"]) {
+        initialParams['S PARATYPHI "BH"'] = paratyphiDefault;
+        initialParams["Salmonella Typhi 'BH'"] = paratyphiDefault;
+      }
+      if (!initialParams['Result']) {
+        initialParams['Result'] = 'WIDAL TEST POSITIVE';
+      }
+    }
+
     const reqDate = reqItem.createdAt ? new Date(reqItem.createdAt) : new Date();
     const formatD = (d) => d.toISOString().split('T')[0];
     const formatT = (d) => d.toTimeString().slice(0, 5);
@@ -920,57 +1180,547 @@ function DashboardContent() {
     setShowProcessModal(false);
   };
 
+  const handleWidalCellUpdate = (antigen, dilution, val, testName = '') => {
+    const currentGrid = getWidalGridFromParams(parameterValues, testName);
+    const updatedGrid = {
+      ...currentGrid,
+      [antigen]: {
+        ...(currentGrid[antigen] || {}),
+        [dilution]: val
+      }
+    };
+    const jsonStr = JSON.stringify(updatedGrid);
+
+    // Calculate summary value for this antigen
+    const dilutionsList = getWidalDilutions(testName);
+    const posDils = dilutionsList.filter(d => (updatedGrid[antigen]?.[d] || '').includes('+'));
+    const highestTiter = posDils.length > 0 ? posDils[posDils.length - 1] : 'Non-Reactive';
+    const displayVal = highestTiter !== 'Non-Reactive' 
+      ? (highestTiter.startsWith('1:') ? `${highestTiter} (+)` : `1:${highestTiter.replace('1/', '')} (+)`) 
+      : 'Non-Reactive';
+
+    const shortAntigen = antigen.replace('S TYPHI ', '').replace('S PARATYPHI ', '').replace(/"/g, '');
+    const longName = `Salmonella Typhi '${shortAntigen}'`;
+
+    setParameterValues(prev => ({
+      ...prev,
+      widal_matrix_json: jsonStr,
+      [antigen]: displayVal,
+      [longName]: displayVal
+    }));
+  };
+
+  const handleWidalCommentUpdate = (commentVal) => {
+    const cleanVal = String(commentVal || '').replace(/^WIDAL TEST\s*/i, '').trim();
+    setParameterValues(prev => ({
+      ...prev,
+      widal_comment: cleanVal,
+      Result: `WIDAL TEST ${cleanVal}`
+    }));
+  };
+
+  const handleToggleBold = (paramName) => {
+    const el = document.getElementById(`morphology-editor-${paramName}`);
+    const currentVal = parameterValues[paramName] || '';
+    if (!el) {
+      handleParamValueChange(paramName, currentVal ? `${currentVal} <b></b>` : '<b></b>');
+      return;
+    }
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    if (start !== undefined && end !== undefined && start !== end) {
+      const selected = currentVal.substring(start, end);
+      const before = currentVal.substring(0, start);
+      const after = currentVal.substring(end);
+      const isBold = (selected.startsWith('<b>') && selected.endsWith('</b>')) || (selected.startsWith('**') && selected.endsWith('**'));
+      const unwrapped = isBold 
+        ? (selected.startsWith('<b>') ? selected.slice(3, -4) : selected.slice(2, -2))
+        : `<b>${selected}</b>`;
+      handleParamValueChange(paramName, before + unwrapped + after);
+    } else {
+      handleParamValueChange(paramName, currentVal ? `${currentVal} <b>bold text</b>` : '<b>bold text</b>');
+    }
+  };
+
+  const handleSaveMorphologyAsDefault = (paramName) => {
+    const val = parameterValues[paramName] || '';
+    if (!val.trim()) {
+      showToast('Please enter some text before saving as default template.', 'info');
+      return;
+    }
+    try {
+      localStorage.setItem(`lab_morphology_default_${paramName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`, val);
+      showToast(`Default template saved for ${paramName}!`, 'success');
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const getParamFormula = (paramName, testParamObj) => {
+    if (testParamObj?.formula) return testParamObj.formula;
+    const name = String(paramName || '').trim().toLowerCase();
+    const group = String(testParamObj?.group || '').trim().toLowerCase();
+    
+    // MCV
+    if (name.includes('mean corpuscular volume') || name === 'mcv') {
+      return 'Formula: MCV = (Hct * 10) / RBC in millions';
+    }
+    // MCH
+    if ((name.includes('mean cell haemoglobin') || name.includes('mean cell hemoglobin')) && !name.includes('mchc') && !name.includes('con')) {
+      return 'Formula: MCH = (Hb * 10) / RBC in millions';
+    }
+    // MCHC
+    if (name.includes('mchc') || name.includes('mean cell haemoglobin con') || name.includes('mean cell hemoglobin con')) {
+      return 'Formula: MCHC = (Hb * 100) / Hct';
+    }
+    // Absolute Counts
+    if (name.includes('absolute neutrophil') || (name.includes('neutrophil') && (name.includes('absolute') || group.includes('absolute')))) {
+      return 'Formula: (TLC * Neutrophil percent / 1000)';
+    }
+    if (name.includes('absolute lymphocyte') || (name.includes('lymphocyte') && (name.includes('absolute') || group.includes('absolute')))) {
+      return 'Formula: (TLC * Lymphocyte percent / 1000)';
+    }
+    if (name.includes('absolute eosinophil') || (name.includes('eosinophil') && (name.includes('absolute') || group.includes('absolute')))) {
+      return 'Formula: (TLC * Eosinophils percent / 1000)';
+    }
+    if (name.includes('absolute monocyte') || (name.includes('monocyte') && (name.includes('absolute') || group.includes('absolute')))) {
+      return 'Formula: (TLC * Monocytes percent / 1000)';
+    }
+    if (name.includes('absolute basophil') || (name.includes('basophil') && (name.includes('absolute') || group.includes('absolute')))) {
+      return 'Formula: (TLC * Basophils percent / 1000)';
+    }
+    // NLR
+    if (name.includes('neutrophil lymphocyte ratio') || name === 'nlr') {
+      return 'Formula: Neutrophil Lymphocyte Ratio (NLR) = Absolute Neutrophil count / absolute Lymphocyte count';
+    }
+    // INR
+    if (name.includes('inr') || name.includes('international normalized ratio')) {
+      return 'Formula: INR = (Patient PT / Control PT)^ISI';
+    }
+    // LFT Formulas
+    if (name.includes('bilirubin') && (name.includes('indirect') || name.includes('unconjugated'))) {
+      return 'Formula: Serum Bilirubin (Indirect) = Serum Bilirubin (Total) - Serum Bilirubin (Direct)';
+    }
+    if ((name.includes('sgot') && name.includes('sgpt')) || name.includes('ast/alt') || name.includes('sgot/sgpt')) {
+      return 'Formula: SGOT/SGPT = SGOT (AST) / SGPT (ALT)';
+    }
+    if (name === 'globulin' || (name.includes('globulin') && !name.includes('ratio') && !name.includes('a/g'))) {
+      return 'Formula: Globulin = Serum Protein - Serum Albumin';
+    }
+    if (name.includes('a/g ratio') || name.includes('albumin/globulin') || name === 'a/g') {
+      return 'Formula: A/G Ratio = Serum Albumin / Globulin';
+    }
+    // KFT Formulas
+    if (name === 'bun' || (name.includes('blood urea nitrogen') && !name.includes('ratio')) || (name.includes('bun') && !name.includes('ratio') && !name.includes('creatinine'))) {
+      return 'Formula: BUN = Serum Urea × 0.466';
+    }
+    if (name.includes('urea') && name.includes('creatinine') && name.includes('ratio') && !name.includes('bun')) {
+      return 'Formula: Urea/Creatinine Ratio = Serum Urea / Serum Creatinine';
+    }
+    if (name.includes('bun') && name.includes('creatinine') && name.includes('ratio')) {
+      return 'Formula: BUN/Creatinine Ratio = BUN / Serum Creatinine';
+    }
+    if (name === 'egfr' || (name.includes('egfr') && !name.includes('category'))) {
+      return 'Formula: eGFR = CKD-EPI(Serum Creatinine, Age, Sex)';
+    }
+    if (name.includes('egfr') && name.includes('category')) {
+      return 'Formula: eGFR Category = Category based on eGFR result';
+    }
+    // Iron Studies Formulas
+    if (name === 'uibc' || (name.includes('uibc') && !name.includes('tibc'))) {
+      return 'Formula: UIBC = TIBC − Iron';
+    }
+    if (name.includes('transferrin saturation') || name === 'tsat' || name.includes('transferrin sat')) {
+      return 'Formula: Transferrin Saturation (%) = (Iron ÷ TIBC) × 100';
+    }
+    // UPCR Formula
+    if (name.includes('urine protein') && name.includes('creatinine') && name.includes('ratio')) {
+      return 'Formula: Urine Protein Creatinine Ratio = Urine for Protein ÷ Urine for creatinine';
+    }
+    return '';
+  };
+
   const handleParamValueChange = (paramName, val) => {
-    setParameterValues({
+    const updated = {
       ...parameterValues,
       [paramName]: val
-    });
+    };
+
+    // Helper to find numeric value by parameter name keywords
+    const getNumVal = (keywords, excludeKeywords = []) => {
+      for (const [k, v] of Object.entries(updated)) {
+        const kLower = k.trim().toLowerCase();
+        if (excludeKeywords.some(ex => kLower.includes(ex.toLowerCase()))) continue;
+        if (keywords.some(kw => kLower === kw.toLowerCase() || kLower.includes(kw.toLowerCase()))) {
+          if (v !== undefined && v !== null && String(v).trim() !== '') {
+            const parsed = parseFloat(String(v).replace(/,/g, ''));
+            if (!isNaN(parsed) && parsed >= 0) return parsed;
+          }
+        }
+      }
+      return null;
+    };
+
+    // Helper to find parameter key
+    const findKey = (keywords, excludeKeywords = []) => {
+      return Object.keys(updated).find(k => {
+        const kl = k.trim().toLowerCase();
+        if (excludeKeywords.some(ex => kl.includes(ex.toLowerCase()))) return false;
+        return keywords.some(kw => kl === kw.toLowerCase() || kl.includes(kw.toLowerCase()));
+      });
+    };
+
+    const hbVal = getNumVal(['Hemoglobin', 'Hb', 'Haemoglobin']);
+    const rbcVal = getNumVal(['Total RBC Count', 'RBC Count', 'Total RBC', 'RBC']);
+    const hctVal = getNumVal(['Hematocrit Value, Hct', 'Hematocrit Value', 'Hematocrit', 'Hct', 'PCV']);
+    const tlcVal = getNumVal(['Total Leukocyte Count', 'TLC', 'Total WBC', 'WBC Count']);
+
+    const neutPercent = getNumVal(['Neutrophils', 'Neutrophil'], ['absolute', 'ratio', 'nlr']);
+    const lymphPercent = getNumVal(['Lymphocyte', 'Lymphocytes'], ['absolute', 'ratio', 'nlr']);
+    const eosPercent = getNumVal(['Eosinophils', 'Eosinophil'], ['absolute', 'ratio', 'nlr']);
+    const monoPercent = getNumVal(['Monocytes', 'Monocyte'], ['absolute', 'ratio', 'nlr']);
+    const basoPercent = getNumVal(['Basophils', 'Basophil'], ['absolute', 'ratio', 'nlr']);
+
+    // MCV = (Hct * 10) / RBC in millions
+    const mcvKey = findKey(['mean corpuscular volume', 'mcv']);
+    if (mcvKey && paramName !== mcvKey) {
+      if (hctVal !== null && rbcVal !== null && rbcVal > 0) {
+        const calculated = ((hctVal * 10) / rbcVal).toFixed(1);
+        updated[mcvKey] = String(calculated);
+      }
+    }
+
+    // MCH = (Hb * 10) / RBC in millions
+    const mchKey = findKey(['mean cell haemoglobin', 'mean cell hemoglobin', 'mch'], ['mchc', 'con']);
+    if (mchKey && paramName !== mchKey) {
+      if (hbVal !== null && rbcVal !== null && rbcVal > 0) {
+        const calculated = ((hbVal * 10) / rbcVal).toFixed(1);
+        updated[mchKey] = String(calculated);
+      }
+    }
+
+    // MCHC = (Hb * 100) / Hct
+    const mchcKey = findKey(['mchc', 'mean cell haemoglobin con', 'mean cell hemoglobin con']);
+    if (mchcKey && paramName !== mchcKey) {
+      if (hbVal !== null && hctVal !== null && hctVal > 0) {
+        const calculated = ((hbVal * 100) / hctVal).toFixed(1);
+        updated[mchcKey] = String(calculated);
+      }
+    }
+
+    // Absolute counts: (TLC * percent / 1000) or if TLC in full units (>= 100): TLC * percent / 100000
+    if (tlcVal !== null && tlcVal > 0) {
+      const tlcBase = tlcVal >= 100 ? tlcVal / 1000 : tlcVal; // Normalize TLC to thousands (e.g. 8000 -> 8.0)
+
+      // Absolute Neutrophils
+      const absNeutKey = findKey(['absolute neutrophils', 'absolute neutrophil']);
+      if (absNeutKey && paramName !== absNeutKey && neutPercent !== null) {
+        const calculated = ((tlcBase * neutPercent) / 100).toFixed(2);
+        updated[absNeutKey] = String(calculated);
+      }
+
+      // Absolute Lymphocytes
+      const absLymphKey = findKey(['absolute lymphocytes', 'absolute lymphocyte']);
+      if (absLymphKey && paramName !== absLymphKey && lymphPercent !== null) {
+        const calculated = ((tlcBase * lymphPercent) / 100).toFixed(2);
+        updated[absLymphKey] = String(calculated);
+      }
+
+      // Absolute Eosinophils
+      const absEosKey = findKey(['absolute eosinophils', 'absolute eosinophil']);
+      if (absEosKey && paramName !== absEosKey && eosPercent !== null) {
+        const calculated = ((tlcBase * eosPercent) / 100).toFixed(2);
+        updated[absEosKey] = String(calculated);
+      }
+
+      // Absolute Monocytes
+      const absMonoKey = findKey(['absolute monocytes', 'absolute monocyte']);
+      if (absMonoKey && paramName !== absMonoKey && monoPercent !== null) {
+        const calculated = ((tlcBase * monoPercent) / 100).toFixed(2);
+        updated[absMonoKey] = String(calculated);
+      }
+
+      // Absolute Basophils
+      const absBasoKey = findKey(['absolute basophils', 'absolute basophil']);
+      if (absBasoKey && paramName !== absBasoKey && basoPercent !== null) {
+        const calculated = ((tlcBase * basoPercent) / 100).toFixed(2);
+        updated[absBasoKey] = String(calculated);
+      }
+    }
+
+    // Neutrophil Lymphocyte Ratio (NLR)
+    const nlrKey = findKey(['neutrophil lymphocyte ratio', 'nlr']);
+    if (nlrKey && paramName !== nlrKey) {
+      let absN = getNumVal(['absolute neutrophil', 'absolute neutrophils']);
+      let absL = getNumVal(['absolute lymphocyte', 'absolute lymphocytes']);
+      if ((absN === null || absL === null || absL === 0) && neutPercent !== null && lymphPercent !== null && lymphPercent > 0) {
+        absN = neutPercent;
+        absL = lymphPercent;
+      }
+      if (absN !== null && absL !== null && absL > 0) {
+        const calculated = (absN / absL).toFixed(2);
+        updated[nlrKey] = String(calculated);
+      }
+    }
+
+    // INR Calculation: INR = (Patient PT / Control PT)^ISI
+    const inrKey = findKey(['inr value', 'inr']);
+    if (inrKey && paramName !== inrKey) {
+      const ptPatientVal = getNumVal(['pt patient', 'prothrombin time patient', 'patient pt', 'patient value']);
+      const ptControlVal = getNumVal(['pt control', 'prothrombin time control', 'control pt', 'control value']);
+      const isiVal = getNumVal(['isi', 'international sensitivity index']);
+
+      if (ptPatientVal !== null && ptControlVal !== null && ptControlVal > 0) {
+        const isi = (isiVal !== null && isiVal > 0) ? isiVal : 1.0;
+        const calculatedInr = Math.pow(ptPatientVal / ptControlVal, isi).toFixed(2);
+        updated[inrKey] = String(calculatedInr);
+      }
+    }
+
+    // Serum Bilirubin (Indirect) = Serum Bilirubin (Total) - Serum Bilirubin (Direct)
+    const indirectBilirubinKey = findKey(['serum bilirubin (indirect)', 'indirect bilirubin', 'bilirubin (indirect)']);
+    if (indirectBilirubinKey && paramName !== indirectBilirubinKey) {
+      const totalBilirubin = getNumVal(['serum bilirubin (total)', 'total bilirubin', 'bilirubin total']);
+      const directBilirubin = getNumVal(['serum bilirubin (direct)', 'direct bilirubin', 'bilirubin direct']);
+      if (totalBilirubin !== null && directBilirubin !== null) {
+        const calculated = Math.max(0, totalBilirubin - directBilirubin).toFixed(2);
+        updated[indirectBilirubinKey] = String(calculated);
+      }
+    }
+
+    // SGOT/SGPT = SGOT (AST) / SGPT (ALT)
+    const sgotSgptKey = findKey(['sgot/sgpt', 'ast/alt', 'sgot / sgpt']);
+    if (sgotSgptKey && paramName !== sgotSgptKey) {
+      const sgot = getNumVal(['sgot (ast)', 'sgot', 'ast']);
+      const sgpt = getNumVal(['sgpt (alt)', 'sgpt', 'alt']);
+      if (sgot !== null && sgpt !== null && sgpt > 0) {
+        const calculated = (sgot / sgpt).toFixed(2);
+        updated[sgotSgptKey] = String(calculated);
+      }
+    }
+
+    // Globulin = Serum Protein - Serum Albumin
+    const globulinKey = findKey(['globulin'], ['ratio', 'a/g']);
+    if (globulinKey && paramName !== globulinKey) {
+      const totalProtein = getNumVal(['serum protein', 'total protein', 'protein']);
+      const albumin = getNumVal(['serum albumin', 'albumin'], ['ratio', 'a/g']);
+      if (totalProtein !== null && albumin !== null) {
+        const calculated = Math.max(0, totalProtein - albumin).toFixed(2);
+        updated[globulinKey] = String(calculated);
+      }
+    }
+
+    // A/G Ratio = Serum Albumin / Globulin
+    const agRatioKey = findKey(['a/g ratio', 'albumin globulin ratio', 'a/g']);
+    if (agRatioKey && paramName !== agRatioKey) {
+      const albumin = getNumVal(['serum albumin', 'albumin'], ['ratio', 'a/g']);
+      let globulin = getNumVal(['globulin'], ['ratio', 'a/g']);
+      if (globulin === null) {
+        const totalProtein = getNumVal(['serum protein', 'total protein', 'protein']);
+        if (totalProtein !== null && albumin !== null) {
+          globulin = totalProtein - albumin;
+        }
+      }
+      if (albumin !== null && globulin !== null && globulin > 0) {
+        const calculated = (albumin / globulin).toFixed(2);
+        updated[agRatioKey] = String(calculated);
+      }
+    }
+
+    // 1. BUN = Serum Urea * 0.466
+    const bunKey = findKey(['bun', 'blood urea nitrogen'], ['ratio', 'creatinine']);
+    const ureaVal = getNumVal(['serum urea', 'urea'], ['ratio', 'bun', 'creatinine']);
+    const creatVal = getNumVal(['serum creatinine', 'creatinine'], ['ratio', 'urea', 'bun']);
+
+    let currentBunVal = getNumVal(['bun', 'blood urea nitrogen'], ['ratio', 'creatinine']);
+    if (bunKey && paramName !== bunKey) {
+      if (ureaVal !== null && ureaVal >= 0) {
+        const calculatedBun = (ureaVal * 0.466).toFixed(1);
+        updated[bunKey] = String(calculatedBun);
+        currentBunVal = parseFloat(calculatedBun);
+      }
+    }
+
+    // 2. Urea / Creatinine Ratio = Serum Urea / Serum Creatinine
+    const ureaCreatRatioKey = findKey(['urea / creatinine ratio', 'urea/creatinine ratio', 'urea creatinine ratio'], ['bun']);
+    if (ureaCreatRatioKey && paramName !== ureaCreatRatioKey) {
+      if (ureaVal !== null && creatVal !== null && creatVal > 0) {
+        const calculated = (ureaVal / creatVal).toFixed(2);
+        updated[ureaCreatRatioKey] = String(calculated);
+      }
+    }
+
+    // 3. BUN / Creatinine Ratio = BUN / Serum Creatinine
+    const bunCreatRatioKey = findKey(['bun / creatinine ratio', 'bun/creatinine ratio', 'bun creatinine ratio']);
+    if (bunCreatRatioKey && paramName !== bunCreatRatioKey) {
+      const activeBun = currentBunVal !== null ? currentBunVal : (ureaVal !== null ? ureaVal * 0.466 : null);
+      if (activeBun !== null && creatVal !== null && creatVal > 0) {
+        const calculated = (activeBun / creatVal).toFixed(2);
+        updated[bunCreatRatioKey] = String(calculated);
+      }
+    }
+
+    // 4. eGFR = CKD-EPI(Serum Creatinine, Age, Sex)
+    const egfrKey = findKey(['egfr'], ['category']);
+    const egfrCategoryKey = findKey(['egfr category', 'egfr stage']);
+    if (creatVal !== null && creatVal > 0) {
+      let patientAge = 45;
+      let patientGender = 'Male';
+
+      const rawAge = selectedRequest?.patientId?.age || selectedRequest?.patientAge;
+      if (rawAge) {
+        const parsedAge = parseInt(String(rawAge).replace(/\D/g, ''), 10);
+        if (!isNaN(parsedAge) && parsedAge > 0 && parsedAge < 125) {
+          patientAge = parsedAge;
+        }
+      }
+
+      const rawGender = selectedRequest?.patientId?.gender || selectedRequest?.patientGender;
+      if (rawGender && String(rawGender).toLowerCase().startsWith('f')) {
+        patientGender = 'Female';
+      }
+
+      const isFemale = patientGender === 'Female';
+      const kappa = isFemale ? 0.7 : 0.9;
+      const alpha = isFemale ? -0.241 : -0.302;
+      const genderMult = isFemale ? 1.012 : 1.0;
+      const scr = creatVal;
+
+      // CKD-EPI 2021 Formula
+      const egfrValue = 142 * Math.pow(Math.min(scr / kappa, 1), alpha) * Math.pow(Math.max(scr / kappa, 1), -1.200) * Math.pow(0.9938, patientAge) * genderMult;
+      const roundedEgfr = Math.round(egfrValue);
+
+      if (egfrKey && paramName !== egfrKey) {
+        updated[egfrKey] = String(roundedEgfr);
+      }
+
+      // 5. eGFR Category based on eGFR value
+      if (egfrCategoryKey && paramName !== egfrCategoryKey) {
+        let catStr = '';
+        if (roundedEgfr >= 90) {
+          catStr = 'G1 (Normal or high: >= 90)';
+        } else if (roundedEgfr >= 60) {
+          catStr = 'G2 (Mildly decreased: 60-89)';
+        } else if (roundedEgfr >= 45) {
+          catStr = 'G3a (Mildly to moderately decreased: 45-59)';
+        } else if (roundedEgfr >= 30) {
+          catStr = 'G3b (Moderately to severely decreased: 30-44)';
+        } else if (roundedEgfr >= 15) {
+          catStr = 'G4 (Severely decreased: 15-29)';
+        } else {
+          catStr = 'G5 (Kidney failure: < 15)';
+        }
+        updated[egfrCategoryKey] = catStr;
+      }
+    }
+
+    // Iron Studies Calculations
+    // 1. UIBC = TIBC - Iron
+    const uibcKey = findKey(['uibc'], ['tibc']);
+    const tibcVal = getNumVal(['total iron binding capacity', 'tibc'], ['uibc']);
+    const ironVal = getNumVal(['iron', 'serum iron'], ['tibc', 'uibc', 'binding', 'saturation']);
+
+    if (uibcKey && paramName !== uibcKey) {
+      if (tibcVal !== null && ironVal !== null) {
+        const calculated = Math.max(0, tibcVal - ironVal).toFixed(1);
+        updated[uibcKey] = String(calculated);
+      }
+    }
+
+    // 2. Transferrin Saturation (%) = (Iron / TIBC) * 100
+    const tsatKey = findKey(['transferrin saturation', 'transferrin sat', 'tsat']);
+    if (tsatKey && paramName !== tsatKey) {
+      if (ironVal !== null && tibcVal !== null && tibcVal > 0) {
+        const calculated = ((ironVal / tibcVal) * 100).toFixed(1);
+        updated[tsatKey] = String(calculated);
+      }
+    }
+
+    // UPCR: Urine Protein Creatinine Ratio = Urine for Protein / Urine for creatinine
+    const upcrKey = findKey(['urine protein creatinine ratio', 'urine protein/creatinine ratio', 'upcr']);
+    if (upcrKey && paramName !== upcrKey) {
+      const uProt = getNumVal(['urine for protein', 'urine protein'], ['ratio', 'creatinine']);
+      const uCreat = getNumVal(['urine for creatinine', 'urine creatinine'], ['ratio', 'protein']);
+      if (uProt !== null && uCreat !== null && uCreat > 0) {
+        const calculated = (uProt / uCreat).toFixed(2);
+        updated[upcrKey] = String(calculated);
+      }
+    }
+
+    setParameterValues(updated);
   };
 
   const handleSaveReport = async (statusToSet = 'completed') => {
     if (!selectedRequest) return;
     setSavingReport(true);
     try {
-      const formattedParameters = Object.entries(parameterValues).map(([pName, pVal]) => {
-        let refRange = '';
-        let unit = '';
-        let refRules = [];
-        let valOptions = [];
-        availableLabTests.forEach(t => {
-          if (Array.isArray(t.parameters)) {
-            const found = t.parameters.find(p => p.name === pName);
-            if (found) {
-              refRange = found.referenceRange || '';
-              unit = found.unit || '';
-              refRules = found.referenceRules || [];
-              valOptions = found.valueOptions || [];
-            }
+      const testNames = Array.isArray(selectedRequest.tests) 
+        ? selectedRequest.tests 
+        : (typeof selectedRequest.tests === 'string' 
+            ? selectedRequest.tests.split(',').map(t => t.trim()) 
+            : []);
+
+      const normalizeString = (str) => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const widalTestName = testNames.find(t => normalizeString(t).includes('widal'));
+
+      const activeParamValues = { ...parameterValues };
+
+      // Ensure Widal test parameters are populated if it's a Widal test
+      if (widalTestName) {
+        const isTube = normalizeString(widalTestName).includes('tube');
+        const grid = getWidalGridFromParams(activeParamValues, widalTestName);
+        const comment = activeParamValues['widal_comment'] || 'POSITIVE';
+        activeParamValues['widal_matrix_json'] = JSON.stringify(grid);
+        activeParamValues['widal_comment'] = comment;
+        activeParamValues['Result'] = `WIDAL TEST ${comment}`;
+        
+        const dilutionsList = getWidalDilutions(widalTestName);
+        WIDAL_DEFAULT_ANTIGENS.forEach(antigen => {
+          if (!activeParamValues[antigen] || activeParamValues[antigen] === '') {
+            const posDils = dilutionsList.filter(d => (grid[antigen]?.[d] || '').includes('+'));
+            const highestTiter = posDils.length > 0 ? posDils[posDils.length - 1] : 'Non-Reactive';
+            const displayVal = highestTiter !== 'Non-Reactive' 
+              ? (highestTiter.startsWith('1:') ? `${highestTiter} (+)` : `1:${highestTiter.replace('1/', '')} (+)`) 
+              : 'Non-Reactive';
+            activeParamValues[antigen] = displayVal;
           }
         });
-        return {
-          name: pName,
-          value: pVal,
-          referenceRange: refRange,
-          unit: unit,
-          remarks: parameterRemarks[pName] || '',
-          referenceRules: refRules,
-          valueOptions: valOptions
-        };
-      });
-
-      if (statusToSet === 'completed' || statusToSet === 'signed_off') {
-        for (const param of formattedParameters) {
-          if (param.value === undefined || param.value === null || param.value.toString().trim() === '') {
-            showToast(`Please enter result value for parameter: ${param.name}`, 'error');
-            setSavingReport(false);
-            return;
-          }
-        }
       }
 
-      const endpoint = (statusToSet === 'completed' || statusToSet === 'signed_off')
-        ? `/lab/requests/${selectedRequest._id}/report-generate`
-        : `/lab/requests/${selectedRequest._id}/report-draft`;
+      const formattedParameters = Object.entries(activeParamValues)
+        .filter(([pName, pVal]) => !skippedParameters[pName] && pVal !== undefined && pVal !== null)
+        .map(([pName, pVal]) => {
+          let refRange = '';
+          let unit = '';
+          let refRules = [];
+          let valOptions = [];
+          let paramGroup = '';
+          let paramDisplayName = '';
+          availableLabTests.forEach(t => {
+            if (Array.isArray(t.parameters)) {
+              const found = t.parameters.find(p => p.name === pName);
+              if (found) {
+                refRange = found.referenceRange || '';
+                unit = found.unit || '';
+                refRules = found.referenceRules || [];
+                valOptions = found.valueOptions || [];
+                paramGroup = found.group || '';
+                paramDisplayName = found.displayName || '';
+              }
+            }
+          });
+          return {
+            name: pName,
+            value: pVal !== '' ? pVal : '-',
+            referenceRange: refRange,
+            unit: unit,
+            remarks: parameterRemarks[pName] || '',
+            referenceRules: refRules,
+            valueOptions: valOptions,
+            group: paramGroup,
+            displayName: customFieldDisplayNames[pName] || paramDisplayName || pName
+          };
+        });
 
       const payload = {
         parameters: formattedParameters,
@@ -978,6 +1728,7 @@ function DashboardContent() {
         notes: reportNotes,
         advice: reportAdvice,
         interpretation: reportInterpretation,
+        printInterpretation: printInterpretation,
         collectedDate: datesInfo.collectedDate,
         collectedTime: datesInfo.collectedTime,
         receivedDate: datesInfo.receivedDate,
@@ -989,6 +1740,10 @@ function DashboardContent() {
       if (statusToSet === 'signed_off' || statusToSet === 'completed') {
         payload.reportStatus = 'Signed off';
       }
+
+      const endpoint = (statusToSet === 'completed' || statusToSet === 'signed_off')
+        ? `/lab/requests/${selectedRequest._id}/report-generate`
+        : `/lab/requests/${selectedRequest._id}/report-draft`;
 
       const response = await api.post(endpoint, payload);
 
@@ -1216,9 +1971,9 @@ function DashboardContent() {
                     border: none !important;
                     box-shadow: none !important;
                     margin: 0 !important;
-                    padding: 0 !important;
-                    padding-top: ${hospitalSettings?.letterheadHeaderHeight || 0}cm !important;
-                    padding-bottom: ${hospitalSettings?.letterheadFooterHeight || 0}cm !important;
+                    padding: 0 24px 24px 24px !important;
+                    padding-top: ${hospitalSettings?.letterheadImageUrl ? `${hospitalSettings.letterheadHeaderHeight || 0}cm` : '5px'} !important;
+                    padding-bottom: ${hospitalSettings?.letterheadImageUrl ? `${hospitalSettings.letterheadFooterHeight || 0}cm` : '0px'} !important;
                   }
                 }
               `}} />
@@ -1228,7 +1983,16 @@ function DashboardContent() {
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-extrabold text-slate-800">Lab Report Print Preview</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-slate-700 select-none bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg border border-slate-300 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={printInterpretation}
+                      onChange={(e) => setPrintInterpretation(e.target.checked)}
+                      className="rounded text-blue-600 cursor-pointer w-3.5 h-3.5"
+                    />
+                    <span>Print Interpretation</span>
+                  </label>
                   <button
                     type="button"
                     onClick={() => handlePrintReport(selectedReportForPrint)}
@@ -1251,7 +2015,7 @@ function DashboardContent() {
               </div>
 
               {/* Printable Area - styled exactly like the screenshot */}
-              <div className="print-area w-full max-w-4xl bg-white border border-slate-300 rounded-lg p-8 shadow-2xl space-y-6 text-xs text-slate-800 font-sans print:shadow-none print:border-0 print:p-0">
+              <div className="print-area w-full max-w-4xl bg-white border border-slate-300 rounded-lg p-8 pt-[5px] shadow-2xl space-y-6 text-xs text-slate-800 font-sans print:shadow-none print:border-0 print:p-0">
                 
                 {/* Simulated/Real Letterhead Header Image */}
                 {hospitalSettings?.letterheadImageUrl ? (
@@ -1331,10 +2095,18 @@ function DashboardContent() {
                 </div>
 
                 {/* Modality Title Header */}
-                <div className="py-2 flex items-center justify-center border-b border-slate-200">
+                <div className="py-2.5 flex flex-col items-center justify-center border-b border-slate-200">
                   <h3 className="text-xs font-black tracking-widest text-slate-900 border-b-2 border-slate-900 pb-0.5 uppercase">
-                    {selectedReportForPrint.category || 'BIOCHEMISTRY'}
+                    {(() => {
+                      const firstTest = testList.length > 0 ? findMatchedTest(testList[0]) : null;
+                      return firstTest?.department || selectedReportForPrint.category || 'BIOCHEMISTRY';
+                    })()}
                   </h3>
+                  {testList.length > 0 && (
+                    <div className="text-[11px] font-extrabold text-slate-800 mt-1 uppercase tracking-wide">
+                      {testList.join(', ')}
+                    </div>
+                  )}
                 </div>
 
                 {/* Parameter Values Table Box */}
@@ -1364,51 +2136,141 @@ function DashboardContent() {
                               </td>
                             </tr>
 
-                            {/* Parameter Values Rows */}
-                            {testParams.filter((p) => {
-                              const patientGender = selectedReportForPrint.patientId?.gender?.toLowerCase() || '';
-                              const pGender = (p.gender || 'both').toLowerCase();
-                              if (pGender === 'male' && patientGender !== 'male') return false;
-                              if (pGender === 'female' && patientGender !== 'female') return false;
-                              return true;
-                            }).map((p, pIdx) => {
-                              const rVal = selectedReportForPrint.report?.parameters?.find(rp => rp.name === p.name);
-                              const valText = rVal ? rVal.value : '';
-                              const isBad = isOutOfRange(p.name, valText) || (rVal && rVal.isAbnormal);
+                            {String(tName || '').toLowerCase().includes('widal') ? (
+                              <tr>
+                                <td colSpan="4" className="p-4 bg-white">
+                                  <p className="text-[11px] font-semibold text-slate-700 mb-2">
+                                    Tube agglutination test for Salmonella group of organisms reveal following titers.
+                                  </p>
+                                  {(() => {
+                                    const dilutions = getWidalDilutions(tName);
+                                    let widalGrid = getWidalDefaultGrid(tName);
+                                    const widalParam = selectedReportForPrint.report?.parameters?.find(rp => rp.name === 'widal_matrix_json');
+                                    if (widalParam && widalParam.value) {
+                                      try {
+                                        widalGrid = typeof widalParam.value === 'string' ? JSON.parse(widalParam.value) : widalParam.value;
+                                      } catch(e) {}
+                                    }
+                                    const commentParam = selectedReportForPrint.report?.parameters?.find(rp => rp.name === 'widal_comment' || rp.name === 'Result' || rp.name === 'Comment');
+                                    let commentVal = commentParam?.value ? commentParam.value.replace(/^WIDAL TEST\s*/i, '').trim() : 'POSITIVE';
+                                    if (!commentVal) commentVal = 'POSITIVE';
+                                    const noteText = getWidalNote(tName);
 
-                              return (
-                                <tr key={pIdx} className="hover:bg-slate-50/30 transition-colors">
-                                  {/* Param Name */}
-                                  <td className="py-2 px-4 pl-8 font-bold text-slate-700 uppercase">
-                                    {p.name}
-                                  </td>
-                                  
-                                  {/* Value - Bold text if abnormal or out of range */}
-                                  <td className={`py-2 px-4 text-slate-800 text-[12px] ${isBad ? 'font-black text-slate-900 text-sm' : 'font-bold'}`}>
-                                    {valText || '—'}
-                                    {(() => {
-                                      const status = getValueRangeStatus(p.name, valText);
-                                      if (!status) return null;
-                                      return (
-                                        <span className="ml-1 text-slate-500 font-extrabold text-[10px]">
-                                          ({status})
-                                        </span>
-                                      );
-                                    })()}
-                                  </td>
-                                  
-                                  {/* Unit */}
-                                  <td className="py-2 px-4 text-slate-500 font-semibold">
-                                    {p.unit || '—'}
-                                  </td>
+                                    return (
+                                      <div className="space-y-2.5">
+                                        <table className="w-full border-collapse border border-slate-400 text-center text-[10.5px]">
+                                          <thead>
+                                            <tr className="bg-slate-100/80 border-b border-slate-400 font-extrabold text-slate-800">
+                                              <th className="py-1.5 px-3 text-left border border-slate-300 w-1/4">Antigen</th>
+                                              {dilutions.map((dil) => (
+                                                <th key={dil} className="py-1.5 px-2 border border-slate-300 w-[15%]">{dil}</th>
+                                              ))}
+                                            </tr>
+                                          </thead>
+                                          <tbody className="divide-y divide-slate-300">
+                                            {WIDAL_DEFAULT_ANTIGENS.map((antigen) => (
+                                              <tr key={antigen}>
+                                                <td className="py-1.5 px-3 text-left font-bold text-slate-900 border border-slate-300">{antigen}</td>
+                                                {dilutions.map((dil) => {
+                                                  const cellVal = widalGrid[antigen]?.[dil] || '-';
+                                                  const isPos = cellVal === '+' || String(cellVal).includes('+');
+                                                  return (
+                                                    <td key={dil} className={`py-1.5 px-2 border border-slate-300 ${isPos ? 'font-black text-red-600' : 'font-medium text-slate-700'}`}>
+                                                      {cellVal}
+                                                    </td>
+                                                  );
+                                                })}
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                        <div className="text-[11px] font-black text-slate-900 pt-1">
+                                          Comment: WIDAL TEST {commentVal}
+                                        </div>
+                                        <div className="text-[10px] leading-relaxed text-slate-600 pt-1 border-t border-slate-200">
+                                          {noteText}
+                                        </div>
+                                      </div>
+                                    );
+                                  })()}
+                                </td>
+                              </tr>
+                            ) : (() => {
+                              const filteredPrintParams = testParams.filter((p) => {
+                                const patientGender = selectedReportForPrint.patientId?.gender?.toLowerCase() || '';
+                                const pGender = (p.gender || 'both').toLowerCase();
+                                if (pGender === 'male' && patientGender !== 'male') return false;
+                                if (pGender === 'female' && patientGender !== 'female') return false;
+                                return true;
+                              });
 
-                                  {/* Reference Range */}
-                                  <td className="py-2 px-4 text-slate-600 font-medium whitespace-pre-wrap">
-                                    {p.referenceRange || 'As per lab standards'}
-                                  </td>
-                                </tr>
-                              );
-                            })}
+                              return filteredPrintParams.map((p, pIdx) => {
+                                const rVal = selectedReportForPrint.report?.parameters?.find(rp => rp.name === p.name);
+                                const valText = rVal ? rVal.value : '';
+                                const isBad = isOutOfRange(p.name, valText) || (rVal && rVal.isAbnormal);
+                                const isGroupHeaderNeeded = p.group && (pIdx === 0 || filteredPrintParams[pIdx - 1]?.group !== p.group);
+                                const isMorphologyParam = p.fieldType === 'RichText' || p.fieldType === 'Multiline' || (p.group && p.group.toLowerCase().includes('morphology')) || p.name.toLowerCase().includes('morphology');
+
+                                return (
+                                  <React.Fragment key={pIdx}>
+                                    {isGroupHeaderNeeded && (
+                                      <tr className="bg-slate-100/70 border-t border-slate-200">
+                                        <td colSpan="4" className="py-1.5 px-4 pl-6 font-black text-slate-900 uppercase text-[11px] tracking-wide">
+                                          {p.group}
+                                        </td>
+                                      </tr>
+                                    )}
+                                    <tr className="hover:bg-slate-50/30 transition-colors">
+                                      {/* Param Name */}
+                                      <td className={`py-2 px-4 ${p.group ? 'pl-8' : 'pl-4'} font-bold text-slate-700 uppercase ${isMorphologyParam ? 'align-top' : ''}`}>
+                                        {p.displayName || p.name}
+                                      </td>
+                                      
+                                      {/* Value */}
+                                      {isMorphologyParam ? (
+                                        <td colSpan="3" className="py-2 px-4 text-slate-800 text-[11px] font-medium whitespace-pre-wrap">
+                                          {valText ? (
+                                            <span dangerouslySetInnerHTML={{
+                                              __html: String(valText)
+                                                .replace(/</g, '&lt;')
+                                                .replace(/>/g, '&gt;')
+                                                .replace(/&lt;b&gt;/gi, '<b>')
+                                                .replace(/&lt;\/b&gt;/gi, '</b>')
+                                                .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
+                                            }} />
+                                          ) : '—'}
+                                        </td>
+                                      ) : (
+                                        <>
+                                          <td className={`py-2 px-4 text-slate-800 text-[12px] ${isBad ? 'font-black text-slate-900 text-sm' : 'font-bold'}`}>
+                                            {valText || '—'}
+                                            {(() => {
+                                              const status = getValueRangeStatus(p.name, valText);
+                                              if (!status) return null;
+                                              return (
+                                                <span className="ml-1 text-slate-500 font-extrabold text-[10px]">
+                                                  ({status})
+                                                </span>
+                                              );
+                                            })()}
+                                          </td>
+                                          
+                                          {/* Unit */}
+                                          <td className="py-2 px-4 text-slate-500 font-semibold">
+                                            {p.unit || '—'}
+                                          </td>
+
+                                          {/* Reference Range */}
+                                          <td className="py-2 px-4 text-slate-600 font-medium whitespace-pre-wrap">
+                                            {p.referenceRange || 'As per lab standards'}
+                                          </td>
+                                        </>
+                                      )}
+                                    </tr>
+                                  </React.Fragment>
+                                );
+                              });
+                            })()}
                           </React.Fragment>
                         );
                       })}
@@ -1427,6 +2289,17 @@ function DashboardContent() {
                   <span className="col-span-2 font-black text-slate-900 italic">Advice</span>
                   <span className="col-span-10 font-bold text-slate-800 italic">: {selectedReportForPrint.report?.advice || '—'}</span>
                 </div>
+
+                {/* Interpretations Section with HTML / Table Formatting */}
+                {printInterpretation && selectedReportForPrint.report?.interpretation && (
+                  <div className="pt-4 border-t border-slate-200 text-[11px] leading-relaxed">
+                    <h4 className="font-extrabold text-slate-900 mb-1.5 uppercase tracking-wide">Interpretation:</h4>
+                    <div
+                      className="text-slate-800 space-y-2 [&_table]:w-full [&_table]:border-collapse [&_table]:my-2.5 [&_th]:border [&_th]:border-slate-300 [&_th]:p-1.5 [&_th]:bg-slate-50 [&_th]:font-bold [&_td]:border [&_td]:border-slate-300 [&_td]:p-1.5 leading-normal"
+                      dangerouslySetInnerHTML={{ __html: selectedReportForPrint.report.interpretation }}
+                    />
+                  </div>
+                )}
 
                 {/* End of Report text */}
                 <div className="flex items-center justify-center pt-8">
@@ -1908,9 +2781,71 @@ function DashboardContent() {
     }
   };
 
-  const handleOpenReportPrint = (reqItem) => {
-    setSelectedReportForPrint(reqItem);
+  const handleOpenReportPrint = (reqItem, liveData = null) => {
+    setSelectedReportForPrint(liveData || reqItem);
     setShowReportPrintModal(true);
+  };
+
+  const handlePreviewCurrentReport = () => {
+    if (!selectedRequest) return;
+    const testNames = Array.isArray(selectedRequest.tests) 
+      ? selectedRequest.tests 
+      : (typeof selectedRequest.tests === 'string' 
+          ? selectedRequest.tests.split(',').map(t => t.trim()) 
+          : []);
+
+    const normalizeString = (str) => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const widalTestName = testNames.find(t => normalizeString(t).includes('widal'));
+    const activeParamValues = { ...parameterValues };
+
+    if (widalTestName) {
+      const grid = getWidalGridFromParams(activeParamValues, widalTestName);
+      const comment = activeParamValues['widal_comment'] || 'POSITIVE';
+      activeParamValues['widal_matrix_json'] = JSON.stringify(grid);
+      activeParamValues['widal_comment'] = comment;
+      activeParamValues['Result'] = `WIDAL TEST ${comment}`;
+      
+      const dilutionsList = getWidalDilutions(widalTestName);
+      WIDAL_DEFAULT_ANTIGENS.forEach(antigen => {
+        if (!activeParamValues[antigen] || activeParamValues[antigen] === '') {
+          const posDils = dilutionsList.filter(d => (grid[antigen]?.[d] || '').includes('+'));
+          const highestTiter = posDils.length > 0 ? posDils[posDils.length - 1] : 'Non-Reactive';
+          const displayVal = highestTiter !== 'Non-Reactive' 
+            ? (highestTiter.startsWith('1:') ? `${highestTiter} (+)` : `1:${highestTiter.replace('1/', '')} (+)`) 
+            : 'Non-Reactive';
+          activeParamValues[antigen] = displayVal;
+        }
+      });
+    }
+
+    const previewParams = Object.entries(activeParamValues)
+      .filter(([pName]) => !skippedParameters[pName])
+      .map(([pName, pVal]) => ({
+        name: pName,
+        displayName: customFieldDisplayNames[pName] || pName,
+        value: pVal !== '' ? pVal : '-',
+        remarks: parameterRemarks[pName] || ''
+      }));
+
+    const liveData = {
+      ...selectedRequest,
+      report: {
+        ...(selectedRequest.report || {}),
+        parameters: previewParams,
+        interpretation: reportInterpretation,
+        remarks: reportRemarks,
+        notes: reportNotes,
+        advice: reportAdvice,
+        collectedDate: datesInfo.collectedDate,
+        collectedTime: datesInfo.collectedTime,
+        receivedDate: datesInfo.receivedDate,
+        receivedTime: datesInfo.receivedTime,
+        reportedDate: datesInfo.reportedDate,
+        reportedTime: datesInfo.reportedTime
+      },
+      printInterpretation: printInterpretation
+    };
+    handleOpenReportPrint(selectedRequest, liveData);
   };
 
   const renderReportEntryView = () => {
@@ -2000,24 +2935,41 @@ function DashboardContent() {
                       type="button"
                       onClick={() => {
                         setShowSignOffDropdown(false);
-                        handleOpenReportPrint(selectedRequest);
+                        handlePreviewCurrentReport();
                       }}
-                      className="w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 cursor-pointer border-t border-slate-100"
+                      className="w-full px-3.5 py-2 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer border-t border-slate-100"
                     >
-                      Browse print
+                      <span>🖨️</span>
+                      <span>Browse print</span>
                     </button>
                   </div>
                 )}
               </div>
-              <button type="button" className="h-8 px-3.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-lg text-xs font-bold cursor-pointer">
-                &lt; Edit &gt;
+
+              {/* Edit Layout Button */}
+              <button 
+                type="button" 
+                onClick={() => setIsEditLayoutMode(!isEditLayoutMode)}
+                className={`h-8 px-3.5 rounded-lg text-xs font-extrabold cursor-pointer transition-all flex items-center gap-1.5 shadow-2xs ${
+                  isEditLayoutMode
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white border border-blue-600 ring-2 ring-blue-200'
+                    : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 hover:border-slate-300'
+                }`}
+                title={isEditLayoutMode ? 'Click to finish editing fields' : 'Click to edit field names or skip fields from print'}
+              >
+                <span>{isEditLayoutMode ? '✓' : '✏️'}</span>
+                <span>{isEditLayoutMode ? 'Done Editing' : 'Edit'}</span>
               </button>
+
+              {/* View / Preview Button */}
               <button
                 type="button"
-                onClick={() => handleOpenReportPrint(selectedRequest)}
-                className="h-8 px-3.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-lg text-xs font-bold cursor-pointer"
+                onClick={handlePreviewCurrentReport}
+                className="h-8 px-3.5 bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200 hover:border-blue-300 rounded-lg text-xs font-extrabold cursor-pointer transition-all flex items-center gap-1.5 shadow-2xs"
+                title="Preview report with current live entered values"
               >
-                &lt; View &gt;
+                <span>👁️</span>
+                <span>View</span>
               </button>
             </div>
           </div>
@@ -2103,11 +3055,19 @@ function DashboardContent() {
             </div>
           </div>
 
-          {/* LARGE MODALITY TITLE */}
+          {/* LARGE MODALITY TITLE & TEST NAME */}
           <div className="text-center py-2.5 border-b border-slate-200 relative">
             <h2 className="text-lg font-black text-slate-800 uppercase tracking-widest">
-              {badgeCategory === 'LAB' ? 'BIOCHEMISTRY' : badgeCategory}
+              {(() => {
+                const firstTest = testNames.length > 0 ? findMatchedTest(testNames[0]) : null;
+                return firstTest?.department || (badgeCategory === 'LAB' ? 'BIOCHEMISTRY' : badgeCategory);
+              })()}
             </h2>
+            {testNames.length > 0 && (
+              <p className="text-sm font-extrabold text-slate-700 mt-0.5 uppercase tracking-wider">
+                {testNames.join(', ')}
+              </p>
+            )}
             <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
               <select className="h-8 px-2 border border-slate-200 bg-white rounded-lg text-xs font-semibold text-slate-600 cursor-pointer">
                 <option>Reorder</option>
@@ -2117,6 +3077,25 @@ function DashboardContent() {
               </button>
             </div>
           </div>
+
+          {/* Edit Mode Alert Banner */}
+          {isEditLayoutMode && (
+            <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 text-xs font-semibold flex items-center justify-between shadow-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🛠️</span>
+                <span>
+                  <b>Field Edit Mode Active:</b> You can rename field display names directly and check/uncheck fields to skip them from this report & print.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditLayoutMode(false)}
+                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold cursor-pointer"
+              >
+                Done Editing
+              </button>
+            </div>
+          )}
 
           {/* TABLE OF PARAMETERS RESULTS ENTRY */}
           <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
@@ -2147,7 +3126,6 @@ function DashboardContent() {
                 <tbody className="divide-y divide-slate-100">
                   {testNames.map((tName) => {
                     const matchedTest = findMatchedTest(tName);
-
                     const params = matchedTest?.parameters || [];
 
                     return (
@@ -2162,70 +3140,355 @@ function DashboardContent() {
                           </td>
                         </tr>
 
-                        {/* Indented Parameters Rows */}
-                        {params.filter((p) => {
-                          const patientGender = activeRequest?.patientId?.gender?.toLowerCase() || '';
-                          const pGender = (p.gender || 'both').toLowerCase();
-                          if (pGender === 'male' && patientGender !== 'male') return false;
-                          if (pGender === 'female' && patientGender !== 'female') return false;
-                          return true;
-                        }).map((p) => {
-                          const isBad = isOutOfRange(p.name, parameterValues[p.name]);
-                          const isRemarksExpanded = expandedRemarks[p.name];
-                          const hasRefRangeOrRules = (p.referenceRange && p.referenceRange.trim().length > 0 && !p.referenceRange.toLowerCase().includes('standards') && !p.referenceRange.toLowerCase().includes('as per')) || (Array.isArray(p.referenceRules) && p.referenceRules.length > 0);
+                        {String(tName || '').toLowerCase().includes('widal') ? (
+                          <tr>
+                            <td colSpan="4" className="p-4 bg-white">
+                              <div className="border border-slate-300 rounded-xl overflow-hidden shadow-xs">
+                                {/* Top Description Header */}
+                                <div className="p-3 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-700 flex flex-wrap items-center justify-between gap-2">
+                                  <span>Tube agglutination test for Salmonella group of organisms reveal following titers.</span>
+                                  <span className="text-[11px] text-slate-500 font-medium bg-white px-2 py-0.5 rounded border border-slate-200">
+                                    💡 Tip: Click + / - to set result or edit cell directly
+                                  </span>
+                                </div>
 
-                          return (
-                            <React.Fragment key={p.name}>
-                              <tr className="hover:bg-slate-50/30 transition-colors">
-                                {/* TEST NAME */}
-                                <td className="py-3 px-5 pl-10 font-bold text-slate-700">
-                                  <span>{p.name}</span>
-                                </td>
+                                {/* Table Matrix */}
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-xs border-collapse">
+                                    <thead>
+                                      <tr className="bg-slate-100/90 border-b border-slate-200 text-slate-800 font-black text-[11px]">
+                                        <th className="py-2.5 px-4 text-left w-1/4 border-r border-slate-200">Antigen</th>
+                                        {getWidalDilutions(tName).map((dil) => (
+                                          <th key={dil} className="py-2.5 px-3 text-center w-[15%] border-r border-slate-200 last:border-r-0">
+                                            {dil}
+                                          </th>
+                                        ))}
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-200 bg-white">
+                                      {WIDAL_DEFAULT_ANTIGENS.map((antigen) => {
+                                        const currentGrid = getWidalGridFromParams(parameterValues, tName);
+                                        return (
+                                          <tr key={antigen} className="hover:bg-slate-50/60 transition-colors">
+                                            <td className="py-2.5 px-4 font-extrabold text-slate-900 border-r border-slate-200">
+                                              {antigen}
+                                            </td>
+                                            {getWidalDilutions(tName).map((dil) => {
+                                              const cellVal = currentGrid[antigen]?.[dil] || '-';
+                                              const isPos = cellVal === '+' || String(cellVal).includes('+');
+                                              return (
+                                                <td key={dil} className="py-2 px-2 text-center border-r border-slate-200 last:border-r-0">
+                                                  <div className="flex items-center justify-center gap-1.5">
+                                                    <input
+                                                      type="text"
+                                                      value={cellVal}
+                                                      onChange={(e) => handleWidalCellUpdate(antigen, dil, e.target.value, tName)}
+                                                      className={`w-10 h-7 text-center font-extrabold rounded border text-xs outline-none focus:ring-1 focus:ring-blue-500 ${
+                                                        isPos ? 'bg-red-50 text-red-700 border-red-300' : 'bg-slate-50 text-slate-700 border-slate-200'
+                                                      }`}
+                                                    />
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => handleWidalCellUpdate(antigen, dil, isPos ? '-' : '+', tName)}
+                                                      className={`w-6 h-7 rounded font-black text-xs cursor-pointer border flex items-center justify-center transition-colors ${
+                                                        isPos ? 'bg-red-600 text-white border-red-700 hover:bg-red-700' : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200'
+                                                      }`}
+                                                      title="Toggle +/-"
+                                                    >
+                                                      {isPos ? '-' : '+'}
+                                                    </button>
+                                                  </div>
+                                                </td>
+                                              );
+                                            })}
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
 
-                                {/* VALUE INPUT */}
-                                <td className="py-3 px-5">
-                                  <div className="flex items-center gap-1.5 w-full">
-                                    {(() => {
-                                      const status = getValueRangeStatus(p.name, parameterValues[p.name]);
-                                      if (!status) return null;
-                                      return (
-                                        <span className={`px-2 py-0.5 rounded text-[10px] font-black tracking-wider animate-in zoom-in-50 duration-150 shrink-0 ${
-                                          status === 'H' 
-                                            ? 'bg-red-100 text-red-700 border border-red-200' 
-                                            : 'bg-blue-100 text-blue-700 border border-blue-200'
-                                        }`}>
-                                          {status}
+                                {/* Comment Bar */}
+                                <div className="p-3.5 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-bold text-slate-700">Comment:</span>
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleWidalCommentUpdate('POSITIVE')}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-extrabold cursor-pointer border transition-colors ${
+                                          (parameterValues['widal_comment'] || 'POSITIVE') === 'POSITIVE'
+                                            ? 'bg-red-600 text-white border-red-700 shadow-xs'
+                                            : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                                        }`}
+                                      >
+                                        POSITIVE
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleWidalCommentUpdate('NEGATIVE')}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-extrabold cursor-pointer border transition-colors ${
+                                          (parameterValues['widal_comment'] || 'POSITIVE') === 'NEGATIVE'
+                                            ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
+                                            : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                                        }`}
+                                      >
+                                        NEGATIVE
+                                      </button>
+                                    </div>
+                                    <input
+                                      type="text"
+                                      value={parameterValues['widal_comment'] || 'POSITIVE'}
+                                      onChange={(e) => handleWidalCommentUpdate(e.target.value)}
+                                      placeholder="e.g. POSITIVE or NEGATIVE"
+                                      className="h-8 px-2.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 outline-none focus:border-orange-500 w-44"
+                                    />
+                                  </div>
+                                  <div className="text-xs font-bold text-slate-600">
+                                    Final Comment: <span className="font-black text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200">WIDAL TEST {parameterValues['widal_comment'] || 'POSITIVE'}</span>
+                                  </div>
+                                </div>
+                                {/* Clinical Note */}
+                                <div className="p-3.5 bg-white border-t border-slate-200 text-[11px] leading-relaxed text-slate-600">
+                                  <p>
+                                    <span className="font-bold text-slate-800">Note: </span>
+                                    {getWidalNote(tName)}
+                                  </p>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        ) : (
+                          params.filter((p) => {
+                            const patientGender = selectedRequest?.patientId?.gender?.toLowerCase() || '';
+                            const pGender = (p.gender || 'both').toLowerCase();
+                            if (pGender === 'male' && patientGender !== 'male') return false;
+                            if (pGender === 'female' && patientGender !== 'female') return false;
+                            return true;
+                          }).map((p, pIdx, filteredArr) => {
+                            const isBad = isOutOfRange(p.name, parameterValues[p.name]);
+                            const isRemarksExpanded = expandedRemarks[p.name];
+                            const hasRefRangeOrRules = (p.referenceRange && p.referenceRange.trim().length > 0 && !p.referenceRange.toLowerCase().includes('standards') && !p.referenceRange.toLowerCase().includes('as per')) || (Array.isArray(p.referenceRules) && p.referenceRules.length > 0);
+                            const formulaInfo = getParamFormula(p.name, p);
+                            const isGroupHeaderNeeded = p.group && (pIdx === 0 || filteredArr[pIdx - 1]?.group !== p.group);
+                            const isMorphologyParam = p.fieldType === 'RichText' || p.fieldType === 'Multiline' || (p.group && p.group.toLowerCase().includes('morphology')) || p.name.toLowerCase().includes('morphology');
+
+                            return (
+                              <React.Fragment key={p.name}>
+                                {isGroupHeaderNeeded && (
+                                  <tr className="bg-slate-50/70 border-t border-slate-100">
+                                    <td colSpan="4" className="py-2 px-5 pl-8 font-bold text-slate-800 text-xs">
+                                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                                        <input type="checkbox" defaultChecked className="rounded text-orange-500 cursor-pointer" />
+                                        <span className="text-slate-900 font-extrabold">{p.group}</span>
+                                      </label>
+                                    </td>
+                                  </tr>
+                                )}
+                                <tr className={`hover:bg-slate-50/30 transition-colors ${skippedParameters[p.name] ? 'opacity-50 bg-slate-50/50' : ''}`}>
+                                  {/* TEST NAME */}
+                                  <td className={`py-3 px-5 font-bold text-slate-700 ${p.group ? 'pl-16 text-slate-600' : 'pl-10'} ${isMorphologyParam ? 'align-top pt-4' : ''}`}>
+                                    {isEditLayoutMode ? (
+                                      <div className="flex flex-col gap-1.5 max-w-sm">
+                                        <div className="flex items-center gap-2">
+                                          <input
+                                            type="text"
+                                            value={customFieldDisplayNames[p.name] !== undefined ? customFieldDisplayNames[p.name] : (p.displayName || p.name)}
+                                            onChange={(e) => setCustomFieldDisplayNames(prev => ({ ...prev, [p.name]: e.target.value }))}
+                                            className="h-8 px-2.5 bg-blue-50/60 border border-blue-300 rounded-lg text-xs font-bold text-slate-900 outline-none focus:bg-white focus:border-blue-500 w-full"
+                                            placeholder="Field Display Name..."
+                                            title="Edit field name for this report"
+                                          />
+                                        </div>
+                                        <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-bold select-none text-slate-600">
+                                          <input
+                                            type="checkbox"
+                                            checked={!skippedParameters[p.name]}
+                                            onChange={(e) => setSkippedParameters(prev => ({ ...prev, [p.name]: !e.target.checked }))}
+                                            className="rounded text-blue-600 cursor-pointer"
+                                          />
+                                          <span className={skippedParameters[p.name] ? 'text-red-500 font-extrabold' : 'text-emerald-700 font-bold'}>
+                                            {skippedParameters[p.name] ? '✕ Skipped (Won’t fill or print)' : '✓ Included in Report & Print'}
+                                          </span>
+                                        </label>
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center gap-2">
+                                        <span className={skippedParameters[p.name] ? 'line-through text-slate-400' : ''}>
+                                          {customFieldDisplayNames[p.name] || p.displayName || p.name}
                                         </span>
-                                      );
-                                    })()}
-                                    <div className="relative flex-1">
-                                      <div className="relative">
-                                        <input
-                                          type="text"
-                                          value={parameterValues[p.name] || ''}
-                                          onChange={(e) => handleParamValueChange(p.name, e.target.value)}
+                                        {skippedParameters[p.name] && (
+                                          <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-slate-100 text-slate-500 border border-slate-200">
+                                            Skipped
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </td>
+
+                                  {/* VALUE INPUT */}
+                                  <td className="py-3 px-5">
+                                    {isMorphologyParam ? (
+                                      <div className="flex items-start gap-2 w-full">
+                                        <div className="flex-1 border border-slate-300 rounded-lg overflow-hidden bg-white shadow-2xs focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
+                                        {/* Editor Toolbar with Bold Button */}
+                                        <div className="bg-slate-50 border-b border-slate-200 px-3 py-1.5 flex items-center justify-between">
+                                          <div className="flex items-center gap-1">
+                                            <button
+                                              type="button"
+                                              onClick={() => handleToggleBold(p.name)}
+                                              className="w-6 h-6 rounded flex items-center justify-center font-black text-xs text-slate-900 hover:bg-slate-200 border border-slate-300 bg-white cursor-pointer shadow-2xs"
+                                              title="Bold text"
+                                            >
+                                              B
+                                            </button>
+                                          </div>
+                                        </div>
+
+                                        {/* Multiline observation textarea */}
+                                        <div className="p-2.5 bg-white">
+                                          <textarea
+                                            id={`morphology-editor-${p.name}`}
+                                            rows={3}
+                                            value={parameterValues[p.name] || ''}
+                                            onChange={(e) => handleParamValueChange(p.name, e.target.value)}
+                                            placeholder="Enter morphology observations..."
+                                            className="w-full text-xs font-medium text-slate-800 outline-none resize-y border-none bg-transparent min-h-[60px]"
+                                          />
+                                        </div>
+
+                                        {/* Editor Bottom Actions */}
+                                        <div className="bg-slate-50/70 border-t border-slate-200/80 px-3 py-1.5 flex items-center justify-between text-[11px]">
+                                          <div className="flex items-center gap-4">
+                                            <div className="relative">
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  if (activeMorphologyTemplatePicker === p.name) {
+                                                    setActiveMorphologyTemplatePicker('');
+                                                  } else {
+                                                    setActiveMorphologyTemplatePicker(p.name);
+                                                  }
+                                                }}
+                                                className="text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 cursor-pointer select-none"
+                                              >
+                                                <span className="font-black text-xs">⊕</span>
+                                                <span>Add template</span>
+                                              </button>
+
+                                              {/* Template Dropdown Selector */}
+                                              {activeMorphologyTemplatePicker === p.name && (
+                                                <div className="absolute left-0 bottom-full mb-1 w-80 bg-white border border-slate-200 rounded-xl shadow-xl p-2.5 z-50 animate-in fade-in zoom-in-95 text-xs">
+                                                  <div className="flex items-center justify-between pb-1.5 border-b border-slate-100 mb-1.5">
+                                                    <span className="font-bold text-slate-800">Select Template</span>
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => setActiveMorphologyTemplatePicker('')}
+                                                      className="text-slate-400 hover:text-slate-600 font-bold text-xs"
+                                                    >
+                                                      ✕
+                                                    </button>
+                                                  </div>
+                                                  <div className="space-y-1 max-h-48 overflow-y-auto">
+                                                    {(STANDARD_MORPHOLOGY_TEMPLATES[p.displayName || p.name] || STANDARD_MORPHOLOGY_TEMPLATES['RBC Morphology']).map((tpl, tIdx) => (
+                                                      <button
+                                                        key={tIdx}
+                                                        type="button"
+                                                        onClick={() => {
+                                                          handleParamValueChange(p.name, tpl);
+                                                          setActiveMorphologyTemplatePicker('');
+                                                        }}
+                                                        className="w-full text-left p-2 rounded-lg hover:bg-blue-50 text-slate-700 hover:text-blue-900 transition-colors cursor-pointer text-[11px] leading-snug border border-transparent hover:border-blue-100"
+                                                      >
+                                                        {tpl}
+                                                      </button>
+                                                    ))}
+                                                  </div>
+                                                </div>
+                                              )}
+                                            </div>
+
+                                            <button
+                                              type="button"
+                                              onClick={() => handleSaveMorphologyAsDefault(p.name)}
+                                              className="text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 cursor-pointer select-none"
+                                            >
+                                              <Save className="w-3 h-3" />
+                                              <span>Save as default</span>
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* Plus Menu */}
+                                      <div className="relative pt-1">
+                                        <button
+                                          type="button"
                                           onClick={() => {
-                                            if (hasRefRangeOrRules) return;
-                                            if (activeValueOptionsDropdown === p.name) {
-                                              setActiveValueOptionsDropdown('');
+                                            if (activePlusMenu === p.name) {
+                                              setActivePlusMenu('');
                                             } else {
-                                              setActiveValueOptionsDropdown(p.name);
-                                              setNewValueOptionText('');
-                                              setNewValueOptionAbnormal(false);
-                                              setEditingValueOptionIdx(null);
+                                              setActivePlusMenu(p.name);
+                                              setActiveValueOptionsDropdown('');
                                             }
                                           }}
-                                          placeholder="Value..."
-                                          className={`w-full px-3.5 py-1.5 rounded-lg text-xs font-bold focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white border cursor-pointer ${
-                                            isBad 
-                                              ? 'border-red-500 bg-red-50 text-red-600 font-black focus:ring-red-500' 
-                                              : 'border-slate-200 bg-slate-50 text-slate-800'
-                                          }`}
-                                        />
-                                        {!hasRefRangeOrRules && (
-                                          <button
-                                            type="button"
+                                          className="w-6 h-6 rounded-full border border-blue-200 bg-blue-50 flex items-center justify-center text-blue-600 hover:bg-blue-100 font-extrabold cursor-pointer shrink-0"
+                                          title="Add remark"
+                                        >
+                                          +
+                                        </button>
+
+                                        {activePlusMenu === p.name && (
+                                          <div className="absolute right-0 mt-1.5 w-44 bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 z-40 text-xs font-semibold text-slate-700 space-y-0.5 animate-in fade-in slide-in-from-top-1">
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setExpandedRemarks({ ...expandedRemarks, [p.name]: true });
+                                                setActivePlusMenu('');
+                                              }}
+                                              className="w-full px-2.5 py-2 text-left hover:bg-slate-50 rounded-lg flex items-center gap-2 cursor-pointer text-slate-800"
+                                            >
+                                              <span>💬</span>
+                                              <span>Add remark</span>
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-1.5 w-full">
+                                      {(() => {
+                                        const status = getValueRangeStatus(p.name, parameterValues[p.name]);
+                                        if (!status) return null;
+                                        return (
+                                          <span className={`px-2 py-0.5 rounded text-[10px] font-black tracking-wider animate-in zoom-in-50 duration-150 shrink-0 ${
+                                            status === 'H' 
+                                              ? 'bg-red-100 text-red-700 border border-red-200' 
+                                              : 'bg-blue-100 text-blue-700 border border-blue-200'
+                                          }`}>
+                                            {status}
+                                          </span>
+                                        );
+                                      })()}
+                                      {formulaInfo && (
+                                        <div className="relative group shrink-0">
+                                          <span className="w-5 h-5 flex items-center justify-center rounded border border-blue-400 bg-blue-50 text-blue-700 font-serif font-black text-xs cursor-help select-none shadow-2xs">
+                                            ƒ
+                                          </span>
+                                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 whitespace-nowrap bg-slate-800 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg shadow-xl animate-in fade-in zoom-in-95 pointer-events-none">
+                                            {formulaInfo}
+                                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
+                                          </div>
+                                        </div>
+                                      )}
+                                      <div className="relative flex-1">
+                                        <div className="relative">
+                                          <input
+                                            type="text"
+                                            value={parameterValues[p.name] || ''}
+                                            onChange={(e) => handleParamValueChange(p.name, e.target.value)}
                                             onClick={() => {
+                                              if (hasRefRangeOrRules) return;
                                               if (activeValueOptionsDropdown === p.name) {
                                                 setActiveValueOptionsDropdown('');
                                               } else {
@@ -2235,189 +3498,216 @@ function DashboardContent() {
                                                 setEditingValueOptionIdx(null);
                                               }
                                             }}
-                                            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-[10px] cursor-pointer"
-                                          >
-                                            ▼
-                                          </button>
-                                        )}
-                                      </div>
-
-                                      {/* VALUE CHOICE CONFIG DROPDOWN CARD OVERLAY */}
-                                      {!hasRefRangeOrRules && activeValueOptionsDropdown === p.name && (
-                                        <div className="absolute left-0 mt-1.5 w-64 bg-white border border-slate-200 rounded-xl shadow-lg p-3.5 z-40 text-xs font-semibold text-slate-700 space-y-3">
-                                          
-                                          {/* Predefined Choices List */}
-                                          <div className="max-h-32 overflow-y-auto divide-y divide-slate-100">
-                                            {(p.valueOptions || []).length === 0 ? (
-                                              <div className="text-[10px] text-slate-400 py-1 font-medium">No options configured. Add one below.</div>
-                                            ) : (
-                                              (p.valueOptions || []).map((opt, oIdx) => (
-                                                <div key={oIdx} className="flex items-center justify-between py-1.5 hover:bg-slate-50 rounded px-1 transition-colors">
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                      handleParamValueChange(p.name, opt.value);
-                                                      setActiveValueOptionsDropdown('');
-                                                    }}
-                                                    className="flex-1 text-left font-bold text-slate-800 flex items-center gap-1.5 cursor-pointer"
-                                                  >
-                                                    <span>{opt.value}</span>
-                                                    {opt.isAbnormal && (
-                                                      <span className="px-1.5 py-0.5 rounded bg-red-50 border border-red-200 text-red-600 font-extrabold text-[8px] tracking-wide uppercase">
-                                                        Abnormal
-                                                      </span>
-                                                    )}
-                                                  </button>
-                                                  <div className="flex items-center gap-1">
-                                                    <button
-                                                      type="button"
-                                                      onClick={() => {
-                                                        setNewValueOptionText(opt.value);
-                                                        setNewValueOptionAbnormal(opt.isAbnormal);
-                                                        setEditingValueOptionIdx(oIdx);
-                                                      }}
-                                                      className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-700 cursor-pointer"
-                                                      title="Edit Option"
-                                                    >
-                                                      📝
-                                                    </button>
-                                                    <button
-                                                      type="button"
-                                                      onClick={() => handleDeleteValueOption(p.name, oIdx)}
-                                                      className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-red-500 cursor-pointer"
-                                                      title="Delete Option"
-                                                    >
-                                                      🗑
-                                                    </button>
-                                                  </div>
-                                                </div>
-                                              ))
-                                            )}
-                                          </div>
-
-                                          {/* Add Option Input Row */}
-                                          <div className="border-t border-slate-100 pt-2 space-y-2">
-                                            <input
-                                              type="text"
-                                              value={newValueOptionText}
-                                              onChange={(e) => setNewValueOptionText(e.target.value)}
-                                              placeholder="Enter choice value..."
-                                              className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 outline-none focus:border-blue-400"
-                                            />
-                                            <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-bold text-slate-600">
-                                              <input
-                                                type="checkbox"
-                                                checked={newValueOptionAbnormal}
-                                                onChange={(e) => setNewValueOptionAbnormal(e.target.checked)}
-                                                className="rounded text-red-500 cursor-pointer focus:ring-red-500"
-                                              />
-                                              <span>Abnormal</span>
-                                            </label>
-                                          </div>
-
-                                          {/* Card Footer Actions */}
-                                          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                setActiveValueOptionsDropdown('');
-                                                setNewValueOptionText('');
-                                                setNewValueOptionAbnormal(false);
-                                                setEditingValueOptionIdx(null);
-                                              }}
-                                              className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-[10px] font-bold text-slate-500 hover:bg-slate-50 cursor-pointer"
-                                            >
-                                              Cancel
-                                            </button>
-                                            <button
-                                              type="button"
-                                              onClick={() => handleSaveValueOption(p.name)}
-                                              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[10px] font-bold cursor-pointer"
-                                            >
-                                              Save
-                                            </button>
-                                          </div>
-
-                                        </div>
-                                      )}
-                                    </div>
-
-                                    {/* Unified Plus Action Menu Card */}
-                                    <div className="relative">
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          if (activePlusMenu === p.name) {
-                                            setActivePlusMenu('');
-                                          } else {
-                                            setActivePlusMenu(p.name);
-                                            setActiveValueOptionsDropdown('');
-                                          }
-                                        }}
-                                        className="w-6 h-6 rounded-full border border-blue-200 bg-blue-50 flex items-center justify-center text-blue-600 hover:bg-blue-100 font-extrabold cursor-pointer shrink-0"
-                                        title="Add remarks / choices menu"
-                                      >
-                                        +
-                                      </button>
-
-                                      {activePlusMenu === p.name && (
-                                        <div className="absolute right-0 mt-1.5 w-44 bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 z-40 text-xs font-semibold text-slate-700 space-y-0.5 animate-in fade-in slide-in-from-top-1">
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              setExpandedRemarks({ ...expandedRemarks, [p.name]: true });
-                                              setActivePlusMenu('');
-                                            }}
-                                            className="w-full px-2.5 py-2 text-left hover:bg-slate-50 rounded-lg flex items-center gap-2 cursor-pointer text-slate-800"
-                                          >
-                                            <span>💬</span>
-                                            <span>Add remark</span>
-                                          </button>
+                                            placeholder="Value..."
+                                            className={`w-full px-3.5 py-1.5 rounded-lg text-xs font-bold focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white border cursor-pointer ${
+                                              isBad 
+                                                ? 'border-red-500 bg-red-50 text-red-600 font-black focus:ring-red-500' 
+                                                : formulaInfo
+                                                  ? 'border-amber-400 bg-amber-50/20 text-slate-900 focus:border-amber-500'
+                                                  : 'border-slate-200 bg-slate-50 text-slate-800'
+                                            }`}
+                                          />
                                           {!hasRefRangeOrRules && (
                                             <button
                                               type="button"
                                               onClick={() => {
-                                                setActiveValueOptionsDropdown(p.name);
-                                                setActivePlusMenu('');
-                                                setNewValueOptionText('');
-                                                setNewValueOptionAbnormal(false);
-                                                setEditingValueOptionIdx(null);
+                                                if (activeValueOptionsDropdown === p.name) {
+                                                  setActiveValueOptionsDropdown('');
+                                                } else {
+                                                  setActiveValueOptionsDropdown(p.name);
+                                                  setNewValueOptionText('');
+                                                  setNewValueOptionAbnormal(false);
+                                                  setEditingValueOptionIdx(null);
+                                                }
                                               }}
-                                              className="w-full px-2.5 py-2 text-left hover:bg-slate-50 rounded-lg flex items-center gap-2 cursor-pointer text-slate-800 border-t border-slate-100/80"
+                                              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-[10px] cursor-pointer"
                                             >
-                                              <span>⚙️</span>
-                                              <span>Add abnormal choice</span>
+                                              ▼
                                             </button>
                                           )}
                                         </div>
-                                      )}
+
+                                        {/* VALUE CHOICE CONFIG DROPDOWN CARD OVERLAY */}
+                                        {!hasRefRangeOrRules && activeValueOptionsDropdown === p.name && (
+                                          <div className="absolute left-0 mt-1.5 w-64 bg-white border border-slate-200 rounded-xl shadow-lg p-3.5 z-40 text-xs font-semibold text-slate-700 space-y-3">
+                                            
+                                            {/* Predefined Choices List */}
+                                            <div className="max-h-32 overflow-y-auto divide-y divide-slate-100">
+                                              {(p.valueOptions || []).length === 0 ? (
+                                                <div className="text-[10px] text-slate-400 py-1 font-medium">No options configured. Add one below.</div>
+                                              ) : (
+                                                (p.valueOptions || []).map((opt, oIdx) => (
+                                                  <div key={oIdx} className="flex items-center justify-between py-1.5 hover:bg-slate-50 rounded px-1 transition-colors">
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => {
+                                                        handleParamValueChange(p.name, opt.value);
+                                                        setActiveValueOptionsDropdown('');
+                                                      }}
+                                                      className="flex-1 text-left font-bold text-slate-800 flex items-center gap-1.5 cursor-pointer"
+                                                    >
+                                                      <span>{opt.value}</span>
+                                                      {opt.isAbnormal && (
+                                                        <span className="px-1.5 py-0.5 rounded bg-red-50 border border-red-200 text-red-600 font-extrabold text-[8px] tracking-wide uppercase">
+                                                          Abnormal
+                                                        </span>
+                                                      )}
+                                                    </button>
+                                                    <div className="flex items-center gap-1">
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                          setNewValueOptionText(opt.value);
+                                                          setNewValueOptionAbnormal(opt.isAbnormal);
+                                                          setEditingValueOptionIdx(oIdx);
+                                                        }}
+                                                        className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-700 cursor-pointer"
+                                                        title="Edit Option"
+                                                      >
+                                                        📝
+                                                      </button>
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => handleDeleteValueOption(p.name, oIdx)}
+                                                        className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-red-500 cursor-pointer"
+                                                        title="Delete Option"
+                                                      >
+                                                        🗑
+                                                      </button>
+                                                    </div>
+                                                  </div>
+                                                ))
+                                              )}
+                                            </div>
+
+                                            {/* Add Option Input Row */}
+                                            <div className="border-t border-slate-100 pt-2 space-y-2">
+                                              <input
+                                                type="text"
+                                                value={newValueOptionText}
+                                                onChange={(e) => setNewValueOptionText(e.target.value)}
+                                                placeholder="Enter choice value..."
+                                                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 outline-none focus:border-blue-400"
+                                              />
+                                              <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-bold text-slate-600">
+                                                <input
+                                                  type="checkbox"
+                                                  checked={newValueOptionAbnormal}
+                                                  onChange={(e) => setNewValueOptionAbnormal(e.target.checked)}
+                                                  className="rounded text-red-500 cursor-pointer focus:ring-red-500"
+                                                />
+                                                <span>Abnormal</span>
+                                              </label>
+                                            </div>
+
+                                            {/* Card Footer Actions */}
+                                            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setActiveValueOptionsDropdown('');
+                                                  setNewValueOptionText('');
+                                                  setNewValueOptionAbnormal(false);
+                                                  setEditingValueOptionIdx(null);
+                                                }}
+                                                className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-[10px] font-bold text-slate-500 hover:bg-slate-50 cursor-pointer"
+                                              >
+                                                Cancel
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => handleSaveValueOption(p.name)}
+                                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[10px] font-bold cursor-pointer"
+                                              >
+                                                Save
+                                              </button>
+                                            </div>
+
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {/* Unified Plus Action Menu Card */}
+                                      <div className="relative">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (activePlusMenu === p.name) {
+                                              setActivePlusMenu('');
+                                            } else {
+                                              setActivePlusMenu(p.name);
+                                              setActiveValueOptionsDropdown('');
+                                            }
+                                          }}
+                                          className="w-6 h-6 rounded-full border border-blue-200 bg-blue-50 flex items-center justify-center text-blue-600 hover:bg-blue-100 font-extrabold cursor-pointer shrink-0"
+                                          title="Add remarks / choices menu"
+                                        >
+                                          +
+                                        </button>
+
+                                        {activePlusMenu === p.name && (
+                                          <div className="absolute right-0 mt-1.5 w-44 bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 z-40 text-xs font-semibold text-slate-700 space-y-0.5 animate-in fade-in slide-in-from-top-1">
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setExpandedRemarks({ ...expandedRemarks, [p.name]: true });
+                                                setActivePlusMenu('');
+                                              }}
+                                              className="w-full px-2.5 py-2 text-left hover:bg-slate-50 rounded-lg flex items-center gap-2 cursor-pointer text-slate-800"
+                                            >
+                                              <span>💬</span>
+                                              <span>Add remark</span>
+                                            </button>
+                                            {!hasRefRangeOrRules && (
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setActiveValueOptionsDropdown(p.name);
+                                                  setActivePlusMenu('');
+                                                  setNewValueOptionText('');
+                                                  setNewValueOptionAbnormal(false);
+                                                  setEditingValueOptionIdx(null);
+                                                }}
+                                                className="w-full px-2.5 py-2 text-left hover:bg-slate-50 rounded-lg flex items-center gap-2 cursor-pointer text-slate-800 border-t border-slate-100/80"
+                                              >
+                                                <span>⚙️</span>
+                                                <span>Add abnormal choice</span>
+                                              </button>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
                                     </div>
-                                  </div>
+                                  )}
                                 </td>
 
-                              {/* UNIT */}
-                              <td className="py-3 px-5 font-semibold text-slate-500">
-                                {p.unit || '—'}
-                              </td>
+                                {/* UNIT */}
+                                <td className={`py-3 px-5 font-semibold text-slate-500 ${isMorphologyParam ? 'align-top pt-4' : ''}`}>
+                                  {p.unit || '—'}
+                                </td>
 
-                              {/* REFERENCE RANGE CONFIG */}
-                              <td className="py-3 px-5 font-bold text-slate-700">
-                                <div className="flex items-center justify-between gap-2">
-                                  <span>{p.referenceRange || 'As per standards'}</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setShowRuleModalParam(p.name);
-                                      setRuleModalRules(p.referenceRules || []);
-                                    }}
-                                    className="w-5 h-5 rounded-full bg-slate-900 flex items-center justify-center text-white font-extrabold hover:bg-slate-800 cursor-pointer shrink-0"
-                                    title="Configure reference rules"
-                                  >
-                                    +
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
+                                {/* REFERENCE RANGE CONFIG */}
+                                <td className={`py-3 px-5 font-bold text-slate-700 ${isMorphologyParam ? 'align-top pt-4' : ''}`}>
+                                  {isMorphologyParam ? (
+                                    <span>{p.referenceRange || '—'}</span>
+                                  ) : (
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span>{p.referenceRange || 'As per standards'}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setShowRuleModalParam(p.name);
+                                          setRuleModalRules(p.referenceRules || []);
+                                        }}
+                                        className="w-5 h-5 rounded-full bg-slate-900 flex items-center justify-center text-white font-extrabold hover:bg-slate-800 cursor-pointer shrink-0"
+                                        title="Configure reference rules"
+                                      >
+                                        +
+                                      </button>
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
                             {isRemarksExpanded && (
                               <tr className="bg-slate-50/20 border-b border-slate-100">
                                 <td colSpan="4" className="py-2 px-10">
@@ -2447,9 +3737,10 @@ function DashboardContent() {
                             )}
                           </React.Fragment>
                         );
-                      })}
-                      </Suspense>
-                    );
+                      })
+                    )}
+                    </Suspense>
+                  );
                   })}
                 </tbody>
               </table>
@@ -2565,7 +3856,7 @@ function DashboardContent() {
                   </span>
                 </div>
 
-                {/* Purple library tip banner */}
+                {/* Pink library tip banner */}
                 <div className="flex items-center gap-2 px-3 py-2 bg-pink-50 border border-pink-100 rounded-lg text-pink-700 text-[10px] font-bold">
                   <span>📖</span>
                   <span>You can now copy interpretations from Library to update.</span>
@@ -2578,30 +3869,191 @@ function DashboardContent() {
                     <span className="px-2 py-0.5 bg-white border border-slate-200 rounded cursor-pointer text-[10px]">Paragraph ▾</span>
                     <span className="px-2 py-0.5 bg-white border border-slate-200 rounded cursor-pointer text-[10px]">12pt ▾</span>
                     <span className="w-px h-4 bg-slate-200"></span>
-                    <button type="button" className="p-1 hover:bg-slate-200 rounded cursor-pointer" title="Undo">↩</button>
-                    <button type="button" className="p-1 hover:bg-slate-200 rounded cursor-pointer" title="Redo">↪</button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const el = document.getElementById('report-interpretation-textarea');
+                        if (!el) {
+                          setReportInterpretation(reportInterpretation ? `${reportInterpretation} <b></b>` : '<b></b>');
+                          return;
+                        }
+                        const start = el.selectionStart;
+                        const end = el.selectionEnd;
+                        if (start !== undefined && end !== undefined && start !== end) {
+                          const selected = reportInterpretation.substring(start, end);
+                          const before = reportInterpretation.substring(0, start);
+                          const after = reportInterpretation.substring(end);
+                          setReportInterpretation(before + `<b>${selected}</b>` + after);
+                        } else {
+                          setReportInterpretation(reportInterpretation ? `${reportInterpretation} <b>bold text</b>` : '<b>bold text</b>');
+                        }
+                      }}
+                      className="px-2 py-0.5 hover:bg-slate-200 bg-white border border-slate-300 rounded font-black text-xs cursor-pointer shadow-2xs"
+                      title="Bold"
+                    >
+                      B
+                    </button>
+                    
+                    {/* Table Dropdown Menu */}
+                    <div className="relative inline-block text-left group">
+                      <button
+                        type="button"
+                        className="px-2 py-0.5 bg-white hover:bg-slate-200 border border-slate-300 rounded text-xs font-bold cursor-pointer shadow-2xs flex items-center gap-1"
+                        title="Table Tools"
+                      >
+                        <span>田</span>
+                        <span>Table ▾</span>
+                      </button>
+                      <div className="hidden group-hover:block absolute left-0 top-full mt-1 w-64 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-1.5 space-y-1 text-[11px] font-semibold text-slate-700">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const glucoseTable = `<table style="width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 10px;" border="1" cellpadding="6">
+  <thead>
+    <tr style="background-color: #f8fafc; font-weight: bold;">
+      <th style="border: 1px solid #cbd5e1; padding: 6px 10px; text-align: left; width: 33.3%;">Fasting Glucose</th>
+      <th style="border: 1px solid #cbd5e1; padding: 6px 10px; text-align: left; width: 33.3%;">2 hours PP Glucose</th>
+      <th style="border: 1px solid #cbd5e1; padding: 6px 10px; text-align: left; width: 33.3%;">Diagnosis</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="border: 1px solid #cbd5e1; padding: 6px 10px;">&lt;100</td>
+      <td style="border: 1px solid #cbd5e1; padding: 6px 10px;">&lt;140</td>
+      <td style="border: 1px solid #cbd5e1; padding: 6px 10px;">Normal</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #cbd5e1; padding: 6px 10px;">100 to 125</td>
+      <td style="border: 1px solid #cbd5e1; padding: 6px 10px;">140 to 199</td>
+      <td style="border: 1px solid #cbd5e1; padding: 6px 10px;">Pre Diabetes</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #cbd5e1; padding: 6px 10px;">&gt;126</td>
+      <td style="border: 1px solid #cbd5e1; padding: 6px 10px;">&gt;200</td>
+      <td style="border: 1px solid #cbd5e1; padding: 6px 10px;">Diabetes</td>
+    </tr>
+  </tbody>
+</table>`;
+                            setReportInterpretation(reportInterpretation ? `${reportInterpretation}\n${glucoseTable}` : glucoseTable);
+                          }}
+                          className="w-full text-left px-2.5 py-1.5 hover:bg-blue-50 hover:text-blue-700 rounded-lg cursor-pointer"
+                        >
+                          ➕ Insert Diabetes Diagnosis Table (3x3)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const causesTable = `<table style="width: 100%; border-collapse: collapse; margin-top: 8px; margin-bottom: 12px;" border="1" cellpadding="6">
+  <thead>
+    <tr style="background-color: #f8fafc; font-weight: bold;">
+      <th style="border: 1px solid #cbd5e1; padding: 6px 10px; text-align: left; width: 25%;"></th>
+      <th style="border: 1px solid #cbd5e1; padding: 6px 10px; text-align: left; width: 37.5%;">High</th>
+      <th style="border: 1px solid #cbd5e1; padding: 6px 10px; text-align: left; width: 37.5%;">Low</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="border: 1px solid #cbd5e1; padding: 6px 10px; font-weight: bold;">RBC, Hb, or HCT</td>
+      <td style="border: 1px solid #cbd5e1; padding: 6px 10px;">Dehydration, polycythemia, shock, chronic hypoxia</td>
+      <td style="border: 1px solid #cbd5e1; padding: 6px 10px;">Anemia, thalassemia, and other hemoglobinopathies</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #cbd5e1; padding: 6px 10px; font-weight: bold;">MCV</td>
+      <td style="border: 1px solid #cbd5e1; padding: 6px 10px;">Macrocytic anemia, liver disease</td>
+      <td style="border: 1px solid #cbd5e1; padding: 6px 10px;">Microcytic anemia</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #cbd5e1; padding: 6px 10px; font-weight: bold;">WBC</td>
+      <td style="border: 1px solid #cbd5e1; padding: 6px 10px;">Acute stress, infection, malignancies</td>
+      <td style="border: 1px solid #cbd5e1; padding: 6px 10px;">Sepsis, marrow hypoplasia</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #cbd5e1; padding: 6px 10px; font-weight: bold;">Platelets</td>
+      <td style="border: 1px solid #cbd5e1; padding: 6px 10px;">Risk of thrombosis</td>
+      <td style="border: 1px solid #cbd5e1; padding: 6px 10px;">Risk of bleeding</td>
+    </tr>
+  </tbody>
+</table>`;
+                            setReportInterpretation(reportInterpretation ? `${reportInterpretation}\n${causesTable}` : causesTable);
+                          }}
+                          className="w-full text-left px-2.5 py-1.5 hover:bg-blue-50 hover:text-blue-700 rounded-lg cursor-pointer"
+                        >
+                          ➕ Insert Abnormal Causes Table
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const blankTable = `<table style="width: 100%; border-collapse: collapse; margin-top: 8px; margin-bottom: 8px;" border="1" cellpadding="6">
+  <thead>
+    <tr style="background-color: #f8fafc; font-weight: bold;">
+      <th style="border: 1px solid #cbd5e1; padding: 6px 10px;">Header 1</th>
+      <th style="border: 1px solid #cbd5e1; padding: 6px 10px;">Header 2</th>
+      <th style="border: 1px solid #cbd5e1; padding: 6px 10px;">Header 3</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="border: 1px solid #cbd5e1; padding: 6px 10px;">Cell 1</td>
+      <td style="border: 1px solid #cbd5e1; padding: 6px 10px;">Cell 2</td>
+      <td style="border: 1px solid #cbd5e1; padding: 6px 10px;">Cell 3</td>
+    </tr>
+  </tbody>
+</table>`;
+                            setReportInterpretation(reportInterpretation ? `${reportInterpretation}\n${blankTable}` : blankTable);
+                          }}
+                          className="w-full text-left px-2.5 py-1.5 hover:bg-blue-50 hover:text-blue-700 rounded-lg cursor-pointer"
+                        >
+                          ➕ Insert Blank 3x2 Table
+                        </button>
+                      </div>
+                    </div>
+
                     <span className="w-px h-4 bg-slate-200"></span>
-                    <button type="button" className="px-1.5 py-0.5 hover:bg-slate-200 rounded font-black cursor-pointer" title="Bold">B</button>
-                    <button type="button" className="p-1 hover:bg-slate-200 rounded cursor-pointer" title="Insert Table">田 ▾</button>
-                    <span className="w-px h-4 bg-slate-200"></span>
-                    <button type="button" className="p-1 hover:bg-slate-200 rounded cursor-pointer" title="Align Left">≡</button>
-                    <button type="button" className="p-1 hover:bg-slate-200 rounded cursor-pointer" title="Align Center">≡</button>
-                    <button type="button" className="p-1 hover:bg-slate-200 rounded cursor-pointer" title="Align Right">≡</button>
-                    <button type="button" className="p-1 hover:bg-slate-200 rounded cursor-pointer" title="Justify">≡</button>
-                    <span className="w-px h-4 bg-slate-200"></span>
-                    <button type="button" className="p-1 hover:bg-slate-200 rounded cursor-pointer" title="Bullet List">•≡</button>
-                    <button type="button" className="p-1 hover:bg-slate-200 rounded cursor-pointer" title="Numbered List">1≡</button>
+                    <button
+                      type="button"
+                      onClick={() => setReportInterpretation(reportInterpretation ? `<p style="text-align: left;">${reportInterpretation}</p>` : '')}
+                      className="p-1 hover:bg-slate-200 rounded cursor-pointer"
+                      title="Align Left"
+                    >
+                      ≡
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReportInterpretation(reportInterpretation ? `<p style="text-align: center;">${reportInterpretation}</p>` : '')}
+                      className="p-1 hover:bg-slate-200 rounded cursor-pointer"
+                      title="Align Center"
+                    >
+                      ≡
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReportInterpretation(reportInterpretation ? `<p style="text-align: right;">${reportInterpretation}</p>` : '')}
+                      className="p-1 hover:bg-slate-200 rounded cursor-pointer"
+                      title="Align Right"
+                    >
+                      ≡
+                    </button>
                   </div>
                   <textarea
-                    rows="6"
+                    id="report-interpretation-textarea"
+                    rows={8}
                     value={reportInterpretation}
                     onChange={(e) => setReportInterpretation(e.target.value)}
                     placeholder="Enter default clinical interpretation findings here..."
-                    className="w-full p-4.5 bg-white text-xs font-bold text-slate-800 outline-none resize-y min-h-[140px] focus:bg-white"
+                    className="w-full p-4 bg-white text-xs font-mono text-slate-800 outline-none resize-y min-h-[160px] focus:bg-white"
                   />
-                  <div className="bg-slate-50 border-t border-slate-200 px-3 py-1 flex items-center justify-between text-[8px] text-slate-400 uppercase tracking-widest font-black">
-                    <span>p</span>
-                    <span>Powered by Tiny</span>
+                  {reportInterpretation && (
+                    <div className="bg-slate-50/90 border-t border-slate-200 p-3 text-xs">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">Formatted Live Preview:</span>
+                      <div
+                        className="bg-white p-3 rounded-lg border border-slate-200 [&_table]:w-full [&_table]:border-collapse [&_th]:border [&_th]:border-slate-300 [&_th]:p-1.5 [&_th]:bg-slate-50 [&_th]:font-bold [&_td]:border [&_td]:border-slate-300 [&_td]:p-1.5 leading-normal"
+                        dangerouslySetInnerHTML={{ __html: reportInterpretation }}
+                      />
+                    </div>
+                  )}
+                  <div className="bg-slate-50 border-t border-slate-200 px-3 py-1 flex items-center justify-between text-[9px] text-slate-500 font-bold">
+                    <span>P &gt; STRONG</span>
+                    <span>Ready</span>
                   </div>
                 </div>
                 
@@ -2610,13 +4062,24 @@ function DashboardContent() {
                 </p>
 
                 {/* Actions Row */}
-                <div className="flex items-center gap-2 pt-1">
+                {/* Actions Row */}
+                <div className="flex items-center gap-2 pt-1 flex-wrap">
                   <button
                     type="button"
-                    onClick={handleSaveInterpretationToTemplate}
+                    onClick={() => {
+                      handleSaveInterpretationToTemplate();
+                      setShowReportEntryTab('');
+                    }}
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer"
                   >
                     Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowReportEntryTab('')}
+                    className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg text-xs font-bold cursor-pointer"
+                  >
+                    Cancel
                   </button>
                   <button
                     type="button"
@@ -2624,10 +4087,185 @@ function DashboardContent() {
                       setReportInterpretation('');
                       setShowReportEntryTab('');
                     }}
-                    className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg text-xs font-bold cursor-pointer"
+                    className="px-4 py-2 border border-slate-200 hover:bg-red-50 text-slate-600 hover:text-red-600 rounded-lg text-xs font-bold cursor-pointer"
                   >
-                    Cancel
+                    Remove
                   </button>
+                  <label className="ml-auto flex items-center gap-1.5 cursor-pointer text-xs font-bold text-slate-700 select-none bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg">
+                    <input
+                      type="checkbox"
+                      checked={printInterpretation}
+                      onChange={(e) => setPrintInterpretation(e.target.checked)}
+                      className="rounded text-blue-600 cursor-pointer w-4 h-4"
+                    />
+                    <span>Print interpretation in report</span>
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {/* Formatted Interpretations View Card */}
+            {reportInterpretation && reportInterpretation.trim() !== '' && showReportEntryTab !== 'interpretation' && (
+              <div className="border border-slate-200 rounded-xl p-4 bg-white shadow-2xs space-y-2.5 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-extrabold text-slate-800 text-xs">Interpretations</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowReportEntryTab('interpretation')}
+                      className="px-2 py-0.5 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>✏️</span>
+                      <span>Edit</span>
+                    </button>
+                  </div>
+                  <label className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-slate-700 select-none bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg">
+                    <input
+                      type="checkbox"
+                      checked={printInterpretation}
+                      onChange={(e) => setPrintInterpretation(e.target.checked)}
+                      className="rounded text-blue-600 cursor-pointer w-3.5 h-3.5"
+                    />
+                    <span>Print in report</span>
+                  </label>
+                </div>
+                <div>
+                  {(() => {
+                    const text = reportInterpretation || '';
+                    const trimmed = text.trim();
+                    if (trimmed.includes('<table') || trimmed.includes('<p>') || trimmed.includes('<strong>') || trimmed.includes('<b>') || trimmed.includes('<br')) {
+                      return (
+                        <div
+                          className="text-slate-800 space-y-2 [&_table]:w-full [&_table]:border-collapse [&_table]:my-2.5 [&_th]:border [&_th]:border-slate-300 [&_th]:p-1.5 [&_th]:bg-slate-50 [&_th]:font-bold [&_td]:border [&_td]:border-slate-300 [&_td]:p-1.5 leading-normal text-xs"
+                          dangerouslySetInnerHTML={{ __html: text }}
+                        />
+                      );
+                    }
+
+                    const lines = text.split('\n');
+                    const elements = [];
+                    let inTable = false;
+                    let tableRows = [];
+
+                    const flushTable = (k) => {
+                      if (tableRows.length > 0) {
+                        elements.push(
+                          <div key={`table-${k}`} className="my-2.5 overflow-x-auto">
+                            <table className="w-full text-left text-xs border-collapse border border-slate-300">
+                              <thead>
+                                {tableRows.slice(0, 1).map((row, rIdx) => (
+                                  <tr key={rIdx} className="bg-slate-50 border-b border-slate-300">
+                                    {row.map((cell, cIdx) => (
+                                      <th key={cIdx} className="py-1.5 px-3 border border-slate-300 font-bold text-slate-900 text-[11px]">
+                                        {cell}
+                                      </th>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </thead>
+                              <tbody>
+                                {tableRows.slice(1).map((row, rIdx) => (
+                                  <tr key={rIdx} className="hover:bg-slate-50/50">
+                                    {row.map((cell, cIdx) => (
+                                      <td key={cIdx} className={`py-1.5 px-3 border border-slate-300 text-[11px] ${cIdx === 0 ? 'font-bold text-slate-900' : 'text-slate-700'}`}>
+                                        {cell}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        );
+                        tableRows = [];
+                      }
+                    };
+
+                    lines.forEach((line, idx) => {
+                      if (line.includes('|')) {
+                        const isSeparator = line.replace(/[\s|:-]/g, '').length === 0;
+                        if (!isSeparator) {
+                          const rawCells = line.split('|').map(c => c.trim());
+                          const cleanedCells = rawCells.filter((c, cIdx) => {
+                            if ((cIdx === 0 || cIdx === rawCells.length - 1) && c === '') return false;
+                            return true;
+                          });
+                          tableRows.push(cleanedCells.length > 0 ? cleanedCells : rawCells);
+                          inTable = true;
+                        }
+                      } else {
+                        if (inTable) {
+                          flushTable(idx);
+                          inTable = false;
+                        }
+                        const trimmedLine = line.trim();
+                        if (trimmedLine) {
+                          const isHeading = [
+                            'LFT Interpretation',
+                            'Test Significance',
+                            'Clinical Notes',
+                            'Possible causes of abnormal parameters',
+                            'Peripheral Blood Smear',
+                            'Physiological basis',
+                            'Comments'
+                          ].some(h => trimmedLine.toLowerCase() === h.toLowerCase());
+
+                          const hasColonPrefix = trimmedLine.includes(':') && (
+                            trimmedLine.toLowerCase().startsWith('increased in:') ||
+                            trimmedLine.toLowerCase().startsWith('clinical notes:') ||
+                            trimmedLine.toLowerCase().startsWith('notes:') ||
+                            trimmedLine.toLowerCase().startsWith('interpretation:')
+                          );
+                          const hasDashPrefix = trimmedLine.includes(' - ') && (
+                            trimmedLine.toLowerCase().startsWith('rbcs -') ||
+                            trimmedLine.toLowerCase().startsWith('wbcs -') ||
+                            trimmedLine.toLowerCase().startsWith('platelets -') ||
+                            trimmedLine.toLowerCase().startsWith('impression -')
+                          );
+
+                          if (isHeading) {
+                            elements.push(
+                              <h5 key={`h-${idx}`} className="font-bold text-slate-900 text-xs mt-3 mb-1">
+                                {trimmedLine}
+                              </h5>
+                            );
+                          } else if (hasColonPrefix) {
+                            const colonIdx = trimmedLine.indexOf(':');
+                            const label = trimmedLine.substring(0, colonIdx + 1);
+                            const val = trimmedLine.substring(colonIdx + 1);
+                            elements.push(
+                              <p key={`p-${idx}`} className="text-xs text-slate-700 leading-relaxed my-1">
+                                <strong className="font-bold text-slate-900">{label}</strong>
+                                {val}
+                              </p>
+                            );
+                          } else if (hasDashPrefix) {
+                            const dashIdx = trimmedLine.indexOf(' - ');
+                            const label = trimmedLine.substring(0, dashIdx);
+                            const val = trimmedLine.substring(dashIdx);
+                            elements.push(
+                              <p key={`p-${idx}`} className="text-xs text-slate-700 leading-relaxed my-1">
+                                <strong className="font-bold text-slate-900">{label}</strong>
+                                {val}
+                              </p>
+                            );
+                          } else {
+                            elements.push(
+                              <p key={`p-${idx}`} className="text-xs text-slate-700 leading-relaxed my-1">
+                                {trimmedLine}
+                              </p>
+                            );
+                          }
+                        }
+                      }
+                    });
+
+                    if (inTable) {
+                      flushTable('end');
+                    }
+
+                    return <div className="space-y-1">{elements}</div>;
+                  })()}
                 </div>
               </div>
             )}
@@ -2781,24 +4419,12 @@ function DashboardContent() {
 
                 {/* Content */}
                 <div className="space-y-4 text-xs">
-                  {/* Select Type and Help Actions Row */}
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-500 mb-1">Select type</label>
-                      <select className="px-3 py-1.5 border border-slate-300 bg-white rounded-lg font-bold text-slate-800 outline-none cursor-pointer text-xs h-[30px]">
-                        <option>Numeric range</option>
-                      </select>
-                    </div>
-                    <div className="flex items-center gap-2 mt-4">
-                      <button
-                        type="button"
-                        className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer border border-blue-100"
-                      >
-                        <span>🎧</span>
-                        <span>Ask help</span>
-                        <span>▼</span>
-                      </button>
-                    </div>
+                  {/* Select Type Row */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 mb-1">Select type</label>
+                    <select className="px-3 py-1.5 border border-slate-300 bg-white rounded-lg font-bold text-slate-800 outline-none cursor-pointer text-xs h-[30px]">
+                      <option>Numeric range</option>
+                    </select>
                   </div>
 
                   {/* Yellow Alert Box */}
@@ -2999,8 +4625,8 @@ function DashboardContent() {
               </div>
             </div>
           )}
-
         </div>
+        {renderSharedModals()}
       </DashboardLayout>
     );
   };
@@ -3295,6 +4921,15 @@ function DashboardContent() {
                                 <Receipt className="w-3.5 h-3.5" />
                                 <span>Create bill</span>
                               </button>
+                            ) : (report.statusCategory === 'final' || report.statusCategory === 'signed_off') ? (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenReportPrint(report.rawRequest)}
+                                className="hover:underline flex items-center gap-1 cursor-pointer text-emerald-700 font-bold"
+                              >
+                                <Printer className="w-3.5 h-3.5" />
+                                <span>Print report</span>
+                              </button>
                             ) : (
                               <button
                                 type="button"
@@ -3307,11 +4942,11 @@ function DashboardContent() {
                             )}
                             <button
                               type="button"
-                              onClick={() => handleOpenReceiptView(report)}
+                              onClick={() => (report.statusCategory === 'final' || report.statusCategory === 'signed_off') ? handleOpenReportPrint(report.rawRequest) : handleOpenReceiptView(report)}
                               className="hover:underline flex items-center gap-1 cursor-pointer text-slate-700 hover:text-blue-600"
                             >
                               <Eye className="w-3.5 h-3.5" />
-                              <span>View</span>
+                              <span>{(report.statusCategory === 'final' || report.statusCategory === 'signed_off') ? 'View report' : 'View'}</span>
                             </button>
                             <button
                               type="button"
@@ -4013,6 +5648,15 @@ function DashboardContent() {
                                 <Receipt className="w-3.5 h-3.5" />
                                 <span>Create bill</span>
                               </button>
+                            ) : (report.statusCategory === 'final' || report.statusCategory === 'signed_off') ? (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenReportPrint(report.rawRequest)}
+                                className="hover:underline flex items-center gap-1 cursor-pointer text-emerald-700 font-bold"
+                              >
+                                <Printer className="w-3.5 h-3.5" />
+                                <span>Browse print</span>
+                              </button>
                             ) : (
                               <button
                                 type="button"
@@ -4025,22 +5669,12 @@ function DashboardContent() {
                             )}
                             <button
                               type="button"
-                              onClick={() => handleOpenReceiptView(report)}
+                              onClick={() => (report.statusCategory === 'final' || report.statusCategory === 'signed_off') ? handleOpenReportPrint(report.rawRequest) : handleOpenReceiptView(report)}
                               className="hover:underline flex items-center gap-1 cursor-pointer text-slate-700 hover:text-blue-600"
                             >
                               <Eye className="w-3.5 h-3.5" />
-                              <span>View bill</span>
+                              <span>{(report.statusCategory === 'final' || report.statusCategory === 'signed_off') ? 'View report' : 'View bill'}</span>
                             </button>
-                            {(report.statusCategory === 'final' || report.statusCategory === 'signed_off') && (
-                              <button
-                                type="button"
-                                onClick={() => handleOpenReportPrint(report.rawRequest)}
-                                className="hover:underline flex items-center gap-1 cursor-pointer text-blue-600 font-bold"
-                              >
-                                <Printer className="w-3.5 h-3.5" />
-                                <span>Browse print</span>
-                              </button>
-                            )}
                             <button
                               type="button"
                               onClick={() => handleOpenReceiptView(report)}
@@ -4309,6 +5943,14 @@ function DashboardContent() {
                             className="px-2.5 py-1 bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold rounded-md cursor-pointer shrink-0 shadow-2xs"
                           >
                             Create bill
+                          </button>
+                        ) : (item.statusCategory === 'final' || item.statusCategory === 'signed_off') ? (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenReportPrint(item.rawRequest)}
+                            className="px-2 py-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-md cursor-pointer shrink-0"
+                          >
+                            View report
                           </button>
                         ) : (
                           <button

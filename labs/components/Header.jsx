@@ -16,8 +16,11 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import ProfileDropdown from './ProfileDropdown';
+import { useAuth } from '../context/AuthContext';
 
 export default function Header({ toggleMobileSidebar }) {
+  const { user } = useAuth();
+  const isAdminUser = user?.role === 'admin' || user?.role === 'lab_admin' || user?.role === 'labadmin' || user?.role === 'superadmin';
   const [searchVal, setSearchVal] = useState('');
   const [showSetupMenu, setShowSetupMenu] = useState(false);
 
@@ -111,30 +114,34 @@ export default function Header({ toggleMobileSidebar }) {
                 <FileText className="w-4 h-4 text-slate-400" />
                 <span>Letterhead</span>
               </Link>
-              <Link 
-                href="/admin?tab=casereg" 
-                onClick={() => setShowSetupMenu(false)}
-                className="flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
-              >
-                <FileText className="w-4 h-4 text-slate-400" />
-                <span>Case reg. no.</span>
-              </Link>
-              <Link 
-                href="/admin?tab=panels" 
-                onClick={() => setShowSetupMenu(false)}
-                className="flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
-              >
-                <FlaskConical className="w-4 h-4 text-slate-400" />
-                <span>Panels</span>
-              </Link>
-              <Link 
-                href="/admin?tab=proofread" 
-                onClick={() => setShowSetupMenu(false)}
-                className="flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
-              >
-                <HelpCircle className="w-4 h-4 text-slate-400" />
-                <span>Proofread</span>
-              </Link>
+              {isAdminUser && (
+                <>
+                  <Link 
+                    href="/admin?tab=casereg" 
+                    onClick={() => setShowSetupMenu(false)}
+                    className="flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                  >
+                    <FileText className="w-4 h-4 text-slate-400" />
+                    <span>Case reg. no.</span>
+                  </Link>
+                  <Link 
+                    href="/admin?tab=panels" 
+                    onClick={() => setShowSetupMenu(false)}
+                    className="flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                  >
+                    <FlaskConical className="w-4 h-4 text-slate-400" />
+                    <span>Panels</span>
+                  </Link>
+                  <Link 
+                    href="/admin?tab=proofread" 
+                    onClick={() => setShowSetupMenu(false)}
+                    className="flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                  >
+                    <HelpCircle className="w-4 h-4 text-slate-400" />
+                    <span>Proofread</span>
+                  </Link>
+                </>
+              )}
             </div>
           )}
         </div>

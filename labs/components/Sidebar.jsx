@@ -234,9 +234,10 @@ export default function Sidebar({ mobileOpen, closeMobileSidebar }) {
         <nav className="flex-1 px-3 py-1 space-y-1 text-sm font-medium">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const containsActive = hasActiveSubItem(item);
-            
-            // Expand rule:
+            const visibleSubItems = (item.subItems || []).filter(sub => isAdminUser || (!sub.href || !sub.href.startsWith('/admin')));
+            if (item.isExpandable && visibleSubItems.length === 0) return null;
+
+            const containsActive = visibleSubItems.some(sub => checkSubActive(sub));
             // Expands if it contains the active subitem, hovered, default open lab, or user has manually toggled it
             const isHovered = hoveredMenu === item.id;
             const isDefaultOpen = containsActive;
@@ -292,32 +293,30 @@ export default function Sidebar({ mobileOpen, closeMobileSidebar }) {
                 </button>
 
                 {/* Submenu */}
-                {isExpanded && item.subItems && (
+                {isExpanded && visibleSubItems.length > 0 && (
                   <div className="pl-4 pr-1 py-1 space-y-1 border-l-2 border-slate-150 ml-5 my-0.5">
-                    {item.subItems
-                      .filter(sub => isAdminUser || sub.href !== '/admin')
-                      .map((sub, idx) => {
-                        const SubIcon = sub.icon;
-                        const isSubActive = checkSubActive(sub);
+                    {visibleSubItems.map((sub, idx) => {
+                      const SubIcon = sub.icon;
+                      const isSubActive = checkSubActive(sub);
 
-                        return (
-                          <Link
-                            key={idx}
-                            href={sub.href}
-                            onClick={closeMobileSidebar}
-                            className={`
-                              flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all
-                              ${isSubActive
-                                ? 'text-orange-600 font-bold bg-orange-50/90 shadow-2xs'
-                                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
-                              }
-                            `}
-                          >
-                            {SubIcon && <SubIcon className={`w-4 h-4 shrink-0 ${isSubActive ? 'text-orange-500' : 'text-slate-400'}`} />}
-                            <span>{sub.label}</span>
-                          </Link>
-                        );
-                      })}
+                      return (
+                        <Link
+                          key={idx}
+                          href={sub.href}
+                          onClick={closeMobileSidebar}
+                          className={`
+                            flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all
+                            ${isSubActive
+                              ? 'text-orange-600 font-bold bg-orange-50/90 shadow-2xs'
+                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
+                            }
+                          `}
+                        >
+                          {SubIcon && <SubIcon className={`w-4 h-4 shrink-0 ${isSubActive ? 'text-orange-500' : 'text-slate-400'}`} />}
+                          <span>{sub.label}</span>
+                        </Link>
+                      );
+                    })}
                   </div>
                 )}
               </div>
