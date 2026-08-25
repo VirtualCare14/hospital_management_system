@@ -258,22 +258,31 @@ const uploadToCloudinary = async (dataUri, folder) => {
     process.env.CLOUDINARY_API_SECRET
   );
   if (!hasCloudinaryConfig) {
-    throw new Error('Cloudinary upload is not configured');
+    return { url: dataUri, publicId: '' };
   }
 
-  const uploaded = await cloudinary.uploader.upload(dataUri, {
-    folder,
-    resource_type: 'image'
-  });
-  return { url: uploaded.secure_url, publicId: uploaded.public_id };
+  try {
+    const uploaded = await cloudinary.uploader.upload(dataUri, {
+      folder,
+      resource_type: 'image'
+    });
+    return { url: uploaded.secure_url, publicId: uploaded.public_id };
+  } catch (err) {
+    console.error('Cloudinary Upload Warning (using dataUri fallback):', err.message || err);
+    if (typeof dataUri === 'string' && dataUri.startsWith('data:image/')) {
+      return { url: dataUri, publicId: '' };
+    }
+    throw err;
+  }
 };
 
 const uploadCloudinaryImage = async (req, res) => {
   try {
-    const { imageData, folder = 'hms/uploads' } = req.body;
-    if (!imageData) return res.status(400).json({ message: 'Image file is required' });
+    const { imageData, image, file, folder = 'hms/uploads' } = req.body;
+    const dataToUpload = imageData || image || file;
+    if (!dataToUpload) return res.status(400).json({ message: 'Image file is required' });
 
-    const uploaded = await uploadToCloudinary(imageData, folder);
+    const uploaded = await uploadToCloudinary(dataToUpload, folder);
     res.status(201).json(uploaded);
   } catch (error) {
     console.error('Cloudinary Upload Error:', error);
@@ -1024,6 +1033,12 @@ const saveReportDraft = async (req, res) => {
     const diagnosisTest = await findDiagnosisTestForRequest(req, request);
     const isDiagnosis = Boolean(diagnosisTest);
 
+    let resolvedSigId = signatoryId !== undefined ? signatoryId : request.report?.signatoryId;
+    if (!resolvedSigId) {
+      const defaultSig = await LabSignatory.findOne(tenantQuery(req, {})).sort({ createdAt: 1 });
+      if (defaultSig) resolvedSigId = defaultSig._id;
+    }
+
     request.report = {
       ...request.report,
       notes: notes !== undefined ? notes : request.report?.notes,
@@ -1036,7 +1051,7 @@ const saveReportDraft = async (req, res) => {
       dynamicTemplateId: isDiagnosis
         ? (dynamicTemplateId !== undefined ? dynamicTemplateId : request.report?.dynamicTemplateId)
         : request.report?.dynamicTemplateId,
-      signatoryId: signatoryId !== undefined ? signatoryId : request.report?.signatoryId,
+      signatoryId: resolvedSigId,
       updatedBy: req.user._id,
       updatedAt: new Date(),
       createdBy: request.report?.createdBy || req.user._id
@@ -1114,7 +1129,13 @@ const generateReport = async (req, res) => {
     }
 
     let signatoryObj = null;
-    const sigId = signatoryId || request.report?.signatoryId;
+    let sigId = signatoryId || request.report?.signatoryId;
+    if (!sigId) {
+      const defaultSig = await LabSignatory.findOne(tenantQuery(req, {})).sort({ createdAt: 1 });
+      if (defaultSig) {
+        sigId = defaultSig._id;
+      }
+    }
     if (sigId) {
       signatoryObj = await LabSignatory.findById(sigId);
     }

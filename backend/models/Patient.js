@@ -22,15 +22,19 @@ const patientSchema = new mongoose.Schema({
   },
   address: {
     type: String,
-    required: true
+    required: false,
+    default: 'Not specified',
+    trim: true
   },
   dob: {
     type: Date,
-    required: true
+    required: false,
+    default: () => new Date('1990-01-01')
   },
   gender: {
     type: String,
-    required: true
+    required: false,
+    default: 'Male'
   },
   aadhaar: {
     type: String,

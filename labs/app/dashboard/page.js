@@ -29,7 +29,32 @@ import {
   Trash2,
   Receipt,
   Wallet,
-  Save
+  Save,
+  Bell,
+  Activity,
+  Clock,
+  CalendarDays,
+  Layers,
+  Filter,
+  RefreshCw,
+  TrendingUp,
+  Tag,
+  CreditCard,
+  CheckCircle2,
+  AlertCircle,
+  Users,
+  Phone,
+  MapPin,
+  Calendar,
+  UserPlus,
+  ArrowUpDown,
+  HeartPulse,
+  History,
+  Smartphone,
+  ShieldCheck,
+  Mail,
+  Building,
+  HelpCircle
 } from 'lucide-react';
 import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -118,6 +143,135 @@ function DashboardContent() {
   const isTodaysReportsView = searchParams.get('view') === 'todays-reports';
   const isSearchReportsView = searchParams.get('view') === 'search-reports';
   const isSignatoriesView = searchParams.get('view') === 'signatories';
+  const isActivitiesView = searchParams.get('view') === 'activities';
+  const isPatientsView = searchParams.get('view') === 'patients';
+  const isReferralDoctorsView = searchParams.get('view') === 'referral-doctors';
+  const isCollectionCentresView = searchParams.get('view') === 'collection-centres';
+  const isDailyBusinessView = searchParams.get('view') === 'daily-business';
+
+  // Daily Business View States (Matching Reference Layout)
+  const [dailyBusinessDate, setDailyBusinessDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [dailyBusinessTab, setDailyBusinessTab] = useState('transactions'); // 'transactions' | 'bills' | 'expenses'
+  const [dailyBusinessSearch, setDailyBusinessSearch] = useState('');
+  const [showPrevDayBills, setShowPrevDayBills] = useState(false);
+  const [dailyBusinessCashier, setDailyBusinessCashier] = useState('all');
+  const [showIncomeSplit, setShowIncomeSplit] = useState(true);
+  const [showAddCashierModal, setShowAddCashierModal] = useState(false);
+  const [newCashierName, setNewCashierName] = useState('');
+  const [cashiersList, setCashiersList] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('hms_lab_cashiers');
+      if (saved) {
+        try { return JSON.parse(saved); } catch (e) {}
+      }
+    }
+    return ['Ravi Shukla', 'Reception Desk', 'Lab Cashier 1', 'Dr. Rajesh Gupta'];
+  });
+  const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
+  const [expenseForm, setExpenseForm] = useState({
+    title: '',
+    category: 'Lab Reagents & Supplies',
+    amount: '',
+    paymentMethod: 'Cash',
+    paidTo: '',
+    notes: ''
+  });
+  const [labExpensesList, setLabExpensesList] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('hms_lab_expenses_data');
+      if (saved) {
+        try { return JSON.parse(saved); } catch (e) {}
+      }
+    }
+    return [];
+  });
+
+  // Activities & Audit Trail Filter States
+  const [activityDuration, setActivityDuration] = useState('past_7_days');
+  const [activityCategoryFilter, setActivityCategoryFilter] = useState('all'); // 'all' | 'requests' | 'samples' | 'results' | 'reports' | 'billing'
+  const [activitySearchQuery, setActivitySearchQuery] = useState('');
+  const [activitySourceFilter, setActivitySourceFilter] = useState('all'); // 'all' | 'OPD' | 'IPD' | 'Direct'
+
+  // Patients Directory Filter States
+  const [patientSearchQuery, setPatientSearchQuery] = useState('');
+  const [patientGenderFilter, setPatientGenderFilter] = useState('all'); // 'all' | 'Male' | 'Female'
+  const [patientDuesFilter, setPatientDuesFilter] = useState('all'); // 'all' | 'dues' | 'paid'
+  const [patientSourceFilter, setPatientSourceFilter] = useState('all'); // 'all' | 'OPD' | 'IPD' | 'Direct'
+  const [patientSortBy, setPatientSortBy] = useState('latest'); // 'latest' | 'name_asc' | 'name_desc' | 'most_tests' | 'highest_due'
+  const [selectedPatientForHistory, setSelectedPatientForHistory] = useState(null);
+  const [registeredPatients, setRegisteredPatients] = useState([]);
+
+  // Referral Doctors Management States (Synced with "Referred by" in New Bill)
+  const [referralDoctors, setReferralDoctors] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('hms_lab_referrers');
+      if (saved) {
+        try { return JSON.parse(saved); } catch (e) {}
+      }
+    }
+    return [
+      { id: '1', codeId: '1', name: 'Self', specialty: 'Direct Walk-in', phone: '', hospital: 'In-house Lab', commission: '0%' },
+      { id: '2', codeId: '2', name: 'Dr. A. K. Sharma (Cardiologist)', specialty: 'Cardiologist', phone: '9876543210', hospital: 'City Heart Clinic', commission: '10%' },
+      { id: '3', codeId: '3', name: 'Dr. Priya Mehta (General Physician)', specialty: 'General Physician', phone: '9876543211', hospital: 'Apollo Clinic', commission: '10%' },
+      { id: '4', codeId: '4', name: 'Dr. Rajesh Gupta (Pathologist)', specialty: 'Pathologist', phone: '9876543212', hospital: 'Main Hospital', commission: '0%' },
+      { id: '5', codeId: '5', name: 'City Hospital & Diagnostic Clinic', specialty: 'Diagnostic Referral', phone: '9876543213', hospital: 'City Hospital', commission: '15%' }
+    ];
+  });
+  const [refDocSearchQuery, setRefDocSearchQuery] = useState('');
+  const [showAddDocModal, setShowAddDocModal] = useState(false);
+  const [editingDocId, setEditingDocId] = useState(null);
+  const [docForm, setDocForm] = useState({
+    name: '',
+    specialty: '',
+    phone: '',
+    hospital: '',
+    commission: '10%'
+  });
+
+  // Collection Centres Management States (Synced with "Collection Centre" in New Bill)
+  const [collectionCentresList, setCollectionCentresList] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('hms_lab_collection_centres');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            return parsed.map((item, idx) => {
+              if (typeof item === 'string') {
+                return {
+                  id: String(idx + 1),
+                  code: `CC-${String(idx + 1).padStart(2, '0')}`,
+                  name: item,
+                  address: idx === 0 ? 'Main Hospital Premises' : 'Branch Location',
+                  phone: '9876543210',
+                  incharge: 'Lab Supervisor',
+                  status: 'Active'
+                };
+              }
+              return item;
+            });
+          }
+        } catch (e) {}
+      }
+    }
+    return [
+      { id: '1', code: 'CC-01', name: 'Main Hospital Lab', address: 'Main Hospital Premises', phone: '9876543210', incharge: 'Dr. Rajesh Gupta', status: 'Active' },
+      { id: '2', code: 'CC-02', name: 'North Branch Centre', address: 'Sector 14, North City', phone: '9876543211', incharge: 'Suresh Phlebotomist', status: 'Active' },
+      { id: '3', code: 'CC-03', name: 'South Satellite Lab', address: 'South Extension Market', phone: '9876543212', incharge: 'Anjali Assistant', status: 'Active' },
+      { id: '4', code: 'CC-04', name: 'Home Collection Unit', address: 'Mobile Field Vans', phone: '9876543213', incharge: 'Rahul Logistics', status: 'Active' }
+    ];
+  });
+  const [centreSearchQuery, setCentreSearchQuery] = useState('');
+  const [showAddCentreModal, setShowAddCentreModal] = useState(false);
+  const [editingCentreId, setEditingCentreId] = useState(null);
+  const [centreForm, setCentreForm] = useState({
+    name: '',
+    code: '',
+    address: '',
+    phone: '',
+    incharge: '',
+    status: 'Active'
+  });
 
   // Morphology template picker state
   const [activeMorphologyTemplatePicker, setActiveMorphologyTemplatePicker] = useState('');
@@ -137,6 +291,7 @@ function DashboardContent() {
 
   // Signatories State
   const [signatories, setSignatories] = useState([]);
+  const [selectedSignatoryId, setSelectedSignatoryId] = useState('');
   const [loadingSignatories, setLoadingSignatories] = useState(false);
   const [signatoryForm, setSignatoryForm] = useState({
     name: '',
@@ -259,8 +414,8 @@ function DashboardContent() {
 
   const handleSaveSignatory = async (e) => {
     e.preventDefault();
-    if (!signatoryForm.name.trim() || !signatoryForm.designation.trim() || !signatoryForm.qualification.trim()) {
-      alert('Name, designation, and qualification are required');
+    if (!signatoryForm.name.trim() || !signatoryForm.designation.trim()) {
+      alert('Doctor / Pathologist name and designation are required');
       return;
     }
 
@@ -301,12 +456,202 @@ function DashboardContent() {
     }
   };
 
+  const handleSaveReferralDoctor = (e) => {
+    e.preventDefault();
+    if (!docForm.name.trim()) {
+      showToast('Doctor / Referrer name is required', 'error');
+      return;
+    }
+
+    if (editingDocId) {
+      const updated = referralDoctors.map(d => d.id === editingDocId ? { ...d, ...docForm, name: docForm.name.trim() } : d);
+      setReferralDoctors(updated);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('hms_lab_referrers', JSON.stringify(updated));
+      }
+      showToast('Referral doctor updated successfully!', 'success');
+    } else {
+      const newId = String(referralDoctors.length + 1);
+      const newDoc = {
+        id: newId,
+        codeId: newId,
+        name: docForm.name.trim(),
+        specialty: docForm.specialty.trim() || 'Referral Doctor',
+        phone: docForm.phone.trim(),
+        hospital: docForm.hospital.trim() || 'Associated Clinic',
+        commission: docForm.commission.trim() || '10%'
+      };
+      const updated = [...referralDoctors, newDoc];
+      setReferralDoctors(updated);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('hms_lab_referrers', JSON.stringify(updated));
+      }
+      showToast(`Referral doctor "${newDoc.name}" added to bill generation options!`, 'success');
+    }
+
+    setDocForm({ name: '', specialty: '', phone: '', hospital: '', commission: '10%' });
+    setEditingDocId(null);
+    setShowAddDocModal(false);
+  };
+
+  const handleEditReferralDoctor = (doc) => {
+    setEditingDocId(doc.id);
+    setDocForm({
+      name: doc.name || '',
+      specialty: doc.specialty || '',
+      phone: doc.phone || '',
+      hospital: doc.hospital || '',
+      commission: doc.commission || '10%'
+    });
+    setShowAddDocModal(true);
+  };
+
+  const handleDeleteReferralDoctor = (docId) => {
+    const docToDelete = referralDoctors.find(d => d.id === docId);
+    if (!docToDelete) return;
+    if (docToDelete.name === 'Self') {
+      showToast('Default "Self" referral source cannot be removed.', 'error');
+      return;
+    }
+    if (!confirm(`Are you sure you want to remove "${docToDelete.name}" from referral doctors? It will no longer appear in Referred by when generating bills.`)) return;
+
+    const updated = referralDoctors.filter(d => d.id !== docId);
+    setReferralDoctors(updated);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('hms_lab_referrers', JSON.stringify(updated));
+    }
+    showToast(`Referral doctor "${docToDelete.name}" removed from bill generation.`, 'success');
+  };
+
+  const handleSaveCentre = (e) => {
+    e.preventDefault();
+    if (!centreForm.name.trim()) {
+      showToast('Collection centre name is required', 'error');
+      return;
+    }
+
+    if (editingCentreId) {
+      const updated = collectionCentresList.map(c => c.id === editingCentreId ? { ...c, ...centreForm, name: centreForm.name.trim() } : c);
+      setCollectionCentresList(updated);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('hms_lab_collection_centres', JSON.stringify(updated));
+      }
+      showToast('Collection centre updated successfully!', 'success');
+    } else {
+      const newId = String(collectionCentresList.length + 1);
+      const newCentre = {
+        id: newId,
+        code: centreForm.code.trim() || `CC-${String(collectionCentresList.length + 1).padStart(2, '0')}`,
+        name: centreForm.name.trim(),
+        address: centreForm.address.trim() || 'Hospital Branch Location',
+        phone: centreForm.phone.trim() || '',
+        incharge: centreForm.incharge.trim() || 'Center Supervisor',
+        status: centreForm.status || 'Active'
+      };
+      const updated = [...collectionCentresList, newCentre];
+      setCollectionCentresList(updated);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('hms_lab_collection_centres', JSON.stringify(updated));
+      }
+      showToast(`Collection centre "${newCentre.name}" added successfully!`, 'success');
+    }
+
+    setCentreForm({ name: '', code: '', address: '', phone: '', incharge: '', status: 'Active' });
+    setEditingCentreId(null);
+    setShowAddCentreModal(false);
+  };
+
+  const handleEditCentre = (centre) => {
+    setEditingCentreId(centre.id);
+    setCentreForm({
+      name: centre.name || '',
+      code: centre.code || '',
+      address: centre.address || '',
+      phone: centre.phone || '',
+      incharge: centre.incharge || '',
+      status: centre.status || 'Active'
+    });
+    setShowAddCentreModal(true);
+  };
+
+  const handleDeleteCentre = (centreId) => {
+    const centreToDelete = collectionCentresList.find(c => c.id === centreId);
+    if (!centreToDelete) return;
+    if (centreToDelete.name === 'Main Hospital Lab') {
+      showToast('Primary "Main Hospital Lab" cannot be deleted.', 'error');
+      return;
+    }
+    if (!confirm(`Are you sure you want to delete collection centre "${centreToDelete.name}"?`)) return;
+
+    const updated = collectionCentresList.filter(c => c.id !== centreId);
+    setCollectionCentresList(updated);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('hms_lab_collection_centres', JSON.stringify(updated));
+    }
+    showToast(`Collection centre "${centreToDelete.name}" removed.`, 'success');
+  };
+
+  // Daily Business Cashier & Expense Handlers
+  const handleSaveCashier = (e) => {
+    e.preventDefault();
+    if (!newCashierName.trim()) return;
+    const name = newCashierName.trim();
+    if (!cashiersList.includes(name)) {
+      const updated = [...cashiersList, name];
+      setCashiersList(updated);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('hms_lab_cashiers', JSON.stringify(updated));
+      }
+      showToast(`Cashier "${name}" added successfully!`, 'success');
+    }
+    setNewCashierName('');
+    setShowAddCashierModal(false);
+  };
+
+  const handleSaveExpense = (e) => {
+    e.preventDefault();
+    if (!expenseForm.title.trim() || !expenseForm.amount) {
+      showToast('Title and Amount are required for expenses', 'error');
+      return;
+    }
+    const newExp = {
+      id: String(Date.now()),
+      title: expenseForm.title.trim(),
+      category: expenseForm.category || 'Lab Reagents & Supplies',
+      amount: parseFloat(expenseForm.amount) || 0,
+      paymentMethod: expenseForm.paymentMethod || 'Cash',
+      paidTo: expenseForm.paidTo.trim() || 'Vendor',
+      notes: expenseForm.notes.trim() || '',
+      date: dailyBusinessDate,
+      time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      recordedBy: user?.name || user?.username || 'Admin'
+    };
+    const updated = [newExp, ...labExpensesList];
+    setLabExpensesList(updated);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('hms_lab_expenses_data', JSON.stringify(updated));
+    }
+    showToast(`Expense ₹${newExp.amount} recorded successfully!`, 'success');
+    setExpenseForm({ title: '', category: 'Lab Reagents & Supplies', amount: '', paymentMethod: 'Cash', paidTo: '', notes: '' });
+    setShowAddExpenseModal(false);
+  };
+
+  const handleDeleteExpense = (expId) => {
+    if (!confirm('Are you sure you want to delete this expense record?')) return;
+    const updated = labExpensesList.filter(e => e.id !== expId);
+    setLabExpensesList(updated);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('hms_lab_expenses_data', JSON.stringify(updated));
+    }
+    showToast('Expense record deleted', 'success');
+  };
+
   const handleSignatureUpload = (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 200 * 1024) {
-      alert('Signature image size should not exceed 200kb');
+    if (file.size > 400 * 1024) {
+      showToast('Signature image size should not exceed 400kb', 'error');
       return;
     }
 
@@ -314,13 +659,23 @@ function DashboardContent() {
     const reader = new FileReader();
     reader.onloadend = async () => {
       try {
+        const base64Data = reader.result;
         const res = await api.post('/lab/upload-image', {
-          image: reader.result,
+          imageData: base64Data,
+          image: base64Data,
           folder: 'hms/lab-signatures'
         });
-        setSignatoryForm(prev => ({ ...prev, signatureImageUrl: res.url }));
+        const finalUrl = res?.url || res?.data?.url || base64Data;
+        setSignatoryForm(prev => ({ ...prev, signatureImageUrl: finalUrl }));
+        showToast('Signature uploaded successfully!', 'success');
       } catch (err) {
-        alert('Image upload failed');
+        console.error('Signature upload error, using local base64 fallback:', err);
+        if (reader.result) {
+          setSignatoryForm(prev => ({ ...prev, signatureImageUrl: reader.result }));
+          showToast('Signature loaded successfully!', 'success');
+        } else {
+          showToast(err.data?.message || err.message || 'Image upload failed', 'error');
+        }
       } finally {
         setUploadingSign(false);
       }
@@ -395,12 +750,73 @@ function DashboardContent() {
           ? reportData.tests.split(',').map(t => t.trim()) 
           : []);
     
+    const formatDateTime = (dateVal, timeVal, fallbackObj) => {
+      let d = '';
+      let t = '';
+      if (dateVal) {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(String(dateVal).trim())) {
+          const [yy, mm, dd] = String(dateVal).trim().split('-');
+          d = `${dd}/${mm}/${yy}`;
+        } else {
+          const parsed = new Date(dateVal);
+          d = !isNaN(parsed.getTime()) ? parsed.toLocaleDateString('en-GB') : String(dateVal);
+        }
+      } else if (fallbackObj) {
+        d = new Date(fallbackObj).toLocaleDateString('en-GB');
+      }
+
+      if (timeVal) {
+        if (String(timeVal).includes(':')) {
+          const [h, m] = String(timeVal).trim().split(':');
+          let hour = parseInt(h, 10);
+          const min = m ? m.slice(0, 2) : '00';
+          if (!isNaN(hour)) {
+            const ampm = hour >= 12 ? 'PM' : 'AM';
+            hour = hour % 12 || 12;
+            t = `${String(hour).padStart(2, '0')}:${min} ${ampm}`;
+          } else {
+            t = String(timeVal);
+          }
+        } else {
+          t = String(timeVal);
+        }
+      } else if (fallbackObj) {
+        t = new Date(fallbackObj).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+      }
+
+      if (d && t) return `${d} ${t}`;
+      if (d) return d;
+      return '—';
+    };
+
+    const reqDate = reportData.createdAt ? new Date(reportData.createdAt) : new Date();
+    const updDate = reportData.updatedAt ? new Date(reportData.updatedAt) : reqDate;
+
     const regDateStr = reportData.createdAt 
       ? new Date(reportData.createdAt).toLocaleDateString('en-GB') + ' ' + new Date(reportData.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-      : '';
-    const reportDateStr = reportData.updatedAt
-      ? new Date(reportData.updatedAt).toLocaleDateString('en-GB') + ' ' + new Date(reportData.updatedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-      : '';
+      : formatDateTime('', '', reqDate);
+
+    const collectedDateStr = formatDateTime(
+      reportData.report?.collectedDate || reportData.collectedDate || datesInfo.collectedDate,
+      reportData.report?.collectedTime || reportData.collectedTime || datesInfo.collectedTime,
+      reqDate
+    );
+
+    const receivedDateStr = formatDateTime(
+      reportData.report?.receivedDate || reportData.receivedDate || datesInfo.receivedDate,
+      reportData.report?.receivedTime || reportData.receivedTime || datesInfo.receivedTime,
+      reqDate
+    );
+
+    const reportDateStr = (reportData.report?.reportedDate || reportData.reportedDate)
+      ? formatDateTime(
+          reportData.report?.reportedDate || reportData.reportedDate,
+          reportData.report?.reportedTime || reportData.reportedTime,
+          updDate
+        )
+      : (reportData.updatedAt
+          ? new Date(reportData.updatedAt).toLocaleDateString('en-GB') + ' ' + new Date(reportData.updatedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+          : formatDateTime('', '', updDate));
 
     const printWindow = window.open('', '_blank', 'width=800,height=600');
     if (!printWindow) {
@@ -689,88 +1105,143 @@ function DashboardContent() {
               display: flex;
               justify-content: flex-end;
               margin-top: 48px;
+              padding-top: 24px;
               text-align: right;
               font-size: 11px;
+              clear: both;
             }
             .signature-img {
-              max-height: 48px;
+              max-height: 52px;
+              max-width: 150px;
               object-fit: contain;
-              margin-bottom: 4px;
+              margin-bottom: 6px;
+              display: block;
+              margin-left: auto;
+              margin-right: auto;
+            }
+            .report-wrapper-table {
+              width: 100%;
+              border-collapse: collapse;
+              border: none;
+            }
+            .report-wrapper-table > thead {
+              display: table-header-group;
+            }
+            .report-wrapper-table > tbody {
+              display: table-row-group;
+            }
+            .report-wrapper-table > thead > tr > th {
+              border: none;
+              padding: 0;
+              text-align: left;
+              font-weight: normal;
+            }
+            .report-wrapper-table > tbody > tr > td {
+              border: none;
+              padding: 0;
+            }
+            .report-wrapper-table tr {
+              page-break-inside: auto;
+              break-inside: auto;
+            }
+            .table-box table tr {
+              page-break-inside: avoid;
+              break-inside: avoid;
             }
           </style>
         </head>
         <body>
           <div class="container">
-            ${letterheadHtml}
-            
-            <div class="grid-container">
-              <div class="col-6">
-                <h2 style="font-size: 14px; font-weight: 800; color: #0f172a; margin: 0 0 8px 0;">${patient.patientName || 'Patient Name'}</h2>
-                <div class="row-flex"><span class="label">Age / Sex</span><span class="value">: ${ageStr} / ${genderStr}</span></div>
-                <div class="row-flex"><span class="label">Referred by</span><span class="value">: ${reportData.remarks || 'Self'}</span></div>
-                <div class="row-flex"><span class="label">Reg. no.</span><span class="value">: ${reportData.labId || '—'}</span></div>
-              </div>
-              <div class="col-6" style="display: flex; flex-direction: column; align-items: flex-end;">
-                <div style="width: 100%; max-width: 280px;">
-                  <div class="row-flex"><span class="label" style="width: 40%; text-align: right; padding-right: 8px;">Registered</span><span class="value" style="width: 60%;">: ${regDateStr || '—'}</span></div>
-                  <div class="row-flex"><span class="label" style="width: 40%; text-align: right; padding-right: 8px;">Collected</span><span class="value" style="width: 60%;">: ${datesInfo.collectedDate || '—'}</span></div>
-                  <div class="row-flex"><span class="label" style="width: 40%; text-align: right; padding-right: 8px;">Received</span><span class="value" style="width: 60%;">: ${datesInfo.receivedDate || '—'}</span></div>
-                  <div class="row-flex"><span class="label" style="width: 40%; text-align: right; padding-right: 8px;">Reported</span><span class="value" style="width: 60%;">: ${reportDateStr || '—'}</span></div>
-                </div>
-              </div>
-            </div>
+            <table class="report-wrapper-table">
+              <thead>
+                <tr>
+                  <th>
+                    ${letterheadHtml}
+                    
+                    <div class="grid-container">
+                      <div class="col-6">
+                        <h2 style="font-size: 14px; font-weight: 800; color: #0f172a; margin: 0 0 8px 0;">${patient.patientName || 'Patient Name'}</h2>
+                        <div class="row-flex"><span class="label">Age / Sex</span><span class="value">: ${ageStr} / ${genderStr}</span></div>
+                        <div class="row-flex"><span class="label">Referred by</span><span class="value">: ${reportData.remarks || 'Self'}</span></div>
+                        <div class="row-flex"><span class="label">Reg. no.</span><span class="value">: ${reportData.labId || '—'}</span></div>
+                      </div>
+                      <div class="col-6" style="display: flex; flex-direction: column; align-items: flex-end;">
+                        <div style="width: 100%; max-width: 280px;">
+                          <div class="row-flex"><span class="label" style="width: 40%; text-align: right; padding-right: 8px;">Registered</span><span class="value" style="width: 60%;">: ${regDateStr || '—'}</span></div>
+                          <div class="row-flex"><span class="label" style="width: 40%; text-align: right; padding-right: 8px;">Collected</span><span class="value" style="width: 60%;">: ${collectedDateStr}</span></div>
+                          <div class="row-flex"><span class="label" style="width: 40%; text-align: right; padding-right: 8px;">Received</span><span class="value" style="width: 60%;">: ${receivedDateStr}</span></div>
+                          <div class="row-flex"><span class="label" style="width: 40%; text-align: right; padding-right: 8px;">Reported</span><span class="value" style="width: 60%;">: ${reportDateStr || '—'}</span></div>
+                        </div>
+                      </div>
+                    </div>
 
-            <div style="padding: 8px 0; text-align: center; border-bottom: 1px solid #e2e8f0;">
-              <h3 style="font-size: 12px; font-weight: 900; letter-spacing: 2px; color: #0f172a; margin: 0; text-transform: uppercase;">
-                ${(() => {
-                  const firstTest = testList.length > 0 ? findMatchedTest(testList[0]) : null;
-                  return firstTest?.department || reportData.category || 'BIOCHEMISTRY';
-                })()}
-              </h3>
-              ${testList.length > 0 ? `
-                <div style="font-size: 11px; font-weight: 800; color: #334155; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px;">
-                  ${testList.join(', ')}
-                </div>
-              ` : ''}
-            </div>
+                    <div style="padding: 8px 0; text-align: center; border-bottom: 1px solid #e2e8f0; margin-bottom: 12px;">
+                      <h3 style="font-size: 12px; font-weight: 900; letter-spacing: 2px; color: #0f172a; margin: 0; text-transform: uppercase;">
+                        ${(() => {
+                          const firstTest = testList.length > 0 ? findMatchedTest(testList[0]) : null;
+                          return firstTest?.department || reportData.category || 'BIOCHEMISTRY';
+                        })()}
+                      </h3>
+                      ${testList.length > 0 ? `
+                        <div style="font-size: 11px; font-weight: 800; color: #334155; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px;">
+                          ${testList.join(', ')}
+                        </div>
+                      ` : ''}
+                    </div>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <div class="table-box">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th style="width: 40%;">TEST</th>
+                            <th style="width: 20%;">VALUE</th>
+                            <th style="width: 20%;">UNIT</th>
+                            <th style="width: 20%;">REFERENCE</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          ${rowsHtml}
+                        </tbody>
+                      </table>
+                    </div>
 
-            <div class="table-box">
-              <table>
-                <thead>
-                  <tr>
-                    <th style="width: 40%;">TEST</th>
-                    <th style="width: 20%;">VALUE</th>
-                    <th style="width: 20%;">UNIT</th>
-                    <th style="width: 20%;">REFERENCE</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${rowsHtml}
-                </tbody>
-              </table>
-            </div>
+                    ${reportData.report?.notes ? `<div class="italic-box"><b>Notes:</b> ${reportData.report.notes}</div>` : ''}
+                    ${reportData.report?.remarks ? `<div class="italic-box"><b>Remarks:</b> ${reportData.report.remarks}</div>` : ''}
+                    ${reportData.report?.advice ? `<div class="italic-box"><b>Advice:</b> ${reportData.report.advice}</div>` : ''}
+                    
+                    ${(!isInterpretationEmpty && printInterpretation && reportData.printInterpretation !== false) ? `
+                      <div style="margin-top: 16px; border-top: 1px solid #e2e8f0; padding-top: 12px; page-break-inside: avoid; break-inside: avoid;">
+                        <h4 style="font-size: 11px; font-weight: 900; margin: 0 0 6px 0; text-transform: uppercase;">Interpretation</h4>
+                        <div style="font-size: 10px; line-height: 1.5; color: #334155;">${formatInterpretationToHtml(reportData.report.interpretation)}</div>
+                      </div>
+                    ` : ''}
 
-            ${reportData.report?.notes ? `<div class="italic-box"><b>Notes:</b> ${reportData.report.notes}</div>` : ''}
-            ${reportData.report?.remarks ? `<div class="italic-box"><b>Remarks:</b> ${reportData.report.remarks}</div>` : ''}
-            ${reportData.report?.advice ? `<div class="italic-box"><b>Advice:</b> ${reportData.report.advice}</div>` : ''}
-            
-            ${(!isInterpretationEmpty && printInterpretation && reportData.printInterpretation !== false) ? `
-              <div style="margin-top: 16px; border-top: 1px solid #e2e8f0; padding-top: 12px;">
-                <h4 style="font-size: 11px; font-weight: 900; margin: 0 0 6px 0; text-transform: uppercase;">Interpretation</h4>
-                <div style="font-size: 10px; line-height: 1.5; color: #334155;">${formatInterpretationToHtml(reportData.report.interpretation)}</div>
-              </div>
-            ` : ''}
+                    ${(() => {
+                      const reportSignatory = (reportData.report?.signatoryId && typeof reportData.report.signatoryId === 'object' && reportData.report.signatoryId.name)
+                        ? reportData.report.signatoryId
+                        : (signatories.find(s => s._id === (reportData.report?.signatoryId || reportData.signatoryId || selectedSignatoryId)) || (signatories.length > 0 ? signatories[0] : null));
 
-            ${reportData.report?.signatoryId ? `
-              <div class="signatory-box">
-                <div>
-                  ${reportData.report.signatoryId.signatureImageUrl ? `<img src="${reportData.report.signatoryId.signatureImageUrl}" style="max-height: 48px; object-fit: contain; margin-bottom: 4px;" /><br/>` : ''}
-                  <b>${reportData.report.signatoryId.name}</b><br/>
-                  <span>${reportData.report.signatoryId.qualification}</span><br/>
-                  <span>${reportData.report.signatoryId.designation}</span>
-                </div>
-              </div>
-            ` : ''}
+                      if (!reportSignatory) return '';
+
+                      return `
+                        <div class="signatory-box" style="display: flex; justify-content: flex-end; margin-top: 48px; padding-top: 24px; text-align: right; font-size: 11px; page-break-inside: avoid; break-inside: avoid; clear: both;">
+                          <div style="display: inline-block; text-align: center; min-width: 150px; padding-top: 8px;">
+                            ${reportSignatory.signatureImageUrl ? `<img class="signature-img" src="${reportSignatory.signatureImageUrl}" style="max-height: 52px; max-width: 150px; object-fit: contain; margin-bottom: 8px; display: block; margin-left: auto; margin-right: auto;" />` : ''}
+                            <b style="font-size: 11px; color: #0f172a; display: block;">${reportSignatory.name}</b>
+                            <span style="font-size: 10px; color: #475569; display: block; margin-top: 2px;">${reportSignatory.designation}</span>
+                          </div>
+                        </div>
+                      `;
+                    })()}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
           <script>
             window.onload = function() {
@@ -787,15 +1258,18 @@ function DashboardContent() {
   const loadDashboardData = async () => {
     setLoadingDashboard(true);
     try {
-      const [reqs, tests, bills, settingsRes] = await Promise.all([
+      const [reqs, tests, bills, settingsRes, regRes] = await Promise.all([
         api.get('/lab/requests').catch(() => []),
         api.get('/lab/tests').catch(() => []),
         api.get('/lab/bills').catch(() => []),
-        api.get('/admin/hospital-settings').catch(() => null)
+        api.get('/admin/hospital-settings').catch(() => null),
+        api.get('/patients/registrations/list').catch(() => [])
       ]);
       setLabRequests(Array.isArray(reqs) ? reqs : []);
       setAvailableLabTests(Array.isArray(tests) ? tests : []);
       setLabBills(Array.isArray(bills) ? bills : []);
+      const patList = Array.isArray(regRes) ? regRes : (regRes?.registrations || []);
+      setRegisteredPatients(patList);
       if (settingsRes && settingsRes.exists && settingsRes.data) {
         setHospitalSettings(settingsRes.data);
       }
@@ -1062,10 +1536,692 @@ function DashboardContent() {
     setSearchSelectedTest('all');
   };
 
+  const formatTimeAgo = (dateObj) => {
+    if (!dateObj || isNaN(dateObj.getTime())) return '';
+    const now = new Date();
+    const diffMs = now.getTime() - dateObj.getTime();
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return dateObj.toLocaleDateString('en-GB');
+  };
+
+  // Compile Comprehensive Chronological Lab Activities and Audit Trail
+  const allLabActivities = React.useMemo(() => {
+    const events = [];
+
+    labRequests.forEach((req) => {
+      const pName = req.patientId?.patientName || 'Patient';
+      const ageVal = req.patientId?.age || '';
+      const genderVal = req.patientId?.gender?.[0]?.toUpperCase() || '';
+      const ageSexStr = ageVal ? `${ageVal} YRS${genderVal ? `/${genderVal}` : ''}` : '';
+      const uhid = req.patientId?.uhid || 'N/A';
+      const mobile = req.patientId?.mobile || '';
+      const labId = req.labId ? (req.labId.startsWith('#') ? req.labId : `#${req.labId}`) : 'N/A';
+      const testsStr = Array.isArray(req.tests) ? req.tests.join(', ') : (req.tests || 'Diagnostic Tests');
+
+      let refBy = 'Self';
+      if (req.remarks && req.remarks.includes('Referred by:')) {
+        refBy = req.remarks.split('Referred by:')[1].trim();
+      }
+
+      let source = 'OPD';
+      if (req.remarks && req.remarks.toLowerCase().includes('ipd')) {
+        source = 'IPD';
+      } else if (Array.isArray(req.statusHistory) && req.statusHistory.some(sh => sh.notes && sh.notes.toLowerCase().includes('ipd'))) {
+        source = 'IPD';
+      } else if (req.doctorId?.department || (req.patientId && req.patientId.department)) {
+        source = 'OPD';
+      } else {
+        source = 'Direct';
+      }
+
+      const createdDate = req.createdAt ? new Date(req.createdAt) : (req.bookingDate ? new Date(req.bookingDate) : new Date());
+
+      // 1. Order / Request Created
+      events.push({
+        id: `req-created-${req._id}`,
+        category: 'requests',
+        categoryLabel: 'Order Created',
+        badgeColor: 'bg-blue-100 text-blue-800 border-blue-200',
+        dotColor: 'bg-blue-500',
+        iconName: 'Plus',
+        action: 'Lab Request Booked',
+        title: `Test order created for ${testsStr}`,
+        description: `New lab request registered for ${pName} (${ageSexStr || 'Patient'}). Source: ${source}. Referred by: ${refBy}.`,
+        patientName: pName,
+        ageSex: ageSexStr,
+        uhid,
+        mobile,
+        labId,
+        tests: testsStr,
+        source,
+        referredBy: refBy,
+        timestamp: createdDate,
+        performedBy: req.doctorId?.doctorName || req.doctorId?.username || refBy || 'Reception / Desk',
+        performedRole: 'Doctor / Recommender',
+        rawRequest: req
+      });
+
+      // 2. Sample Collection
+      if (
+        req.sampleStatus === 'Sample Collected' || 
+        req.sampleStatus === 'Sample Submitted' ||
+        req.report?.collectedAt ||
+        req.collectionDate
+      ) {
+        const sampleDate = new Date(req.report?.collectedAt || req.collectionDate || req.updatedAt || createdDate);
+        const colBy = req.report?.collectedByName || req.collectedByName || req.assignedAssistantId?.doctorName || req.assignedAssistantId?.username || 'Lab Phlebotomist';
+        events.push({
+          id: `req-sample-${req._id}`,
+          category: 'samples',
+          categoryLabel: 'Sample Collected',
+          badgeColor: 'bg-amber-100 text-amber-800 border-amber-200',
+          dotColor: 'bg-amber-500',
+          iconName: 'FlaskConical',
+          action: 'Specimen / Sample Collected',
+          title: `Sample collected for ${testsStr}`,
+          description: `Diagnostic biological sample collected via ${req.collectionType || 'Lab Visit'}. Processing initiated.`,
+          patientName: pName,
+          ageSex: ageSexStr,
+          uhid,
+          mobile,
+          labId,
+          tests: testsStr,
+          source,
+          referredBy: refBy,
+          timestamp: sampleDate,
+          performedBy: colBy,
+          performedRole: 'Phlebotomist / Technician',
+          rawRequest: req
+        });
+      }
+
+      // 3. Results Entry / Testing In Progress
+      const hasParameters = Array.isArray(req.report?.parameters) && req.report.parameters.length > 0;
+      if (
+        hasParameters ||
+        req.reportStatus === 'In Progress' ||
+        req.status === 'testing_in_progress' ||
+        req.report?.interpretation ||
+        req.report?.remarks
+      ) {
+        const resultsDate = new Date(req.report?.updatedAt || req.updatedAt || createdDate);
+        const paramCount = req.report?.parameters?.length || 0;
+        events.push({
+          id: `req-results-${req._id}`,
+          category: 'results',
+          categoryLabel: 'Results Entered',
+          badgeColor: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+          dotColor: 'bg-indigo-500',
+          iconName: 'Edit3',
+          action: 'Test Parameters Recorded',
+          title: `${paramCount > 0 ? `${paramCount} parameter value(s) recorded` : 'Diagnostic results drafted'} for ${testsStr}`,
+          description: `Parameters, reference ranges, and observations updated.${req.report?.remarks ? ` Remarks: "${req.report.remarks}"` : ''}`,
+          patientName: pName,
+          ageSex: ageSexStr,
+          uhid,
+          mobile,
+          labId,
+          tests: testsStr,
+          source,
+          referredBy: refBy,
+          timestamp: resultsDate,
+          performedBy: req.report?.updatedBy?.doctorName || req.report?.updatedBy?.username || 'Lab Technician',
+          performedRole: 'Lab Technician',
+          rawRequest: req
+        });
+      }
+
+      // 4. Report Finalized / Completed
+      const isFinal = req.reportStatus === 'Completed' || req.reportStatus === 'Final' || req.reportStatus === 'Signed off' || req.status === 'completed';
+      if (isFinal) {
+        const finalDate = new Date(req.report?.completionDate || req.report?.generatedAt || req.updatedAt || createdDate);
+        events.push({
+          id: `req-final-${req._id}`,
+          category: 'reports',
+          categoryLabel: 'Report Finalized',
+          badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+          dotColor: 'bg-emerald-500',
+          iconName: 'Check',
+          action: 'Lab Report Finalized & Ready',
+          title: `Diagnostic report finalized for ${testsStr}`,
+          description: `All investigative parameters verified and marked complete. Ready for patient print and delivery.`,
+          patientName: pName,
+          ageSex: ageSexStr,
+          uhid,
+          mobile,
+          labId,
+          tests: testsStr,
+          source,
+          referredBy: refBy,
+          timestamp: finalDate,
+          performedBy: req.report?.generatedBy?.doctorName || req.report?.signatoryId?.name || 'Pathologist',
+          performedRole: 'Pathologist',
+          rawRequest: req
+        });
+      }
+
+      // 5. Signed Off by Authorized Signatory
+      if (req.reportStatus === 'Signed off' || req.report?.signatoryId) {
+        const signDate = new Date(req.report?.reportedDate || req.report?.completionDate || req.updatedAt || createdDate);
+        const sigObj = (req.report?.signatoryId && typeof req.report.signatoryId === 'object' && req.report.signatoryId.name)
+          ? req.report.signatoryId
+          : signatories.find(s => s._id === req.report?.signatoryId);
+        
+        events.push({
+          id: `req-signoff-${req._id}`,
+          category: 'reports',
+          categoryLabel: 'Report Signed Off',
+          badgeColor: 'bg-purple-100 text-purple-800 border-purple-200',
+          dotColor: 'bg-purple-500',
+          iconName: 'UserCheck',
+          action: 'Clinical Sign-off Stamp Applied',
+          title: `Report authorized & digitally stamped for ${testsStr}`,
+          description: `Authorized by ${sigObj?.name || 'Doctor'} (${sigObj?.designation || 'Consultant Pathologist'}). Clinical approval granted.`,
+          patientName: pName,
+          ageSex: ageSexStr,
+          uhid,
+          mobile,
+          labId,
+          tests: testsStr,
+          source,
+          referredBy: refBy,
+          timestamp: signDate,
+          performedBy: sigObj?.name || 'Authorized Pathologist',
+          performedRole: sigObj?.designation || 'Consultant Pathologist',
+          rawRequest: req
+        });
+      }
+    });
+
+    // 6. Billing & Payment Transactions
+    labBills.forEach((bill) => {
+      const pName = bill.patientId?.patientName || 'Patient';
+      const uhid = bill.patientId?.uhid || 'N/A';
+      const mobile = bill.patientId?.mobile || '';
+      const billNo = bill.billNo || bill.labId || 'BILL';
+      const billCreatedDate = bill.createdAt ? new Date(bill.createdAt) : new Date();
+
+      // Bill generation event
+      events.push({
+        id: `bill-created-${bill._id}`,
+        category: 'billing',
+        categoryLabel: 'Bill Generated',
+        badgeColor: 'bg-orange-100 text-orange-800 border-orange-200',
+        dotColor: 'bg-orange-500',
+        iconName: 'Receipt',
+        action: 'Lab Bill / Invoice Created',
+        title: `Bill #${billNo} generated: ₹${(bill.totalAmount || 0).toLocaleString('en-IN')}`,
+        description: `Invoice raised for ${pName}. Total: ₹${(bill.totalAmount || 0).toLocaleString('en-IN')}, Paid: ₹${(bill.paidAmount || 0).toLocaleString('en-IN')}, Due: ₹${(bill.dueAmount || 0).toLocaleString('en-IN')}. Status: ${bill.paymentStatus || 'Unpaid'}.`,
+        patientName: pName,
+        uhid,
+        mobile,
+        labId: billNo,
+        amount: bill.totalAmount || 0,
+        timestamp: billCreatedDate,
+        performedBy: bill.doctorId?.doctorName || bill.doctorId?.username || 'Billing Desk',
+        performedRole: 'Billing Desk',
+        rawBill: bill
+      });
+
+      // Individual payment events
+      if (Array.isArray(bill.payments) && bill.payments.length > 0) {
+        bill.payments.forEach((payment, pIdx) => {
+          const payDate = payment.date ? new Date(payment.date) : (bill.updatedAt ? new Date(bill.updatedAt) : billCreatedDate);
+          events.push({
+            id: `bill-payment-${bill._id}-${pIdx}`,
+            category: 'billing',
+            categoryLabel: 'Payment Received',
+            badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+            dotColor: 'bg-emerald-600',
+            iconName: 'Wallet',
+            action: `Payment Received (${payment.paymentMethod || 'Cash'})`,
+            title: `₹${(payment.amount || 0).toLocaleString('en-IN')} received for Bill #${billNo}`,
+            description: `Payment of ₹${(payment.amount || 0).toLocaleString('en-IN')} collected via ${payment.paymentMethod || 'Cash'}${payment.transactionRef ? ` (Ref: ${payment.transactionRef})` : ''}.${payment.remarks ? ` Note: ${payment.remarks}` : ''}`,
+            patientName: pName,
+            uhid,
+            mobile,
+            labId: billNo,
+            amount: payment.amount || 0,
+            timestamp: payDate,
+            performedBy: payment.receivedByName || payment.receivedBy?.doctorName || payment.receivedBy?.username || 'Cashier',
+            performedRole: 'Cashier / Finance',
+            rawBill: bill
+          });
+        });
+      } else if (bill.paidAmount > 0) {
+        const payDate = bill.updatedAt ? new Date(bill.updatedAt) : billCreatedDate;
+        events.push({
+          id: `bill-paid-${bill._id}`,
+          category: 'billing',
+          categoryLabel: 'Payment Received',
+          badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+          dotColor: 'bg-emerald-600',
+          iconName: 'Wallet',
+          action: `Payment Received (${bill.paymentMethod || 'Cash'})`,
+          title: `₹${(bill.paidAmount || 0).toLocaleString('en-IN')} received for Bill #${billNo}`,
+          description: `Payment of ₹${(bill.paidAmount || 0).toLocaleString('en-IN')} collected. Status: ${bill.paymentStatus || 'Paid'}.`,
+          patientName: pName,
+          uhid,
+          mobile,
+          labId: billNo,
+          amount: bill.paidAmount || 0,
+          timestamp: payDate,
+          performedBy: bill.paymentReceivedBy?.doctorName || 'Cashier',
+          performedRole: 'Cashier',
+          rawBill: bill
+        });
+      }
+    });
+
+    // Sort newest to oldest
+    return events.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+  }, [labRequests, labBills, signatories]);
+
+  // Filtered Lab Activities List
+  const filteredLabActivities = React.useMemo(() => {
+    return allLabActivities.filter(item => {
+      // 1. Search Query filter
+      if (activitySearchQuery) {
+        const q = activitySearchQuery.toLowerCase();
+        const matches = (
+          item.patientName.toLowerCase().includes(q) ||
+          item.uhid.toLowerCase().includes(q) ||
+          item.labId.toLowerCase().includes(q) ||
+          (item.tests && item.tests.toLowerCase().includes(q)) ||
+          item.title.toLowerCase().includes(q) ||
+          item.description.toLowerCase().includes(q) ||
+          item.performedBy.toLowerCase().includes(q) ||
+          item.action.toLowerCase().includes(q)
+        );
+        if (!matches) return false;
+      }
+
+      // 2. Category Filter
+      if (activityCategoryFilter !== 'all') {
+        if (item.category !== activityCategoryFilter) return false;
+      }
+
+      // 3. Source Filter
+      if (activitySourceFilter !== 'all') {
+        if (item.source && item.source !== activitySourceFilter) return false;
+      }
+
+      // 4. Duration Filter
+      if (activityDuration && activityDuration !== 'all') {
+        const now = new Date();
+        const itemDate = item.timestamp;
+
+        if (activityDuration === 'today') {
+          const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          if (itemDate < startOfToday) return false;
+        } else if (activityDuration === 'yesterday') {
+          const startOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+          const endOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          if (itemDate < startOfYesterday || itemDate >= endOfYesterday) return false;
+        } else if (activityDuration === 'past_7_days') {
+          const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          if (itemDate < sevenDaysAgo) return false;
+        } else if (activityDuration === 'past_30_days') {
+          const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          if (itemDate < thirtyDaysAgo) return false;
+        } else if (activityDuration === 'this_month') {
+          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+          if (itemDate < startOfMonth) return false;
+        } else if (activityDuration === 'last_month') {
+          const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+          if (itemDate < startOfLastMonth || itemDate > endOfLastMonth) return false;
+        }
+      }
+
+      return true;
+    });
+  }, [allLabActivities, activitySearchQuery, activityCategoryFilter, activitySourceFilter, activityDuration]);
+
+  // Compile Comprehensive Unified Lab Patient Profiles Directory
+  const allLabPatients = React.useMemo(() => {
+    const patientMap = new Map();
+
+    const getOrCreatePatient = (patientObj, fallbackSource = 'Direct') => {
+      if (!patientObj) return null;
+      const rawUhid = patientObj.uhid ? String(patientObj.uhid).trim() : '';
+      const rawMobile = patientObj.mobile ? String(patientObj.mobile).trim() : '';
+      const rawName = patientObj.patientName ? String(patientObj.patientName).trim() : 'Patient';
+
+      const key = rawUhid && rawUhid !== 'N/A'
+        ? `uhid:${rawUhid.toLowerCase()}`
+        : (rawMobile ? `mob:${rawMobile}_${rawName.toLowerCase()}` : `id:${patientObj._id || rawName.toLowerCase()}`);
+
+      if (!patientMap.has(key)) {
+        patientMap.set(key, {
+          id: key,
+          patientId: patientObj._id || null,
+          patientName: rawName,
+          uhid: rawUhid || 'N/A',
+          age: patientObj.age || (patientObj.demographics?.age) || '',
+          gender: patientObj.gender || (patientObj.demographics?.gender) || 'Male',
+          mobile: rawMobile || patientObj.mobileNumber || 'N/A',
+          guardianName: patientObj.guardianName || patientObj.fatherName || patientObj.demographics?.guardianName || '',
+          address: patientObj.address || patientObj.demographics?.address || '',
+          city: patientObj.city || patientObj.demographics?.city || '',
+          bloodGroup: patientObj.bloodGroup || '',
+          source: fallbackSource,
+          latestVisitDate: null,
+          testsSet: new Set(),
+          requests: [],
+          bills: [],
+          totalBilledAmount: 0,
+          totalPaidAmount: 0,
+          totalDueAmount: 0,
+          latestReportStatus: 'New'
+        });
+      }
+      return patientMap.get(key);
+    };
+
+    // 1. Process all lab requests
+    labRequests.forEach((req) => {
+      const pObj = req.patientId;
+      if (!pObj) return;
+
+      let reqSource = 'OPD';
+      if (req.remarks && req.remarks.toLowerCase().includes('ipd')) {
+        reqSource = 'IPD';
+      } else if (Array.isArray(req.statusHistory) && req.statusHistory.some(sh => sh.notes && sh.notes.toLowerCase().includes('ipd'))) {
+        reqSource = 'IPD';
+      } else if (req.doctorId?.department || (pObj && pObj.department)) {
+        reqSource = 'OPD';
+      } else {
+        reqSource = 'Direct';
+      }
+
+      const pEntry = getOrCreatePatient(pObj, reqSource);
+      if (!pEntry) return;
+
+      pEntry.requests.push(req);
+      pEntry.source = reqSource;
+
+      // Extract tests
+      if (Array.isArray(req.tests)) {
+        req.tests.forEach(t => { if (t) pEntry.testsSet.add(t); });
+      } else if (typeof req.tests === 'string' && req.tests) {
+        pEntry.testsSet.add(req.tests);
+      }
+
+      const reqDate = req.createdAt ? new Date(req.createdAt) : (req.bookingDate ? new Date(req.bookingDate) : new Date());
+      if (!pEntry.latestVisitDate || reqDate > pEntry.latestVisitDate) {
+        pEntry.latestVisitDate = reqDate;
+        pEntry.latestReportStatus = req.reportStatus || req.status || 'New';
+      }
+    });
+
+    // 2. Process all lab bills
+    labBills.forEach((bill) => {
+      const pObj = bill.patientId;
+      if (!pObj) return;
+
+      const pEntry = getOrCreatePatient(pObj, 'Direct');
+      if (!pEntry) return;
+
+      pEntry.bills.push(bill);
+      pEntry.totalBilledAmount += (bill.totalAmount || 0);
+      pEntry.totalPaidAmount += (bill.paidAmount || 0);
+      pEntry.totalDueAmount += (bill.dueAmount || 0);
+
+      if (Array.isArray(bill.tests)) {
+        bill.tests.forEach(t => {
+          const tName = typeof t === 'string' ? t : (t.testName || t.name);
+          if (tName) pEntry.testsSet.add(tName);
+        });
+      }
+
+      const billDate = bill.createdAt ? new Date(bill.createdAt) : new Date();
+      if (!pEntry.latestVisitDate || billDate > pEntry.latestVisitDate) {
+        pEntry.latestVisitDate = billDate;
+      }
+    });
+
+    // 3. Process general registered patients if available
+    registeredPatients.forEach((reg) => {
+      const pObj = reg.patientId || reg;
+      if (!pObj) return;
+      getOrCreatePatient(pObj, reg.department || 'OPD');
+    });
+
+    // Convert map to array and finalize fields
+    const list = Array.from(patientMap.values()).map(p => {
+      const allTests = Array.from(p.testsSet);
+      return {
+        ...p,
+        allTestsList: allTests,
+        testsSummary: allTests.length > 0 ? allTests.join(', ') : 'Diagnostic Investigations',
+        totalTestsCount: allTests.length,
+        totalOrdersCount: p.requests.length,
+        totalBillsCount: p.bills.length,
+        latestVisitDate: p.latestVisitDate || new Date(),
+        paymentStatus: p.totalDueAmount > 0 
+          ? (p.totalPaidAmount > 0 ? 'Partial' : 'Unpaid')
+          : (p.totalBilledAmount > 0 ? 'Paid' : 'Settled')
+      };
+    });
+
+    // Default sort by latest visit
+    return list.sort((a, b) => b.latestVisitDate.getTime() - a.latestVisitDate.getTime());
+  }, [labRequests, labBills, registeredPatients]);
+
+  // Filtered and Sorted Patients List
+  const filteredLabPatients = React.useMemo(() => {
+    let result = allLabPatients.filter(patient => {
+      // 1. Search Query filter (Patient Name, UHID, Mobile, Address, Tests, Guardian)
+      if (patientSearchQuery) {
+        const q = patientSearchQuery.toLowerCase().trim();
+        const matches = (
+          patient.patientName.toLowerCase().includes(q) ||
+          patient.uhid.toLowerCase().includes(q) ||
+          patient.mobile.toLowerCase().includes(q) ||
+          patient.guardianName.toLowerCase().includes(q) ||
+          patient.address.toLowerCase().includes(q) ||
+          patient.city.toLowerCase().includes(q) ||
+          patient.testsSummary.toLowerCase().includes(q)
+        );
+        if (!matches) return false;
+      }
+
+      // 2. Gender filter
+      if (patientGenderFilter !== 'all') {
+        const pGen = (patient.gender || '').toLowerCase();
+        if (patientGenderFilter.toLowerCase() === 'male' && !pGen.startsWith('m')) return false;
+        if (patientGenderFilter.toLowerCase() === 'female' && !pGen.startsWith('f')) return false;
+      }
+
+      // 3. Dues filter
+      if (patientDuesFilter !== 'all') {
+        if (patientDuesFilter === 'dues' && patient.totalDueAmount <= 0) return false;
+        if (patientDuesFilter === 'paid' && patient.totalDueAmount > 0) return false;
+      }
+
+      // 4. Source filter
+      if (patientSourceFilter !== 'all') {
+        if (patient.source !== patientSourceFilter) return false;
+      }
+
+      return true;
+    });
+
+    // Sorting
+    if (patientSortBy === 'name_asc') {
+      result.sort((a, b) => a.patientName.localeCompare(b.patientName));
+    } else if (patientSortBy === 'name_desc') {
+      result.sort((a, b) => b.patientName.localeCompare(a.patientName));
+    } else if (patientSortBy === 'most_tests') {
+      result.sort((a, b) => b.totalTestsCount - a.totalTestsCount);
+    } else if (patientSortBy === 'highest_due') {
+      result.sort((a, b) => b.totalDueAmount - a.totalDueAmount);
+    } else {
+      // latest
+      result.sort((a, b) => b.latestVisitDate.getTime() - a.latestVisitDate.getTime());
+    }
+
+    return result;
+  }, [allLabPatients, patientSearchQuery, patientGenderFilter, patientDuesFilter, patientSourceFilter, patientSortBy]);
+
+  // Filtered Referral Doctors List
+  const filteredReferralDoctors = React.useMemo(() => {
+    if (!refDocSearchQuery) return referralDoctors;
+    const q = refDocSearchQuery.toLowerCase().trim();
+    return referralDoctors.filter(doc => (
+      doc.name.toLowerCase().includes(q) ||
+      (doc.specialty && doc.specialty.toLowerCase().includes(q)) ||
+      (doc.hospital && doc.hospital.toLowerCase().includes(q)) ||
+      (doc.phone && doc.phone.includes(q)) ||
+      (doc.codeId && doc.codeId.includes(q))
+    ));
+  }, [referralDoctors, refDocSearchQuery]);
+
+  // Filtered Collection Centres List
+  const filteredCollectionCentres = React.useMemo(() => {
+    if (!centreSearchQuery) return collectionCentresList;
+    const q = centreSearchQuery.toLowerCase().trim();
+    return collectionCentresList.filter(c => (
+      c.name.toLowerCase().includes(q) ||
+      (c.code && c.code.toLowerCase().includes(q)) ||
+      (c.address && c.address.toLowerCase().includes(q)) ||
+      (c.incharge && c.incharge.toLowerCase().includes(q)) ||
+      (c.phone && c.phone.includes(q))
+    ));
+  }, [collectionCentresList, centreSearchQuery]);
+
+  // Daily Business Data Computation (Exact Reference Layout Match)
+  const dailyBusinessData = React.useMemo(() => {
+    const targetDateStr = dailyBusinessDate; // 'YYYY-MM-DD'
+    const dayTransactions = [];
+    const dayBills = [];
+
+    labBills.forEach((bill, billIdx) => {
+      const bDate = bill.createdAt ? new Date(bill.createdAt) : new Date();
+      const bDateStr = bDate.toISOString().split('T')[0];
+      const isDateMatch = !targetDateStr || bDateStr === targetDateStr;
+
+      if (isDateMatch || showPrevDayBills) {
+        dayBills.push(bill);
+
+        const pName = bill.patientId?.patientName || 'Patient';
+        const regNo = bill.labId ? (bill.labId.startsWith('#') ? bill.labId : `#${bill.labId}`) : `#${1300 + billIdx}`;
+        let refBy = bill.referredBy || 'Self';
+        if (bill.remarks?.includes('Referred by:')) {
+          refBy = bill.remarks.split('Referred by:')[1].trim();
+        }
+        const timeStr = bDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        const dateStr = bDate.toLocaleDateString('en-GB');
+        const dcn = `L${billIdx + 1}`;
+        const cc = bill.collectionCentre ? (bill.collectionCentre.length > 10 ? bill.collectionCentre.slice(0, 10) : bill.collectionCentre) : 'Main';
+        const receivedBy = bill.receivedBy || cashiersList[0] || 'Ravi Shukla';
+        const method = (bill.paymentMode || 'cash').toLowerCase();
+
+        // 1. Initial payment transaction
+        if ((bill.paidAmount || 0) > 0) {
+          dayTransactions.push({
+            id: String(39414000 + billIdx * 7 + 1),
+            regNo,
+            patientName: pName,
+            referredBy: refBy,
+            date: dateStr,
+            time: timeStr,
+            dcn,
+            cc,
+            amount: bill.paidAmount || 0,
+            method,
+            receivedBy,
+            rawBill: bill,
+            rawDate: bDate
+          });
+        }
+
+        // 2. Extra payment history items if any
+        if (Array.isArray(bill.paymentHistory)) {
+          bill.paymentHistory.forEach((ph, pIdx) => {
+            const phDate = ph.date ? new Date(ph.date) : bDate;
+            const phDateStr = phDate.toISOString().split('T')[0];
+            if (!targetDateStr || phDateStr === targetDateStr || showPrevDayBills) {
+              dayTransactions.push({
+                id: String(39414500 + billIdx * 10 + pIdx),
+                regNo,
+                patientName: pName,
+                referredBy: refBy,
+                date: phDate.toLocaleDateString('en-GB'),
+                time: phDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+                dcn,
+                cc,
+                amount: ph.amount || 0,
+                method: (ph.mode || ph.paymentMode || 'cash').toLowerCase(),
+                receivedBy: ph.receivedBy || receivedBy,
+                rawBill: bill,
+                rawDate: phDate
+              });
+            }
+          });
+        }
+      }
+    });
+
+    // Compute Income Totals
+    const totalIncome = dayTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
+    const cashIncome = dayTransactions.filter(t => t.method.includes('cash')).reduce((sum, t) => sum + (t.amount || 0), 0);
+    const cardIncome = dayTransactions.filter(t => t.method.includes('card')).reduce((sum, t) => sum + (t.amount || 0), 0);
+    const upiIncome = dayTransactions.filter(t => t.method.includes('upi') || t.method.includes('online') || t.method.includes('gpay')).reduce((sum, t) => sum + (t.amount || 0), 0);
+    const insuranceIncome = dayTransactions.filter(t => t.method.includes('insur') || t.method.includes('tpa')).reduce((sum, t) => sum + (t.amount || 0), 0);
+
+    // Expenses for this date
+    const dayExpenses = labExpensesList.filter(e => !targetDateStr || e.date === targetDateStr);
+    const totalExpenses = dayExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+    const netIncome = totalIncome - totalExpenses;
+
+    // Filter transactions by search and cashier
+    let filteredTransactions = [...dayTransactions];
+    if (dailyBusinessCashier !== 'all') {
+      filteredTransactions = filteredTransactions.filter(t => t.receivedBy.toLowerCase() === dailyBusinessCashier.toLowerCase());
+    }
+    if (dailyBusinessSearch) {
+      const q = dailyBusinessSearch.toLowerCase().trim();
+      filteredTransactions = filteredTransactions.filter(t => (
+        t.patientName.toLowerCase().includes(q) ||
+        t.regNo.toLowerCase().includes(q) ||
+        t.id.includes(q) ||
+        t.referredBy.toLowerCase().includes(q) ||
+        t.method.toLowerCase().includes(q) ||
+        t.receivedBy.toLowerCase().includes(q) ||
+        t.cc.toLowerCase().includes(q)
+      ));
+    }
+
+    return {
+      dayTransactions,
+      filteredTransactions,
+      dayBills,
+      dayExpenses,
+      totalIncome,
+      cashIncome,
+      cardIncome,
+      upiIncome,
+      insuranceIncome,
+      totalExpenses,
+      netIncome
+    };
+  }, [labBills, dailyBusinessDate, showPrevDayBills, dailyBusinessCashier, dailyBusinessSearch, labExpensesList, cashiersList]);
+
   const availableReferrers = Array.from(new Set(rawReportsList.map(r => r.referredBy).filter(Boolean)));
 
   const handleOpenProcessRequest = (reqItem) => {
     setSelectedRequest(reqItem);
+    const currentSigId = reqItem.report?.signatoryId?._id || reqItem.report?.signatoryId || (signatories.length > 0 ? signatories[0]._id : '');
+    setSelectedSignatoryId(currentSigId);
     setReportRemarks(reqItem.report?.remarks || '');
     setReportNotes(reqItem.report?.notes || '');
     setReportAdvice(reqItem.report?.advice || '');
@@ -1729,6 +2885,7 @@ function DashboardContent() {
         advice: reportAdvice,
         interpretation: reportInterpretation,
         printInterpretation: printInterpretation,
+        signatoryId: selectedSignatoryId || (signatories.length > 0 ? signatories[0]._id : undefined),
         collectedDate: datesInfo.collectedDate,
         collectedTime: datesInfo.collectedTime,
         receivedDate: datesInfo.receivedDate,
@@ -1936,12 +3093,73 @@ function DashboardContent() {
                 ? selectedReportForPrint.tests.split(',').map(t => t.trim()) 
                 : []);
           
+          const formatDateTime = (dateVal, timeVal, fallbackObj) => {
+            let d = '';
+            let t = '';
+            if (dateVal) {
+              if (/^\d{4}-\d{2}-\d{2}$/.test(String(dateVal).trim())) {
+                const [yy, mm, dd] = String(dateVal).trim().split('-');
+                d = `${dd}/${mm}/${yy}`;
+              } else {
+                const parsed = new Date(dateVal);
+                d = !isNaN(parsed.getTime()) ? parsed.toLocaleDateString('en-GB') : String(dateVal);
+              }
+            } else if (fallbackObj) {
+              d = new Date(fallbackObj).toLocaleDateString('en-GB');
+            }
+
+            if (timeVal) {
+              if (String(timeVal).includes(':')) {
+                const [h, m] = String(timeVal).trim().split(':');
+                let hour = parseInt(h, 10);
+                const min = m ? m.slice(0, 2) : '00';
+                if (!isNaN(hour)) {
+                  const ampm = hour >= 12 ? 'PM' : 'AM';
+                  hour = hour % 12 || 12;
+                  t = `${String(hour).padStart(2, '0')}:${min} ${ampm}`;
+                } else {
+                  t = String(timeVal);
+                }
+              } else {
+                t = String(timeVal);
+              }
+            } else if (fallbackObj) {
+              t = new Date(fallbackObj).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+            }
+
+            if (d && t) return `${d} ${t}`;
+            if (d) return d;
+            return '—';
+          };
+
+          const reqDate = selectedReportForPrint.createdAt ? new Date(selectedReportForPrint.createdAt) : new Date();
+          const updDate = selectedReportForPrint.updatedAt ? new Date(selectedReportForPrint.updatedAt) : reqDate;
+
           const regDateStr = selectedReportForPrint.createdAt 
             ? new Date(selectedReportForPrint.createdAt).toLocaleDateString('en-GB') + ' ' + new Date(selectedReportForPrint.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-            : '';
-          const reportDateStr = selectedReportForPrint.updatedAt
-            ? new Date(selectedReportForPrint.updatedAt).toLocaleDateString('en-GB') + ' ' + new Date(selectedReportForPrint.updatedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-            : '';
+            : formatDateTime('', '', reqDate);
+
+          const collectedDateStr = formatDateTime(
+            selectedReportForPrint.report?.collectedDate || selectedReportForPrint.collectedDate || datesInfo.collectedDate,
+            selectedReportForPrint.report?.collectedTime || selectedReportForPrint.collectedTime || datesInfo.collectedTime,
+            reqDate
+          );
+
+          const receivedDateStr = formatDateTime(
+            selectedReportForPrint.report?.receivedDate || selectedReportForPrint.receivedDate || datesInfo.receivedDate,
+            selectedReportForPrint.report?.receivedTime || selectedReportForPrint.receivedTime || datesInfo.receivedTime,
+            reqDate
+          );
+
+          const reportDateStr = (selectedReportForPrint.report?.reportedDate || selectedReportForPrint.reportedDate)
+            ? formatDateTime(
+                selectedReportForPrint.report?.reportedDate || selectedReportForPrint.reportedDate,
+                selectedReportForPrint.report?.reportedTime || selectedReportForPrint.reportedTime,
+                updDate
+              )
+            : (selectedReportForPrint.updatedAt 
+                ? new Date(selectedReportForPrint.updatedAt).toLocaleDateString('en-GB') + ' ' + new Date(selectedReportForPrint.updatedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+                : formatDateTime('', '', updDate));
 
           return (
             <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex flex-col items-center justify-start overflow-y-auto p-4 md:p-8 print:p-0 print:bg-white print:static print:block animate-in fade-in duration-200">
@@ -2083,13 +3301,13 @@ function DashboardContent() {
                   <div className="col-span-6 flex flex-col items-end justify-start text-[11px]">
                     <div className="w-full max-w-xs grid grid-cols-12 leading-relaxed text-slate-700 font-bold">
                       <span className="col-span-5 text-right pr-2">Registered</span>
-                      <span className="col-span-7 text-slate-900 font-extrabold">: {regDateStr || '19/08/2026 04:56 PM'}</span>
+                      <span className="col-span-7 text-slate-900 font-extrabold">: {regDateStr}</span>
                       <span className="col-span-5 text-right pr-2">Collected</span>
-                      <span className="col-span-7 text-slate-900 font-extrabold">: {datesInfo.collectedDate || '19/08/2026'}</span>
+                      <span className="col-span-7 text-slate-900 font-extrabold">: {collectedDateStr}</span>
                       <span className="col-span-5 text-right pr-2">Received</span>
-                      <span className="col-span-7 text-slate-900 font-extrabold">: {datesInfo.receivedDate || '19/08/2026'}</span>
+                      <span className="col-span-7 text-slate-900 font-extrabold">: {receivedDateStr}</span>
                       <span className="col-span-5 text-right pr-2">Reported</span>
-                      <span className="col-span-7 text-slate-900 font-extrabold">: {reportDateStr || '19/08/2026 05:04 PM'}</span>
+                      <span className="col-span-7 text-slate-900 font-extrabold">: {reportDateStr}</span>
                     </div>
                   </div>
                 </div>
@@ -2278,17 +3496,29 @@ function DashboardContent() {
                   </table>
                 </div>
 
-                {/* Notes, Remarks & Advice Section */}
-                <div className="grid grid-cols-12 gap-y-2.5 pt-4 text-[11px] leading-relaxed border-t border-slate-200">
-                  <span className="col-span-2 font-black text-slate-900 italic">Notes</span>
-                  <span className="col-span-10 font-bold text-slate-800 italic">: {selectedReportForPrint.report?.notes || '—'}</span>
-                  
-                  <span className="col-span-2 font-black text-slate-900 italic">Remarks</span>
-                  <span className="col-span-10 font-bold text-slate-800 italic">: {selectedReportForPrint.report?.remarks || '—'}</span>
-                  
-                  <span className="col-span-2 font-black text-slate-900 italic">Advice</span>
-                  <span className="col-span-10 font-bold text-slate-800 italic">: {selectedReportForPrint.report?.advice || '—'}</span>
-                </div>
+                {/* Notes, Remarks & Advice Section (Only when provided) */}
+                {(selectedReportForPrint.report?.notes || selectedReportForPrint.report?.remarks || selectedReportForPrint.report?.advice) && (
+                  <div className="grid grid-cols-12 gap-y-2.5 pt-4 text-[11px] leading-relaxed border-t border-slate-200">
+                    {selectedReportForPrint.report?.notes && (
+                      <>
+                        <span className="col-span-2 font-black text-slate-900 italic">Notes</span>
+                        <span className="col-span-10 font-bold text-slate-800 italic">: {selectedReportForPrint.report.notes}</span>
+                      </>
+                    )}
+                    {selectedReportForPrint.report?.remarks && (
+                      <>
+                        <span className="col-span-2 font-black text-slate-900 italic">Remarks</span>
+                        <span className="col-span-10 font-bold text-slate-800 italic">: {selectedReportForPrint.report.remarks}</span>
+                      </>
+                    )}
+                    {selectedReportForPrint.report?.advice && (
+                      <>
+                        <span className="col-span-2 font-black text-slate-900 italic">Advice</span>
+                        <span className="col-span-10 font-bold text-slate-800 italic">: {selectedReportForPrint.report.advice}</span>
+                      </>
+                    )}
+                  </div>
+                )}
 
                 {/* Interpretations Section with HTML / Table Formatting */}
                 {printInterpretation && selectedReportForPrint.report?.interpretation && (
@@ -2300,6 +3530,31 @@ function DashboardContent() {
                     />
                   </div>
                 )}
+
+                {/* Signatory Footer Block */}
+                {(() => {
+                  const sig = (selectedReportForPrint.report?.signatoryId && typeof selectedReportForPrint.report.signatoryId === 'object' && selectedReportForPrint.report.signatoryId.name)
+                    ? selectedReportForPrint.report.signatoryId
+                    : (signatories.find(s => s._id === (selectedReportForPrint.report?.signatoryId || selectedReportForPrint.signatoryId || selectedSignatoryId)) || (signatories.length > 0 ? signatories[0] : null));
+
+                  if (!sig) return null;
+
+                  return (
+                    <div className="mt-10 pt-8 flex justify-end">
+                      <div className="text-center min-w-[160px] space-y-1.5 pt-2">
+                        {sig.signatureImageUrl && (
+                          <img
+                            src={sig.signatureImageUrl}
+                            alt="Doctor Signature"
+                            className="max-h-14 max-w-[160px] object-contain mx-auto mb-2"
+                          />
+                        )}
+                        <div className="font-extrabold text-slate-900 text-xs">{sig.name}</div>
+                        <div className="text-[10px] text-slate-500 font-semibold">{sig.designation}</div>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* End of Report text */}
                 <div className="flex items-center justify-center pt-8">
@@ -2836,6 +4091,7 @@ function DashboardContent() {
         remarks: reportRemarks,
         notes: reportNotes,
         advice: reportAdvice,
+        signatoryId: signatories.find(s => s._id === selectedSignatoryId) || selectedRequest.report?.signatoryId || (signatories.length > 0 ? signatories[0] : null),
         collectedDate: datesInfo.collectedDate,
         collectedTime: datesInfo.collectedTime,
         receivedDate: datesInfo.receivedDate,
@@ -4289,6 +5545,72 @@ function DashboardContent() {
                 className="w-full p-3 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 overflow-hidden min-h-[70px]"
               />
             </div>
+
+            {/* Authorized Signatory Configuration on Report */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h4 className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
+                    <UserCheck className="w-4 h-4 text-blue-600" /> Authorized Signatory
+                  </h4>
+                  <p className="text-[11px] text-slate-500 font-medium">Select the doctor / pathologist whose signature stamp, name, and designation will show at the bottom right of the report.</p>
+                </div>
+                {signatories.length > 0 && (
+                  <select
+                    value={selectedSignatoryId}
+                    onChange={(e) => setSelectedSignatoryId(e.target.value)}
+                    className="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 outline-none focus:border-blue-500 cursor-pointer shadow-2xs"
+                  >
+                    {signatories.map((s) => (
+                      <option key={s._id} value={s._id}>
+                        {s.name} — {s.designation}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* Selected Signatory Info Box */}
+              {(() => {
+                const activeSig = signatories.find(s => s._id === selectedSignatoryId) || (signatories.length > 0 ? signatories[0] : null);
+                if (!activeSig) {
+                  return (
+                    <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2.5 flex items-center justify-between">
+                      <span>No authorized signatories found. Please configure a signatory profile to display signature stamp and name on reports.</span>
+                      <button
+                        type="button"
+                        onClick={() => router.push('/dashboard?view=signatories')}
+                        className="underline font-bold text-blue-600 cursor-pointer ml-2 whitespace-nowrap"
+                      >
+                        + Add Signatory
+                      </button>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="flex items-center justify-between bg-white border border-slate-200 rounded-lg p-3 shadow-2xs">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-black text-xs border border-blue-100 shrink-0">
+                        {activeSig.name?.[0] || 'D'}
+                      </div>
+                      <div>
+                        <div className="font-extrabold text-slate-900 text-xs leading-tight">{activeSig.name}</div>
+                        <div className="text-[11px] text-slate-500 font-semibold">{activeSig.designation}</div>
+                      </div>
+                    </div>
+                    {activeSig.signatureImageUrl ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-emerald-600 font-extrabold">✓ Stamp Attached</span>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={activeSig.signatureImageUrl} alt="Signature Preview" className="h-9 max-w-[100px] object-contain border border-slate-100 rounded bg-slate-50 p-1" />
+                      </div>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 font-medium italic">No stamp image</span>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
           </div>
 
           {/* ACTION BUTTONS FOOTER BAR */}
@@ -5044,18 +6366,6 @@ function DashboardContent() {
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="block text-[11px] font-bold text-slate-700">Qualification <span className="text-red-500">*</span></label>
-                  <input
-                    type="text"
-                    required
-                    value={signatoryForm.qualification}
-                    onChange={(e) => setSignatoryForm({ ...signatoryForm, qualification: e.target.value })}
-                    placeholder="e.g. MBBS, MD (Pathology)"
-                    className="w-full h-9 px-3 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 outline-none focus:border-blue-500"
-                  />
-                </div>
-
                 <div className="space-y-2">
                   <label className="block text-[11px] font-bold text-slate-700">Signature Stamp Image</label>
                   <div className="relative w-44 h-24 border-2 border-dashed border-slate-300 bg-slate-50 rounded-xl flex flex-col items-center justify-center overflow-hidden">
@@ -5200,6 +6510,2684 @@ function DashboardContent() {
               )}
             </div>
           </div>
+        </div>
+        {renderSharedModals()}
+      </DashboardLayout>
+    );
+  }
+
+  // IF ACTIVITIES & AUDIT TRAIL VIEW IS SELECTED
+  if (isActivitiesView) {
+    const totalActivitiesCount = allLabActivities.length;
+    const requestsCount = allLabActivities.filter(a => a.category === 'requests').length;
+    const samplesCount = allLabActivities.filter(a => a.category === 'samples').length;
+    const resultsCount = allLabActivities.filter(a => a.category === 'results').length;
+    const reportsCount = allLabActivities.filter(a => a.category === 'reports').length;
+    const billingCount = allLabActivities.filter(a => a.category === 'billing').length;
+
+    const totalBilled = labBills.reduce((acc, b) => acc + (b.totalAmount || 0), 0);
+    const totalCollected = labBills.reduce((acc, b) => acc + (b.paidAmount || 0), 0);
+
+    return (
+      <DashboardLayout>
+        <div className="space-y-6 pb-12 bg-slate-50/50 min-h-screen">
+          
+          {/* HEADER ROW */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => router.push('/dashboard')}
+                className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
+                title="Back to Dashboard"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-blue-600" /> Activities & Audit Trails
+                  </h1>
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200 inline-flex items-center gap-1">
+                    <span>★</span>
+                    <span>Tracking of lab module</span>
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 font-medium mt-1">
+                  Chronological trail of lab working — test bookings, sample collections, parameter entries, diagnostic reports, and payments.
+                </p>
+              </div>
+            </div>
+
+            {/* Top Right Action Buttons */}
+            <div className="flex items-center gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => loadDashboardData()}
+                className="px-3.5 py-2 border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs transition-all"
+                title="Refresh activities list"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 text-slate-500 ${loadingDashboard ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push('/new-bill')}
+                className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ New Request / Bill</span>
+              </button>
+            </div>
+          </div>
+
+          {/* TOP METRICS SUMMARY CARDS */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+            {/* Card 1: Total Activities */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Total Activities</span>
+                <Activity className="w-4 h-4 text-blue-500" />
+              </div>
+              <div className="text-2xl font-black text-slate-900">{totalActivitiesCount}</div>
+              <p className="text-[10px] text-slate-400 font-semibold">Tracked across entire lab module</p>
+            </div>
+
+            {/* Card 2: Test Orders */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600">Test Orders</span>
+                <Plus className="w-4 h-4 text-blue-600" />
+              </div>
+              <div className="text-2xl font-black text-blue-700">{requestsCount}</div>
+              <p className="text-[10px] text-slate-400 font-semibold">OPD, IPD & Direct Walk-in</p>
+            </div>
+
+            {/* Card 3: Samples & Results */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-amber-600">Samples & Testing</span>
+                <FlaskConical className="w-4 h-4 text-amber-500" />
+              </div>
+              <div className="text-2xl font-black text-amber-700">{samplesCount + resultsCount}</div>
+              <p className="text-[10px] text-slate-400 font-semibold">{samplesCount} collected • {resultsCount} tested</p>
+            </div>
+
+            {/* Card 4: Reports & Sign Offs */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">Reports Finalized</span>
+                <Check className="w-4 h-4 text-emerald-600" />
+              </div>
+              <div className="text-2xl font-black text-emerald-700">{reportsCount}</div>
+              <p className="text-[10px] text-slate-400 font-semibold">Verified & Sign-off stamped</p>
+            </div>
+
+            {/* Card 5: Billed Collections */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-1 col-span-2 sm:col-span-1">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-purple-600">Billed & Payments</span>
+                <Wallet className="w-4 h-4 text-purple-500" />
+              </div>
+              <div className="text-2xl font-black text-purple-800">₹{totalCollected.toLocaleString('en-IN')}</div>
+              <p className="text-[10px] text-slate-400 font-semibold">{billingCount} transaction records</p>
+            </div>
+          </div>
+
+          {/* CONTROLS & FILTER BAR */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+            {/* Search & Selectors Row */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 text-xs font-semibold text-slate-700">
+              
+              {/* Search Bar */}
+              <div className="md:col-span-5 relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={activitySearchQuery}
+                  onChange={(e) => setActivitySearchQuery(e.target.value)}
+                  placeholder="Search activities by patient, UHID, Lab ID, test name, doctor, ref..."
+                  className="w-full h-9 pl-9 pr-8 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-all"
+                />
+                {activitySearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setActivitySearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Duration Selector */}
+              <div className="md:col-span-4 flex items-center gap-1.5">
+                <select
+                  value={activityDuration}
+                  onChange={(e) => setActivityDuration(e.target.value)}
+                  className="h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-blue-500 cursor-pointer"
+                >
+                  <option value="today">Today</option>
+                  <option value="yesterday">Yesterday</option>
+                  <option value="past_7_days">Past 7 days</option>
+                  <option value="past_30_days">Past 30 days</option>
+                  <option value="this_month">This month</option>
+                  <option value="last_month">Last month</option>
+                  <option value="all">All time</option>
+                </select>
+                <div className="flex-1 h-9 px-2.5 bg-slate-100/70 border border-slate-200 rounded-xl flex items-center gap-1.5 text-[11px] text-slate-600 font-semibold truncate">
+                  <CalendarDays className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <span className="truncate">{getDurationDateRangeStr(activityDuration)}</span>
+                </div>
+              </div>
+
+              {/* Source Filter (OPD / IPD / Direct) */}
+              <div className="md:col-span-2">
+                <select
+                  value={activitySourceFilter}
+                  onChange={(e) => setActivitySourceFilter(e.target.value)}
+                  className="w-full h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-blue-500 cursor-pointer"
+                >
+                  <option value="all">All Sources</option>
+                  <option value="OPD">OPD Orders</option>
+                  <option value="IPD">IPD Orders</option>
+                  <option value="Direct">Direct / Walk-in</option>
+                </select>
+              </div>
+
+              {/* Clear Filters Button */}
+              <div className="md:col-span-1 flex items-center justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivitySearchQuery('');
+                    setActivityCategoryFilter('all');
+                    setActivitySourceFilter('all');
+                    setActivityDuration('past_7_days');
+                  }}
+                  className="w-full h-9 px-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                  title="Reset all filters"
+                >
+                  <Filter className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Reset</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Category Filter Tabs with Counters */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100">
+              {[
+                { key: 'all', label: 'All Activities', count: totalActivitiesCount, color: 'text-blue-700 bg-blue-50' },
+                { key: 'requests', label: 'Orders & Requests', count: requestsCount, color: 'text-blue-700 bg-blue-50' },
+                { key: 'samples', label: 'Sample Collections', count: samplesCount, color: 'text-amber-700 bg-amber-50' },
+                { key: 'results', label: 'Results & Testing', count: resultsCount, color: 'text-indigo-700 bg-indigo-50' },
+                { key: 'reports', label: 'Reports & Sign Offs', count: reportsCount, color: 'text-emerald-700 bg-emerald-50' },
+                { key: 'billing', label: 'Billing & Payments', count: billingCount, color: 'text-purple-700 bg-purple-50' }
+              ].map((tab) => {
+                const isActive = activityCategoryFilter === tab.key;
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => setActivityCategoryFilter(tab.key)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      isActive
+                        ? 'bg-slate-900 text-white shadow-xs'
+                        : 'bg-slate-100/80 text-slate-600 hover:bg-slate-200/80 hover:text-slate-900'
+                    }`}
+                  >
+                    <span>{tab.label}</span>
+                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
+                      isActive ? 'bg-slate-700 text-white' : 'bg-white text-slate-700 border border-slate-200'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  </button>
+                );
+              })}
+
+              <div className="ml-auto text-xs text-slate-400 font-semibold">
+                Showing <strong className="text-slate-800">{filteredLabActivities.length}</strong> of {totalActivitiesCount} activities
+              </div>
+            </div>
+          </div>
+
+          {/* MAIN ACTIVITIES TIMELINE LIST */}
+          <div className="space-y-3">
+            {loadingDashboard ? (
+              <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-xs">
+                <Loader2 className="w-8 h-8 animate-spin text-orange-500 mx-auto mb-2" />
+                <p className="text-sm font-bold text-slate-800">Loading lab activity logs & audit trails...</p>
+                <p className="text-xs text-slate-400 mt-1">Please wait while the system synchronizes all lab records.</p>
+              </div>
+            ) : filteredLabActivities.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-xs space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center mx-auto text-xl font-bold">
+                  <Activity className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">No lab activities match your filters</h3>
+                  <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
+                    Try changing your search keywords, duration filter, or category tab to view other audit trail records.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivitySearchQuery('');
+                    setActivityCategoryFilter('all');
+                    setActivitySourceFilter('all');
+                    setActivityDuration('all');
+                  }}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-all shadow-xs"
+                >
+                  View All Lab Activities
+                </button>
+              </div>
+            ) : (
+              <div className="relative pl-6 sm:pl-8 space-y-4 before:absolute before:left-3 sm:before:left-4 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-200">
+                {filteredLabActivities.map((item) => {
+                  const dateFormatted = item.timestamp.toLocaleDateString('en-GB');
+                  const timeFormatted = item.timestamp.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+                  const timeAgoStr = formatTimeAgo(item.timestamp);
+
+                  return (
+                    <div key={item.id} className="relative group">
+                      {/* Timeline Dot & Icon */}
+                      <div className={`absolute -left-6 sm:-left-8 top-3.5 w-6 h-6 rounded-full border-2 border-white shadow-xs flex items-center justify-center text-white ${item.dotColor || 'bg-blue-500'}`}>
+                        {item.category === 'requests' && <Plus className="w-3 h-3" />}
+                        {item.category === 'samples' && <FlaskConical className="w-3 h-3" />}
+                        {item.category === 'results' && <Edit3 className="w-3 h-3" />}
+                        {item.category === 'reports' && <Check className="w-3 h-3" />}
+                        {item.category === 'billing' && <Receipt className="w-3 h-3" />}
+                      </div>
+
+                      {/* Main Event Card */}
+                      <div className="bg-white rounded-2xl border border-slate-200 hover:border-blue-300 hover:shadow-md transition-all p-4 sm:p-5 space-y-3">
+                        
+                        {/* Header Row: Badges & Timestamp */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {/* Category Badge */}
+                            <span className={`px-2.5 py-0.5 rounded-md text-[11px] font-extrabold border ${item.badgeColor}`}>
+                              {item.categoryLabel}
+                            </span>
+                            
+                            {/* Reg / Lab ID Pill */}
+                            <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 text-slate-800 font-mono">
+                              {item.labId}
+                            </span>
+
+                            {/* Source Badge */}
+                            {item.source && (
+                              <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                                item.source === 'IPD' ? 'bg-purple-100 text-purple-800' :
+                                item.source === 'OPD' ? 'bg-blue-100 text-blue-800' :
+                                'bg-emerald-100 text-emerald-800'
+                              }`}>
+                                {item.source}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Date & Relative Time */}
+                          <div className="flex items-center gap-2 text-xs text-slate-500 font-semibold">
+                            <Clock className="w-3.5 h-3.5 text-slate-400" />
+                            <span>{dateFormatted}, {timeFormatted}</span>
+                            <span className="px-2 py-0.5 bg-slate-100 rounded-full text-[10px] font-bold text-slate-600">
+                              {timeAgoStr}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Title & Description */}
+                        <div>
+                          <h3 className="text-sm font-bold text-slate-900 leading-snug">
+                            {item.title}
+                          </h3>
+                          <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                            {item.description}
+                          </p>
+                        </div>
+
+                        {/* Details Pill Grid */}
+                        <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-slate-600">
+                          {/* Patient */}
+                          <div className="px-2.5 py-1 bg-slate-50 rounded-lg border border-slate-100 flex items-center gap-1.5 font-medium">
+                            <User className="w-3.5 h-3.5 text-slate-400" />
+                            <span>Patient: <strong className="text-slate-900">{item.patientName}</strong> {item.ageSex ? `(${item.ageSex})` : ''}</span>
+                          </div>
+
+                          {/* UHID */}
+                          {item.uhid && item.uhid !== 'N/A' && (
+                            <div className="px-2.5 py-1 bg-slate-50 rounded-lg border border-slate-100 font-medium">
+                              <span>UHID: <strong className="text-slate-900">{item.uhid}</strong></span>
+                            </div>
+                          )}
+
+                          {/* Performed By */}
+                          <div className="px-2.5 py-1 bg-slate-50 rounded-lg border border-slate-100 font-medium flex items-center gap-1">
+                            <UserCheck className="w-3.5 h-3.5 text-slate-400" />
+                            <span>Action By: <strong className="text-slate-900">{item.performedBy}</strong></span>
+                          </div>
+
+                          {/* Amount if Billing */}
+                          {item.amount !== undefined && item.amount > 0 && (
+                            <div className="px-2.5 py-1 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-200 font-bold">
+                              <span>Amount: ₹{item.amount.toLocaleString('en-IN')}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Action Buttons Row */}
+                        <div className="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-slate-100">
+                          <div className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
+                            <span>Audit Action:</span>
+                            <span className="font-bold text-slate-700">{item.action}</span>
+                          </div>
+
+                          {/* Interactive Shortcuts */}
+                          <div className="flex items-center gap-2 text-xs font-bold">
+                            {/* If Lab Request Item */}
+                            {item.rawRequest && (
+                              <>
+                                {(item.rawRequest.reportStatus === 'Completed' || item.rawRequest.reportStatus === 'Final' || item.rawRequest.reportStatus === 'Signed off') ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenReportPrint(item.rawRequest)}
+                                      className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg border border-emerald-200 flex items-center gap-1 cursor-pointer transition-colors"
+                                    >
+                                      <Printer className="w-3.5 h-3.5" />
+                                      <span>Print Report</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenReportPrint(item.rawRequest)}
+                                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
+                                    >
+                                      <Eye className="w-3.5 h-3.5" />
+                                      <span>View Report</span>
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenProcessRequest(item.rawRequest)}
+                                    className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg border border-blue-200 flex items-center gap-1 cursor-pointer transition-colors"
+                                  >
+                                    <Edit3 className="w-3.5 h-3.5" />
+                                    <span>Enter Results</span>
+                                  </button>
+                                )}
+
+                                {item.rawRequest.billingRecord && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setViewingReceiptData(item.rawRequest.billingRecord)}
+                                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
+                                  >
+                                    <Receipt className="w-3.5 h-3.5" />
+                                    <span>View Bill</span>
+                                  </button>
+                                )}
+                              </>
+                            )}
+
+                            {/* If Billing Item */}
+                            {item.rawBill && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingReceiptData(item.rawBill)}
+                                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
+                                >
+                                  <Receipt className="w-3.5 h-3.5" />
+                                  <span>View Receipt</span>
+                                </button>
+
+                                {(item.rawBill.dueAmount || 0) > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenPaymentModal(item.rawBill)}
+                                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg flex items-center gap-1 cursor-pointer shadow-2xs transition-colors"
+                                  >
+                                    <Wallet className="w-3.5 h-3.5" />
+                                    <span>Receive Due (₹{(item.rawBill.dueAmount || 0).toLocaleString('en-IN')})</span>
+                                  </button>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+        </div>
+        {renderSharedModals()}
+      </DashboardLayout>
+    );
+  }
+
+  // IF PATIENTS DIRECTORY VIEW IS SELECTED FROM SIDEBAR
+  if (isPatientsView) {
+    const totalPatientsCount = allLabPatients.length;
+    const maleCount = allLabPatients.filter(p => (p.gender || '').toLowerCase().startsWith('m')).length;
+    const femaleCount = allLabPatients.filter(p => (p.gender || '').toLowerCase().startsWith('f')).length;
+    const otherCount = totalPatientsCount - maleCount - femaleCount;
+    const totalTestsCount = allLabPatients.reduce((sum, p) => sum + p.totalTestsCount, 0);
+    const totalDuePatientsCount = allLabPatients.filter(p => p.totalDueAmount > 0).length;
+    const totalOutstandingDue = allLabPatients.reduce((sum, p) => sum + p.totalDueAmount, 0);
+    const totalCollectedRevenue = allLabPatients.reduce((sum, p) => sum + p.totalPaidAmount, 0);
+
+    return (
+      <DashboardLayout>
+        <div className="space-y-6 pb-12 bg-slate-50/50 min-h-screen">
+          
+          {/* HEADER ROW */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => router.push('/dashboard')}
+                className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
+                title="Back to Dashboard"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+                    <Users className="w-5 h-5 text-blue-600" /> Patients Directory & Lab Profiles
+                  </h1>
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-800 border border-blue-200 inline-flex items-center gap-1">
+                    <span>★</span>
+                    <span>Lab Patients</span>
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 font-medium mt-1">
+                  Comprehensive directory of all patients who have come for lab investigations — demographic details, test history, and billing records.
+                </p>
+              </div>
+            </div>
+
+            {/* Top Action Buttons */}
+            <div className="flex items-center gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => loadDashboardData()}
+                className="px-3.5 py-2 border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs transition-all"
+                title="Refresh patient list"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 text-slate-500 ${loadingDashboard ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push('/new-bill')}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ New Patient / Test</span>
+              </button>
+            </div>
+          </div>
+
+          {/* TOP METRICS SUMMARY CARDS */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+            {/* Card 1: Total Patients */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Total Patients</span>
+                <Users className="w-4 h-4 text-blue-500" />
+              </div>
+              <div className="text-2xl font-black text-slate-900">{totalPatientsCount}</div>
+              <p className="text-[10px] text-slate-400 font-semibold">Registered in lab system</p>
+            </div>
+
+            {/* Card 2: Gender Demographics */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600">Demographics</span>
+                <UserCheck className="w-4 h-4 text-indigo-500" />
+              </div>
+              <div className="text-lg font-black text-indigo-900 mt-1">
+                {maleCount} <span className="text-xs font-semibold text-slate-400">Male</span> • {femaleCount} <span className="text-xs font-semibold text-slate-400">Female</span>
+              </div>
+              <p className="text-[10px] text-slate-400 font-semibold">{otherCount > 0 ? `${otherCount} Other • ` : ''}Gender distribution</p>
+            </div>
+
+            {/* Card 3: Tests Conducted */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-amber-600">Tests Ordered</span>
+                <FlaskConical className="w-4 h-4 text-amber-500" />
+              </div>
+              <div className="text-2xl font-black text-amber-700">{totalTestsCount}</div>
+              <p className="text-[10px] text-slate-400 font-semibold">Across all patient visits</p>
+            </div>
+
+            {/* Card 4: Outstanding Dues */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-red-600">Pending Dues</span>
+                <Receipt className="w-4 h-4 text-red-500" />
+              </div>
+              <div className="text-2xl font-black text-red-700">₹{totalOutstandingDue.toLocaleString('en-IN')}</div>
+              <p className="text-[10px] text-slate-400 font-semibold">{totalDuePatientsCount} patients have pending dues</p>
+            </div>
+
+            {/* Card 5: Total Revenue */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-1 col-span-2 sm:col-span-1">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">Revenue Paid</span>
+                <Wallet className="w-4 h-4 text-emerald-500" />
+              </div>
+              <div className="text-2xl font-black text-emerald-700">₹{totalCollectedRevenue.toLocaleString('en-IN')}</div>
+              <p className="text-[10px] text-slate-400 font-semibold">Lifetime lab collections</p>
+            </div>
+          </div>
+
+          {/* CONTROLS & FILTER TOOLBAR */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 text-xs font-semibold text-slate-700">
+              
+              {/* Search Bar */}
+              <div className="md:col-span-4 relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={patientSearchQuery}
+                  onChange={(e) => setPatientSearchQuery(e.target.value)}
+                  placeholder="Search by Patient Name, UHID, Mobile, City, Guardian, Tests..."
+                  className="w-full h-9 pl-9 pr-8 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-all"
+                />
+                {patientSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setPatientSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Gender Filter */}
+              <div className="md:col-span-2">
+                <select
+                  value={patientGenderFilter}
+                  onChange={(e) => setPatientGenderFilter(e.target.value)}
+                  className="w-full h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-blue-500 cursor-pointer"
+                >
+                  <option value="all">All Genders</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                </select>
+              </div>
+
+              {/* Dues Filter */}
+              <div className="md:col-span-2">
+                <select
+                  value={patientDuesFilter}
+                  onChange={(e) => setPatientDuesFilter(e.target.value)}
+                  className="w-full h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-blue-500 cursor-pointer"
+                >
+                  <option value="all">All Payment Statuses</option>
+                  <option value="dues">With Outstanding Dues</option>
+                  <option value="paid">Fully Settled / Paid</option>
+                </select>
+              </div>
+
+              {/* Source Filter */}
+              <div className="md:col-span-2">
+                <select
+                  value={patientSourceFilter}
+                  onChange={(e) => setPatientSourceFilter(e.target.value)}
+                  className="w-full h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-blue-500 cursor-pointer"
+                >
+                  <option value="all">All Sources</option>
+                  <option value="OPD">OPD Referral</option>
+                  <option value="IPD">IPD Sample</option>
+                  <option value="Direct">Direct / Walk-in</option>
+                </select>
+              </div>
+
+              {/* Sort By Dropdown */}
+              <div className="md:col-span-2 flex items-center gap-1.5">
+                <select
+                  value={patientSortBy}
+                  onChange={(e) => setPatientSortBy(e.target.value)}
+                  className="w-full h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-blue-500 cursor-pointer"
+                >
+                  <option value="latest">Sort: Last Visited</option>
+                  <option value="name_asc">Sort: Name (A-Z)</option>
+                  <option value="name_desc">Sort: Name (Z-A)</option>
+                  <option value="most_tests">Sort: Most Tests</option>
+                  <option value="highest_due">Sort: Highest Due</option>
+                </select>
+              </div>
+
+            </div>
+
+            {/* Status counts & active filter reset */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
+              <span className="text-slate-500 font-medium">
+                Showing <strong className="text-slate-900 font-bold">{filteredLabPatients.length}</strong> of {totalPatientsCount} registered lab patients
+              </span>
+
+              {(patientSearchQuery || patientGenderFilter !== 'all' || patientDuesFilter !== 'all' || patientSourceFilter !== 'all' || patientSortBy !== 'latest') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPatientSearchQuery('');
+                    setPatientGenderFilter('all');
+                    setPatientDuesFilter('all');
+                    setPatientSourceFilter('all');
+                    setPatientSortBy('latest');
+                  }}
+                  className="text-blue-600 hover:text-blue-700 font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Clear All Filters</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* MAIN PATIENTS TABLE */}
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-extrabold uppercase tracking-wider text-slate-600">
+                    <th className="p-4">Patient Profile</th>
+                    <th className="p-4">UHID & Contact</th>
+                    <th className="p-4">Source & Address</th>
+                    <th className="p-4">Lab Tests History</th>
+                    <th className="p-4">Last Visit</th>
+                    <th className="p-4 text-right">Billing & Dues</th>
+                    <th className="p-4 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {loadingDashboard ? (
+                    <tr>
+                      <td colSpan="7" className="p-12 text-center">
+                        <Loader2 className="w-7 h-7 animate-spin text-blue-600 mx-auto" />
+                        <p className="text-xs text-slate-500 font-bold mt-2">Loading patients directory...</p>
+                      </td>
+                    </tr>
+                  ) : filteredLabPatients.length === 0 ? (
+                    <tr>
+                      <td colSpan="7" className="p-12 text-center text-slate-400">
+                        <Users className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+                        <p className="font-bold text-slate-700">No Patients Found</p>
+                        <p className="text-xs text-slate-400 mt-1">Try adjusting your search query or filter criteria.</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredLabPatients.map((patient) => {
+                      const genderInitial = (patient.gender || 'M').charAt(0).toUpperCase();
+                      const ageDisplay = patient.age ? `${patient.age} Y` : '';
+                      const isMale = genderInitial === 'M';
+
+                      return (
+                        <tr key={patient.id} className="hover:bg-blue-50/30 transition-colors">
+                          
+                          {/* 1. Patient Profile */}
+                          <td className="p-4">
+                            <div className="flex items-center gap-3">
+                              {/* Avatar Icon */}
+                              <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs shrink-0 ${
+                                isMale ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-pink-100 text-pink-700 border border-pink-200'
+                              }`}>
+                                {patient.patientName.charAt(0).toUpperCase()}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-bold text-slate-900 text-sm truncate">{patient.patientName}</span>
+                                  {patient.bloodGroup && (
+                                    <span className="px-1.5 py-0.2 rounded text-[10px] font-extrabold bg-red-50 text-red-700 border border-red-200">
+                                      {patient.bloodGroup}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-slate-500 font-medium">
+                                  {ageDisplay ? `${ageDisplay} / ` : ''}{patient.gender || 'Male'}
+                                  {patient.guardianName ? ` • S/o, D/o: ${patient.guardianName}` : ''}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* 2. UHID & Contact */}
+                          <td className="p-4">
+                            <div className="space-y-0.5">
+                              <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 inline-block">
+                                {patient.uhid}
+                              </span>
+                              <div className="flex items-center gap-1 text-xs text-slate-600 font-medium">
+                                <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+                                <span>{patient.mobile}</span>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* 3. Source & Address */}
+                          <td className="p-4">
+                            <div className="space-y-1">
+                              <span className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold inline-block ${
+                                patient.source === 'IPD' ? 'bg-purple-100 text-purple-800' :
+                                patient.source === 'OPD' ? 'bg-blue-100 text-blue-800' :
+                                'bg-emerald-100 text-emerald-800'
+                              }`}>
+                                {patient.source}
+                              </span>
+                              <div className="text-xs text-slate-500 font-medium truncate max-w-[160px]">
+                                {patient.city || patient.address || '—'}
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* 4. Lab Tests History */}
+                          <td className="p-4">
+                            <div className="space-y-1 max-w-[240px]">
+                              <p className="text-xs font-semibold text-slate-800 line-clamp-1" title={patient.testsSummary}>
+                                {patient.testsSummary}
+                              </p>
+                              <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                                <span className="px-1.5 py-0.2 bg-slate-100 rounded text-slate-700 font-bold">
+                                  {patient.totalOrdersCount} orders ({patient.totalTestsCount} tests)
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* 5. Last Visit */}
+                          <td className="p-4 text-xs text-slate-600">
+                            <span className="font-bold text-slate-800 block">
+                              {patient.latestVisitDate.toLocaleDateString('en-GB')}
+                            </span>
+                            <span className="text-[11px] text-slate-400 font-medium">
+                              {formatTimeAgo(patient.latestVisitDate)}
+                            </span>
+                          </td>
+
+                          {/* 6. Billing & Dues */}
+                          <td className="p-4 text-right">
+                            <div className="space-y-0.5">
+                              {patient.totalDueAmount > 0 ? (
+                                <>
+                                  <span className="font-black text-red-600 text-sm block">
+                                    Due: ₹{patient.totalDueAmount.toLocaleString('en-IN')}
+                                  </span>
+                                  <span className="text-[11px] text-slate-400 font-medium block">
+                                    Paid: ₹{patient.totalPaidAmount.toLocaleString('en-IN')}
+                                  </span>
+                                </>
+                              ) : patient.totalBilledAmount > 0 ? (
+                                <>
+                                  <span className="font-bold text-emerald-700 text-xs px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 inline-block">
+                                    Fully Paid
+                                  </span>
+                                  <span className="text-[11px] text-slate-400 font-medium block mt-0.5">
+                                    ₹{patient.totalPaidAmount.toLocaleString('en-IN')}
+                                  </span>
+                                </>
+                              ) : (
+                                <span className="text-xs text-slate-400 font-medium">No Bills Raised</span>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* 7. Action Buttons */}
+                          <td className="p-4 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              {/* View Full History & Profile Button */}
+                              <button
+                                type="button"
+                                onClick={() => setSelectedPatientForHistory(patient)}
+                                className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                                title="View full lab history & tests"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>Lab Profile</span>
+                              </button>
+
+                              {/* Direct payment if due */}
+                              {patient.totalDueAmount > 0 && patient.bills.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const unpaidBill = patient.bills.find(b => (b.dueAmount || 0) > 0) || patient.bills[0];
+                                    handleOpenPaymentModal(unpaidBill);
+                                  }}
+                                  className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors shadow-2xs"
+                                  title="Receive outstanding due"
+                                >
+                                  <Wallet className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* PATIENT FULL PROFILE & LAB HISTORY MODAL */}
+          {selectedPatientForHistory && (
+            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-y-auto animate-in fade-in">
+              <div className="bg-white rounded-3xl max-w-4xl w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+                
+                {/* Modal Top Header Banner */}
+                <div className="bg-slate-900 text-white p-6 relative">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPatientForHistory(null)}
+                    className="absolute top-5 right-5 w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center cursor-pointer transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pr-10">
+                    <div className="flex items-center gap-4">
+                      <div className="w-14 h-14 rounded-2xl bg-blue-600 text-white font-black text-2xl flex items-center justify-center shadow-md">
+                        {selectedPatientForHistory.patientName.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h2 className="text-xl font-bold text-white">{selectedPatientForHistory.patientName}</h2>
+                          <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-blue-500/20 text-blue-300 border border-blue-400/30">
+                            {selectedPatientForHistory.uhid}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-300 font-medium mt-1">
+                          {selectedPatientForHistory.age ? `${selectedPatientForHistory.age} YRS • ` : ''}
+                          {selectedPatientForHistory.gender} • Mobile: <strong className="text-white">{selectedPatientForHistory.mobile}</strong>
+                          {selectedPatientForHistory.bloodGroup ? ` • Blood Group: ${selectedPatientForHistory.bloodGroup}` : ''}
+                        </p>
+                        {selectedPatientForHistory.address && (
+                          <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1">
+                            <MapPin className="w-3 h-3" /> {selectedPatientForHistory.address} {selectedPatientForHistory.city ? `(${selectedPatientForHistory.city})` : ''}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Financial Summary Badges */}
+                    <div className="flex items-center gap-3 shrink-0">
+                      <div className="px-3.5 py-2 bg-slate-800 rounded-xl border border-slate-700 text-right">
+                        <span className="text-[10px] text-slate-400 font-bold block uppercase">Lifetime Billed</span>
+                        <span className="text-sm font-bold text-white">₹{selectedPatientForHistory.totalBilledAmount.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div className={`px-3.5 py-2 rounded-xl border text-right ${
+                        selectedPatientForHistory.totalDueAmount > 0
+                          ? 'bg-red-500/20 border-red-500/30 text-red-300'
+                          : 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300'
+                      }`}>
+                        <span className="text-[10px] font-bold block uppercase">
+                          {selectedPatientForHistory.totalDueAmount > 0 ? 'Due Balance' : 'Status'}
+                        </span>
+                        <span className="text-sm font-black">
+                          {selectedPatientForHistory.totalDueAmount > 0 
+                            ? `₹${selectedPatientForHistory.totalDueAmount.toLocaleString('en-IN')}` 
+                            : 'Fully Paid'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Modal Body with History */}
+                <div className="p-6 overflow-y-auto space-y-6 flex-1">
+                  
+                  {/* Section 1: Lab Test Orders & Reports History */}
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
+                      <FlaskConical className="w-4 h-4 text-blue-600" />
+                      <span>Lab Test Requests & Diagnostic Reports ({selectedPatientForHistory.requests.length})</span>
+                    </h3>
+
+                    {selectedPatientForHistory.requests.length === 0 ? (
+                      <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200 text-center text-slate-400 text-xs">
+                        No direct lab request orders recorded for this patient yet.
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {selectedPatientForHistory.requests.map((req) => {
+                          const reqDateStr = req.createdAt 
+                            ? new Date(req.createdAt).toLocaleDateString('en-GB') 
+                            : (req.bookingDate ? new Date(req.bookingDate).toLocaleDateString('en-GB') : '—');
+                          const isFinal = req.reportStatus === 'Completed' || req.reportStatus === 'Final' || req.reportStatus === 'Signed off';
+
+                          return (
+                            <div key={req._id} className="p-4 rounded-2xl border border-slate-200 bg-white hover:border-blue-300 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                                    {req.labId ? (req.labId.startsWith('#') ? req.labId : `#${req.labId}`) : 'REQ'}
+                                  </span>
+                                  <span className="text-xs font-bold text-slate-900">
+                                    {Array.isArray(req.tests) ? req.tests.join(', ') : (req.tests || 'Diagnostic Tests')}
+                                  </span>
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                                    isFinal ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                                  }`}>
+                                    {req.reportStatus || req.status || 'New'}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-slate-500 mt-1">
+                                  Booked on: <strong>{reqDateStr}</strong>
+                                  {req.doctorId?.doctorName ? ` • Doctor: ${req.doctorId.doctorName}` : ''}
+                                  {req.sampleStatus ? ` • Sample: ${req.sampleStatus}` : ''}
+                                </p>
+                              </div>
+
+                              {/* Action Buttons for this request */}
+                              <div className="flex items-center gap-2 shrink-0">
+                                {isFinal ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenReportPrint(req)}
+                                      className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                                    >
+                                      <Printer className="w-3.5 h-3.5" />
+                                      <span>Print Report</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenReportPrint(req)}
+                                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                                    >
+                                      <Eye className="w-3.5 h-3.5" />
+                                      <span>View Report</span>
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenProcessRequest(req)}
+                                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-xs"
+                                  >
+                                    <Edit3 className="w-3.5 h-3.5" />
+                                    <span>Enter Results</span>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Section 2: Invoices & Billing History */}
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
+                      <Receipt className="w-4 h-4 text-purple-600" />
+                      <span>Lab Invoices & Payment Transactions ({selectedPatientForHistory.bills.length})</span>
+                    </h3>
+
+                    {selectedPatientForHistory.bills.length === 0 ? (
+                      <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200 text-center text-slate-400 text-xs">
+                        No billing records generated for this patient yet.
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {selectedPatientForHistory.bills.map((bill) => {
+                          const billDateStr = bill.createdAt ? new Date(bill.createdAt).toLocaleDateString('en-GB') : '—';
+                          const hasDue = (bill.dueAmount || 0) > 0;
+
+                          return (
+                            <div key={bill._id} className="p-4 rounded-2xl border border-slate-200 bg-white hover:border-purple-300 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono text-xs font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-100">
+                                    {bill.billNo || bill.labId || 'BILL'}
+                                  </span>
+                                  <span className="text-xs font-bold text-slate-900">
+                                    Total: ₹{(bill.totalAmount || 0).toLocaleString('en-IN')}
+                                  </span>
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                                    hasDue ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'
+                                  }`}>
+                                    {bill.paymentStatus || (hasDue ? 'Unpaid' : 'Paid')}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-slate-500 mt-1">
+                                  Date: <strong>{billDateStr}</strong> • Paid: <strong className="text-emerald-700">₹{(bill.paidAmount || 0).toLocaleString('en-IN')}</strong>
+                                  {hasDue && ` • Due: `}<strong className="text-red-600">{hasDue ? `₹${(bill.dueAmount || 0).toLocaleString('en-IN')}` : ''}</strong>
+                                </p>
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingReceiptData(bill)}
+                                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                                >
+                                  <Receipt className="w-3.5 h-3.5" />
+                                  <span>View Receipt</span>
+                                </button>
+
+                                {hasDue && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenPaymentModal(bill)}
+                                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                                  >
+                                    <Wallet className="w-3.5 h-3.5" />
+                                    <span>Receive Due</span>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+
+                {/* Modal Footer */}
+                <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => router.push('/new-bill')}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>+ Book New Lab Test</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPatientForHistory(null)}
+                    className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold cursor-pointer transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+
+              </div>
+            </div>
+          )}
+
+        </div>
+        {renderSharedModals()}
+      </DashboardLayout>
+    );
+  }
+
+  // IF REFERRAL DOCTORS VIEW IS SELECTED FROM SIDEBAR
+  if (isReferralDoctorsView) {
+    const totalDoctorsCount = referralDoctors.length;
+    const activeDoctorsCount = referralDoctors.filter(d => d.name !== 'Self').length;
+
+    // Calculate total tests referred across all doctors
+    const getReferredCount = (docName) => {
+      if (!docName) return 0;
+      return labRequests.filter(r => {
+        const refText = r.remarks?.includes('Referred by:') ? r.remarks.split('Referred by:')[1].trim() : (r.doctorId?.doctorName || '');
+        return refText.toLowerCase().includes(docName.toLowerCase()) || docName.toLowerCase().includes(refText.toLowerCase());
+      }).length;
+    };
+
+    return (
+      <DashboardLayout>
+        <div className="space-y-6 pb-12 bg-slate-50/50 min-h-screen">
+          
+          {/* HEADER ROW */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => router.push('/dashboard')}
+                className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
+                title="Back to Dashboard"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+                    <UserCheck className="w-5 h-5 text-indigo-600" /> Referral Doctors & Clinics
+                  </h1>
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200 inline-flex items-center gap-1">
+                    <span>★</span>
+                    <span>Referred By Options</span>
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 font-medium mt-1">
+                  Manage the doctors and healthcare providers that appear in the &quot;Referred by&quot; dropdown when booking tests and generating new lab bills.
+                </p>
+              </div>
+            </div>
+
+            {/* Top Action Buttons */}
+            <div className="flex items-center gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingDocId(null);
+                  setDocForm({ name: '', specialty: '', phone: '', hospital: '', commission: '10%' });
+                  setShowAddDocModal(true);
+                }}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Add Referral Doctor</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push('/new-bill')}
+                className="px-3.5 py-2 border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs transition-all"
+              >
+                <Receipt className="w-3.5 h-3.5 text-slate-500" />
+                <span>+ New Bill</span>
+              </button>
+            </div>
+          </div>
+
+          {/* TOP METRICS SUMMARY CARDS */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+            {/* Card 1: Total Referral Sources */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Total Referrers</span>
+                <UserCheck className="w-4 h-4 text-indigo-500" />
+              </div>
+              <div className="text-2xl font-black text-slate-900">{totalDoctorsCount}</div>
+              <p className="text-[10px] text-slate-400 font-semibold">Available in New Bill selection</p>
+            </div>
+
+            {/* Card 2: External Doctors */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600">Active Doctors</span>
+                <Users className="w-4 h-4 text-blue-500" />
+              </div>
+              <div className="text-2xl font-black text-blue-700">{activeDoctorsCount}</div>
+              <p className="text-[10px] text-slate-400 font-semibold">External doctors & clinics</p>
+            </div>
+
+            {/* Card 3: Total Tests Referred */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-amber-600">Referred Cases</span>
+                <FlaskConical className="w-4 h-4 text-amber-500" />
+              </div>
+              <div className="text-2xl font-black text-amber-700">{labRequests.length}</div>
+              <p className="text-[10px] text-slate-400 font-semibold">Orders tracked to referrers</p>
+            </div>
+
+            {/* Card 4: Two-Way Synchronization */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">Sync Status</span>
+                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              </div>
+              <div className="text-sm font-black text-emerald-700 mt-1 flex items-center gap-1">
+                <span>● 100% Synchronized</span>
+              </div>
+              <p className="text-[10px] text-slate-400 font-semibold">Instantly updates &quot;Referred by&quot;</p>
+            </div>
+          </div>
+
+          {/* CONTROLS & SEARCH BAR */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={refDocSearchQuery}
+                onChange={(e) => setRefDocSearchQuery(e.target.value)}
+                placeholder="Search referral doctor by name, specialty, clinic/hospital, or phone..."
+                className="w-full h-9 pl-9 pr-8 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white transition-all"
+              />
+              {refDocSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setRefDocSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500 font-medium">
+                Showing <strong className="text-slate-900 font-bold">{filteredReferralDoctors.length}</strong> of {totalDoctorsCount} Referral Doctors
+              </span>
+            </div>
+          </div>
+
+          {/* REFERRAL DOCTORS TABLE */}
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-extrabold uppercase tracking-wider text-slate-600">
+                    <th className="p-4">Code / ID</th>
+                    <th className="p-4">Doctor / Clinic Name</th>
+                    <th className="p-4">Specialty / Department</th>
+                    <th className="p-4">Hospital / Clinic</th>
+                    <th className="p-4">Contact Phone</th>
+                    <th className="p-4 text-center">Cases Referred</th>
+                    <th className="p-4 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {filteredReferralDoctors.length === 0 ? (
+                    <tr>
+                      <td colSpan="7" className="p-12 text-center text-slate-400">
+                        <UserCheck className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+                        <p className="font-bold text-slate-700">No Referral Doctors Found</p>
+                        <p className="text-xs text-slate-400 mt-1">Click &quot;+ Add Referral Doctor&quot; to register a new doctor.</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredReferralDoctors.map((doc) => {
+                      const isSelf = doc.name === 'Self';
+                      const referredCount = getReferredCount(doc.name);
+
+                      return (
+                        <tr key={doc.id} className="hover:bg-indigo-50/20 transition-colors">
+                          {/* 1. Code / ID */}
+                          <td className="p-4 font-mono text-xs font-bold text-indigo-700">
+                            <span className="bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
+                              ID: {doc.codeId || doc.id}
+                            </span>
+                          </td>
+
+                          {/* 2. Doctor Name */}
+                          <td className="p-4">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs shrink-0 ${
+                                isSelf ? 'bg-slate-100 text-slate-700' : 'bg-indigo-100 text-indigo-700 border border-indigo-200'
+                              }`}>
+                                {doc.name.charAt(0).toUpperCase()}
+                              </div>
+                              <div>
+                                <span className="font-bold text-slate-900 block text-sm">{doc.name}</span>
+                                <span className="text-[11px] text-slate-400 font-medium">
+                                  {isSelf ? 'Default Walk-in' : 'External / OPD Referrer'}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* 3. Specialty */}
+                          <td className="p-4">
+                            <span className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700">
+                              {doc.specialty || 'General'}
+                            </span>
+                          </td>
+
+                          {/* 4. Hospital / Clinic */}
+                          <td className="p-4 text-xs text-slate-600">
+                            {doc.hospital || '—'}
+                          </td>
+
+                          {/* 5. Contact Phone */}
+                          <td className="p-4 text-xs text-slate-600">
+                            {doc.phone ? (
+                              <span className="flex items-center gap-1 font-mono font-medium text-slate-700">
+                                <Phone className="w-3 h-3 text-slate-400" />
+                                {doc.phone}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </td>
+
+                          {/* 6. Cases Referred */}
+                          <td className="p-4 text-center">
+                            <span className="px-2.5 py-1 rounded-full text-xs font-extrabold bg-blue-50 text-blue-700 border border-blue-100">
+                              {referredCount} cases
+                            </span>
+                          </td>
+
+                          {/* 7. Action Buttons */}
+                          <td className="p-4 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleEditReferralDoctor(doc)}
+                                className="p-1.5 hover:bg-slate-100 text-slate-600 hover:text-indigo-600 rounded-lg cursor-pointer transition-colors"
+                                title="Edit Doctor Details"
+                              >
+                                <Edit3 className="w-4 h-4" />
+                              </button>
+                              
+                              {!isSelf && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteReferralDoctor(doc.id)}
+                                  className="p-1.5 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-lg cursor-pointer transition-colors"
+                                  title="Remove Doctor"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* ADD / EDIT REFERRAL DOCTOR MODAL */}
+          {showAddDocModal && (
+            <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+              <div className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl overflow-hidden animate-in zoom-in-95">
+                
+                {/* Modal Header */}
+                <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50/80">
+                  <div className="flex items-center gap-2">
+                    <UserCheck className="w-5 h-5 text-indigo-600" />
+                    <h3 className="font-bold text-slate-900 text-sm">
+                      {editingDocId ? 'Edit Referral Doctor' : 'Add New Referral Doctor'}
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddDocModal(false);
+                      setEditingDocId(null);
+                    }}
+                    className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Modal Form */}
+                <form onSubmit={handleSaveReferralDoctor} className="p-5 space-y-4 text-xs font-semibold text-slate-700">
+                  
+                  {/* Doctor Name */}
+                  <div className="space-y-1">
+                    <label className="block">
+                      * Doctor / Clinic Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      autoFocus
+                      value={docForm.name}
+                      onChange={(e) => setDocForm({ ...docForm, name: e.target.value })}
+                      placeholder="e.g. Dr. Rajiv Kapoor (Orthopedic) or City Clinic"
+                      className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    />
+                    <p className="text-[10px] text-slate-400 font-normal">This name will appear in the &quot;Referred by&quot; dropdown in New Bill.</p>
+                  </div>
+
+                  {/* Specialty */}
+                  <div className="space-y-1">
+                    <label className="block">Specialty / Qualification</label>
+                    <input
+                      type="text"
+                      value={docForm.specialty}
+                      onChange={(e) => setDocForm({ ...docForm, specialty: e.target.value })}
+                      placeholder="e.g. Cardiologist, MD Medicine, General Physician"
+                      className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  {/* Hospital / Clinic */}
+                  <div className="space-y-1">
+                    <label className="block">Hospital / Clinic Affiliation</label>
+                    <input
+                      type="text"
+                      value={docForm.hospital}
+                      onChange={(e) => setDocForm({ ...docForm, hospital: e.target.value })}
+                      placeholder="e.g. Apollo Hospital, City Clinic, In-house"
+                      className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  {/* Phone Number */}
+                  <div className="space-y-1">
+                    <label className="block">Contact Mobile Number</label>
+                    <input
+                      type="tel"
+                      value={docForm.phone}
+                      onChange={(e) => setDocForm({ ...docForm, phone: e.target.value })}
+                      placeholder="e.g. 9876543210"
+                      className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  {/* Commission % */}
+                  <div className="space-y-1">
+                    <label className="block">Referral Incentive / Commission %</label>
+                    <input
+                      type="text"
+                      value={docForm.commission}
+                      onChange={(e) => setDocForm({ ...docForm, commission: e.target.value })}
+                      placeholder="e.g. 10%"
+                      className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  {/* Buttons */}
+                  <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddDocModal(false);
+                        setEditingDocId(null);
+                      }}
+                      className="px-4 py-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold cursor-pointer transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold cursor-pointer shadow-xs transition-colors"
+                    >
+                      {editingDocId ? 'Update Doctor' : 'Save & Add Doctor'}
+                    </button>
+                  </div>
+
+                </form>
+
+              </div>
+            </div>
+          )}
+
+        </div>
+        {renderSharedModals()}
+      </DashboardLayout>
+    );
+  }
+
+  // IF COLLECTION CENTRES VIEW IS SELECTED FROM SIDEBAR
+  if (isCollectionCentresView) {
+    const totalCentresCount = collectionCentresList.length;
+    const activeCentresCount = collectionCentresList.filter(c => c.status === 'Active').length;
+
+    return (
+      <DashboardLayout>
+        <div className="space-y-6 pb-12 bg-slate-50/50 min-h-screen">
+          
+          {/* HEADER ROW */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => router.push('/dashboard')}
+                className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
+                title="Back to Dashboard"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+                    <Building className="w-5 h-5 text-amber-600" /> Collection Centres & Branches
+                  </h1>
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200 inline-flex items-center gap-1">
+                    <span>★</span>
+                    <span>Collection Centers</span>
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 font-medium mt-1">
+                  Add, edit, and manage sample collection branches, satellite centers, and lab locations used when generating new bills.
+                </p>
+              </div>
+            </div>
+
+            {/* Top Action Buttons */}
+            <div className="flex items-center gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingCentreId(null);
+                  setCentreForm({ name: '', code: '', address: '', phone: '', incharge: '', status: 'Active' });
+                  setShowAddCentreModal(true);
+                }}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Add Collection Centre</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push('/new-bill')}
+                className="px-3.5 py-2 border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs transition-all"
+              >
+                <Receipt className="w-3.5 h-3.5 text-slate-500" />
+                <span>+ New Bill</span>
+              </button>
+            </div>
+          </div>
+
+          {/* TOP METRICS SUMMARY CARDS */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+            {/* Card 1: Total Centres */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Total Centres</span>
+                <Building className="w-4 h-4 text-amber-500" />
+              </div>
+              <div className="text-2xl font-black text-slate-900">{totalCentresCount}</div>
+              <p className="text-[10px] text-slate-400 font-semibold">Available for test collection</p>
+            </div>
+
+            {/* Card 2: Active Centres */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">Active Centres</span>
+                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              </div>
+              <div className="text-2xl font-black text-emerald-700">{activeCentresCount}</div>
+              <p className="text-[10px] text-slate-400 font-semibold">Operational branches</p>
+            </div>
+
+            {/* Card 3: Main Lab Location */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600">Primary Center</span>
+                <FlaskConical className="w-4 h-4 text-blue-500" />
+              </div>
+              <div className="text-sm font-black text-slate-900 truncate mt-1">Main Hospital Lab</div>
+              <p className="text-[10px] text-slate-400 font-semibold">Central processing facility</p>
+            </div>
+
+            {/* Card 4: Synchronization Status */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600">Sync Status</span>
+                <Layers className="w-4 h-4 text-indigo-500" />
+              </div>
+              <div className="text-sm font-black text-emerald-700 mt-1 flex items-center gap-1">
+                <span>● 100% Synchronized</span>
+              </div>
+              <p className="text-[10px] text-slate-400 font-semibold">Instantly updates New Bill dropdown</p>
+            </div>
+          </div>
+
+          {/* CONTROLS & SEARCH BAR */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={centreSearchQuery}
+                onChange={(e) => setCentreSearchQuery(e.target.value)}
+                placeholder="Search collection centre by name, code, address, incharge, or phone..."
+                className="w-full h-9 pl-9 pr-8 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white transition-all"
+              />
+              {centreSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setCentreSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500 font-medium">
+                Showing <strong className="text-slate-900 font-bold">{filteredCollectionCentres.length}</strong> of {totalCentresCount} Collection Centres
+              </span>
+            </div>
+          </div>
+
+          {/* COLLECTION CENTRES TABLE */}
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-extrabold uppercase tracking-wider text-slate-600">
+                    <th className="p-4">Centre Code</th>
+                    <th className="p-4">Collection Centre Name</th>
+                    <th className="p-4">Location / Address</th>
+                    <th className="p-4">Incharge / Supervisor</th>
+                    <th className="p-4">Contact Phone</th>
+                    <th className="p-4 text-center">Status</th>
+                    <th className="p-4 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {filteredCollectionCentres.length === 0 ? (
+                    <tr>
+                      <td colSpan="7" className="p-12 text-center text-slate-400">
+                        <Building className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+                        <p className="font-bold text-slate-700">No Collection Centres Found</p>
+                        <p className="text-xs text-slate-400 mt-1">Click &quot;+ Add Collection Centre&quot; to add a new center.</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredCollectionCentres.map((centre) => {
+                      const isMain = centre.name === 'Main Hospital Lab';
+
+                      return (
+                        <tr key={centre.id} className="hover:bg-amber-50/20 transition-colors">
+                          {/* 1. Code */}
+                          <td className="p-4 font-mono text-xs font-bold text-amber-700">
+                            <span className="bg-amber-50 px-2 py-0.5 rounded border border-amber-100">
+                              {centre.code || `CC-${centre.id}`}
+                            </span>
+                          </td>
+
+                          {/* 2. Centre Name */}
+                          <td className="p-4">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs shrink-0 ${
+                                isMain ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-amber-100 text-amber-700 border border-amber-200'
+                              }`}>
+                                <Building className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <span className="font-bold text-slate-900 block text-sm">{centre.name}</span>
+                                <span className="text-[11px] text-slate-400 font-medium">
+                                  {isMain ? 'Primary Central Lab' : 'Branch Collection Hub'}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* 3. Address */}
+                          <td className="p-4 text-xs text-slate-600">
+                            <div className="flex items-center gap-1">
+                              <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span>{centre.address || '—'}</span>
+                            </div>
+                          </td>
+
+                          {/* 4. Incharge */}
+                          <td className="p-4 text-xs text-slate-700 font-semibold">
+                            {centre.incharge || '—'}
+                          </td>
+
+                          {/* 5. Phone */}
+                          <td className="p-4 text-xs text-slate-600">
+                            {centre.phone ? (
+                              <span className="flex items-center gap-1 font-mono font-medium text-slate-700">
+                                <Phone className="w-3 h-3 text-slate-400" />
+                                {centre.phone}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </td>
+
+                          {/* 6. Status */}
+                          <td className="p-4 text-center">
+                            <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                              centre.status === 'Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'
+                            }`}>
+                              {centre.status || 'Active'}
+                            </span>
+                          </td>
+
+                          {/* 7. Action Buttons */}
+                          <td className="p-4 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              {/* Edit Button */}
+                              <button
+                                type="button"
+                                onClick={() => handleEditCentre(centre)}
+                                className="p-1.5 hover:bg-slate-100 text-slate-600 hover:text-amber-600 rounded-lg cursor-pointer transition-colors"
+                                title="Edit Collection Centre"
+                              >
+                                <Edit3 className="w-4 h-4" />
+                              </button>
+                              
+                              {/* Delete Button */}
+                              {!isMain && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteCentre(centre.id)}
+                                  className="p-1.5 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-lg cursor-pointer transition-colors"
+                                  title="Delete Collection Centre"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* ADD / EDIT COLLECTION CENTRE MODAL */}
+          {showAddCentreModal && (
+            <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+              <div className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl overflow-hidden animate-in zoom-in-95">
+                
+                {/* Modal Header */}
+                <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50/80">
+                  <div className="flex items-center gap-2">
+                    <Building className="w-5 h-5 text-amber-600" />
+                    <h3 className="font-bold text-slate-900 text-sm">
+                      {editingCentreId ? 'Edit Collection Centre' : 'Add New Collection Centre'}
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddCentreModal(false);
+                      setEditingCentreId(null);
+                    }}
+                    className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Modal Form */}
+                <form onSubmit={handleSaveCentre} className="p-5 space-y-4 text-xs font-semibold text-slate-700">
+                  
+                  {/* Centre Name */}
+                  <div className="space-y-1">
+                    <label className="block">
+                      * Collection Centre Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      autoFocus
+                      value={centreForm.name}
+                      onChange={(e) => setCentreForm({ ...centreForm, name: e.target.value })}
+                      placeholder="e.g. North City Collection Branch"
+                      className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                    />
+                    <p className="text-[10px] text-slate-400 font-normal">This name appears in the Collection Centre dropdown in New Bill.</p>
+                  </div>
+
+                  {/* Centre Code */}
+                  <div className="space-y-1">
+                    <label className="block">Centre Code / Identifier</label>
+                    <input
+                      type="text"
+                      value={centreForm.code}
+                      onChange={(e) => setCentreForm({ ...centreForm, code: e.target.value })}
+                      placeholder="e.g. CC-05"
+                      className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                    />
+                  </div>
+
+                  {/* Address */}
+                  <div className="space-y-1">
+                    <label className="block">Address / Location Details</label>
+                    <input
+                      type="text"
+                      value={centreForm.address}
+                      onChange={(e) => setCentreForm({ ...centreForm, address: e.target.value })}
+                      placeholder="e.g. Plot 12, Sector 14, Main Road"
+                      className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                    />
+                  </div>
+
+                  {/* Incharge / Supervisor */}
+                  <div className="space-y-1">
+                    <label className="block">Centre Incharge / Supervisor</label>
+                    <input
+                      type="text"
+                      value={centreForm.incharge}
+                      onChange={(e) => setCentreForm({ ...centreForm, incharge: e.target.value })}
+                      placeholder="e.g. Dr. Amit Sharma / Phlebotomist"
+                      className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                    />
+                  </div>
+
+                  {/* Phone */}
+                  <div className="space-y-1">
+                    <label className="block">Contact Mobile Number</label>
+                    <input
+                      type="tel"
+                      value={centreForm.phone}
+                      onChange={(e) => setCentreForm({ ...centreForm, phone: e.target.value })}
+                      placeholder="e.g. 9876543210"
+                      className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                    />
+                  </div>
+
+                  {/* Status */}
+                  <div className="space-y-1">
+                    <label className="block">Operating Status</label>
+                    <select
+                      value={centreForm.status}
+                      onChange={(e) => setCentreForm({ ...centreForm, status: e.target.value })}
+                      className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 outline-none focus:border-amber-500 cursor-pointer"
+                    >
+                      <option value="Active">Active</option>
+                      <option value="Inactive">Inactive</option>
+                    </select>
+                  </div>
+
+                  {/* Buttons */}
+                  <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddCentreModal(false);
+                        setEditingCentreId(null);
+                      }}
+                      className="px-4 py-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold cursor-pointer transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold cursor-pointer shadow-xs transition-colors"
+                    >
+                      {editingCentreId ? 'Update Centre' : 'Save & Add Centre'}
+                    </button>
+                  </div>
+
+                </form>
+
+              </div>
+            </div>
+          )}
+
+        </div>
+        {renderSharedModals()}
+      </DashboardLayout>
+    );
+  }
+
+  // IF DAILY BUSINESS VIEW IS SELECTED FROM SIDEBAR OR MAIN DASHBOARD
+  if (isDailyBusinessView) {
+    const {
+      dayTransactions,
+      filteredTransactions,
+      dayBills,
+      dayExpenses,
+      totalIncome,
+      cashIncome,
+      cardIncome,
+      upiIncome,
+      insuranceIncome,
+      totalExpenses,
+      netIncome
+    } = dailyBusinessData;
+
+    const handleDailyPrevDay = () => {
+      const d = new Date(dailyBusinessDate);
+      d.setDate(d.getDate() - 1);
+      setDailyBusinessDate(d.toISOString().split('T')[0]);
+    };
+
+    const handleDailyNextDay = () => {
+      const d = new Date(dailyBusinessDate);
+      d.setDate(d.getDate() + 1);
+      setDailyBusinessDate(d.toISOString().split('T')[0]);
+    };
+
+    const formattedSelectedDate = new Date(dailyBusinessDate).toLocaleDateString('en-GB');
+
+    return (
+      <DashboardLayout>
+        <div className="space-y-4 pb-12 bg-slate-50/50 min-h-screen text-slate-800">
+          
+          {/* 1. TOP HEADER & ACTION BUTTONS */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight">
+              Daily business
+            </h1>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  window.print();
+                }}
+                className="px-3.5 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-2xs transition-colors"
+              >
+                <FileText className="w-3.5 h-3.5 text-slate-500" />
+                <span>Business Report</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => router.push('/dashboard?view=todays-reports')}
+                className="px-3.5 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-2xs transition-colors"
+              >
+                <span>Monthly Overview <span className="text-[10px] font-bold text-blue-600">(BETA)</span></span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-3.5 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-2xs transition-colors"
+              >
+                <Printer className="w-3.5 h-3.5 text-slate-500" />
+                <span>Print</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => showToast('Daily business report emailed to administrator', 'success')}
+                className="px-3.5 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-2xs transition-colors"
+              >
+                <Mail className="w-3.5 h-3.5 text-slate-500" />
+                <span>Email</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 2. DATE SELECTOR BAR */}
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={handleDailyPrevDay}
+              className="w-8 h-8 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-600 flex items-center justify-center cursor-pointer shadow-2xs"
+              title="Previous Day"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+
+            <div className="relative inline-flex items-center">
+              <input
+                type="date"
+                value={dailyBusinessDate}
+                onChange={(e) => setDailyBusinessDate(e.target.value)}
+                className="h-8 px-3 py-1 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 shadow-2xs cursor-pointer outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={handleDailyNextDay}
+              className="w-8 h-8 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-600 flex items-center justify-center cursor-pointer shadow-2xs"
+              title="Next Day"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDailyBusinessDate(new Date().toISOString().split('T')[0])}
+              className="px-2.5 py-1 text-xs font-bold text-blue-600 hover:underline cursor-pointer"
+            >
+              Today
+            </button>
+          </div>
+
+          {/* 3. FINANCIAL SUMMARY EQUATION CARD */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-start">
+            
+            {/* Main Equation Box */}
+            <div className="lg:col-span-9 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+              
+              {/* Equation Line */}
+              <div className="flex flex-wrap items-center justify-between gap-y-3 gap-x-2 text-xs font-semibold">
+                
+                {/* Total Income */}
+                <div>
+                  <span className="text-[11px] text-slate-400 font-medium block">Total Income</span>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <span className="text-base font-extrabold text-slate-900">
+                      Rs.{totalIncome.toLocaleString('en-IN')}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowIncomeSplit(!showIncomeSplit)}
+                      className="p-0.5 rounded hover:bg-slate-100 text-slate-400 cursor-pointer"
+                    >
+                      <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showIncomeSplit ? 'rotate-180' : ''}`} />
+                    </button>
+                  </div>
+                </div>
+
+                <span className="text-slate-300 text-base font-light">+</span>
+
+                {/* Total collection charge */}
+                <div>
+                  <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
+                    Total collection charge <HelpCircle className="w-3 h-3 text-slate-300" />
+                  </span>
+                  <div className="text-base font-extrabold text-slate-900 mt-0.5">Rs.0</div>
+                </div>
+
+                <span className="text-slate-300 text-base font-light">-</span>
+
+                {/* Expenses */}
+                <div>
+                  <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
+                    Expenses <HelpCircle className="w-3 h-3 text-slate-300" />
+                  </span>
+                  <div className="text-base font-extrabold text-slate-900 mt-0.5">
+                    Rs.{totalExpenses.toLocaleString('en-IN')}
+                  </div>
+                </div>
+
+                <span className="text-slate-300 text-base font-light">=</span>
+
+                {/* Net Income */}
+                <div>
+                  <span className="text-[11px] text-slate-400 font-medium block">Net income</span>
+                  <div className="text-base font-black text-slate-900 mt-0.5">
+                    Rs.{netIncome.toLocaleString('en-IN')}
+                  </div>
+                </div>
+
+                {/* Date stamp & Today badge */}
+                <div className="border-l border-slate-200 pl-4 py-0.5 text-right hidden sm:block">
+                  <div className="flex items-center gap-1.5 justify-end">
+                    <span className="text-[11px] text-slate-400 font-medium">Date -</span>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-blue-100 text-blue-800">
+                      Today
+                    </span>
+                  </div>
+                  <span className="text-xs font-bold text-slate-700 block mt-0.5">
+                    {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}, {formattedSelectedDate}
+                  </span>
+                </div>
+
+              </div>
+
+              {/* Collapsible Income Split */}
+              {showIncomeSplit && (
+                <div className="pt-3 border-t border-slate-100">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
+                    Total Income split
+                  </span>
+                  <div className="flex flex-wrap items-center gap-6 text-xs">
+                    
+                    <div className="flex items-center gap-2">
+                      <Wallet className="w-4 h-4 text-emerald-600" />
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-semibold block">Cash</span>
+                        <strong className="text-xs text-slate-900 font-bold">Rs.{cashIncome.toLocaleString('en-IN')}</strong>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <CreditCard className="w-4 h-4 text-blue-600" />
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-semibold block">Card</span>
+                        <strong className="text-xs text-slate-900 font-bold">Rs.{cardIncome.toLocaleString('en-IN')}</strong>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Smartphone className="w-4 h-4 text-purple-600" />
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-semibold block">UPI</span>
+                        <strong className="text-xs text-slate-900 font-bold">Rs.{upiIncome.toLocaleString('en-IN')}</strong>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-amber-600" />
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-semibold block">Insurance</span>
+                        <strong className="text-xs text-slate-900 font-bold">Rs.{insuranceIncome.toLocaleString('en-IN')}</strong>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+              )}
+
+            </div>
+
+            {/* Right Help Box */}
+            <div className="lg:col-span-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-2.5 text-xs text-slate-600 font-medium">
+              <HelpCircle className="w-4 h-4 text-slate-400 shrink-0" />
+              <span>How collection charges work?</span>
+            </div>
+
+          </div>
+
+          {/* 4. TABS NAVIGATION */}
+          <div className="flex items-center gap-6 border-b border-slate-200 pt-2 text-sm font-semibold">
+            <button
+              type="button"
+              onClick={() => setDailyBusinessTab('transactions')}
+              className={`pb-3 flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+                dailyBusinessTab === 'transactions'
+                  ? 'border-blue-600 text-blue-600 font-bold'
+                  : 'border-transparent text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <CreditCard className="w-4 h-4" />
+              <span>Transactions</span>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-extrabold ${
+                dailyBusinessTab === 'transactions' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-600'
+              }`}>
+                {dayTransactions.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDailyBusinessTab('bills')}
+              className={`pb-3 flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+                dailyBusinessTab === 'bills'
+                  ? 'border-blue-600 text-blue-600 font-bold'
+                  : 'border-transparent text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Receipt className="w-4 h-4" />
+              <span>Bills</span>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-extrabold ${
+                dailyBusinessTab === 'bills' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-600'
+              }`}>
+                {dayBills.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDailyBusinessTab('expenses')}
+              className={`pb-3 flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+                dailyBusinessTab === 'expenses'
+                  ? 'border-blue-600 text-blue-600 font-bold'
+                  : 'border-transparent text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Wallet className="w-4 h-4" />
+              <span>Expenses</span>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-extrabold ${
+                dailyBusinessTab === 'expenses' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-600'
+              }`}>
+                {dayExpenses.length}
+              </span>
+            </button>
+          </div>
+
+          {/* 5. TOOLBAR & CASHIER CONTROLS */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+            <div className="flex flex-wrap items-center gap-2.5 flex-1">
+              
+              {/* Search in page */}
+              <div className="relative w-full sm:w-64">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={dailyBusinessSearch}
+                  onChange={(e) => setDailyBusinessSearch(e.target.value)}
+                  placeholder="Search in page"
+                  className="w-full h-8 pl-8 pr-3 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 placeholder:text-slate-400 outline-none focus:border-blue-500 shadow-2xs"
+                />
+              </div>
+
+              {/* Previous day bills toggle */}
+              <button
+                type="button"
+                onClick={() => setShowPrevDayBills(!showPrevDayBills)}
+                className={`h-8 px-3 rounded-lg border text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-2xs transition-all ${
+                  showPrevDayBills 
+                    ? 'bg-blue-50 border-blue-300 text-blue-700 font-bold' 
+                    : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <Filter className="w-3 h-3 text-slate-500" />
+                <span>Previous day bills</span>
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
+                  {showPrevDayBills ? dayBills.length : 0}
+                </span>
+              </button>
+            </div>
+
+            {/* Cashier Filter & Add Cashier */}
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="relative">
+                <select
+                  value={dailyBusinessCashier}
+                  onChange={(e) => setDailyBusinessCashier(e.target.value)}
+                  className="h-8 pl-2.5 pr-8 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 shadow-2xs outline-none cursor-pointer focus:border-blue-500 appearance-none"
+                >
+                  <option value="all">All Cashiers : Rs.{totalIncome.toLocaleString('en-IN')}</option>
+                  {cashiersList.map((cName) => (
+                    <option key={cName} value={cName}>
+                      {cName} : Rs.{totalIncome.toLocaleString('en-IN')}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowAddCashierModal(true)}
+                className="h-8 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-2xs cursor-pointer transition-colors"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>+ Add cashier</span>
+              </button>
+
+              {dailyBusinessTab === 'expenses' && (
+                <button
+                  type="button"
+                  onClick={() => setShowAddExpenseModal(true)}
+                  className="h-8 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-2xs cursor-pointer transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+ Record Expense</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 6. TAB CONTENT: TRANSACTIONS TABLE */}
+          {dailyBusinessTab === 'transactions' && (
+            <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-extrabold uppercase tracking-wider text-slate-600">
+                      <th className="py-3 px-3.5">ID</th>
+                      <th className="py-3 px-3.5">REG. NO.</th>
+                      <th className="py-3 px-3.5">PATIENT NAME</th>
+                      <th className="py-3 px-3.5">REFERRED BY</th>
+                      <th className="py-3 px-3.5">DATE</th>
+                      <th className="py-3 px-3.5">TIME</th>
+                      <th className="py-3 px-3.5">DCN <span title="Daily Case Number">ⓘ</span></th>
+                      <th className="py-3 px-3.5">CC <span title="Collection Centre">ⓘ</span></th>
+                      <th className="py-3 px-3.5">AMOUNT</th>
+                      <th className="py-3 px-3.5">METHOD</th>
+                      <th className="py-3 px-3.5">RECEIVED BY</th>
+                      <th className="py-3 px-3.5 text-center">ACTION</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium">
+                    {filteredTransactions.length === 0 ? (
+                      <tr>
+                        <td colSpan="12" className="p-12 text-center text-slate-400">
+                          <CreditCard className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+                          <p className="font-bold text-slate-700">No Transactions Recorded</p>
+                          <p className="text-xs text-slate-400 mt-1">No payment collections found for {formattedSelectedDate}.</p>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredTransactions.map((tx) => (
+                        <tr key={tx.id} className="hover:bg-slate-50/70 transition-colors text-slate-700">
+                          {/* ID */}
+                          <td className="py-2.5 px-3.5 font-mono text-slate-600 text-xs">
+                            {tx.id}
+                          </td>
+
+                          {/* REG. NO. */}
+                          <td className="py-2.5 px-3.5 font-bold text-slate-900">
+                            {tx.regNo}
+                          </td>
+
+                          {/* PATIENT NAME */}
+                          <td className="py-2.5 px-3.5 font-semibold text-slate-900">
+                            {tx.patientName}
+                          </td>
+
+                          {/* REFERRED BY */}
+                          <td className="py-2.5 px-3.5 text-slate-600">
+                            {tx.referredBy}
+                          </td>
+
+                          {/* DATE */}
+                          <td className="py-2.5 px-3.5 text-slate-600">
+                            {tx.date}
+                          </td>
+
+                          {/* TIME */}
+                          <td className="py-2.5 px-3.5 text-slate-600">
+                            {tx.time}
+                          </td>
+
+                          {/* DCN */}
+                          <td className="py-2.5 px-3.5 font-bold text-slate-800">
+                            {tx.dcn}
+                          </td>
+
+                          {/* CC */}
+                          <td className="py-2.5 px-3.5 text-slate-700">
+                            {tx.cc}
+                          </td>
+
+                          {/* AMOUNT */}
+                          <td className="py-2.5 px-3.5 font-black text-emerald-600 whitespace-nowrap">
+                            + Rs.{tx.amount.toLocaleString('en-IN')}
+                          </td>
+
+                          {/* METHOD */}
+                          <td className="py-2.5 px-3.5 uppercase text-[11px] font-bold text-slate-600">
+                            {tx.method}
+                          </td>
+
+                          {/* RECEIVED BY */}
+                          <td className="py-2.5 px-3.5 text-slate-800 font-medium">
+                            {tx.receivedBy}
+                          </td>
+
+                          {/* ACTION */}
+                          <td className="py-2.5 px-3.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => setViewingReceiptData(tx.rawBill)}
+                              className="text-blue-600 hover:text-blue-800 font-bold text-xs inline-flex items-center gap-1 hover:underline cursor-pointer"
+                            >
+                              <Eye className="w-3 h-3" />
+                              <span>View bill</span>
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* 7. TAB CONTENT: BILLS TABLE */}
+          {dailyBusinessTab === 'bills' && (
+            <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-extrabold uppercase tracking-wider text-slate-600">
+                      <th className="py-3 px-3.5">BILL / LAB ID</th>
+                      <th className="py-3 px-3.5">PATIENT NAME</th>
+                      <th className="py-3 px-3.5">INVESTIGATIONS</th>
+                      <th className="py-3 px-3.5">DATE & TIME</th>
+                      <th className="py-3 px-3.5 text-right">TOTAL</th>
+                      <th className="py-3 px-3.5 text-right">PAID</th>
+                      <th className="py-3 px-3.5 text-right">DUE</th>
+                      <th className="py-3 px-3.5 text-center">STATUS</th>
+                      <th className="py-3 px-3.5 text-center">ACTION</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium">
+                    {dayBills.length === 0 ? (
+                      <tr>
+                        <td colSpan="9" className="p-12 text-center text-slate-400">
+                          No bills generated on {formattedSelectedDate}.
+                        </td>
+                      </tr>
+                    ) : (
+                      dayBills.map((b) => {
+                        const bDate = b.createdAt ? new Date(b.createdAt) : new Date();
+                        const isDue = (b.dueAmount || 0) > 0;
+                        const testsSummary = Array.isArray(b.tests) 
+                          ? b.tests.map(t => typeof t === 'string' ? t : (t.testName || t.name)).join(', ')
+                          : (b.tests || 'Lab Tests');
+
+                        return (
+                          <tr key={b._id} className="hover:bg-slate-50/70 transition-colors">
+                            <td className="py-2.5 px-3.5 font-mono font-bold text-blue-700">
+                              {b.billNo || b.labId || 'BILL'}
+                            </td>
+                            <td className="py-2.5 px-3.5 font-bold text-slate-900">
+                              {b.patientId?.patientName || 'Patient'}
+                            </td>
+                            <td className="py-2.5 px-3.5 text-slate-600 max-w-[200px] truncate" title={testsSummary}>
+                              {testsSummary}
+                            </td>
+                            <td className="py-2.5 px-3.5 text-slate-600">
+                              {bDate.toLocaleDateString('en-GB')} {bDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                            </td>
+                            <td className="py-2.5 px-3.5 text-right font-bold text-slate-900">
+                              Rs.{(b.totalAmount || 0).toLocaleString('en-IN')}
+                            </td>
+                            <td className="py-2.5 px-3.5 text-right font-bold text-emerald-700">
+                              Rs.{(b.paidAmount || 0).toLocaleString('en-IN')}
+                            </td>
+                            <td className="py-2.5 px-3.5 text-right font-bold text-red-600">
+                              Rs.{(b.dueAmount || 0).toLocaleString('en-IN')}
+                            </td>
+                            <td className="py-2.5 px-3.5 text-center">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                                isDue ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'
+                              }`}>
+                                {b.paymentStatus || (isDue ? 'Unpaid' : 'Paid')}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3.5 text-center">
+                              <button
+                                type="button"
+                                onClick={() => setViewingReceiptData(b)}
+                                className="text-blue-600 hover:text-blue-800 font-bold text-xs inline-flex items-center gap-1 hover:underline cursor-pointer"
+                              >
+                                <Eye className="w-3 h-3" />
+                                <span>View bill</span>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* 8. TAB CONTENT: EXPENSES TABLE */}
+          {dailyBusinessTab === 'expenses' && (
+            <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-extrabold uppercase tracking-wider text-slate-600">
+                      <th className="py-3 px-3.5">EXPENSE TITLE</th>
+                      <th className="py-3 px-3.5">CATEGORY</th>
+                      <th className="py-3 px-3.5">PAID TO / VENDOR</th>
+                      <th className="py-3 px-3.5">TIME</th>
+                      <th className="py-3 px-3.5">METHOD</th>
+                      <th className="py-3 px-3.5 text-right">AMOUNT</th>
+                      <th className="py-3 px-3.5 text-center">ACTION</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium">
+                    {dayExpenses.length === 0 ? (
+                      <tr>
+                        <td colSpan="7" className="p-12 text-center text-slate-400">
+                          <Wallet className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+                          <p className="font-bold text-slate-700">No Expenses Recorded</p>
+                          <p className="text-xs text-slate-400 mt-1">Click &quot;+ Record Expense&quot; to log daily lab operational expenses.</p>
+                        </td>
+                      </tr>
+                    ) : (
+                      dayExpenses.map((exp) => (
+                        <tr key={exp.id} className="hover:bg-slate-50/70 transition-colors">
+                          <td className="py-2.5 px-3.5 font-bold text-slate-900">
+                            {exp.title}
+                          </td>
+                          <td className="py-2.5 px-3.5 text-slate-600">
+                            <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[11px] font-semibold">
+                              {exp.category}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3.5 text-slate-700">
+                            {exp.paidTo}
+                          </td>
+                          <td className="py-2.5 px-3.5 text-slate-600">
+                            {exp.time}
+                          </td>
+                          <td className="py-2.5 px-3.5 uppercase text-[11px] font-bold text-slate-600">
+                            {exp.paymentMethod}
+                          </td>
+                          <td className="py-2.5 px-3.5 text-right font-black text-red-600">
+                            - Rs.{exp.amount.toLocaleString('en-IN')}
+                          </td>
+                          <td className="py-2.5 px-3.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteExpense(exp.id)}
+                              className="text-slate-400 hover:text-red-600 p-1 cursor-pointer"
+                              title="Delete Expense"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ADD CASHIER MODAL */}
+          {showAddCashierModal && (
+            <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+              <div className="bg-white rounded-2xl max-w-sm w-full border border-slate-200 shadow-2xl overflow-hidden p-5 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                    <UserPlus className="w-4 h-4 text-blue-600" /> Add New Cashier
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddCashierModal(false)}
+                    className="text-slate-400 hover:text-slate-600 p-1"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <form onSubmit={handleSaveCashier} className="space-y-3 text-xs font-semibold text-slate-700">
+                  <div>
+                    <label className="block mb-1">Cashier / Staff Name</label>
+                    <input
+                      type="text"
+                      required
+                      autoFocus
+                      value={newCashierName}
+                      onChange={(e) => setNewCashierName(e.target.value)}
+                      placeholder="e.g. Suresh Phlebotomist"
+                      className="w-full h-9 px-3 bg-white border border-slate-300 rounded-xl text-xs outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div className="flex items-center justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddCashierModal(false)}
+                      className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold"
+                    >
+                      Save Cashier
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* RECORD EXPENSE MODAL */}
+          {showAddExpenseModal && (
+            <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+              <div className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl overflow-hidden p-5 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                    <Wallet className="w-4 h-4 text-emerald-600" /> Record Lab Expense
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddExpenseModal(false)}
+                    className="text-slate-400 hover:text-slate-600 p-1"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <form onSubmit={handleSaveExpense} className="space-y-3 text-xs font-semibold text-slate-700">
+                  <div>
+                    <label className="block mb-1">Expense Title / Item</label>
+                    <input
+                      type="text"
+                      required
+                      value={expenseForm.title}
+                      onChange={(e) => setExpenseForm({ ...expenseForm, title: e.target.value })}
+                      placeholder="e.g. CBC Reagent Pack / Test Tubes"
+                      className="w-full h-9 px-3 bg-white border border-slate-300 rounded-xl text-xs outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block mb-1">Amount (Rs.)</label>
+                      <input
+                        type="number"
+                        required
+                        min="1"
+                        value={expenseForm.amount}
+                        onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })}
+                        placeholder="e.g. 1500"
+                        className="w-full h-9 px-3 bg-white border border-slate-300 rounded-xl text-xs outline-none focus:border-blue-500 font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block mb-1">Payment Method</label>
+                      <select
+                        value={expenseForm.paymentMethod}
+                        onChange={(e) => setExpenseForm({ ...expenseForm, paymentMethod: e.target.value })}
+                        className="w-full h-9 px-2.5 bg-white border border-slate-300 rounded-xl text-xs outline-none focus:border-blue-500"
+                      >
+                        <option value="Cash">Cash</option>
+                        <option value="UPI">UPI</option>
+                        <option value="Card">Card</option>
+                        <option value="Net Banking">Net Banking</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block mb-1">Paid To / Vendor Name</label>
+                    <input
+                      type="text"
+                      value={expenseForm.paidTo}
+                      onChange={(e) => setExpenseForm({ ...expenseForm, paidTo: e.target.value })}
+                      placeholder="e.g. MedSupply Diagnostic Solutions"
+                      className="w-full h-9 px-3 bg-white border border-slate-300 rounded-xl text-xs outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div className="flex items-center justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddExpenseModal(false)}
+                      className="px-3.5 py-1.5 border border-slate-200 rounded-lg text-xs"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold"
+                    >
+                      Save Expense
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
         </div>
         {renderSharedModals()}
       </DashboardLayout>
@@ -5862,7 +9850,7 @@ function DashboardContent() {
               </div>
               <button
                 type="button"
-                onClick={() => router.push('/dashboard?view=todays-reports')}
+                onClick={() => router.push('/dashboard?view=activities')}
                 className="text-xs font-semibold text-blue-600 hover:underline cursor-pointer"
               >
                 View all
@@ -5871,25 +9859,34 @@ function DashboardContent() {
 
             {/* Lab Module Activity Feed */}
             <div className="my-auto py-2">
-              <div className="space-y-2">
-                {rawReportsList.slice(0, 2).map((item) => (
-                  <div key={item.id} className="flex items-center gap-2.5 p-2 bg-slate-50 rounded-lg border border-slate-100 text-xs">
-                    <div className={`w-2 h-2 rounded-full shrink-0 ${
-                      item.status === 'Final' ? 'bg-emerald-500' :
-                      item.status === 'In progress' ? 'bg-amber-500' : 'bg-blue-500'
-                    }`} />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold text-slate-800 truncate">
-                        {item.patientName} <span className="font-normal text-slate-500">({item.tests})</span>
-                      </p>
-                      <p className="text-[10px] text-slate-400 font-medium">
-                        Reg {item.regNo} • Status: <span className="font-semibold text-slate-700">{item.status}</span>
-                      </p>
+              {allLabActivities.length === 0 ? (
+                <div className="flex flex-col items-center justify-center text-center py-2">
+                  <Activity className="w-5 h-5 text-slate-300 mb-1" />
+                  <p className="text-xs font-bold text-slate-700">No recent lab activities</p>
+                  <p className="text-[11px] text-slate-400 font-medium mt-0.5">Test orders and updates will appear here.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {allLabActivities.slice(0, 2).map((item) => (
+                    <div 
+                      key={item.id} 
+                      onClick={() => router.push('/dashboard?view=activities')}
+                      className="flex items-center gap-2.5 p-2 bg-slate-50 hover:bg-blue-50/50 rounded-lg border border-slate-100 transition-colors text-xs cursor-pointer"
+                    >
+                      <div className={`w-2 h-2 rounded-full shrink-0 ${item.dotColor || 'bg-blue-500'}`} />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-slate-800 truncate">
+                          {item.patientName} <span className="font-normal text-slate-500">({item.tests || item.title})</span>
+                        </p>
+                        <p className="text-[10px] text-slate-400 font-medium truncate">
+                          {item.labId} • <span className="font-semibold text-slate-700">{item.action}</span> • {item.performedBy}
+                        </p>
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-medium shrink-0">{formatTimeAgo(item.timestamp)}</span>
                     </div>
-                    <span className="text-[10px] text-slate-400 font-medium shrink-0">{item.time}</span>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 

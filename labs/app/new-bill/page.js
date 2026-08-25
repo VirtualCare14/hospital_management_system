@@ -166,18 +166,18 @@ function NewBillContent() {
 
           const patientPayload = {
             patientName: `${patientData.firstName.trim()} ${patientData.lastName.trim()}`.trim(),
-            gender: patientData.gender,
+            gender: patientData.gender || 'Male',
             dob: calculatedDob,
-            mobile: patientData.mobileNumber || '9999999999',
+            mobile: patientData.mobileNumber?.trim() || '9999999999',
             email: patientData.email || '',
-            address: patientData.address || '',
+            address: patientData.address?.trim() || 'Not specified',
             aadhaar: patientData.aadhaar || '',
             isEmergency: true
           };
 
           const newPatientRes = await api.post('/patients/create', patientPayload);
-          if (newPatientRes && (newPatientRes._id || newPatientRes.patient?._id)) {
-            resolvedPatientId = newPatientRes._id || newPatientRes.patient._id;
+          if (newPatientRes && (newPatientRes._id || newPatientRes.patient?._id || newPatientRes.data?._id || newPatientRes.data?.patient?._id)) {
+            resolvedPatientId = newPatientRes._id || newPatientRes.patient?._id || newPatientRes.data?._id || newPatientRes.data?.patient?._id;
           }
         } catch (patientErr) {
           console.warn('Patient creation response:', patientErr);

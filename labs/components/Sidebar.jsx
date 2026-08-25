@@ -7,8 +7,8 @@ import { useAuth } from '../context/AuthContext';
 import {
   Plus,
   LayoutDashboard,
-  Briefcase,
-  FolderOpen,
+  TrendingUp,
+  FolderKanban,
   FlaskConical,
   Activity,
   Scan,
@@ -18,23 +18,23 @@ import {
   FileText,
   Users,
   Receipt,
-  CalendarDays,
+  CalendarCheck,
   Wallet,
-  Bell,
-  UserCheck,
-  ClipboardList,
-  TrendingUp,
-  Download,
+  History,
+  Stethoscope,
+  Building2,
+  CheckSquare,
   Globe,
   ArrowLeftRight,
-  Syringe,
   Search,
   Package,
   Layers,
-  Grid,
+  LayoutGrid,
   Database,
-  AlignLeft,
-  Building
+  BarChart3,
+  PenTool,
+  CalendarPlus,
+  FileCheck2
 } from 'lucide-react';
 
 export default function Sidebar({ mobileOpen, closeMobileSidebar }) {
@@ -82,23 +82,19 @@ export default function Sidebar({ mobileOpen, closeMobileSidebar }) {
     {
       id: 'business',
       label: 'Business',
-      icon: Briefcase,
+      icon: TrendingUp,
       isExpandable: true,
       subItems: [
-        { label: 'Daily business', icon: CalendarDays, href: '/dashboard?view=daily-business' },
+        { label: 'Daily business', icon: CalendarCheck, href: '/dashboard?view=daily-business' },
         { label: 'Expenses', icon: Wallet, href: '/dashboard?view=expenses' },
-        { label: 'Due reports', icon: FileText, href: '/dashboard?view=due-reports' },
-        { label: 'Activities', icon: Bell, href: '/dashboard?view=activities' },
-        { label: 'Referral business', icon: UserCheck, href: '/dashboard?view=referral-business' },
-        { label: 'Case wise report', icon: ClipboardList, href: '/dashboard?view=case-wise-report' },
-        { label: 'Business analysis', icon: TrendingUp, href: '/dashboard?view=business-analysis' },
-        { label: 'Data export', icon: Download, href: '/dashboard?view=data-export' }
+        { label: 'Due reports', icon: Receipt, href: '/dashboard?view=due-reports' },
+        { label: 'Activities', icon: History, href: '/dashboard?view=activities' }
       ]
     },
     {
       id: 'cases',
       label: 'Cases',
-      icon: FolderOpen,
+      icon: FolderKanban,
       isExpandable: true,
       subItems: [
         { label: 'Bills', icon: Receipt, href: '/dashboard?view=bills' },
@@ -106,8 +102,8 @@ export default function Sidebar({ mobileOpen, closeMobileSidebar }) {
         { label: 'Ct scan cases', icon: Scan, href: '/dashboard?view=ct-scan-cases' },
         { label: 'Patients', icon: Users, href: '/dashboard?view=patients' },
         { label: 'Transactions', icon: ArrowLeftRight, href: '/dashboard?view=transactions' },
-        { label: 'Referral Doctors', icon: UserCheck, href: '/dashboard?view=referral-doctors' },
-        { label: 'Agents', icon: Syringe, href: '/dashboard?view=agents' }
+        { label: 'Referral Doctors', icon: Stethoscope, href: '/dashboard?view=referral-doctors' },
+        { label: 'Collection Centres', icon: Building2, href: '/dashboard?view=collection-centres' }
       ]
     },
     {
@@ -116,17 +112,17 @@ export default function Sidebar({ mobileOpen, closeMobileSidebar }) {
       icon: FlaskConical,
       isExpandable: true,
       subItems: [
-        { label: "Today's reports", icon: FileText, href: '/dashboard?view=todays-reports' },
+        { label: "Today's reports", icon: FileCheck2, href: '/dashboard?view=todays-reports' },
         { label: 'Search reports', icon: Search, href: '/dashboard?view=search-reports' },
         { label: 'Test packages', icon: Package, href: '/admin' },
         { label: 'Test panels', icon: Layers, href: '/admin' },
-        { label: 'Test categories', icon: Grid, href: '/admin' },
+        { label: 'Test categories', icon: LayoutGrid, href: '/admin' },
         { label: 'Test database', icon: Database, href: '/admin' },
-        { label: 'Interpretations', icon: AlignLeft, href: '/admin' },
-        { label: 'Test counts', icon: FlaskConical, href: '/dashboard?view=test-counts' },
-        { label: 'Add signature', icon: UserCheck, href: '/dashboard?view=signatories' },
-        { label: 'Panels', icon: Layers, href: '/setup/ratelist' },
-        { label: 'Proofread', icon: ClipboardList, href: '/setup/ratelist' }
+        { label: 'Interpretations', icon: FileText, href: '/admin' },
+        { label: 'Test counts', icon: BarChart3, href: '/dashboard?view=test-counts' },
+        { label: 'Add signature', icon: PenTool, href: '/dashboard?view=signatories' },
+        { label: 'Panels', icon: Sliders, href: '/setup/ratelist' },
+        { label: 'Proofread', icon: CheckSquare, href: '/setup/ratelist' }
       ]
     },
     {
@@ -135,7 +131,7 @@ export default function Sidebar({ mobileOpen, closeMobileSidebar }) {
       icon: Activity,
       isExpandable: true,
       subItems: [
-        { label: 'USG Bookings', icon: CalendarDays, href: '/new-bill?service=USG' },
+        { label: 'USG Bookings', icon: CalendarPlus, href: '/new-bill?service=USG' },
         { label: 'USG Reports', icon: FileText, href: '/dashboard?view=usg-reports' }
       ]
     },
@@ -145,19 +141,8 @@ export default function Sidebar({ mobileOpen, closeMobileSidebar }) {
       icon: Scan,
       isExpandable: true,
       subItems: [
-        { label: 'X-ray Orders', icon: CalendarDays, href: '/new-bill?service=X-RAY' },
-        { label: 'Completed Scans', icon: FileText, href: '/dashboard?view=xray-scans' }
-      ]
-    },
-    {
-      id: 'manage',
-      label: 'Manage',
-      icon: Sliders,
-      isExpandable: true,
-      subItems: [
-        { label: 'Test Catalog', icon: Grid, href: '/admin' },
-        { label: 'Referrers', icon: UserCheck, href: '/new-bill?manage=referrers' },
-        { label: 'Collection Centres', icon: Building, href: '/new-bill?manage=collection-centres' }
+        { label: 'X-ray Orders', icon: CalendarPlus, href: '/new-bill?service=X-RAY' },
+        { label: 'Completed Scans', icon: FileCheck2, href: '/dashboard?view=xray-scans' }
       ]
     }
   ];

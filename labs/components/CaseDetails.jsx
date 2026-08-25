@@ -32,7 +32,12 @@ export default function CaseDetails({ caseData, setCaseData, selectedCategory, s
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('hms_lab_collection_centres');
       if (saved) {
-        try { return JSON.parse(saved); } catch (e) {}
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            return parsed.map(c => typeof c === 'string' ? c : c.name).filter(Boolean);
+          }
+        } catch (e) {}
       }
     }
     return [
@@ -73,14 +78,22 @@ export default function CaseDetails({ caseData, setCaseData, selectedCategory, s
     ];
   });
 
-  // Sample referrer options matching screenshot formatting
-  const [referrers, setReferrers] = useState([
-    { id: '1', codeId: '1', name: 'Self' },
-    { id: '2', codeId: '2', name: 'Dr. A. K. Sharma (Cardiologist)' },
-    { id: '3', codeId: '3', name: 'Dr. Priya Mehta (General Physician)' },
-    { id: '4', codeId: '4', name: 'Dr. Rajesh Gupta (Pathologist)' },
-    { id: '5', codeId: '5', name: 'City Hospital & Diagnostic Clinic' }
-  ]);
+  // Referrer options synchronized with Referral Doctors management
+  const [referrers, setReferrers] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('hms_lab_referrers');
+      if (saved) {
+        try { return JSON.parse(saved); } catch (e) {}
+      }
+    }
+    return [
+      { id: '1', codeId: '1', name: 'Self' },
+      { id: '2', codeId: '2', name: 'Dr. A. K. Sharma (Cardiologist)' },
+      { id: '3', codeId: '3', name: 'Dr. Priya Mehta (General Physician)' },
+      { id: '4', codeId: '4', name: 'Dr. Rajesh Gupta (Pathologist)' },
+      { id: '5', codeId: '5', name: 'City Hospital & Diagnostic Clinic' }
+    ];
+  });
 
   const categories = [
     { id: 'LAB', label: 'LAB', icon: FlaskConical },
@@ -113,9 +126,14 @@ export default function CaseDetails({ caseData, setCaseData, selectedCategory, s
     const newRef = {
       id: newId,
       codeId: newId,
-      name: newReferrerName.trim()
+      name: newReferrerName.trim(),
+      specialty: 'Referral Doctor'
     };
-    setReferrers(prev => [...prev, newRef]);
+    const updated = [...referrers, newRef];
+    setReferrers(updated);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('hms_lab_referrers', JSON.stringify(updated));
+    }
     setCaseData(prev => ({ ...prev, referredBy: `ID: ${newRef.codeId}, ${newRef.name}` }));
     setNewReferrerName('');
     setShowAddReferrerModal(false);

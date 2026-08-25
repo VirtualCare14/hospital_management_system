@@ -462,13 +462,6 @@ function RatelistContent() {
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
             <button 
-              onClick={() => router.push('/setup/letterhead')}
-              className="w-full text-left px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-between cursor-pointer"
-            >
-              <span>Letterhead</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-            <button 
               onClick={() => showToast('Case registration prefix settings are pre-configured.', 'success')}
               className="w-full text-left px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-between cursor-pointer"
             >
@@ -508,10 +501,10 @@ function RatelistContent() {
               ‹ Prev
             </button>
             <button 
-              onClick={() => router.push('/setup/letterhead')} 
+              onClick={() => router.push('/dashboard')} 
               className="flex-1 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold text-center hover:bg-blue-500 cursor-pointer"
             >
-              Next ›
+              Finish ›
             </button>
           </div>
         </div>

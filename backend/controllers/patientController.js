@@ -102,10 +102,19 @@ const createPatient = async (req, res) => {
       paymentMode: reqPaymentMode
     } = req.body;
 
+    const cleanAddress = (address && typeof address === 'string' && address.trim()) ? address.trim() : 'Not specified';
+    const cleanGender = gender || 'Male';
+    let cleanDob = dob ? new Date(dob) : null;
+    if (!cleanDob || isNaN(cleanDob.getTime())) {
+      const parsedAge = parseInt(req.body.age || req.body.ageYears, 10) || 30;
+      const birthYear = new Date().getFullYear() - parsedAge;
+      cleanDob = new Date(`${birthYear}-01-01`);
+    }
+
     const isEmergency = req.body.isEmergency || (!department && !slot);
 
-    if (!patientName || !mobile || !dob || !gender) {
-      return res.status(400).json({ message: 'Patient Name, Mobile, Date of Birth, and Gender are required.' });
+    if (!patientName || !mobile) {
+      return res.status(400).json({ message: 'Patient Name and Mobile are required.' });
     }
 
     if (!isEmergency && (!department || !doctorId || !appointmentDate || !slot)) {
@@ -163,7 +172,7 @@ const createPatient = async (req, res) => {
       if (category && patient.category !== category) { patient.category = category; updated = true; }
       if (patientName && patient.patientName !== patientName) { patient.patientName = patientName; updated = true; }
       if (cleanMobile && patient.mobile !== cleanMobile) { patient.mobile = cleanMobile; updated = true; }
-      if (address && patient.address !== address) { patient.address = address; updated = true; }
+      if (cleanAddress && (!patient.address || patient.address === 'Not specified')) { patient.address = cleanAddress; updated = true; }
       if (cleanAadhaar && patient.aadhaar !== cleanAadhaar) { patient.aadhaar = cleanAadhaar; updated = true; }
       if (updated) await patient.save();
 
@@ -182,9 +191,9 @@ const createPatient = async (req, res) => {
         uhid,
         patientName,
         mobile: cleanMobile,
-        address,
-        dob,
-        gender,
+        address: cleanAddress,
+        dob: cleanDob,
+        gender: cleanGender,
         aadhaar: cleanAadhaar,
         category: category || 'General'
       });
