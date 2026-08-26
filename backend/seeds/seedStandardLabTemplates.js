@@ -475,6 +475,192 @@ const standardTests = [
   },
   {
     "category": "LAB",
+    "department": "PATHOLOGY",
+    "test": "Anemia Package",
+    "title": "Anemia Package",
+    "basePrice": 1200,
+    "taxPercentage": 0,
+    "sampleType": "Whole Blood (EDTA) & Blood Serum",
+    "turnaroundTime": "6 Hours",
+    "description": "Comprehensive Anemia Profile evaluating complete red blood cell indices, iron metabolism (Iron, TIBC, UIBC, Transferrin Saturation, Ferritin), Vitamin B12, Folate, Reticulocytes, and Peripheral Blood Smear examination.",
+    "notes": "Clinical Utility:\nAnemia profiling allows comprehensive differential diagnosis of microcytic, normocytic, and macrocytic anemias, distinguishing nutritional deficiencies (Iron, Vitamin B12, Folate), anemia of chronic disease, hemolytic disorders, and hemoglobinopathies.\n\nCalculated Indices & Formulas:\n• Transferrin Saturation (%) = (Serum Iron ÷ TIBC) × 100\n• UIBC (µg/dL) = TIBC − Serum Iron\n• MCV (fL) = (Hematocrit % × 10) ÷ RBC Count (million/µL)\n• MCH (pg) = (Hemoglobin g/dL × 10) ÷ RBC Count (million/µL)\n• MCHC (g/dL) = (Hemoglobin g/dL ÷ Hematocrit %) × 100",
+    "interpretation": "Clinical Interpretation & Diagnostic Guidance:\n\n1. Microcytic Hypochromic Anemia (MCV < 80 fL):\n• Iron Deficiency Anemia: Low Serum Iron (< 65 µg/dL), Elevated TIBC (> 450 µg/dL), Low Transferrin Saturation (< 16%), Low Serum Ferritin (< 30 ng/mL in males, < 13 ng/mL in females), High RDW-CV (> 14.5%).\n• Anemia of Chronic Disease / Inflammation: Low/Normal Iron, Low/Normal TIBC, Normal or High Ferritin (acute phase reactant), Low Transferrin Saturation.\n• Thalassemia Trait: Markedly low MCV and MCH with normal/high RBC count, normal iron studies, normal RDW.\n\n2. Macrocytic Anemia (MCV > 100 fL):\n• Megaloblastic Anemia: Low Vitamin B12 (< 200 pg/mL) and/or Low Folate (< 3 ng/mL), oval macrocytes, hypersegmented neutrophils on peripheral smear, low reticulocyte response.\n• Non-Megaloblastic Causes: Liver disease, alcohol excess, hypothyroidism, myelodysplastic syndrome (MDS).\n\n3. Normocytic Normochromic Anemia (MCV 80–100 fL):\n• Hemolytic Anemia: Elevated Reticulocyte Count (> 2.5%), polychromasia, elevated indirect bilirubin.\n• Acute Blood Loss or Bone Marrow Suppression: Normal iron/B12, variable reticulocyte response.\n\nFormulas & Calculations:\n• Transferrin Saturation (%) = (Serum Iron ÷ TIBC) × 100\n• UIBC (µg/dL) = TIBC − Serum Iron\n• MCV (fL) = (Hematocrit % × 10) ÷ RBC Count\n• MCH (pg) = (Hemoglobin × 10) ÷ RBC Count\n• MCHC (g/dL) = (Hemoglobin ÷ Hematocrit %) × 100",
+    "parameters": [
+      {
+        "name": "Hemoglobin (Hb)",
+        "displayName": "Hemoglobin (Hb)",
+        "referenceRange": "Male: 13.5–17.5 / Female: 12.0–15.5",
+        "unit": "g/dL",
+        "gender": "Both",
+        "fieldType": "Number",
+        "valueOptions": [],
+        "status": "Active"
+      },
+      {
+        "name": "RBC Count",
+        "displayName": "RBC Count",
+        "referenceRange": "Male: 4.5–5.9 / Female: 4.1–5.1",
+        "unit": "million/µL",
+        "gender": "Both",
+        "fieldType": "Number",
+        "valueOptions": [],
+        "status": "Active"
+      },
+      {
+        "name": "Hematocrit (PCV)",
+        "displayName": "Hematocrit (PCV)",
+        "referenceRange": "Male: 41–53 / Female: 36–46",
+        "unit": "%",
+        "gender": "Both",
+        "fieldType": "Number",
+        "valueOptions": [],
+        "status": "Active"
+      },
+      {
+        "name": "MCV",
+        "displayName": "MCV",
+        "referenceRange": "80–100",
+        "unit": "fL",
+        "gender": "Both",
+        "fieldType": "Number",
+        "formula": "Formula: MCV (fL) = (Hematocrit % × 10) ÷ RBC Count",
+        "valueOptions": [],
+        "status": "Active"
+      },
+      {
+        "name": "MCH",
+        "displayName": "MCH",
+        "referenceRange": "27–33",
+        "unit": "pg",
+        "gender": "Both",
+        "fieldType": "Number",
+        "formula": "Formula: MCH (pg) = (Hemoglobin × 10) ÷ RBC Count",
+        "valueOptions": [],
+        "status": "Active"
+      },
+      {
+        "name": "MCHC",
+        "displayName": "MCHC",
+        "referenceRange": "32–36",
+        "unit": "g/dL",
+        "gender": "Both",
+        "fieldType": "Number",
+        "formula": "Formula: MCHC (g/dL) = (Hemoglobin ÷ Hematocrit %) × 100",
+        "valueOptions": [],
+        "status": "Active"
+      },
+      {
+        "name": "RDW-CV",
+        "displayName": "RDW-CV",
+        "referenceRange": "11.5–14.5",
+        "unit": "%",
+        "gender": "Both",
+        "fieldType": "Number",
+        "valueOptions": [],
+        "status": "Active"
+      },
+      {
+        "name": "Serum Iron",
+        "displayName": "Serum Iron",
+        "referenceRange": "65–175",
+        "unit": "µg/dL",
+        "gender": "Both",
+        "fieldType": "Number",
+        "valueOptions": [],
+        "status": "Active"
+      },
+      {
+        "name": "TIBC",
+        "displayName": "TIBC",
+        "referenceRange": "250–450",
+        "unit": "µg/dL",
+        "gender": "Both",
+        "fieldType": "Number",
+        "valueOptions": [],
+        "status": "Active"
+      },
+      {
+        "name": "UIBC",
+        "displayName": "UIBC",
+        "referenceRange": "155–355",
+        "unit": "µg/dL",
+        "gender": "Both",
+        "fieldType": "Number",
+        "formula": "Formula: UIBC = TIBC − Serum Iron",
+        "valueOptions": [],
+        "status": "Active"
+      },
+      {
+        "name": "Transferrin Saturation",
+        "displayName": "Transferrin Saturation",
+        "referenceRange": "20–50",
+        "unit": "%",
+        "gender": "Both",
+        "fieldType": "Number",
+        "formula": "Formula: Transferrin Saturation (%) = (Serum Iron ÷ TIBC) × 100",
+        "valueOptions": [],
+        "status": "Active"
+      },
+      {
+        "name": "Serum Ferritin",
+        "displayName": "Serum Ferritin",
+        "referenceRange": "Male: 30–400 / Female: 13–150",
+        "unit": "ng/mL",
+        "gender": "Both",
+        "fieldType": "Number",
+        "valueOptions": [],
+        "status": "Active"
+      },
+      {
+        "name": "Vitamin B12",
+        "displayName": "Vitamin B12",
+        "referenceRange": "200–900",
+        "unit": "pg/mL",
+        "gender": "Both",
+        "fieldType": "Number",
+        "valueOptions": [],
+        "status": "Active"
+      },
+      {
+        "name": "Folate (Vitamin B9)",
+        "displayName": "Folate (Vitamin B9)",
+        "referenceRange": "3–20",
+        "unit": "ng/mL",
+        "gender": "Both",
+        "fieldType": "Number",
+        "valueOptions": [],
+        "status": "Active"
+      },
+      {
+        "name": "Reticulocyte Count",
+        "displayName": "Reticulocyte Count",
+        "referenceRange": "0.5–2.5",
+        "unit": "%",
+        "gender": "Both",
+        "fieldType": "Number",
+        "valueOptions": [],
+        "status": "Active"
+      },
+      {
+        "name": "Peripheral Smear",
+        "displayName": "Peripheral Smear",
+        "referenceRange": "Morphology-based interpretation",
+        "unit": "—",
+        "gender": "Both",
+        "fieldType": "Multiline",
+        "valueOptions": [
+          { "value": "Normocytic Normochromic RBCs with normal morphology", "isAbnormal": false },
+          { "value": "Microcytic Hypochromic RBCs with marked Anisopoikilocytosis and pencil cells", "isAbnormal": true },
+          { "value": "Macrocytic RBCs with Hypersegmented Neutrophils", "isAbnormal": true },
+          { "value": "Dimorphic RBC population (Microcytic Hypochromic + Macrocytic)", "isAbnormal": true },
+          { "value": "Normocytic Normochromic with Polychromasia and Reticulocytosis", "isAbnormal": true }
+        ],
+        "status": "Active"
+      }
+    ]
+  },
+  {
+    "category": "LAB",
     "test": "HSV-2 IgG",
     "title": "HSV-2 IgG",
     "basePrice": 750,

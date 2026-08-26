@@ -590,6 +590,191 @@ Sample must be collected in EDTA or Heparin tube without stasis (avoid fist clen
           }
         ]
       })
+    } else if (presetType === 'ANEMIA_PACKAGE' || presetType === 'Anemia Package' || presetType === 'ANEMIA') {
+      setReportForm({
+        title: 'Anemia Package',
+        test: 'Anemia Package',
+        category: 'LAB',
+        department: 'PATHOLOGY',
+        basePrice: 1200,
+        taxPercentage: 0,
+        sampleType: 'Whole Blood (EDTA) & Blood Serum',
+        turnaroundTime: '6 Hours',
+        description: 'Comprehensive Anemia Profile evaluating complete red blood cell indices, iron metabolism (Iron, TIBC, UIBC, Transferrin Saturation, Ferritin), Vitamin B12, Folate, Reticulocytes, and Peripheral Blood Smear examination.',
+        interpretation: `Clinical Interpretation & Diagnostic Guidance:
+
+1. Microcytic Hypochromic Anemia (MCV < 80 fL):
+• Iron Deficiency Anemia: Low Serum Iron (< 65 µg/dL), Elevated TIBC (> 450 µg/dL), Low Transferrin Saturation (< 16%), Low Serum Ferritin (< 30 ng/mL in males, < 13 ng/mL in females), High RDW-CV (> 14.5%).
+• Anemia of Chronic Disease / Inflammation: Low/Normal Iron, Low/Normal TIBC, Normal or High Ferritin (acute phase reactant), Low Transferrin Saturation.
+• Thalassemia Trait: Markedly low MCV and MCH with normal/high RBC count, normal iron studies, normal RDW.
+
+2. Macrocytic Anemia (MCV > 100 fL):
+• Megaloblastic Anemia: Low Vitamin B12 (< 200 pg/mL) and/or Low Folate (< 3 ng/mL), oval macrocytes, hypersegmented neutrophils on peripheral smear, low reticulocyte response.
+• Non-Megaloblastic Causes: Liver disease, alcohol excess, hypothyroidism, myelodysplastic syndrome (MDS).
+
+3. Normocytic Normochromic Anemia (MCV 80–100 fL):
+• Hemolytic Anemia: Elevated Reticulocyte Count (> 2.5%), polychromasia, elevated indirect bilirubin.
+• Acute Blood Loss or Bone Marrow Suppression: Normal iron/B12, variable reticulocyte response.
+
+Formulas & Calculations:
+• Transferrin Saturation (%) = (Serum Iron ÷ TIBC) × 100
+• UIBC (µg/dL) = TIBC − Serum Iron
+• MCV (fL) = (Hematocrit % × 10) ÷ RBC Count
+• MCH (pg) = (Hemoglobin × 10) ÷ RBC Count
+• MCHC (g/dL) = (Hemoglobin ÷ Hematocrit %) × 100`,
+        parameters: [
+          {
+            name: 'Hemoglobin (Hb)',
+            displayName: 'Hemoglobin (Hb)',
+            referenceRange: 'Male: 13.5–17.5 / Female: 12.0–15.5',
+            unit: 'g/dL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'RBC Count',
+            displayName: 'RBC Count',
+            referenceRange: 'Male: 4.5–5.9 / Female: 4.1–5.1',
+            unit: 'million/µL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'Hematocrit (PCV)',
+            displayName: 'Hematocrit (PCV)',
+            referenceRange: 'Male: 41–53 / Female: 36–46',
+            unit: '%',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'MCV',
+            displayName: 'MCV',
+            referenceRange: '80–100',
+            unit: 'fL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'MCH',
+            displayName: 'MCH',
+            referenceRange: '27–33',
+            unit: 'pg',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'MCHC',
+            displayName: 'MCHC',
+            referenceRange: '32–36',
+            unit: 'g/dL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'RDW-CV',
+            displayName: 'RDW-CV',
+            referenceRange: '11.5–14.5',
+            unit: '%',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'Serum Iron',
+            displayName: 'Serum Iron',
+            referenceRange: '65–175',
+            unit: 'µg/dL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'TIBC',
+            displayName: 'TIBC',
+            referenceRange: '250–450',
+            unit: 'µg/dL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'UIBC',
+            displayName: 'UIBC',
+            referenceRange: '155–355',
+            unit: 'µg/dL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'Transferrin Saturation',
+            displayName: 'Transferrin Saturation',
+            referenceRange: '20–50',
+            unit: '%',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'Serum Ferritin',
+            displayName: 'Serum Ferritin',
+            referenceRange: 'Male: 30–400 / Female: 13–150',
+            unit: 'ng/mL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'Vitamin B12',
+            displayName: 'Vitamin B12',
+            referenceRange: '200–900',
+            unit: 'pg/mL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'Folate (Vitamin B9)',
+            displayName: 'Folate (Vitamin B9)',
+            referenceRange: '3–20',
+            unit: 'ng/mL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'Reticulocyte Count',
+            displayName: 'Reticulocyte Count',
+            referenceRange: '0.5–2.5',
+            unit: '%',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'Peripheral Smear',
+            displayName: 'Peripheral Smear',
+            referenceRange: 'Morphology-based interpretation',
+            unit: '—',
+            fieldType: 'Multiline',
+            gender: 'Both',
+            valueOptions: [
+              { value: 'Normocytic Normochromic RBCs with normal morphology', isAbnormal: false },
+              { value: 'Microcytic Hypochromic RBCs with marked Anisopoikilocytosis and pencil cells', isAbnormal: true },
+              { value: 'Macrocytic RBCs with Hypersegmented Neutrophils', isAbnormal: true },
+              { value: 'Dimorphic RBC population (Microcytic Hypochromic + Macrocytic)', isAbnormal: true },
+              { value: 'Normocytic Normochromic with Polychromasia and Reticulocytosis', isAbnormal: true }
+            ]
+          }
+        ]
+      })
     } else if (presetType === 'CCP') {
       setReportForm({
         title: 'CCP(Cyclic-citrullinated-peptide)',
@@ -7405,6 +7590,13 @@ Polycystic Ovarian Disease (PCOD / PCOS) is a complex endocrine disorder charact
                   className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs cursor-pointer shadow-xs"
                 >
                   Ammonia
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('ANEMIA_PACKAGE')}
+                  className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs cursor-pointer shadow-xs"
+                >
+                  Anemia Package
                 </button>
                 <button
                   type="button"

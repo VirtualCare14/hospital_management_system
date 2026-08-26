@@ -2904,10 +2904,20 @@ Clinical Interpretation:
     }
     // Iron Studies Formulas
     if (name === 'uibc' || (name.includes('uibc') && !name.includes('tibc'))) {
-      return 'Formula: UIBC = TIBC − Iron';
+      return 'Formula: UIBC = TIBC − Serum Iron';
     }
     if (name.includes('transferrin saturation') || name === 'tsat' || name.includes('transferrin sat')) {
-      return 'Formula: Transferrin Saturation (%) = (Iron ÷ TIBC) × 100';
+      return 'Formula: Transferrin Saturation (%) = (Serum Iron ÷ TIBC) × 100';
+    }
+    // RBC Indices Formulas
+    if (name === 'mcv' || (name.includes('mcv') && !name.includes('mch'))) {
+      return 'Formula: MCV (fL) = (Hematocrit % × 10) ÷ RBC Count';
+    }
+    if (name === 'mch' || (name.includes('mch') && !name.includes('mchc') && !name.includes('mcv'))) {
+      return 'Formula: MCH (pg) = (Hemoglobin × 10) ÷ RBC Count';
+    }
+    if (name === 'mchc' || name.includes('mchc')) {
+      return 'Formula: MCHC (g/dL) = (Hemoglobin ÷ Hematocrit %) × 100';
     }
     // UPCR Formula
     if (name.includes('urine protein') && name.includes('creatinine') && name.includes('ratio')) {
@@ -3209,6 +3219,35 @@ Clinical Interpretation:
       if (ironVal !== null && tibcVal !== null && tibcVal > 0) {
         const calculated = ((ironVal / tibcVal) * 100).toFixed(1);
         updated[tsatKey] = String(calculated);
+      }
+    }
+
+    // RBC Indices Calculations (MCV, MCH, MCHC)
+    const hbVal = getNumVal(['hemoglobin (hb)', 'hemoglobin', 'hb'], ['ratio', 'binding']);
+    const rbcVal = getNumVal(['rbc count', 'rbc', 'total rbc count'], ['ratio', 'morphology']);
+    const pcvVal = getNumVal(['hematocrit (pcv)', 'hematocrit', 'pcv'], ['ratio']);
+
+    const mcvKey = findKey(['mcv', 'mean corpuscular volume'], ['mch', 'mchc']);
+    if (mcvKey && paramName !== mcvKey) {
+      if (pcvVal !== null && rbcVal !== null && rbcVal > 0) {
+        const calculated = ((pcvVal * 10) / rbcVal).toFixed(1);
+        updated[mcvKey] = String(calculated);
+      }
+    }
+
+    const mchKey = findKey(['mch', 'mean corpuscular hemoglobin'], ['mchc', 'mcv']);
+    if (mchKey && paramName !== mchKey) {
+      if (hbVal !== null && rbcVal !== null && rbcVal > 0) {
+        const calculated = ((hbVal * 10) / rbcVal).toFixed(1);
+        updated[mchKey] = String(calculated);
+      }
+    }
+
+    const mchcKey = findKey(['mchc', 'mean corpuscular hemoglobin concentration'], ['mcv', 'mch ']);
+    if (mchcKey && paramName !== mchcKey) {
+      if (hbVal !== null && pcvVal !== null && pcvVal > 0) {
+        const calculated = ((hbVal / pcvVal) * 100).toFixed(1);
+        updated[mchcKey] = String(calculated);
       }
     }
 
