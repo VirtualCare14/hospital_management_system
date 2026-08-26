@@ -1735,23 +1735,22 @@ NB: Very high (> 100 mm/1st hour) ESR is found in autoimmune disease, malignancy
           }
         ]
       })
-    } else if (presetType === 'ESR_WINTROBE') {
+    } else if (presetType === 'ESR_WINTROBE' || presetType === 'ESR (Wintrobe)' || presetType === 'ESR(Wintrobe)' || presetType === 'ESR_Wintrobe') {
       setReportForm({
-        title: 'Erythrocyte Sedimentation Rate (Wintrobe)',
-        test: 'ESR(Wintrobe)',
+        title: 'ESR (Wintrobe)',
+        test: 'ESR (Wintrobe)',
         category: 'LAB',
+        department: 'HAEMATOLOGY',
         basePrice: 100,
         taxPercentage: 0,
         sampleType: 'Whole Blood (EDTA / Sodium Citrate)',
         turnaroundTime: 'Same Day',
         description: 'Measurement of the rate at which red blood cells sediment in a period of 1 hour by Wintrobe method to evaluate systemic inflammation.',
-        interpretation: `Interpretation:
-
-Raised ESR can be found in:
-1. Connective tissue disorders (e.g., SLE, Rheumatoid Arthritis, Systemic Sclerosis)
-2. Infections (e.g., Tuberculosis, acute hepatitis, bacterial infections)
-3. Hematological disease (e.g., multiple myeloma, anemia of acute or chronic disease, alone or combined with iron deficiency anemia)
-4. Malignancy (e.g., lymphoma, breast or colon cancer)
+        interpretation: `Raised ESR can be found in
+1. Connective tissue disorders
+2. Infections e.g., TB, acute hepatitis, bacterial
+3. Hematological disease e.g., multiple myeloma, anemia of acute or chronic disease, alone or combined with iron deficiency anemia
+4. Malignancy e.g., lymphoma, breast or colon cancer
 5. Pregnancy
 6. Oral contraceptive pill users
 7. Obesity can cause a moderately raised ESR
@@ -1759,17 +1758,18 @@ Raised ESR can be found in:
 Low ESR is found in:
 1. Heart failure
 2. Cachexia
-3. Polycythemia vera (PRV) or secondary conditions featuring abnormal blood cells (e.g., sickle cell anemia, hereditary spherocytosis, acanthocytosis)
+3. PRV or secondary Conditions featuring abnormal blood cells e.g., sickle cell anemia, hereditary spherocytosis, acanthocytosis
 4. Microcytosis
-5. Hypofibrinogenemia (e.g., DIC)
+5. Hypofibrinogenemia e.g. DIC,
 6. Massive hepatic necrosis
-7. High white cell count (extreme leukocytosis)
+7. High white cell count
 8. Treatment with steroids
 
-NB: Very high (> 100 mm/1st hour) ESR is found in autoimmune disease, malignancy, acute post-trauma, and serious infection (e.g. TB, osteomyelitis, temporal arteritis). A false high ESR can occur if the ambient temperature is unusually high or if the sedimentation tube is not strictly vertical.`,
+NB: Very high (>100) ESR is found in autoimmune disease, malignancy, acute post-trauma, and serious infection. A false high ESR can occur if the ambient temperature is unusually high.`,
         parameters: [
           {
             name: 'Erythrocyte Sedimentation Rate (Wintrobe)',
+            displayName: 'Erythrocyte Sedimentation Rate (Wintrobe)',
             referenceRange: '0 - 9',
             unit: 'mm for 1st hour',
             fieldType: 'Number',
@@ -5614,6 +5614,239 @@ The Lepromin test (Mitsuda and Fernandez reactions) is a delayed-type hypersensi
           }
         ]
       })
+    } else if (presetType === 'FLUID_CS' || presetType === 'Fluid c/s' || presetType === 'Fluid C/S' || presetType === 'FLUID_C_S') {
+      const antibioticsList = [
+        'AMOXYCLAV (AMC)', 'AMIKACIN (AK)', 'AMPICILLIN (AMP)', 'AMPICILLIN / SULBACTUM ( A/S)',
+        'AZITHROMYCIN (AZM)', 'AZTREONAM (AT)', 'BACITRACIN (B)', 'CEFADROXIL (CFR)',
+        'CEFAZOLIN (CZ)', 'CEFEPIME (CPM)', 'CEFOPERAZONE (CPZ)', 'CEFUROXIME (CXM)',
+        'CEPHALOTHIN (CEP)', 'CHLORAMPHENICOL (C)', 'CIPROFLOXACIN (CIP)', 'CLINDAMYCIN (CD)',
+        'CO - TRIMOXAZOLE (COT)', 'DOXYCYCLINE HYDROCHORIDE (DO)', 'ERTAPENEM (ETP)', 'ERYTHROMYCIN (E)',
+        'FAROPENEM (FAR)', 'GENTAMICIN (GEN)', 'IMIPENEM (IPM)', 'LEVOFLOXACIN (LE)',
+        'LINEZOLIN (LZ)', 'MEROPENEM (MRP)', 'METHICILLIN (MET)', 'MOXIFLOXACIN (MO)',
+        'MUPIROCIN (MUP)', 'NALIDIXIC ACID (NA)', 'NETILLIN (NET)', 'NITROFURANTOIN (NIT)',
+        'NORFLOXACIN (NX)', 'OFLOXACIN (OF)', 'PIPERACILLIN /TAZOBACTAM (PIT)', 'RIFAMPICIN (RIF)',
+        'TEICOPLANIN (TEI)', 'TETRACYCLINE (TE)', 'VANCOMYCIN (VA)'
+      ];
+
+      setReportForm({
+        title: 'Fluid c/s',
+        test: 'Fluid c/s',
+        category: 'LAB',
+        department: 'MICROBIOLOGY',
+        basePrice: 650,
+        taxPercentage: 0,
+        sampleType: 'Body Fluid (Pleural / Ascitic / Synovial / Peritoneal / CSF)',
+        turnaroundTime: '48 - 72 Hours',
+        description: 'Microbiological culture, bacterial identification, colony count, and antibiotic sensitivity testing for body fluid specimens.',
+        interpretation: `MICROBIOLOGY - Culture and Sensitivity
+
+Sterile after 48 Hours. Incubation at 37°C.
+
+Date of Sample Collection: 
+Date of Reporting: 
+
+Sample Type: 
+Organism Isolated: 
+Colony Count: <count> Cfu/ml.
+
+Antibiotic Sensitivity Table:
+1. AMOXYCLAV (AMC)
+2. AMIKACIN (AK)
+3. AMPICILLIN (AMP)
+4. AMPICILLIN / SULBACTUM ( A/S)
+5. AZITHROMYCIN (AZM)
+6. AZTREONAM (AT)
+7. BACITRACIN (B)
+8. CEFADROXIL (CFR)
+9. CEFAZOLIN (CZ)
+10. CEFEPIME (CPM)
+11. CEFOPERAZONE (CPZ)
+12. CEFUROXIME (CXM)
+13. CEPHALOTHIN (CEP)
+14. CHLORAMPHENICOL (C)
+15. CIPROFLOXACIN (CIP)
+16. CLINDAMYCIN (CD)
+17. CO - TRIMOXAZOLE (COT)
+18. DOXYCYCLINE HYDROCHORIDE (DO)
+19. ERTAPENEM (ETP)
+20. ERYTHROMYCIN (E)
+21. FAROPENEM (FAR)
+22. GENTAMICIN (GEN)
+23. IMIPENEM (IPM)
+24. LEVOFLOXACIN (LE)
+25. LINEZOLIN (LZ)
+26. MEROPENEM (MRP)
+27. METHICILLIN (MET)
+28. MOXIFLOXACIN (MO)
+29. MUPIROCIN (MUP)
+30. NALIDIXIC ACID (NA)
+31. NETILLIN (NET)
+32. NITROFURANTOIN (NIT)
+33. NORFLOXACIN (NX)
+34. OFLOXACIN (OF)
+35. PIPERACILLIN /TAZOBACTAM (PIT)
+36. RIFAMPICIN (RIF)
+37. TEICOPLANIN (TEI)
+38. TETRACYCLINE (TE)
+39. VANCOMYCIN (VA)`,
+        parameters: [
+          {
+            name: 'Incubation Status',
+            displayName: 'Incubation Status',
+            referenceRange: 'Sterile after 48 Hours. Incubation at 37°C.',
+            unit: '',
+            fieldType: 'Text',
+            gender: 'Both',
+            valueOptions: ['Sterile after 48 Hours. Incubation at 37°C.', 'Sterile after 24 Hours. Incubation at 37°C.', 'Growth Seen after 24 Hours.', 'Growth Seen after 48 Hours.']
+          },
+          {
+            name: 'Sample Type',
+            displayName: 'Sample Type',
+            referenceRange: 'Pleural / Ascitic / Synovial / Peritoneal / CSF',
+            unit: '',
+            fieldType: 'Select',
+            gender: 'Both',
+            valueOptions: ['Pleural Fluid', 'Ascitic Fluid', 'Peritoneal Fluid', 'Synovial Fluid', 'Pericardial Fluid', 'CSF (Cerebrospinal Fluid)', 'Body Fluid']
+          },
+          {
+            name: 'Organism Isolated',
+            displayName: 'Organism Isolated',
+            referenceRange: 'No Growth / Sterile',
+            unit: '',
+            fieldType: 'Text',
+            gender: 'Both',
+            valueOptions: ['No Growth', 'Sterile', 'Staphylococcus aureus', 'Methicillin-Resistant Staphylococcus aureus (MRSA)', 'Escherichia coli', 'Klebsiella pneumoniae', 'Pseudomonas aeruginosa', 'Acinetobacter baumannii', 'Enterococcus faecalis', 'Streptococcus pneumoniae']
+          },
+          {
+            name: 'Colony Count',
+            displayName: 'Colony Count',
+            referenceRange: '< 10^3 Cfu/ml',
+            unit: 'Cfu/ml',
+            fieldType: 'Text',
+            gender: 'Both',
+            valueOptions: []
+          },
+          ...antibioticsList.map((abx, idx) => ({
+            name: `${idx + 1}. ${abx}`,
+            displayName: `${idx + 1}. ${abx}`,
+            referenceRange: 'Sensitive',
+            unit: '',
+            fieldType: 'Select',
+            gender: 'Both',
+            valueOptions: ['Sensitive', 'Resistant', 'Intermediate', 'Moderate Sensitive', 'Not Tested', '—']
+          }))
+        ]
+      })
+    } else if (presetType === 'ANTI_CARDIOLIPIN_IGG' || presetType === 'Anti Cardiolipin IgG' || presetType === 'Anti Cardiolipin lgG' || presetType === 'ACA_IGG' || presetType === 'ACL_IGG') {
+      setReportForm({
+        title: 'Anti Cardiolipin IgG',
+        test: 'Anti Cardiolipin IgG',
+        category: 'LAB',
+        department: 'SEROLOGY & IMMUNOLOGY',
+        basePrice: 850,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum',
+        turnaroundTime: 'Same Day',
+        description: 'Quantitative determination of Anti-Cardiolipin IgG (ACA IgG) antibodies in serum for the diagnosis and risk assessment of Antiphospholipid Syndrome (APS), thrombosis, and recurrent fetal loss.',
+        interpretation: `RESULT IN GPL | REMARKS
+<15           | Negative
+15-20         | Equivocal
+20-80         | Low Positive
+>80           | High Positive
+
+Comments:
+ACA is a type of antiphospholipid antibody.
+Diagnostic Importance: ACA are significant in diagnosing -
+1. Venous or arterial thrombosis
+2. Thrombocytopenia
+3. Livedo Reticularis
+4. Recurrent miscarriages
+5. Neurological symptoms
+Other Associations: Elevated ACA levels can also be linked to cardiovascular insufficiency and myocardial infarction.`,
+        parameters: [
+          {
+            name: 'Anti Cardiolipin IgG',
+            displayName: 'Anti Cardiolipin IgG',
+            referenceRange: '< 15',
+            unit: 'GPL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      })
+    } else if (presetType === 'ANTI_CARDIOLIPIN_IGM' || presetType === 'Anti Cardiolipin IgM' || presetType === 'Anti Cardiolipin Igm' || presetType === 'Anti Cardiolipin lgm' || presetType === 'ACA_IGM' || presetType === 'ACL_IGM') {
+      setReportForm({
+        title: 'Anti Cardiolipin IgM',
+        test: 'Anti Cardiolipin IgM',
+        category: 'LAB',
+        department: 'SEROLOGY & IMMUNOLOGY',
+        basePrice: 850,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum',
+        turnaroundTime: 'Same Day',
+        description: 'Quantitative determination of Anti-Cardiolipin IgM (ACA IgM) antibodies in serum for the diagnosis and risk assessment of Antiphospholipid Syndrome (APS), acute thrombosis, and autoimmune vascular disorders.',
+        interpretation: `RESULT IN MPL | REMARKS
+<15           | Negative
+15-20         | Equivocal
+20-80         | Low Positive
+>80           | High Positive
+
+Comments:
+ACA is a type of antiphospholipid antibody.
+Diagnostic Importance: ACA are significant in diagnosing -
+1. Venous or arterial thrombosis
+2. Thrombocytopenia
+3. Livedo Reticularis
+4. Recurrent miscarriages
+5. Neurological symptoms
+Other Associations: Elevated ACA levels can also be linked to cardiovascular insufficiency and myocardial infarction.`,
+        parameters: [
+          {
+            name: 'Anti Cardiolipin IgM',
+            displayName: 'Anti Cardiolipin IgM',
+            referenceRange: '< 15',
+            unit: 'MPL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      })
+    } else if (presetType === 'ANTI_HAV' || presetType === 'Anti-HAV' || presetType === 'Anti HAV' || presetType === 'HAV_TOTAL' || presetType === 'ANTI_HAV_TOTAL') {
+      setReportForm({
+        title: 'Anti-HAV',
+        test: 'Anti-HAV',
+        category: 'LAB',
+        department: 'SEROLOGY & IMMUNOLOGY',
+        basePrice: 750,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum',
+        turnaroundTime: 'Same Day',
+        description: 'Quantitative determination of total antibodies to Hepatitis A Virus (Anti-HAV Total / IgG + IgM) in serum for assessing past exposure, natural immunity, or response to Hepatitis A vaccination.',
+        interpretation: `Clinical Significance & Interpretation:
+Anti-HAV (Total Antibody) measures both IgG and IgM antibodies to Hepatitis A Virus. It is used to detect past exposure, verify immunity post-vaccination, or evaluate suspected Hepatitis A infection.
+
+Reference Cut-offs (mIU/mL):
+• < 20 mIU/mL : Non-Reactive / Negative (Non-Immune / No detectable antibodies to Hepatitis A Virus)
+• ≥ 20 mIU/mL : Reactive / Positive (Immune / Detectable antibodies to Hepatitis A Virus due to past infection or vaccination)
+
+Clinical Guidance:
+1. Reactive (≥ 20 mIU/mL): Indicates immunity to Hepatitis A Virus acquired either from past resolved infection or successful Hepatitis A vaccination.
+2. Non-Reactive (< 20 mIU/mL): Indicates non-immunity and susceptibility to Hepatitis A infection. Vaccination is recommended for high-risk individuals and travelers.
+3. For acute infection evaluation: If acute viral hepatitis is clinically suspected (elevated ALT/AST, acute jaundice), Anti-HAV IgM testing should be performed.`,
+        parameters: [
+          {
+            name: 'Anti-HAV',
+            displayName: 'Anti-HAV',
+            referenceRange: '< 20 mIU/mL',
+            unit: 'mIU/mL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      })
     } else if (presetType === 'STOOL_CS') {
       setReportForm({
         title: 'Stool Culture and Sensitivity (Stool C/S)',
@@ -7605,6 +7838,41 @@ Polycystic Ovarian Disease (PCOD / PCOS) is a complex endocrine disorder charact
                   className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs cursor-pointer shadow-xs"
                 >
                   H-ALB
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('ESR (Wintrobe)')}
+                  className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs cursor-pointer shadow-xs"
+                >
+                  ESR (Wintrobe)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('Fluid c/s')}
+                  className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs cursor-pointer shadow-xs"
+                >
+                  Fluid c/s
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('Anti Cardiolipin IgG')}
+                  className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs cursor-pointer shadow-xs"
+                >
+                  Anti Cardiolipin IgG
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('Anti Cardiolipin IgM')}
+                  className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs cursor-pointer shadow-xs"
+                >
+                  Anti Cardiolipin IgM
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('Anti-HAV')}
+                  className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs cursor-pointer shadow-xs"
+                >
+                  Anti-HAV
                 </button>
                 <button
                   type="button"

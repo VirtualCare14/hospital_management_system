@@ -686,6 +686,823 @@ const standardTests = [
   },
   {
     "category": "LAB",
+    "department": "MICROBIOLOGY",
+    "test": "Fluid c/s",
+    "title": "Fluid c/s",
+    "basePrice": 650,
+    "taxPercentage": 0,
+    "sampleType": "Body Fluid (Pleural / Ascitic / Synovial / Peritoneal / CSF)",
+    "turnaroundTime": "48 - 72 Hours",
+    "description": "Microbiological culture, bacterial identification, colony count, and antibiotic sensitivity testing for body fluid specimens.",
+    "notes": "Sterile after 48 Hours. Incubation at 37°C.\n\nDate of Sample Collection:\nDate of Reporting:\n\nSample Type:\nOrganism Isolated:\nColony Count: <count> Cfu/ml.\n\nAntibiogram / Sensitivity Table:\nEvaluates 39 standard antibiotic susceptibility markers against isolated bacterial strains according to CLSI guidelines.",
+    "interpretation": "MICROBIOLOGY - Culture and Sensitivity\n\nSterile after 48 Hours. Incubation at 37°C.\n\nDate of Sample Collection:\nDate of Reporting:\n\nSample Type:\nOrganism Isolated:\nColony Count: <count> Cfu/ml.\n\nAntibiotic Sensitivity Table:\n1. AMOXYCLAV (AMC)\n2. AMIKACIN (AK)\n3. AMPICILLIN (AMP)\n4. AMPICILLIN / SULBACTUM ( A/S)\n5. AZITHROMYCIN (AZM)\n6. AZTREONAM (AT)\n7. BACITRACIN (B)\n8. CEFADROXIL (CFR)\n9. CEFAZOLIN (CZ)\n10. CEFEPIME (CPM)\n11. CEFOPERAZONE (CPZ)\n12. CEFUROXIME (CXM)\n13. CEPHALOTHIN (CEP)\n14. CHLORAMPHENICOL (C)\n15. CIPROFLOXACIN (CIP)\n16. CLINDAMYCIN (CD)\n17. CO - TRIMOXAZOLE (COT)\n18. DOXYCYCLINE HYDROCHORIDE (DO)\n19. ERTAPENEM (ETP)\n20. ERYTHROMYCIN (E)\n21. FAROPENEM (FAR)\n22. GENTAMICIN (GEN)\n23. IMIPENEM (IPM)\n24. LEVOFLOXACIN (LE)\n25. LINEZOLIN (LZ)\n26. MEROPENEM (MRP)\n27. METHICILLIN (MET)\n28. MOXIFLOXACIN (MO)\n29. MUPIROCIN (MUP)\n30. NALIDIXIC ACID (NA)\n31. NETILLIN (NET)\n32. NITROFURANTOIN (NIT)\n33. NORFLOXACIN (NX)\n34. OFLOXACIN (OF)\n35. PIPERACILLIN /TAZOBACTAM (PIT)\n36. RIFAMPICIN (RIF)\n37. TEICOPLANIN (TEI)\n38. TETRACYCLINE (TE)\n39. VANCOMYCIN (VA)",
+    "parameters": [
+      {
+        "name": "Incubation Status",
+        "displayName": "Incubation Status",
+        "referenceRange": "Sterile after 48 Hours. Incubation at 37°C.",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Text",
+        "valueOptions": [
+          { "value": "Sterile after 48 Hours. Incubation at 37°C.", "isAbnormal": false },
+          { "value": "Sterile after 24 Hours. Incubation at 37°C.", "isAbnormal": false },
+          { "value": "Growth Seen after 24 Hours.", "isAbnormal": true },
+          { "value": "Growth Seen after 48 Hours.", "isAbnormal": true }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "Sample Type",
+        "displayName": "Sample Type",
+        "referenceRange": "Pleural / Ascitic / Synovial / Peritoneal / CSF",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Pleural Fluid", "isAbnormal": false },
+          { "value": "Ascitic Fluid", "isAbnormal": false },
+          { "value": "Peritoneal Fluid", "isAbnormal": false },
+          { "value": "Synovial Fluid", "isAbnormal": false },
+          { "value": "Pericardial Fluid", "isAbnormal": false },
+          { "value": "CSF (Cerebrospinal Fluid)", "isAbnormal": false },
+          { "value": "Body Fluid", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "Organism Isolated",
+        "displayName": "Organism Isolated",
+        "referenceRange": "No Growth / Sterile",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Text",
+        "valueOptions": [
+          { "value": "No Growth", "isAbnormal": false },
+          { "value": "Sterile", "isAbnormal": false },
+          { "value": "Staphylococcus aureus", "isAbnormal": true },
+          { "value": "Methicillin-Resistant Staphylococcus aureus (MRSA)", "isAbnormal": true },
+          { "value": "Escherichia coli", "isAbnormal": true },
+          { "value": "Klebsiella pneumoniae", "isAbnormal": true },
+          { "value": "Pseudomonas aeruginosa", "isAbnormal": true },
+          { "value": "Acinetobacter baumannii", "isAbnormal": true },
+          { "value": "Enterococcus faecalis", "isAbnormal": true },
+          { "value": "Streptococcus pneumoniae", "isAbnormal": true }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "Colony Count",
+        "displayName": "Colony Count",
+        "referenceRange": "< 10^3 Cfu/ml",
+        "unit": "Cfu/ml",
+        "gender": "Both",
+        "fieldType": "Text",
+        "valueOptions": [],
+        "status": "Active"
+      },
+      {
+        "name": "1. AMOXYCLAV (AMC)",
+        "displayName": "1. AMOXYCLAV (AMC)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "2. AMIKACIN (AK)",
+        "displayName": "2. AMIKACIN (AK)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "3. AMPICILLIN (AMP)",
+        "displayName": "3. AMPICILLIN (AMP)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "4. AMPICILLIN / SULBACTUM ( A/S)",
+        "displayName": "4. AMPICILLIN / SULBACTUM ( A/S)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "5. AZITHROMYCIN (AZM)",
+        "displayName": "5. AZITHROMYCIN (AZM)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "6. AZTREONAM (AT)",
+        "displayName": "6. AZTREONAM (AT)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "7. BACITRACIN (B)",
+        "displayName": "7. BACITRACIN (B)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "8. CEFADROXIL (CFR)",
+        "displayName": "8. CEFADROXIL (CFR)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "9. CEFAZOLIN (CZ)",
+        "displayName": "9. CEFAZOLIN (CZ)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "10. CEFEPIME (CPM)",
+        "displayName": "10. CEFEPIME (CPM)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "11. CEFOPERAZONE (CPZ)",
+        "displayName": "11. CEFOPERAZONE (CPZ)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "12. CEFUROXIME (CXM)",
+        "displayName": "12. CEFUROXIME (CXM)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "13. CEPHALOTHIN (CEP)",
+        "displayName": "13. CEPHALOTHIN (CEP)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "14. CHLORAMPHENICOL (C)",
+        "displayName": "14. CHLORAMPHENICOL (C)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "15. CIPROFLOXACIN (CIP)",
+        "displayName": "15. CIPROFLOXACIN (CIP)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "16. CLINDAMYCIN (CD)",
+        "displayName": "16. CLINDAMYCIN (CD)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "17. CO - TRIMOXAZOLE (COT)",
+        "displayName": "17. CO - TRIMOXAZOLE (COT)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "18. DOXYCYCLINE HYDROCHORIDE (DO)",
+        "displayName": "18. DOXYCYCLINE HYDROCHORIDE (DO)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "19. ERTAPENEM (ETP)",
+        "displayName": "19. ERTAPENEM (ETP)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "20. ERYTHROMYCIN (E)",
+        "displayName": "20. ERYTHROMYCIN (E)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "21. FAROPENEM (FAR)",
+        "displayName": "21. FAROPENEM (FAR)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "22. GENTAMICIN (GEN)",
+        "displayName": "22. GENTAMICIN (GEN)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "23. IMIPENEM (IPM)",
+        "displayName": "23. IMIPENEM (IPM)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "24. LEVOFLOXACIN (LE)",
+        "displayName": "24. LEVOFLOXACIN (LE)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "25. LINEZOLIN (LZ)",
+        "displayName": "25. LINEZOLIN (LZ)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "26. MEROPENEM (MRP)",
+        "displayName": "26. MEROPENEM (MRP)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "27. METHICILLIN (MET)",
+        "displayName": "27. METHICILLIN (MET)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "28. MOXIFLOXACIN (MO)",
+        "displayName": "28. MOXIFLOXACIN (MO)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "29. MUPIROCIN (MUP)",
+        "displayName": "29. MUPIROCIN (MUP)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "30. NALIDIXIC ACID (NA)",
+        "displayName": "30. NALIDIXIC ACID (NA)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "31. NETILLIN (NET)",
+        "displayName": "31. NETILLIN (NET)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "32. NITROFURANTOIN (NIT)",
+        "displayName": "32. NITROFURANTOIN (NIT)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "33. NORFLOXACIN (NX)",
+        "displayName": "33. NORFLOXACIN (NX)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "34. OFLOXACIN (OF)",
+        "displayName": "34. OFLOXACIN (OF)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "35. PIPERACILLIN /TAZOBACTAM (PIT)",
+        "displayName": "35. PIPERACILLIN /TAZOBACTAM (PIT)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "36. RIFAMPICIN (RIF)",
+        "displayName": "36. RIFAMPICIN (RIF)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "37. TEICOPLANIN (TEI)",
+        "displayName": "37. TEICOPLANIN (TEI)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "38. TETRACYCLINE (TE)",
+        "displayName": "38. TETRACYCLINE (TE)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      },
+      {
+        "name": "39. VANCOMYCIN (VA)",
+        "displayName": "39. VANCOMYCIN (VA)",
+        "referenceRange": "Sensitive",
+        "unit": "",
+        "gender": "Both",
+        "fieldType": "Select",
+        "valueOptions": [
+          { "value": "Sensitive", "isAbnormal": false },
+          { "value": "Resistant", "isAbnormal": true },
+          { "value": "Intermediate", "isAbnormal": true },
+          { "value": "Moderate Sensitive", "isAbnormal": false },
+          { "value": "Not Tested", "isAbnormal": false },
+          { "value": "—", "isAbnormal": false }
+        ],
+        "status": "Active"
+      }
+    ]
+  },
+  {
+    "category": "LAB",
+    "department": "SEROLOGY & IMMUNOLOGY",
+    "test": "Anti Cardiolipin IgG",
+    "title": "Anti Cardiolipin IgG",
+    "basePrice": 850,
+    "taxPercentage": 0,
+    "sampleType": "Blood Serum",
+    "turnaroundTime": "Same Day",
+    "description": "Quantitative determination of Anti-Cardiolipin IgG (ACA IgG) antibodies in serum for the diagnosis and risk assessment of Antiphospholipid Syndrome (APS), thrombosis, and recurrent fetal loss.",
+    "notes": "RESULT IN GPL | REMARKS\n<15           | Negative\n15-20         | Equivocal\n20-80         | Low Positive\n>80           | High Positive\n\nComments:\nACA is a type of antiphospholipid antibody.\nDiagnostic Importance: ACA are significant in diagnosing -\n1. Venous or arterial thrombosis\n2. Thrombocytopenia\n3. Livedo Reticularis\n4. Recurrent miscarriages\n5. Neurological symptoms\nOther Associations: Elevated ACA levels can also be linked to cardiovascular insufficiency and myocardial infarction.",
+    "interpretation": "RESULT IN GPL | REMARKS\n<15           | Negative\n15-20         | Equivocal\n20-80         | Low Positive\n>80           | High Positive\n\nComments:\nACA is a type of antiphospholipid antibody.\nDiagnostic Importance: ACA are significant in diagnosing -\n1. Venous or arterial thrombosis\n2. Thrombocytopenia\n3. Livedo Reticularis\n4. Recurrent miscarriages\n5. Neurological symptoms\nOther Associations: Elevated ACA levels can also be linked to cardiovascular insufficiency and myocardial infarction.",
+    "parameters": [
+      {
+        "name": "Anti Cardiolipin IgG",
+        "displayName": "Anti Cardiolipin IgG",
+        "referenceRange": "< 15",
+        "unit": "GPL",
+        "gender": "Both",
+        "fieldType": "Number",
+        "valueOptions": [],
+        "status": "Active"
+      }
+    ]
+  },
+  {
+    "category": "LAB",
+    "department": "SEROLOGY & IMMUNOLOGY",
+    "test": "Anti Cardiolipin IgM",
+    "title": "Anti Cardiolipin IgM",
+    "basePrice": 850,
+    "taxPercentage": 0,
+    "sampleType": "Blood Serum",
+    "turnaroundTime": "Same Day",
+    "description": "Quantitative determination of Anti-Cardiolipin IgM (ACA IgM) antibodies in serum for the diagnosis and risk assessment of Antiphospholipid Syndrome (APS), acute thrombosis, and autoimmune vascular disorders.",
+    "notes": "RESULT IN MPL | REMARKS\n<15           | Negative\n15-20         | Equivocal\n20-80         | Low Positive\n>80           | High Positive\n\nComments:\nACA is a type of antiphospholipid antibody.\nDiagnostic Importance: ACA are significant in diagnosing -\n1. Venous or arterial thrombosis\n2. Thrombocytopenia\n3. Livedo Reticularis\n4. Recurrent miscarriages\n5. Neurological symptoms\nOther Associations: Elevated ACA levels can also be linked to cardiovascular insufficiency and myocardial infarction.",
+    "interpretation": "RESULT IN MPL | REMARKS\n<15           | Negative\n15-20         | Equivocal\n20-80         | Low Positive\n>80           | High Positive\n\nComments:\nACA is a type of antiphospholipid antibody.\nDiagnostic Importance: ACA are significant in diagnosing -\n1. Venous or arterial thrombosis\n2. Thrombocytopenia\n3. Livedo Reticularis\n4. Recurrent miscarriages\n5. Neurological symptoms\nOther Associations: Elevated ACA levels can also be linked to cardiovascular insufficiency and myocardial infarction.",
+    "parameters": [
+      {
+        "name": "Anti Cardiolipin IgM",
+        "displayName": "Anti Cardiolipin IgM",
+        "referenceRange": "< 15",
+        "unit": "MPL",
+        "gender": "Both",
+        "fieldType": "Number",
+        "valueOptions": [],
+        "status": "Active"
+      }
+    ]
+  },
+  {
+    "category": "LAB",
+    "department": "SEROLOGY & IMMUNOLOGY",
+    "test": "Anti-HAV",
+    "title": "Anti-HAV",
+    "basePrice": 750,
+    "taxPercentage": 0,
+    "sampleType": "Blood Serum",
+    "turnaroundTime": "Same Day",
+    "description": "Quantitative determination of total antibodies to Hepatitis A Virus (Anti-HAV Total / IgG + IgM) in serum for assessing past exposure, natural immunity, or response to Hepatitis A vaccination.",
+    "notes": "Clinical Significance & Interpretation:\nAnti-HAV (Total Antibody) measures both IgG and IgM antibodies to Hepatitis A Virus. It is used to detect past exposure, verify immunity post-vaccination, or evaluate suspected Hepatitis A infection.\n\nReference Cut-offs (mIU/mL):\n• < 20 mIU/mL : Non-Reactive / Negative (Non-Immune / No detectable antibodies to Hepatitis A Virus)\n• ≥ 20 mIU/mL : Reactive / Positive (Immune / Detectable antibodies to Hepatitis A Virus due to past infection or vaccination)\n\nClinical Guidance:\n1. Reactive (≥ 20 mIU/mL): Indicates immunity to Hepatitis A Virus acquired either from past resolved infection or successful Hepatitis A vaccination.\n2. Non-Reactive (< 20 mIU/mL): Indicates non-immunity and susceptibility to Hepatitis A infection. Vaccination is recommended for high-risk individuals and travelers.\n3. For acute infection evaluation: If acute viral hepatitis is clinically suspected (elevated ALT/AST, acute jaundice), Anti-HAV IgM testing should be performed.",
+    "interpretation": "Clinical Significance & Interpretation:\nAnti-HAV (Total Antibody) measures both IgG and IgM antibodies to Hepatitis A Virus. It is used to detect past exposure, verify immunity post-vaccination, or evaluate suspected Hepatitis A infection.\n\nReference Cut-offs (mIU/mL):\n• < 20 mIU/mL : Non-Reactive / Negative (Non-Immune / No detectable antibodies to Hepatitis A Virus)\n• ≥ 20 mIU/mL : Reactive / Positive (Immune / Detectable antibodies to Hepatitis A Virus due to past infection or vaccination)\n\nClinical Guidance:\n1. Reactive (≥ 20 mIU/mL): Indicates immunity to Hepatitis A Virus acquired either from past resolved infection or successful Hepatitis A vaccination.\n2. Non-Reactive (< 20 mIU/mL): Indicates non-immunity and susceptibility to Hepatitis A infection. Vaccination is recommended for high-risk individuals and travelers.\n3. For acute infection evaluation: If acute viral hepatitis is clinically suspected (elevated ALT/AST, acute jaundice), Anti-HAV IgM testing should be performed.",
+    "parameters": [
+      {
+        "name": "Anti-HAV",
+        "displayName": "Anti-HAV",
+        "referenceRange": "< 20 mIU/mL",
+        "unit": "mIU/mL",
+        "gender": "Both",
+        "fieldType": "Number",
+        "valueOptions": [],
+        "status": "Active"
+      }
+    ]
+  },
+  {
+    "category": "LAB",
     "test": "HSV-2 IgG",
     "title": "HSV-2 IgG",
     "basePrice": 750,
@@ -2483,18 +3300,20 @@ const standardTests = [
   },
   {
     "category": "LAB",
-    "test": "ESR(Wintrobe)",
-    "title": "Erythrocyte Sedimentation Rate (Wintrobe)",
+    "department": "HAEMATOLOGY",
+    "test": "ESR (Wintrobe)",
+    "title": "ESR (Wintrobe)",
     "basePrice": 100,
     "taxPercentage": 0,
-    "sampleType": "Whole Blood (EDTA / Citrate)",
+    "sampleType": "Whole Blood (EDTA / Sodium Citrate)",
     "turnaroundTime": "Same Day",
     "description": "Measurement of the rate at which red blood cells sediment in a period of 1 hour by Wintrobe method to evaluate systemic inflammation.",
-    "notes": "Interpretation:\n\nRaised ESR can be found in:\n1. Connective tissue disorders (e.g., SLE, Rheumatoid Arthritis, Systemic Sclerosis)\n2. Infections (e.g., Tuberculosis, acute hepatitis, bacterial infections)\n3. Hematological disease (e.g., multiple myeloma, anemia of acute or chronic disease, alone or combined with iron deficiency anemia)\n4. Malignancy (e.g., lymphoma, breast or colon cancer)\n5. Pregnancy\n6. Oral contraceptive pill users\n7. Obesity can cause a moderately raised ESR\n\nLow ESR is found in:\n1. Heart failure\n2. Cachexia\n3. Polycythemia vera (PRV) or secondary conditions featuring abnormal blood cells (e.g., sickle cell anemia, hereditary spherocytosis, acanthocytosis)\n4. Microcytosis\n5. Hypofibrinogenemia (e.g., DIC)\n6. Massive hepatic necrosis\n7. High white cell count (extreme leukocytosis)\n8. Treatment with steroids\n\nNB: Very high (> 100 mm/hr) ESR is found in autoimmune disease, malignancy, acute post-trauma, and serious infection (e.g. TB, osteomyelitis). A false high ESR can occur if the ambient temperature is unusually high or if the tube is tilted.",
-    "interpretation": "Interpretation:\n\nRaised ESR can be found in:\n1. Connective tissue disorders (e.g., SLE, Rheumatoid Arthritis, Systemic Sclerosis)\n2. Infections (e.g., Tuberculosis, acute hepatitis, bacterial infections)\n3. Hematological disease (e.g., multiple myeloma, anemia of acute or chronic disease, alone or combined with iron deficiency anemia)\n4. Malignancy (e.g., lymphoma, breast or colon cancer)\n5. Pregnancy\n6. Oral contraceptive pill users\n7. Obesity can cause a moderately raised ESR\n\nLow ESR is found in:\n1. Heart failure\n2. Cachexia\n3. Polycythemia vera (PRV) or secondary conditions featuring abnormal blood cells (e.g., sickle cell anemia, hereditary spherocytosis, acanthocytosis)\n4. Microcytosis\n5. Hypofibrinogenemia (e.g., DIC)\n6. Massive hepatic necrosis\n7. High white cell count (extreme leukocytosis)\n8. Treatment with steroids\n\nNB: Very high (> 100 mm/hr) ESR is found in autoimmune disease, malignancy, acute post-trauma, and serious infection (e.g. TB, osteomyelitis). A false high ESR can occur if the ambient temperature is unusually high or if the tube is tilted.",
+    "notes": "Raised ESR can be found in\n1. Connective tissue disorders\n2. Infections e.g., TB, acute hepatitis, bacterial\n3. Hematological disease e.g., multiple myeloma, anemia of acute or chronic disease, alone or combined with iron deficiency anemia\n4. Malignancy e.g., lymphoma, breast or colon cancer\n5. Pregnancy\n6. Oral contraceptive pill users\n7. Obesity can cause a moderately raised ESR\n\nLow ESR is found in:\n1. Heart failure\n2. Cachexia\n3. PRV or secondary Conditions featuring abnormal blood cells e.g., sickle cell anemia, hereditary spherocytosis, acanthocytosis\n4. Microcytosis\n5. Hypofibrinogenemia e.g. DIC,\n6. Massive hepatic necrosis\n7. High white cell count\n8. Treatment with steroids\n\nNB: Very high (>100) ESR is found in autoimmune disease, malignancy, acute post-trauma, and serious infection. A false high ESR can occur if the ambient temperature is unusually high.",
+    "interpretation": "Raised ESR can be found in\n1. Connective tissue disorders\n2. Infections e.g., TB, acute hepatitis, bacterial\n3. Hematological disease e.g., multiple myeloma, anemia of acute or chronic disease, alone or combined with iron deficiency anemia\n4. Malignancy e.g., lymphoma, breast or colon cancer\n5. Pregnancy\n6. Oral contraceptive pill users\n7. Obesity can cause a moderately raised ESR\n\nLow ESR is found in:\n1. Heart failure\n2. Cachexia\n3. PRV or secondary Conditions featuring abnormal blood cells e.g., sickle cell anemia, hereditary spherocytosis, acanthocytosis\n4. Microcytosis\n5. Hypofibrinogenemia e.g. DIC,\n6. Massive hepatic necrosis\n7. High white cell count\n8. Treatment with steroids\n\nNB: Very high (>100) ESR is found in autoimmune disease, malignancy, acute post-trauma, and serious infection. A false high ESR can occur if the ambient temperature is unusually high.",
     "parameters": [
       {
         "name": "Erythrocyte Sedimentation Rate (Wintrobe)",
+        "displayName": "Erythrocyte Sedimentation Rate (Wintrobe)",
         "referenceRange": "0 - 9",
         "unit": "mm for 1st hour",
         "gender": "Both",
