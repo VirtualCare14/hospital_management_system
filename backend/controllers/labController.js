@@ -11,6 +11,7 @@ const Patient = require('../models/Patient');
 const PatientHistory = require('../models/PatientHistory');
 const Consultation = require('../models/Consultation');
 const LabBill = require('../models/LabBill');
+const Billing = require('../models/Billing');
 const LabPackage = require('../models/LabPackage');
 const {
   DIAGNOSIS_CATEGORY_NAME,
@@ -1602,6 +1603,78 @@ const createDirectLabRequest = async (req, res) => {
           date: new Date()
         }] : []
       });
+
+      // Synchronize into Hospital Billing Module (Billing Invoices)
+      if (bill) {
+        try {
+          const billingItems = (expandedTestList && expandedTestList.length > 0 ? expandedTestList : ['Lab Test Investigation']).map(testName => {
+            const itemPrice = Math.round(baseTotal / (expandedTestList.length || 1));
+            return {
+              category: 'Lab',
+              date: new Date().toLocaleDateString('en-GB'),
+              description: `Lab Test: ${testName}`,
+              price: itemPrice,
+              quantity: 1,
+              total: itemPrice,
+              sourceId: bill._id,
+              sourceModel: 'LabBill'
+            };
+          });
+
+          const patientAge = patient.age || (patient.dob ? Math.floor((new Date() - new Date(patient.dob)) / (365.25 * 24 * 60 * 60 * 1000)) : undefined);
+
+          const syncedBilling = new Billing({
+            hospitalId: req.user.hospitalId || patient.hospitalId,
+            patientId: patient._id,
+            uhid: patient.uhid,
+            patientName: patient.patientName || '',
+            patientMobile: patient.mobile || '',
+            patientGender: patient.gender || '',
+            patientAge,
+            doctorName: req.user.doctorName || req.user.username || 'Lab Specialist',
+            billType: 'Lab',
+            items: billingItems,
+            subtotal: baseTotal,
+            gstPercentage: 0,
+            gstAmount: 0,
+            discountPercentage: discPct,
+            discountAmount: discountAmount,
+            grandTotal: netTotal,
+            paymentMode: mappedPaymentMethod || 'Cash',
+            remarks: remarks || `Lab Invoice for ${labReq.labId}`,
+            amountPaid: paid,
+            dueAmount: due,
+            paymentStatus: paymentStatus === 'Paid' ? 'Paid' : (paid > 0 ? 'Partially Paid' : 'Unpaid'),
+            status: 'Final',
+            invoiceNo: bill.billNo || labReq.labId,
+            billNo: bill.billNo || labReq.labId,
+            payments: paid > 0 ? [{
+              paymentNo: 'PMT-1',
+              amount: paid,
+              paymentMode: mappedPaymentMethod || 'Cash',
+              paidAt: new Date(),
+              receivedBy: req.user._id,
+              receivedByName: req.user.doctorName || req.user.username || 'Staff',
+              dueBeforePayment: netTotal,
+              dueAfterPayment: due,
+              remarks: 'Direct Lab payment'
+            }] : [],
+            auditTrail: [{
+              action: 'Finalized',
+              performedBy: req.user._id,
+              performedByName: req.user.username || 'Staff',
+              timestamp: new Date(),
+              remarks: `Lab bill created (${paymentStatus}). Paid: ₹${paid}, Due: ₹${due}`
+            }],
+            createdBy: req.user._id,
+            updatedBy: req.user._id
+          });
+
+          await syncedBilling.save();
+        } catch (syncErr) {
+          console.warn('Billing sync notice:', syncErr.message);
+        }
+      }
     } catch (billErr) {
       console.warn('Bill creation notice:', billErr);
     }

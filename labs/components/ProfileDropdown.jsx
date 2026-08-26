@@ -2,8 +2,9 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { User, LogOut, Settings, ShieldCheck, ChevronDown } from 'lucide-react';
+import { User, LogOut, Settings, ShieldCheck, ChevronDown, ArrowLeft, LayoutGrid } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { getMainPortalUrl } from '../lib/api';
 
 export default function ProfileDropdown() {
   const { user, logout } = useAuth();
@@ -31,6 +32,7 @@ export default function ProfileDropdown() {
   const userEmail = user?.email || `${username.toLowerCase().replace(/\s+/g, '')}@example.com`;
   const userRole = user?.role || 'Lab Personnel';
   const initial = username.charAt(0).toUpperCase();
+  const mainPortalUrl = getMainPortalUrl(user?.hospitalId);
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -55,55 +57,67 @@ export default function ProfileDropdown() {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-56 rounded-xl bg-white border border-slate-200 shadow-lg shadow-slate-200/50 py-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+        <div className="absolute right-0 mt-2 w-60 rounded-2xl bg-white border border-slate-200 shadow-xl shadow-slate-200/50 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
           {/* User Info Section */}
           <div className="px-4 py-2.5 border-b border-slate-100">
-            <p className="text-sm font-semibold text-slate-900 truncate">
+            <p className="text-sm font-bold text-slate-900 truncate">
               {username}
             </p>
             <p className="text-xs text-slate-500 truncate mt-0.5">
               {userEmail}
             </p>
             {user?.hospitalName && (
-              <span className="inline-block mt-1.5 px-2 py-0.5 bg-orange-50 text-orange-700 rounded text-[10px] font-medium border border-orange-100">
+              <span className="inline-block mt-1.5 px-2 py-0.5 bg-orange-50 text-orange-700 rounded-md text-[10px] font-bold border border-orange-100">
                 {user.hospitalName}
               </span>
             )}
           </div>
 
           {/* Actions */}
-          <div className="py-1">
+          <div className="py-1.5">
             <button
+              type="button"
               onClick={() => {
                 setIsOpen(false);
                 router.push('/dashboard');
               }}
-              className="w-full text-left px-4 py-2 text-xs text-slate-700 hover:bg-orange-50 hover:text-orange-600 font-medium flex items-center gap-2 transition-colors cursor-pointer"
+              className="w-full text-left px-4 py-2 text-xs text-slate-700 hover:bg-orange-50 hover:text-orange-600 font-medium flex items-center gap-2.5 transition-colors cursor-pointer"
             >
-              <User className="w-3.5 h-3.5 text-slate-400" />
-              <span>Profile</span>
+              <User className="w-4 h-4 text-slate-400" />
+              <span>Lab Workspace</span>
             </button>
 
             {userRole === 'admin' || userRole === 'lab_admin' || userRole === 'labadmin' ? (
               <button
+                type="button"
                 onClick={() => {
                   setIsOpen(false);
                   router.push('/admin');
                 }}
-                className="w-full text-left px-4 py-2 text-xs text-slate-700 hover:bg-orange-50 hover:text-orange-600 font-medium flex items-center gap-2 transition-colors cursor-pointer"
+                className="w-full text-left px-4 py-2 text-xs text-slate-700 hover:bg-orange-50 hover:text-orange-600 font-medium flex items-center gap-2.5 transition-colors cursor-pointer"
               >
-                <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
+                <ShieldCheck className="w-4 h-4 text-slate-400" />
                 <span>Lab Admin Console</span>
               </button>
             ) : null}
+
+            {/* Back to All Modules Link */}
+            <a
+              href={mainPortalUrl}
+              className="w-full text-left px-4 py-2 text-xs text-orange-600 hover:bg-orange-50 font-bold flex items-center gap-2.5 transition-colors cursor-pointer border-t border-slate-100 mt-1 pt-2"
+            >
+              <LayoutGrid className="w-4 h-4 text-orange-500" />
+              <span>All Modules (Main Portal)</span>
+            </a>
           </div>
 
-          <div className="border-t border-slate-100 pt-1 mt-1">
+          <div className="border-t border-slate-100 pt-1.5 mt-1">
             <button
+              type="button"
               onClick={handleLogout}
-              className="w-full text-left px-4 py-2 text-xs text-red-600 hover:bg-red-50 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
+              className="w-full text-left px-4 py-2 text-xs text-red-600 hover:bg-red-50 font-bold flex items-center gap-2.5 transition-colors cursor-pointer"
             >
-              <LogOut className="w-3.5 h-3.5 text-red-500" />
+              <LogOut className="w-4 h-4 text-red-500" />
               <span>Logout</span>
             </button>
           </div>

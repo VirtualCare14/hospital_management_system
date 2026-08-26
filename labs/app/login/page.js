@@ -3,7 +3,8 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { FlaskConical, Building2, User, Lock, ArrowRight, AlertCircle, ShieldCheck } from 'lucide-react';
+import { FlaskConical, Building2, User, Lock, ArrowRight, ArrowLeft, AlertCircle, ShieldCheck } from 'lucide-react';
+import { getMainPortalUrl } from '../../lib/api';
 
 function LoginForm() {
   const { login, isAuthenticated, user, error, setError } = useAuth();
@@ -19,10 +20,14 @@ function LoginForm() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      if (user?.role === 'labadmin' || user?.role === 'lab_admin') {
-        router.push('/admin');
+      if (typeof window !== 'undefined' && window.location.search.includes('token=')) {
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+      const role = (user?.role || '').toLowerCase();
+      if (role === 'labadmin' || role === 'lab_admin' || role === 'admin') {
+        router.replace('/admin');
       } else {
-        router.push('/dashboard');
+        router.replace('/dashboard');
       }
     }
   }, [isAuthenticated, router, user]);
@@ -54,6 +59,16 @@ function LoginForm() {
 
   return (
     <div className="bg-white/95 backdrop-blur-xl border border-orange-100 rounded-3xl p-8 shadow-xl shadow-orange-500/10">
+      {/* Top All Modules Link */}
+      <div className="mb-5 pb-3 border-b border-orange-100/60">
+        <a
+          href={getMainPortalUrl()}
+          className="inline-flex items-center gap-2 text-xs font-bold text-orange-600 hover:text-orange-700 transition-all duration-150 group"
+        >
+          <ArrowLeft className="w-4 h-4 transform group-hover:-translate-x-0.5 transition duration-150" />
+          <span>All modules</span>
+        </a>
+      </div>
       {/* Alerts */}
       {sessionExpired && (
         <div className="mb-6 p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-sm flex items-start gap-3">

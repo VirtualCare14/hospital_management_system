@@ -23,6 +23,23 @@ const getBaseUrl = () => {
 
 export const API_BASE_URL = getBaseUrl();
 
+export const getMainPortalUrl = (hospitalId = null) => {
+  let baseUrl = 'https://medora360.com';
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      baseUrl = 'http://localhost:5173';
+    }
+  }
+  if (process.env.NEXT_PUBLIC_PORTAL_URL) {
+    baseUrl = process.env.NEXT_PUBLIC_PORTAL_URL.replace(/\/$/, '');
+  }
+  if (hospitalId) {
+    return `${baseUrl}/hospital/${hospitalId}`;
+  }
+  return baseUrl;
+};
+
 export const getStoredToken = () => {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem('lab_token') || localStorage.getItem('hms_token');

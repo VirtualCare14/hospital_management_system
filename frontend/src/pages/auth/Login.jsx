@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
 import { ArrowLeft, HeartPulse, Lock, User, Eye, EyeOff } from 'lucide-react';
-import { getDefaultPathForUser, getModuleById } from '../../utils/moduleRoutes';
+import { getDefaultPathForUser, getModuleById, getLabsPortalUrl } from '../../utils/moduleRoutes';
 
 const Login = () => {
   const { login, logout } = useAuth();
@@ -15,6 +15,15 @@ const Login = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const selectedModule = searchParams.get('module') || 'admin';
   const module = getModuleById(selectedModule);
+
+  useEffect(() => {
+    if (String(selectedModule) === '4') {
+      const token = localStorage.getItem('hms_token');
+      const userStr = localStorage.getItem('hms_user');
+      const user = userStr ? JSON.parse(userStr) : null;
+      window.location.href = getLabsPortalUrl(token, user);
+    }
+  }, [selectedModule]);
 
   const {
     register,
@@ -31,6 +40,11 @@ const Login = () => {
         const hasModuleQuery = searchParams.has('module');
         if (!hasModuleQuery && user.moduleAccess && user.moduleAccess.length > 0) {
           const firstModule = user.moduleAccess[0];
+          if (Number(firstModule) === 4 || user.role === 'lab' || user.role === 'labadmin' || user.role === 'lab_admin') {
+            const token = localStorage.getItem('hms_token');
+            window.location.href = getLabsPortalUrl(token, user);
+            return;
+          }
           navigate(getDefaultPathForUser(user, String(firstModule), hospitalId));
           return;
         }
@@ -43,6 +57,13 @@ const Login = () => {
       if (selectedModule !== 'admin' && user.role !== 'admin' && !user.moduleAccess.includes(Number(selectedModule))) {
         await logout(false);
         toast.error(`This user does not have Module ${selectedModule} access.`);
+        return;
+      }
+
+      // If Lab module selected (module 4) or user is lab staff/admin, redirect directly to Next.js Labs portal
+      if (String(selectedModule) === '4' || user.role === 'lab' || user.role === 'labadmin' || user.role === 'lab_admin') {
+        const token = localStorage.getItem('hms_token');
+        window.location.href = getLabsPortalUrl(token, user);
         return;
       }
 

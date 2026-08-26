@@ -27,9 +27,7 @@ import DischargeRequestsView from './pages/doctor/DischargeRequestsView.jsx';
 import EditPrintRxSettings from './pages/doctor/EditPrintRxSettings.jsx';
 import SuperAdminLogin from './pages/superadmin/SuperAdminLogin.jsx';
 import SuperAdminDashboard from './pages/superadmin/SuperAdminDashboard.jsx';
-import LabWorkspace from './pages/lab/LabWorkspace.jsx';
-import LabAssistantLogin from './pages/lab/LabAssistantLogin.jsx';
-import LabAssistantPortal from './pages/lab/LabAssistantPortal.jsx';
+import LabRedirect from './pages/lab/LabRedirect.jsx';
 import HospitalSettings from './pages/admin/HospitalSettings.jsx';
 import IpdAdminWorkspace from './pages/admin/IpdAdminWorkspace.jsx';
 import ConsumableServiceSettings from './pages/admin/ConsumableServiceSettings.jsx';
@@ -73,10 +71,8 @@ function App() {
       <Route path="/hospital/:hospitalId/login" element={<Login />} />
       <Route path="/super-admin" element={<SuperAdminLogin />} />
       <Route path="/super-admin/dashboard" element={<SuperAdminDashboard />} />
-      <Route path="/lab-assistant" element={<LabAssistantLogin />} />
-      <Route element={<ProtectedRoute allowedRoles={['lab']} />}>
-        <Route path="/lab-assistant/portal" element={<LabAssistantPortal />} />
-      </Route>
+      <Route path="/lab-assistant" element={<LabRedirect />} />
+      <Route path="/lab-assistant/portal" element={<LabRedirect />} />
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
           <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
@@ -118,9 +114,7 @@ function App() {
           <Route element={<ProtectedRoute allowedRoles={['admin', 'billing']} requiredModule={8} />}>
             <Route path="/module/8" element={<BillingPage />} />
           </Route>
-          <Route element={<ProtectedRoute allowedRoles={['admin', 'lab']} requiredModule={4} />}>
-            <Route path="/lab" element={<LabWorkspace />} />
-          </Route>
+          <Route path="/lab" element={<LabRedirect />} />
           <Route element={<ProtectedRoute allowedRoles={['admin', 'reception', 'ipd', 'doctor', 'nursing']} />}>
             <Route path="/ipd/patient/:id" element={<IpdPatientDetails />} />
             <Route path="/ipd/discharge/:id" element={<IpdDischargeForm />} />

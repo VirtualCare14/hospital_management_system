@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { HeartPulse, ChevronRight } from 'lucide-react';
 import client from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import { moduleCards } from '../utils/moduleRoutes';
+import { moduleCards, getLabsPortalUrl } from '../utils/moduleRoutes';
 
 import Navbar from '../components/website/Navbar';
 import Hero from '../components/website/Hero';
@@ -58,27 +58,56 @@ const Home = () => {
           </div>
 
           <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
-            {moduleCards.map((module) => (
-              <Link
-                key={module.id}
-                to={`${loginPrefix}?module=${module.id}`}
-                className="card group block p-6 transition duration-300 hover:-translate-y-1 hover:border-orange-400 hover:shadow-xl hover:shadow-orange-100 bg-white rounded-2xl border border-orange-50"
-              >
-                <div className="flex items-start gap-4">
-                  <div className="rounded-2xl bg-orange-100 p-3.5 text-orange-600 transition group-hover:bg-orange-500 group-hover:text-white">
-                    <module.icon className="h-6 w-6" />
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-extrabold text-gray-900 group-hover:text-orange-600 transition">{module.title}</h2>
-                    <p className="mt-2 text-sm text-gray-500 leading-relaxed">{module.subtitle}</p>
-                    <div className="mt-5 flex items-center text-sm font-bold text-orange-600 gap-1">
-                      <span>Open module</span>
-                      <ChevronRight className="h-4 w-4 transform group-hover:translate-x-1 transition duration-200" />
+            {moduleCards.map((module) => {
+              const isLabModule = String(module.id) === '4';
+              const labPortalUrl = getLabsPortalUrl(localStorage.getItem('hms_token'), user);
+
+              if (isLabModule) {
+                return (
+                  <a
+                    key={module.id}
+                    href={labPortalUrl}
+                    className="card group block p-6 transition duration-300 hover:-translate-y-1 hover:border-orange-400 hover:shadow-xl hover:shadow-orange-100 bg-white rounded-2xl border border-orange-50"
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className="rounded-2xl bg-orange-100 p-3.5 text-orange-600 transition group-hover:bg-orange-500 group-hover:text-white">
+                        <module.icon className="h-6 w-6" />
+                      </div>
+                      <div>
+                        <h2 className="text-lg font-extrabold text-gray-900 group-hover:text-orange-600 transition">{module.title}</h2>
+                        <p className="mt-2 text-sm text-gray-500 leading-relaxed">{module.subtitle}</p>
+                        <div className="mt-5 flex items-center text-sm font-bold text-orange-600 gap-1">
+                          <span>Open module</span>
+                          <ChevronRight className="h-4 w-4 transform group-hover:translate-x-1 transition duration-200" />
+                        </div>
+                      </div>
+                    </div>
+                  </a>
+                );
+              }
+
+              return (
+                <Link
+                  key={module.id}
+                  to={`${loginPrefix}?module=${module.id}`}
+                  className="card group block p-6 transition duration-300 hover:-translate-y-1 hover:border-orange-400 hover:shadow-xl hover:shadow-orange-100 bg-white rounded-2xl border border-orange-50"
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="rounded-2xl bg-orange-100 p-3.5 text-orange-600 transition group-hover:bg-orange-500 group-hover:text-white">
+                      <module.icon className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-extrabold text-gray-900 group-hover:text-orange-600 transition">{module.title}</h2>
+                      <p className="mt-2 text-sm text-gray-500 leading-relaxed">{module.subtitle}</p>
+                      <div className="mt-5 flex items-center text-sm font-bold text-orange-600 gap-1">
+                        <span>Open module</span>
+                        <ChevronRight className="h-4 w-4 transform group-hover:translate-x-1 transition duration-200" />
+                      </div>
                     </div>
                   </div>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              );
+            })}
           </div>
         </div>
       </main>

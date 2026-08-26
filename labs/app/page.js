@@ -12,7 +12,11 @@ export default function Home() {
   useEffect(() => {
     if (!loading) {
       if (isAuthenticated) {
-        if (user?.role === 'labadmin' || user?.role === 'lab_admin') {
+        if (typeof window !== 'undefined' && window.location.search.includes('token=')) {
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+        const role = (user?.role || '').toLowerCase();
+        if (role === 'labadmin' || role === 'lab_admin' || role === 'admin') {
           router.replace('/admin');
         } else {
           router.replace('/dashboard');

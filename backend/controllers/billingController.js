@@ -1407,7 +1407,7 @@ const createBill = async (req, res) => {
 
     await bill.save();
 
-    // Sync SameDayTreatment price on finalization
+    // Sync SameDayTreatment price and LabBill payment status on finalization
     if (status === 'Final') {
       const SameDayTreatment = require('../models/SameDayTreatment');
       for (const item of activeItems) {
@@ -1416,6 +1416,16 @@ const createBill = async (req, res) => {
             await SameDayTreatment.findByIdAndUpdate(item.sourceId, { price: item.price });
           } catch (err) {
             console.error('Failed to sync SameDayTreatment price:', err);
+          }
+        } else if (item.sourceModel === 'LabBill' && item.sourceId) {
+          try {
+            await LabBill.findByIdAndUpdate(item.sourceId, {
+              paymentStatus: finalPaymentStatus === 'Paid' ? 'Paid' : 'Partial',
+              dueAmount: finalDueAmount,
+              paidAmount: finalAmountPaid
+            });
+          } catch (err) {
+            console.error('Failed to sync LabBill payment status:', err);
           }
         }
       }
@@ -2319,7 +2329,17 @@ const recordDuePayment = async (req, res) => {
 
     await bill.save();
 
-    await bill.save();
+    // Sync corresponding LabBill if this bill originated from Lab
+    if (bill.billType === 'Lab' || bill.items?.some(i => i.sourceModel === 'LabBill')) {
+      try {
+        await LabBill.updateMany(
+          { $or: [{ billNo: bill.invoiceNo }, { billNo: bill.billNo }, { _id: { $in: bill.items.filter(i => i.sourceModel === 'LabBill').map(i => i.sourceId) } }] },
+          { $set: { dueAmount: dueAfterPayment, paidAmount: newAmountPaid, paymentStatus: newPaymentStatus === 'Paid' ? 'Paid' : 'Partial' } }
+        );
+      } catch (labSyncErr) {
+        console.warn('Failed to sync due payment to LabBill:', labSyncErr.message);
+      }
+    }
 
     res.json({
       message: 'Due payment recorded successfully!',

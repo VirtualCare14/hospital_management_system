@@ -55,6 +55,28 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    // Check URL parameters for bridged authentication from main HMS portal
+    if (typeof window !== 'undefined') {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const queryToken = urlParams.get('token');
+        const queryUser = urlParams.get('user');
+        if (queryToken) {
+          setStoredToken(queryToken);
+          if (queryUser) {
+            try {
+              const parsedUser = JSON.parse(decodeURIComponent(queryUser));
+              setStoredUser(parsedUser);
+            } catch (e) {
+              // fallback
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('URL token check failed:', e);
+      }
+    }
+
     const timer = setTimeout(() => {
       verifySession();
     }, 0);

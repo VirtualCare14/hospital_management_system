@@ -41,8 +41,10 @@ import {
   Fingerprint,
   PanelLeftClose,
   PanelLeftOpen,
-  Printer
+  Printer,
+  ExternalLink
 } from 'lucide-react';
+import { getLabsPortalUrl } from '../utils/moduleRoutes';
 
 const Sidebar = () => {
   const { user, hasAccess } = useAuth();
@@ -266,33 +268,24 @@ const Sidebar = () => {
           </div>
         )}
 
-        {/* Lab Links (Module 4) */}
+        {/* Lab Links (Module 4) - Direct Link to Dedicated Next.js Labs Portal */}
         {hasAccess([4]) && (
           <div>
             {renderSectionHeader('Diagnostics')}
-            <NavLink
-              to="/lab"
+            <a
+              href={getLabsPortalUrl(localStorage.getItem('hms_token'), user)}
               onClick={handleOptionClick}
-              title="Lab Module"
-              className={({ isActive }) => getLinkClass(isActive)}
+              title="Open Labs Portal (labs.medora360.com)"
+              className="flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs md:text-sm font-medium text-gray-700 hover:bg-orange-50 hover:text-orange-600 transition-all duration-200 cursor-pointer"
             >
-              <FlaskConical className="h-5 w-5 shrink-0" />
-              {isExpanded && <span className="truncate">Lab Module</span>}
-            </NavLink>
-            <div className="mt-1 space-y-1">
-              {labLinks.map((link) => (
-                <NavLink
-                  key={link.to}
-                  to={link.to}
-                  onClick={handleOptionClick}
-                  title={link.label}
-                  className={() => getLinkClass(currentLabSection === link.section, true)}
-                >
-                  <link.icon className="h-4 w-4 shrink-0" />
-                  {isExpanded && <span className="truncate">{link.label}</span>}
-                </NavLink>
-              ))}
-            </div>
+              <FlaskConical className="h-5 w-5 shrink-0 text-orange-500" />
+              {isExpanded && (
+                <div className="flex items-center justify-between w-full min-w-0">
+                  <span className="truncate font-semibold text-gray-800">Lab Portal</span>
+                  <ExternalLink className="h-3.5 w-3.5 text-orange-500/70 shrink-0 ml-1.5" />
+                </div>
+              )}
+            </a>
           </div>
         )}
 

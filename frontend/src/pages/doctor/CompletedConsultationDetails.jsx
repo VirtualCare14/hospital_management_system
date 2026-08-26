@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Calendar, FileText, Printer, X, Plus, Clock, Globe } from 'lucide-react';
+import { ArrowLeft, Calendar, FileText, Printer, X, Plus, Clock, Globe, FlaskConical, Eye, CheckCircle2, AlertCircle, Sparkles, Building2, Check, Download, ShieldCheck, Microscope } from 'lucide-react';
 import client from '../../api/client';
 import { formatDate } from '../../utils/dateFormat';
 import toast from 'react-hot-toast';
@@ -24,7 +24,13 @@ const CompletedConsultationDetails = () => {
   const [patient, setPatient] = useState(null);
   const [prescription, setPrescription] = useState(null);
   const [allPrescriptions, setAllPrescriptions] = useState([]);
+  const [labRequests, setLabRequests] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Lab Report Modal state
+  const [selectedReportForView, setSelectedReportForView] = useState(null);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const reportPrintRef = useRef(null);
 
   // Print Language Modal state
   const [showLangModal, setShowLangModal] = useState(false);
@@ -40,6 +46,7 @@ const CompletedConsultationDetails = () => {
         setPatient(data.patient);
         setPrescription(data.prescription);
         setAllPrescriptions(data.allPrescriptions || (data.prescription ? [data.prescription] : []));
+        setLabRequests(data.labRequests || []);
       } catch (error) {
         console.error('Error fetching consultation details:', error);
       } finally {
@@ -58,6 +65,42 @@ const CompletedConsultationDetails = () => {
     }
     setTargetRxForPrint(rxToPrint);
     setShowLangModal(true);
+  };
+
+  const handleOpenLabReport = (labReq) => {
+    setSelectedReportForView(labReq);
+    setShowReportModal(true);
+  };
+
+  const handlePrintLabReport = async () => {
+    if (!reportPrintRef.current) {
+      toast.error('Lab report content not available for printing');
+      return;
+    }
+    const toastId = toast.loading('Generating Lab Report PDF...');
+    try {
+      const canvas = await html2canvas(reportPrintRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        imageTimeout: 20000,
+        onclone: (clonedDoc) => sanitizeClonedDocumentForPdf(clonedDoc)
+      });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const width = pdf.internal.pageSize.getWidth();
+      const height = (canvas.height * width) / canvas.width;
+      const padding = 5;
+      pdf.addImage(imgData, 'PNG', padding, padding, width - (padding * 2), height);
+      pdf.autoPrint();
+      openPdfPrintWindow(pdf, `Lab_Report_${selectedReportForView?.labId || 'Document'}`);
+      toast.dismiss(toastId);
+      toast.success('Lab Report opened for printing!');
+    } catch (err) {
+      console.error('Lab report print error:', err);
+      toast.dismiss(toastId);
+      toast.error('Error generating print view');
+    }
   };
 
   const handleConfirmPrintWithLanguage = async (chosenLang) => {
@@ -399,16 +442,302 @@ const CompletedConsultationDetails = () => {
         </div>
       ) : null}
 
-      {/* Tests Card */}
+      {/* LAB INVESTIGATIONS & DIAGNOSTIC REPORTS SECTION */}
+      <div className="card p-5 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-100 pb-3">
+          <div>
+            <h2 className="font-extrabold text-gray-900 text-base flex items-center gap-2">
+              <FlaskConical className="h-5 w-5 text-orange-600" />
+              Laboratory Investigations & Reports ({labRequests.length})
+            </h2>
+            <p className="text-xs text-gray-500">
+              Lab diagnostic orders, specimen collection status, and finalized laboratory reports
+            </p>
+          </div>
+        </div>
+
+        {labRequests.length > 0 ? (
+          <div className="space-y-3">
+            {labRequests.map((reqItem, rIdx) => {
+              const isFinal = reqItem.reportStatus === 'Ready' || 
+                reqItem.reportStatus === 'Completed' || 
+                reqItem.reportStatus === 'Signed off' || 
+                reqItem.status === 'report_ready' || 
+                reqItem.status === 'completed' || 
+                (reqItem.report?.parameters && reqItem.report.parameters.length > 0);
+
+              const reqDate = reqItem.createdAt ? new Date(reqItem.createdAt) : new Date();
+
+              return (
+                <div key={reqItem._id || rIdx} className="p-4 bg-white border border-orange-200/80 rounded-2xl shadow-xs hover:border-orange-300 transition duration-200 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2.5 rounded-xl ${isFinal ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                        <FlaskConical className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-black text-gray-900 text-sm tracking-tight">
+                            {reqItem.labId || `LAB-${String(reqItem._id).substring(18).toUpperCase()}`}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            • {formatDate(reqDate)} {reqDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          Collection: <strong className="text-gray-700">{reqItem.collectionType || 'Lab Visit'}</strong> ({reqItem.sampleStatus || 'Sample Pending'})
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2.5 self-start sm:self-center">
+                      {isFinal ? (
+                        <>
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-xs font-bold border border-emerald-200">
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                            Report Final
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenLabReport(reqItem)}
+                            className="px-3.5 py-1.5 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm shadow-orange-500/20 active:scale-[0.98] transition cursor-pointer"
+                          >
+                            <Eye className="h-4 w-4" />
+                            <span>View Lab Report</span>
+                          </button>
+                        </>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 rounded-full text-xs font-bold border border-amber-200">
+                          <Clock className="h-3.5 w-3.5 text-amber-600 animate-spin" />
+                          {reqItem.reportStatus || 'Testing In Progress'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Tests tags */}
+                  <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center gap-1.5">
+                    <span className="text-xs font-bold text-gray-500 mr-1 uppercase">Tests:</span>
+                    {(reqItem.tests || []).map((tName, tIdx) => (
+                      <span key={tIdx} className="px-2.5 py-0.5 bg-orange-50 text-orange-800 border border-orange-200/70 rounded-md text-xs font-semibold">
+                        {tName}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="p-6 bg-orange-50/30 rounded-2xl border border-dashed border-orange-200 text-center space-y-2">
+            <Microscope className="h-8 w-8 text-orange-400 mx-auto" />
+            <p className="text-sm font-semibold text-gray-700">No laboratory test orders recorded yet</p>
+            <p className="text-xs text-gray-500 max-w-md mx-auto">
+              Any diagnostic tests ordered by the doctor or created directly at the lab portal will appear here once processed.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Tests Card (Recommended during consultation) */}
       {consultation.tests && consultation.tests.length > 0 && (
         <div className="card p-5">
-          <h2 className="font-bold text-gray-800 mb-4">Recommended Tests</h2>
+          <h2 className="font-bold text-gray-800 mb-3">Consultation Prescribed Tests</h2>
           <div className="flex flex-wrap gap-2">
             {consultation.tests.map((test, index) => (
               <span key={index} className="inline-block px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-semibold">
                 {test}
               </span>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* LAB REPORT DETAILS MODAL */}
+      {showReportModal && selectedReportForView && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-fadeIn">
+          <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl border border-orange-100 overflow-hidden my-6 flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="px-6 py-4 bg-gradient-to-r from-orange-500 via-amber-600 to-orange-600 text-white flex items-center justify-between shadow-xs">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-white/20">
+                  <FlaskConical className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base leading-tight">Laboratory Diagnostic Report</h3>
+                  <p className="text-xs text-orange-100 font-medium">
+                    Lab ID: <span className="font-bold text-white">{selectedReportForView.labId || 'N/A'}</span> • {selectedReportForView.reportStatus || 'Completed'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handlePrintLabReport}
+                  className="px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  Print
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowReportModal(false)}
+                  className="p-1.5 rounded-xl bg-white/20 hover:bg-white/30 text-white transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body / Report Content */}
+            <div className="p-6 overflow-y-auto flex-1 space-y-6" ref={reportPrintRef}>
+              {/* Patient & Report Meta Header */}
+              <div className="p-4 bg-orange-50/50 rounded-2xl border border-orange-100 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div>
+                  <span className="text-gray-500 font-semibold block uppercase text-[10px]">Patient UHID</span>
+                  <span className="font-extrabold text-orange-700 text-sm">{patient.uhid}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500 font-semibold block uppercase text-[10px]">Patient Name</span>
+                  <span className="font-bold text-gray-900 text-sm">{patient.patientName}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500 font-semibold block uppercase text-[10px]">Age / Gender</span>
+                  <span className="font-semibold text-gray-800">{ageFromDob(patient.dob)} YRS / {patient.gender || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500 font-semibold block uppercase text-[10px]">Referred By / Doctor</span>
+                  <span className="font-semibold text-gray-800">Dr. {selectedReportForView.doctorId?.doctorName || selectedReportForView.doctorId?.username || user?.doctorName || 'Doctor'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500 font-semibold block uppercase text-[10px]">Booking Date</span>
+                  <span className="font-medium text-gray-700">{formatDate(selectedReportForView.createdAt)}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500 font-semibold block uppercase text-[10px]">Sample Specimen</span>
+                  <span className="font-medium text-gray-700">{selectedReportForView.collectionType || 'Blood Serum'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500 font-semibold block uppercase text-[10px]">Collection Status</span>
+                  <span className="font-bold text-emerald-700">{selectedReportForView.sampleStatus || 'Collected'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500 font-semibold block uppercase text-[10px]">Reported Date</span>
+                  <span className="font-bold text-purple-700">{formatDate(selectedReportForView.report?.generatedAt || selectedReportForView.updatedAt || new Date())}</span>
+                </div>
+              </div>
+
+              {/* Parameter Table */}
+              <div className="space-y-2">
+                <h4 className="font-bold text-gray-900 text-sm flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-orange-600" />
+                  Investigation Findings & Parameter Results
+                </h4>
+                
+                <div className="overflow-x-auto rounded-xl border border-orange-200/80 bg-white shadow-xs">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-orange-100/70 text-orange-950 font-bold uppercase tracking-wider">
+                      <tr>
+                        <th className="p-3">Test Parameter</th>
+                        <th className="p-3">Result Value</th>
+                        <th className="p-3">Unit</th>
+                        <th className="p-3">Reference Range</th>
+                        <th className="p-3">Interpretation / Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-orange-50 font-medium text-gray-800">
+                      {selectedReportForView.report?.parameters && selectedReportForView.report.parameters.length > 0 ? (
+                        selectedReportForView.report.parameters.map((param, pIdx) => {
+                          const isAbnormal = param.isAbnormal || param.valueOptions?.some(v => v.value === param.value && v.isAbnormal);
+
+                          return (
+                            <tr key={pIdx} className={isAbnormal ? 'bg-amber-50/50' : 'hover:bg-orange-50/20'}>
+                              <td className="p-3 font-bold text-gray-900">
+                                {param.displayName || param.name || `Parameter ${pIdx + 1}`}
+                              </td>
+                              <td className="p-3">
+                                <span className={`font-black text-sm ${isAbnormal ? 'text-amber-700 underline decoration-amber-500' : 'text-gray-900'}`}>
+                                  {param.value || '—'}
+                                </span>
+                              </td>
+                              <td className="p-3 text-gray-600">{param.unit || '—'}</td>
+                              <td className="p-3 text-gray-600 font-mono text-[11px]">{param.referenceRange || '—'}</td>
+                              <td className="p-3">
+                                {isAbnormal ? (
+                                  <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-bold text-[10px]">
+                                    Out of range
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-semibold text-[10px]">
+                                    Normal
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      ) : (
+                        <tr>
+                          <td colSpan={5} className="p-4 text-center text-gray-500">
+                            Tests reported: <strong>{(selectedReportForView.tests || []).join(', ') || 'Standard Lab Panel'}</strong>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Interpretation / Clinical Notes */}
+              {(selectedReportForView.report?.interpretation || selectedReportForView.report?.notes || selectedReportForView.remarks) && (
+                <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 text-xs space-y-1.5">
+                  <span className="font-bold text-gray-800 uppercase text-[11px] block">
+                    Clinical Notes & Diagnostic Interpretation:
+                  </span>
+                  <p className="text-gray-700 whitespace-pre-line leading-relaxed">
+                    {selectedReportForView.report?.interpretation || selectedReportForView.report?.notes || selectedReportForView.remarks}
+                  </p>
+                </div>
+              )}
+
+              {/* Verification & Signatory Footer */}
+              <div className="pt-4 border-t border-gray-200 flex items-center justify-between text-xs text-gray-500">
+                <div className="flex items-center gap-1.5 text-emerald-700 font-semibold">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  <span>Report verified by Diagnostic Pathology Department</span>
+                </div>
+                <div className="text-right">
+                  <span className="font-bold text-gray-800 block">
+                    {selectedReportForView.report?.signatoryId?.name || 'Authorized Lab Signatory'}
+                  </span>
+                  <span className="text-[11px] text-gray-500">
+                    {selectedReportForView.report?.signatoryId?.designation || 'Consultant Pathologist'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+              <span className="text-xs text-gray-500 font-medium">Medora 360 Laboratory Information System</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handlePrintLabReport}
+                  className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Print Report</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowReportModal(false)}
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-xs font-bold cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

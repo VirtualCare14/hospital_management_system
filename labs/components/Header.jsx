@@ -10,11 +10,14 @@ import {
   X,
   Sliders,
   FileText,
-  Building2
+  Building2,
+  ArrowLeft,
+  Layers
 } from 'lucide-react';
 import Link from 'next/link';
 import ProfileDropdown from './ProfileDropdown';
 import { useAuth } from '../context/AuthContext';
+import { getMainPortalUrl } from '../lib/api';
 
 export default function Header({ toggleMobileSidebar }) {
   const { user } = useAuth();
@@ -135,6 +138,16 @@ export default function Header({ toggleMobileSidebar }) {
           <Bell className="w-4 h-4" />
           <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-orange-500 rounded-full ring-2 ring-white"></span>
         </button>
+
+        {/* All Modules Button */}
+        <a
+          href={getMainPortalUrl(user?.hospitalId)}
+          className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-orange-600 bg-orange-50 hover:bg-orange-100/80 border border-orange-200/70 transition-colors cursor-pointer"
+          title="Return to Main Hospital Portal (All Modules)"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          <span>All Modules</span>
+        </a>
 
         <div className="h-5 w-px bg-slate-200 mx-1 hidden sm:block"></div>
 

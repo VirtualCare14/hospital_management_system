@@ -286,7 +286,11 @@ function DashboardContent() {
   const [searchInPage, setSearchInPage] = useState('');
   const [activeTabFilter, setActiveTabFilter] = useState('new'); // 'all' | 'new' | 'create_bill' | 'in_progress' | 'final' | 'signed_off'
   const [sortOrder, setSortOrder] = useState('oldest');
-  const [selectedDate, setSelectedDate] = useState(new Date().toLocaleDateString('en-GB'));
+  const [selectedDate, setSelectedDate] = useState('');
+
+  useEffect(() => {
+    setSelectedDate(new Date().toLocaleDateString('en-GB'));
+  }, []);
   const [dueSearchQuery, setDueSearchQuery] = useState('');
   const [reportsCurrentPage, setReportsCurrentPage] = useState(1);
   const [reportsPageSize, setReportsPageSize] = useState(10);
@@ -9742,8 +9746,8 @@ Clinical Interpretation:
             >
               <ArrowLeft className="w-4 h-4" />
             </button>
-            <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
-              {selectedDate === new Date().toLocaleDateString('en-GB') ? 'Reports for today' : `Reports for ${selectedDate}`}
+            <h1 suppressHydrationWarning className="text-xl font-extrabold text-slate-900 tracking-tight">
+              {(!selectedDate || selectedDate === (typeof window !== 'undefined' ? new Date().toLocaleDateString('en-GB') : '')) ? 'Reports for today' : `Reports for ${selectedDate}`}
             </h1>
             <a
               href="#recent-changes"
