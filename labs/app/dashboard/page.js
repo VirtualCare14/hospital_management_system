@@ -2956,9 +2956,9 @@ Clinical Interpretation:
       });
     };
 
-    const hbVal = getNumVal(['Hemoglobin', 'Hb', 'Haemoglobin']);
+    const hbVal = getNumVal(['Hemoglobin (Hb)', 'Hemoglobin', 'Hb', 'Haemoglobin']);
     const rbcVal = getNumVal(['Total RBC Count', 'RBC Count', 'Total RBC', 'RBC']);
-    const hctVal = getNumVal(['Hematocrit Value, Hct', 'Hematocrit Value', 'Hematocrit', 'Hct', 'PCV']);
+    const hctVal = getNumVal(['Hematocrit (PCV)', 'Hematocrit Value, Hct', 'Hematocrit Value', 'Hematocrit', 'Hct', 'PCV']);
     const tlcVal = getNumVal(['Total Leukocyte Count', 'TLC', 'Total WBC', 'WBC Count']);
 
     const neutPercent = getNumVal(['Neutrophils', 'Neutrophil'], ['absolute', 'ratio', 'nlr']);
@@ -3222,34 +3222,6 @@ Clinical Interpretation:
       }
     }
 
-    // RBC Indices Calculations (MCV, MCH, MCHC)
-    const hbVal = getNumVal(['hemoglobin (hb)', 'hemoglobin', 'hb'], ['ratio', 'binding']);
-    const rbcVal = getNumVal(['rbc count', 'rbc', 'total rbc count'], ['ratio', 'morphology']);
-    const pcvVal = getNumVal(['hematocrit (pcv)', 'hematocrit', 'pcv'], ['ratio']);
-
-    const mcvKey = findKey(['mcv', 'mean corpuscular volume'], ['mch', 'mchc']);
-    if (mcvKey && paramName !== mcvKey) {
-      if (pcvVal !== null && rbcVal !== null && rbcVal > 0) {
-        const calculated = ((pcvVal * 10) / rbcVal).toFixed(1);
-        updated[mcvKey] = String(calculated);
-      }
-    }
-
-    const mchKey = findKey(['mch', 'mean corpuscular hemoglobin'], ['mchc', 'mcv']);
-    if (mchKey && paramName !== mchKey) {
-      if (hbVal !== null && rbcVal !== null && rbcVal > 0) {
-        const calculated = ((hbVal * 10) / rbcVal).toFixed(1);
-        updated[mchKey] = String(calculated);
-      }
-    }
-
-    const mchcKey = findKey(['mchc', 'mean corpuscular hemoglobin concentration'], ['mcv', 'mch ']);
-    if (mchcKey && paramName !== mchcKey) {
-      if (hbVal !== null && pcvVal !== null && pcvVal > 0) {
-        const calculated = ((hbVal / pcvVal) * 100).toFixed(1);
-        updated[mchcKey] = String(calculated);
-      }
-    }
 
     // UPCR: Urine Protein Creatinine Ratio = Urine for Protein / Urine for creatinine
     const upcrKey = findKey(['urine protein creatinine ratio', 'urine protein/creatinine ratio', 'upcr']);
