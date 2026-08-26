@@ -19,6 +19,7 @@ const {
   ensureSystemCategoryForHospital,
   ensureDiagnosisTestForHospital
 } = require('../seeds/seedDiagnosisCategory');
+const { standardTests } = require('../seeds/seedStandardLabTemplates');
 const { v2: cloudinary } = require('cloudinary');
 
 cloudinary.config({
@@ -143,19 +144,60 @@ const ensureCategory = async (req, name) => {
   );
 };
 
+const provisionedHospitals = new Set();
+
 // Make sure the current hospital always has the system "Diagnosis" category and the
-// predefined diagnosis test names configured. Runs on every listTests / listTestCategories
-// call so the category + default tests show up the first time a hospital admin opens
-// Lab Settings, without requiring a manual seed.
-const provisionDiagnosisForHospital = async (req) => {
+// predefined diagnosis test names configured, plus standard lab test templates (like Ammonia).
+const provisionStandardTemplatesForHospital = async (req) => {
   try {
-    const hospitalId = req.user.hospitalId || null;
+    const hospitalId = req.user?.hospitalId || null;
+    const hospKey = String(hospitalId || 'global');
+
     await ensureSystemCategoryForHospital(hospitalId);
     for (const testName of DIAGNOSIS_TESTS) {
       await ensureDiagnosisTestForHospital(hospitalId, testName);
     }
+
+    if (!provisionedHospitals.has(hospKey) && Array.isArray(standardTests) && standardTests.length > 0) {
+      const existingTests = await LabTest.find({ hospitalId }, 'testKey title test').lean();
+      const existingKeys = new Set(existingTests.map(t => t.testKey || normalizeKey(t.title || t.test)));
+
+      const toInsert = [];
+      for (const t of standardTests) {
+        const key = normalizeKey(t.title || t.test);
+        if (!existingKeys.has(key)) {
+          toInsert.push({
+            hospitalId: hospitalId || null,
+            category: t.category || 'LAB',
+            categoryKey: normalizeKey(t.category || 'LAB'),
+            department: t.department || 'BIOCHEMISTRY',
+            test: t.test || t.title,
+            testKey: key,
+            title: t.title || t.test,
+            description: t.description || '',
+            notes: t.notes || '',
+            interpretation: t.interpretation || '',
+            basePrice: Number(t.basePrice) || 0,
+            taxPercentage: Number(t.taxPercentage) || 0,
+            totalAmount: Number(t.basePrice) || 0,
+            sampleType: t.sampleType || 'Blood',
+            turnaroundTime: t.turnaroundTime || 'Same Day',
+            isManualTotal: false,
+            parameters: t.parameters || [],
+            status: 'Active'
+          });
+        }
+      }
+
+      if (toInsert.length > 0) {
+        await LabTest.insertMany(toInsert, { ordered: false }).catch(err => {
+          console.warn('Standard tests insertion notice:', err.message);
+        });
+      }
+      provisionedHospitals.add(hospKey);
+    }
   } catch (error) {
-    console.error('Provision Diagnosis category error:', error.message);
+    console.error('Provision standard templates error:', error.message);
   }
 };
 
@@ -677,7 +719,7 @@ const updateLabRequest = async (req, res) => {
 };
 
 const listTests = async (req, res) => {
-  await provisionDiagnosisForHospital(req);
+  await provisionStandardTemplatesForHospital(req);
   const query = testMasterReadQuery(req);
   if (req.query.category) query.category = req.query.category;
   if (req.query.q) {
@@ -708,7 +750,7 @@ const listTests = async (req, res) => {
 };
 
 const listTestCategories = async (req, res) => {
-  await provisionDiagnosisForHospital(req);
+  await provisionStandardTemplatesForHospital(req);
   const [savedCategories, testCategories] = await Promise.all([
     LabTestCategory.find(tenantQuery(req, { status: 'Active' })).sort({ name: 1 }),
     LabTest.distinct('category', testMasterReadQuery(req))

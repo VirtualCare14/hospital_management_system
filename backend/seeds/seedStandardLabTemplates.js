@@ -450,6 +450,31 @@ const standardTests = [
   },
   {
     "category": "LAB",
+    "department": "BIOCHEMISTRY",
+    "test": "Ammonia",
+    "title": "Ammonia",
+    "basePrice": 500,
+    "taxPercentage": 0,
+    "sampleType": "Plasma (EDTA / Heparin - Placed immediately on ice)",
+    "turnaroundTime": "2 Hours",
+    "description": "Quantitative measurement of Ammonia level in blood plasma for evaluating hepatic encephalopathy, liver function, and urea cycle metabolic disorders.",
+    "notes": "Physiological Basis:\nAmmonia (NH3/NH4+) is produced in the gastrointestinal tract by bacterial degradation of dietary amines and amino acids, as well as mucosal glutamine metabolism. It is transported to the liver via the portal circulation and metabolized through the urea cycle into urea, which is subsequently excreted by the kidneys. Elevated systemic blood ammonia crosses the blood-brain barrier and can cause astrocyte swelling, cerebral edema, and neurotoxicity.\n\nReference Range:\n• Normal: 11 - 32 µmol/L (18 - 54 µg/dL)\n\nClinical Significance:\nElevated Levels (Hyperammonemia):\n- Hepatic Encephalopathy / Acute Liver Failure / Advanced Cirrhosis / Portosystemic Shunting\n- Inborn Errors of Metabolism (Urea Cycle Enzyme Deficiencies, Organic Acidemias)\n- Reye's Syndrome\n- Total Parenteral Nutrition (TPN)\n- Severe Congestive Heart Failure\n- Valproic Acid / Carbamazepine therapy\n\nPre-analytical Requirements:\nSample must be collected in EDTA or Heparin tube without stasis (avoid fist clenching), immediately placed on crushed ice, and transported promptly to the laboratory for centrifugation and cold analysis to prevent in vitro generation of ammonia from amino acid deamination.",
+    "interpretation": "Physiological Basis:\nAmmonia (NH3/NH4+) is produced in the gastrointestinal tract by bacterial degradation of dietary amines and amino acids, as well as mucosal glutamine metabolism. It is transported to the liver via the portal circulation and metabolized through the urea cycle into urea, which is subsequently excreted by the kidneys. Elevated systemic blood ammonia crosses the blood-brain barrier and can cause astrocyte swelling, cerebral edema, and neurotoxicity.\n\nReference Range:\n• Normal: 11 - 32 µmol/L (18 - 54 µg/dL)\n\nClinical Significance:\nElevated Levels (Hyperammonemia):\n- Hepatic Encephalopathy / Acute Liver Failure / Advanced Cirrhosis / Portosystemic Shunting\n- Inborn Errors of Metabolism (Urea Cycle Enzyme Deficiencies, Organic Acidemias)\n- Reye's Syndrome\n- Total Parenteral Nutrition (TPN)\n- Severe Congestive Heart Failure\n- Valproic Acid / Carbamazepine therapy\n\nPre-analytical Requirements:\nSample must be collected in EDTA or Heparin tube without stasis (avoid fist clenching), immediately placed on crushed ice, and transported promptly to the laboratory for centrifugation and cold analysis to prevent in vitro generation of ammonia from amino acid deamination.",
+    "parameters": [
+      {
+        "name": "Ammonia",
+        "displayName": "Ammonia",
+        "referenceRange": "11 - 32",
+        "unit": "µmol/L",
+        "gender": "Both",
+        "fieldType": "Number",
+        "valueOptions": [],
+        "status": "Active"
+      }
+    ]
+  },
+  {
+    "category": "LAB",
     "test": "HSV-2 IgG",
     "title": "HSV-2 IgG",
     "basePrice": 750,
