@@ -4,7 +4,7 @@ const visitSchema = new mongoose.Schema({
   hospitalId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Hospital',
-    required: true
+    required: false
   },
   patientId: {
     type: mongoose.Schema.Types.ObjectId,

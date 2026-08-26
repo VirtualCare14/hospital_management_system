@@ -251,25 +251,40 @@ export default function ServiceSelector({ selectedServices, onToggleService, onR
     loadCategories();
   }, []);
 
-  // Load lab tests from backend
+  // Load lab tests & packages from backend
   useEffect(() => {
     async function loadTests() {
       setLoading(true);
       try {
-        const tests = await api.get('/lab/tests').catch(() => []);
-        if (Array.isArray(tests) && tests.length > 0) {
-          const formatted = tests
-            .filter(t => (t.category || '').toUpperCase() !== 'DIAGNOSIS')
-            .map(t => ({
-              id: t._id || t.id,
-              title: t.title || t.test || 'Lab Test',
-              category: (t.category || 'LAB').toUpperCase(),
-              price: t.basePrice || t.totalAmount || t.amount || 400
-            }));
-          setAllTests(formatted);
-        } else {
-          setAllTests([]);
-        }
+        const [testsRes, pkgsRes] = await Promise.all([
+          api.get('/lab/tests').catch(() => []),
+          api.get('/lab/packages').catch(() => [])
+        ]);
+
+        const formattedTests = (Array.isArray(testsRes) ? testsRes : [])
+          .filter(t => (t.category || '').toUpperCase() !== 'DIAGNOSIS')
+          .map(t => ({
+            id: t._id || t.id,
+            title: t.title || t.test || 'Lab Test',
+            category: (t.category || 'LAB').toUpperCase(),
+            price: t.basePrice || t.totalAmount || t.amount || 400
+          }));
+
+        const formattedPkgs = (Array.isArray(pkgsRes) ? pkgsRes : [])
+          .filter(p => p.status !== 'Inactive')
+          .map(pkg => ({
+            id: pkg._id || pkg.id,
+            title: pkg.name,
+            category: 'LAB',
+            price: pkg.price || 0,
+            originalPrice: pkg.originalPrice || 0,
+            isPackage: true,
+            packageCode: pkg.code || '',
+            tests: pkg.tests || [],
+            description: pkg.description || ''
+          }));
+
+        setAllTests([...formattedPkgs, ...formattedTests]);
       } catch (err) {
         console.warn(err);
       } finally {
@@ -536,12 +551,29 @@ export default function ServiceSelector({ selectedServices, onToggleService, onR
                                 type="button"
                                 onClick={() => handleSelectTestForBox(test, catId)}
                                 className={`
-                                  w-full text-left px-3.5 py-2 text-xs flex items-center justify-between transition-colors cursor-pointer
-                                  ${isSelected ? 'bg-orange-50 text-orange-800 font-bold' : 'hover:bg-slate-50 text-slate-800 font-medium'}
+                                  w-full text-left px-3.5 py-2 text-xs flex items-center justify-between transition-colors cursor-pointer border-b border-slate-50 last:border-b-0
+                                  ${isSelected ? 'bg-orange-50/80 text-orange-950 font-bold' : 'hover:bg-orange-50/30 text-slate-800 font-medium'}
                                 `}
                               >
-                                <span>{test.title} (Rs.{test.price})</span>
-                                {isSelected && <Check className="w-3.5 h-3.5 text-orange-600" />}
+                                <div className="flex flex-col">
+                                  <div className="flex items-center gap-1.5">
+                                    {test.isPackage && (
+                                      <span className="bg-orange-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded tracking-wide uppercase shadow-2xs">
+                                        PACKAGE
+                                      </span>
+                                    )}
+                                    <span className="font-bold">{test.title}</span>
+                                    <span className="text-slate-500 text-[11px] font-bold">
+                                      (Rs.{test.price})
+                                    </span>
+                                  </div>
+                                  {test.isPackage && Array.isArray(test.tests) && test.tests.length > 0 && (
+                                    <span className="text-[10px] text-slate-500 font-normal mt-0.5">
+                                      Includes: {test.tests.map(t => t.testName || t.title || t.name).join(', ')}
+                                    </span>
+                                  )}
+                                </div>
+                                {isSelected && <Check className="w-4 h-4 text-orange-600 shrink-0" />}
                               </button>
                             );
                           })

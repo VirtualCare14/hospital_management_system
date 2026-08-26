@@ -11,6 +11,7 @@ const Patient = require('../models/Patient');
 const PatientHistory = require('../models/PatientHistory');
 const Consultation = require('../models/Consultation');
 const LabBill = require('../models/LabBill');
+const LabPackage = require('../models/LabPackage');
 const {
   DIAGNOSIS_CATEGORY_NAME,
   DIAGNOSIS_SYSTEM_KEY,
@@ -1449,6 +1450,43 @@ const createDirectLabRequest = async (req, res) => {
       return res.status(400).json({ message: 'At least one test must be selected' });
     }
 
+    let expandedTestList = [];
+    let baseTotal = 0;
+
+    for (const testName of testList) {
+      const pkg = await LabPackage.findOne({
+        $or: [
+          { name: { $regex: `^${escapeRegex(testName)}$`, $options: 'i' } },
+          { code: { $regex: `^${escapeRegex(testName)}$`, $options: 'i' } }
+        ]
+      });
+
+      if (pkg && Array.isArray(pkg.tests) && pkg.tests.length > 0) {
+        baseTotal += (pkg.price || 0);
+        pkg.tests.forEach(pt => {
+          const ptName = pt.testName || pt.name || pt.title;
+          if (ptName && !expandedTestList.includes(ptName)) {
+            expandedTestList.push(ptName);
+          }
+        });
+      } else {
+        expandedTestList.push(testName);
+        const testDoc = await LabTest.findOne({
+          $or: [
+            { title: { $regex: `^${escapeRegex(testName)}$`, $options: 'i' } },
+            { test: { $regex: `^${escapeRegex(testName)}$`, $options: 'i' } }
+          ]
+        });
+        if (testDoc) {
+          baseTotal += (testDoc.basePrice || testDoc.totalAmount || 0);
+        }
+      }
+    }
+
+    if (expandedTestList.length === 0) {
+      expandedTestList = testList;
+    }
+
     const patient = await Patient.findById(patientId);
     if (!patient) {
       return res.status(404).json({ message: 'Patient record not found' });
@@ -1462,7 +1500,7 @@ const createDirectLabRequest = async (req, res) => {
     }
 
     if (labReq) {
-      labReq.tests = testList;
+      labReq.tests = expandedTestList;
       if (remarks) labReq.remarks = remarks;
       await labReq.save();
     } else {
@@ -1471,7 +1509,7 @@ const createDirectLabRequest = async (req, res) => {
         hospitalId: req.user.hospitalId || patient.hospitalId,
         patientId,
         doctorId: resolvedDoctorId,
-        tests: testList,
+        tests: expandedTestList,
         collectionType: collectionType === 'Home Sample Collection' ? 'Home Sample Collection' : 'Lab Visit',
         bookingDate: bookingDate ? new Date(bookingDate) : new Date(),
         remarks: remarks || '',
@@ -1493,18 +1531,6 @@ const createDirectLabRequest = async (req, res) => {
 
     let bill;
     try {
-      let baseTotal = 0;
-      const testDocs = await LabTest.find({
-        $or: [
-          { title: { $in: testList } },
-          { test: { $in: testList } }
-        ]
-      });
-
-      if (testDocs.length > 0) {
-        baseTotal = testDocs.reduce((sum, t) => sum + (t.basePrice || t.totalAmount || 0), 0);
-      }
-      
       const discPct = Number(discountPercent) || 0;
       const discountAmount = (baseTotal * discPct) / 100;
       const netTotal = Math.max(0, baseTotal - discountAmount);
@@ -1686,6 +1712,108 @@ const receivePayment = async (req, res) => {
 
 
 
+const listPackages = async (req, res) => {
+  try {
+    const packages = await LabPackage.find(tenantQuery(req)).sort({ createdAt: -1 });
+    res.json(packages);
+  } catch (error) {
+    console.error('List packages error:', error);
+    res.status(500).json({ message: 'Failed to load packages' });
+  }
+};
+
+const savePackage = async (req, res) => {
+  try {
+    const body = req.body || {};
+    const name = body.name?.trim();
+    if (!name) return res.status(400).json({ message: 'Package name is required' });
+    if (!Array.isArray(body.tests) || body.tests.length === 0) {
+      return res.status(400).json({ message: 'Please select at least one test for the package' });
+    }
+
+    const payload = {
+      hospitalId: req.user.hospitalId,
+      name,
+      code: body.code?.trim() || '',
+      category: 'LAB',
+      price: Number(body.price) || 0,
+      originalPrice: Number(body.originalPrice) || 0,
+      tests: body.tests.map(t => ({
+        testId: t.testId || t.id || t._id,
+        testName: t.testName || t.title || t.name || t.test,
+        department: t.department || 'PATHOLOGY',
+        price: Number(t.price || t.basePrice || t.totalAmount) || 0
+      })),
+      forGender: body.forGender || 'Both',
+      sampleType: body.sampleType || 'Blood / Serum / Urine',
+      turnaroundTime: body.turnaroundTime || 'Same Day',
+      description: body.description || '',
+      status: body.status || 'Active'
+    };
+
+    let pkg;
+    if (req.params.id) {
+      pkg = await LabPackage.findOneAndUpdate(
+        tenantQuery(req, { _id: req.params.id }),
+        payload,
+        { returnDocument: 'after', runValidators: true }
+      );
+      if (!pkg) return res.status(404).json({ message: 'Package not found' });
+    } else {
+      pkg = await LabPackage.create(payload);
+    }
+
+    // Also sync as a LabTest template in LAB category so it shows in test searches seamlessly
+    try {
+      const packageTestPayload = {
+        hospitalId: req.user.hospitalId,
+        category: 'LAB',
+        categoryKey: 'lab',
+        test: name,
+        testKey: normalizeKey(name),
+        title: name,
+        description: payload.description || `Package containing: ${payload.tests.map(t => t.testName).join(', ')}`,
+        notes: '',
+        interpretation: '',
+        basePrice: payload.price,
+        taxPercentage: 0,
+        totalAmount: payload.price,
+        revenueShare: 0,
+        forGender: payload.forGender,
+        isManualTotal: false,
+        status: payload.status
+      };
+      await LabTest.findOneAndUpdate(
+        tenantQuery(req, { testKey: normalizeKey(name) }),
+        packageTestPayload,
+        { upsert: true, returnDocument: 'after' }
+      );
+    } catch (syncErr) {
+      console.warn('Package sync to LabTest warning:', syncErr);
+    }
+
+    res.status(req.params.id ? 200 : 201).json(pkg);
+  } catch (error) {
+    console.error('Save package error:', error);
+    res.status(500).json({ message: error.message || 'Failed to save package' });
+  }
+};
+
+const deletePackage = async (req, res) => {
+  try {
+    const pkg = await LabPackage.findOneAndDelete(tenantQuery(req, { _id: req.params.id }));
+    if (!pkg) return res.status(404).json({ message: 'Package not found' });
+    
+    // Also remove from LabTest if present
+    await LabTest.findOneAndDelete(tenantQuery(req, { testKey: normalizeKey(pkg.name) })).catch(() => {});
+
+    res.json({ message: 'Package deleted successfully' });
+  } catch (error) {
+    console.error('Delete package error:', error);
+    res.status(500).json({ message: 'Failed to delete package' });
+  }
+};
+
 module.exports = {
   STATUS_FLOW,
   SAMPLE_FLOW,
@@ -1703,6 +1831,9 @@ module.exports = {
   deleteTestCategory,
   saveTest,
   deleteTest,
+  listPackages,
+  savePackage,
+  deletePackage,
   listProfiles,
   saveProfile,
   deleteProfile,

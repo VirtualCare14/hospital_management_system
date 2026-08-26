@@ -172,6 +172,7 @@ function NewBillContent() {
             email: patientData.email || '',
             address: patientData.address?.trim() || 'Not specified',
             aadhaar: patientData.aadhaar || '',
+            hospitalId: user?.hospitalId || undefined,
             isEmergency: true
           };
 

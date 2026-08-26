@@ -458,8 +458,92 @@ function LabAdminDashboard() {
         parameters: [
           {
             name: 'AMH(Anti Mullerian Hormone)',
-            referenceRange: '',
+            referenceRange: '< 0.50 Poor | 0.50 - 1.0 Limited | 1.00 - 3.50 Optimal | > 3.50 High/PCOS',
             unit: 'ng/mL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          }
+        ]
+      })
+    } else if (presetType === 'AMH_PANEL' || presetType === 'AMH PANEL') {
+      setReportForm({
+        title: 'AMH PANEL',
+        test: 'AMH PANEL',
+        category: 'LAB',
+        department: 'BIOCHEMISTRY',
+        basePrice: 1800,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum',
+        turnaroundTime: '24 Hours',
+        description: 'Anti-Müllerian Hormone (AMH) Fertility and Ovarian Reserve Panel including T4, TSH, Prolactin, LH, FSH, and Estradiol.',
+        interpretation: `Notes & Interpretation:
+Anti-Müllerian Hormone (AMH) paired with T4, TSH, Prolactin, LH, FSH, and Estradiol provides a comprehensive assessment of the hypothalamic-pituitary-ovarian-thyroid axis, ovulatory function, and ovarian reserve.
+AMH LEVEL IN ng/mL | Remarks
+< 0.50 | Predictive of poor response / Diminished Ovarian Reserve
+0.50 - < 1.0 | Suggestive of limited ovarian reserve
+1.00 - 3.50 | Predictive of optimal response
+> 3.50 | Predictive of Polycystic Ovary Syndrome (PCOS) / OHSS risk`,
+        parameters: [
+          {
+            name: 'ANTI MULLERIAN HORMONE',
+            displayName: 'ANTI MULLERIAN HORMONE',
+            referenceRange: '< 0.50 Poor | 0.50 - 1.0 Limited | 1.00 - 3.50 Optimal | > 3.50 High/PCOS',
+            unit: 'ng/mL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'Serum thyroxine, T4',
+            displayName: 'Serum thyroxine, T4',
+            referenceRange: '52 - 127',
+            unit: 'ng/mL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'Thyroid-Stimulating Hormone, TSH',
+            displayName: 'Thyroid-Stimulating Hormone, TSH',
+            referenceRange: '0.3 - 4.5',
+            unit: 'µIU/mL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'Prolactin',
+            displayName: 'Prolactin',
+            referenceRange: '< 15 ng/mL',
+            unit: 'ng/mL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'Luteinising Hormone, LH',
+            displayName: 'Luteinising Hormone, LH',
+            referenceRange: 'Follicular: 2.4 - 12.6 | Ovulatory: 14.0 - 95.6 | Luteal: 1.0 - 11.4',
+            unit: 'mIU/mL',
+            fieldType: 'Text',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'Follicle Stimulating Hormone, FSH',
+            displayName: 'Follicle Stimulating Hormone, FSH',
+            referenceRange: 'Follicular: 3.5 - 12.5 | Ovulatory: 4.7 - 21.5 | Luteal: 1.7 - 7.7',
+            unit: 'mIU/mL',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: []
+          },
+          {
+            name: 'Estradiol',
+            displayName: 'Estradiol',
+            referenceRange: 'Follicular: 12.5 - 166.0 | Ovulatory: 85.8 - 498.0 | Luteal: 43.8 - 211.0',
+            unit: 'pg/mL',
             fieldType: 'Number',
             gender: 'Both',
             valueOptions: []
@@ -6673,6 +6757,76 @@ Diagnostic Titres:
           }
         ]
       })
+    } else if (presetType === 'PCOD' || presetType === 'PCOS') {
+      setReportForm({
+        title: 'PCOD',
+        test: 'PCOD',
+        category: 'LAB',
+        department: 'ENDOCRINOLOGY',
+        basePrice: 1200,
+        taxPercentage: 0,
+        sampleType: 'Blood Serum / Plasma',
+        turnaroundTime: 'Same Day',
+        description: 'Polycystic Ovarian Disease (PCOD) hormonal profile including Progesterone, Prolactin, LH, FSH, Random Blood Sugar, and Estradiol.',
+        interpretation: `Clinical Significance:
+Polycystic Ovarian Disease (PCOD / PCOS) is a complex endocrine disorder characterized by hyperandrogenism, ovulatory dysfunction, and polycystic ovarian morphology. Hormonal evaluation of LH, FSH, LH:FSH ratio, Prolactin, Progesterone, Estradiol, and Glucose helps in definitive diagnosis and clinical management.`,
+        parameters: [
+          {
+            name: 'Progesterone',
+            displayName: 'Progesterone',
+            referenceRange: 'Follicular: 0.1 - 0.9 | Luteal: 1.8 - 23.9 | Postmenopausal: < 0.2',
+            unit: 'ng/mL',
+            fieldType: 'Number',
+            gender: 'Female',
+            valueOptions: []
+          },
+          {
+            name: 'Prolactin',
+            displayName: 'Prolactin',
+            referenceRange: '< 15 ng/mL (Non-pregnant: 4.8 - 23.3)',
+            unit: 'ng/mL',
+            fieldType: 'Number',
+            gender: 'Female',
+            valueOptions: []
+          },
+          {
+            name: 'Luteinising Hormone, LH',
+            displayName: 'Luteinising Hormone, LH',
+            referenceRange: 'Follicular: 2.4 - 12.6 | Ovulatory: 14.0 - 95.6 | Luteal: 1.0 - 11.4',
+            unit: 'mIU/mL',
+            fieldType: 'Number',
+            gender: 'Female',
+            valueOptions: []
+          },
+          {
+            name: 'Follicle Stimulating Hormone, FSH',
+            displayName: 'Follicle Stimulating Hormone, FSH',
+            referenceRange: 'Follicular: 3.5 - 12.5 | Ovulatory: 4.7 - 21.5 | Luteal: 1.7 - 7.7',
+            unit: 'mIU/mL',
+            fieldType: 'Number',
+            gender: 'Female',
+            valueOptions: []
+          },
+          {
+            name: 'Random Blood Sugar',
+            displayName: 'Random Blood Sugar',
+            referenceRange: '70 - 140',
+            unit: 'mg/dl',
+            fieldType: 'Number',
+            gender: 'Female',
+            valueOptions: []
+          },
+          {
+            name: 'Estradiol',
+            displayName: 'Estradiol',
+            referenceRange: 'Follicular: 12.5 - 166.0 | Ovulatory: 85.8 - 498.0 | Luteal: 43.8 - 211.0',
+            unit: 'pg/mL',
+            fieldType: 'Number',
+            gender: 'Female',
+            valueOptions: []
+          }
+        ]
+      })
     }
   };
 
@@ -7200,6 +7354,13 @@ Diagnostic Titres:
                 </button>
                 <button
                   type="button"
+                  onClick={() => handleApplyPreset('AMH_PANEL')}
+                  className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs cursor-pointer shadow-xs"
+                >
+                  AMH Panel
+                </button>
+                <button
+                  type="button"
                   onClick={() => handleApplyPreset('CCP')}
                   className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer"
                 >
@@ -7435,6 +7596,13 @@ Diagnostic Titres:
                   className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs cursor-pointer shadow-xs"
                 >
                   NT-proBNP
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('PCOD')}
+                  className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs cursor-pointer shadow-xs"
+                >
+                  PCOD
                 </button>
                 <button
                   type="button"

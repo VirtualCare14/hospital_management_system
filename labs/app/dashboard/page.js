@@ -288,6 +288,8 @@ function DashboardContent() {
   const [sortOrder, setSortOrder] = useState('oldest');
   const [selectedDate, setSelectedDate] = useState(new Date().toLocaleDateString('en-GB'));
   const [dueSearchQuery, setDueSearchQuery] = useState('');
+  const [reportsCurrentPage, setReportsCurrentPage] = useState(1);
+  const [reportsPageSize, setReportsPageSize] = useState(10);
 
   // Signatories State
   const [signatories, setSignatories] = useState([]);
@@ -331,6 +333,7 @@ function DashboardContent() {
   const [showRuleModalParam, setShowRuleModalParam] = useState('');
   const [ruleModalRules, setRuleModalRules] = useState([]);
   const [showReportEntryTab, setShowReportEntryTab] = useState(''); // 'notes' | 'remarks' | 'advice' | 'interpretation'
+  const [selectedReportTestFilter, setSelectedReportTestFilter] = useState('all'); // 'all' or specific test name
   const [datesInfo, setDatesInfo] = useState({
     collectedDate: '',
     collectedTime: '',
@@ -353,6 +356,7 @@ function DashboardContent() {
   // Lab Report Printing States
   const [showReportPrintModal, setShowReportPrintModal] = useState(false);
   const [selectedReportForPrint, setSelectedReportForPrint] = useState(null);
+  const [printModalTestFilter, setPrintModalTestFilter] = useState('all');
   const [showReportSavedModal, setShowReportSavedModal] = useState(false);
   const [savedReportRequest, setSavedReportRequest] = useState(null);
 
@@ -688,7 +692,7 @@ function DashboardContent() {
     const query = String(testName).toLowerCase();
     const queryNorm = query.replace(/[^a-z0-9]/g, '');
 
-    return availableLabTests.find(t => {
+    const found = availableLabTests.find(t => {
       const tTitle = String(t.title || '').toLowerCase();
       const tTest = String(t.test || '').toLowerCase();
       const titleNorm = tTitle.replace(/[^a-z0-9]/g, '');
@@ -720,9 +724,391 @@ function DashboardContent() {
 
       return false;
     });
+
+    if (found && Array.isArray(found.parameters) && found.parameters.length > 0) {
+      return found;
+    }
+
+    // Built-in fallback template for PCOD / PCOS if parameters are missing from DB
+    if (queryNorm === 'pcod' || queryNorm.includes('pcod') || queryNorm === 'pcos' || queryNorm.includes('polycysticovarian')) {
+      return {
+        _id: found?._id || 'built_in_pcod',
+        title: found?.title || 'PCOD',
+        test: found?.test || 'PCOD',
+        category: 'LAB',
+        department: 'ENDOCRINOLOGY',
+        parameters: [
+          {
+            name: 'Progesterone',
+            displayName: 'Progesterone',
+            unit: 'ng/mL',
+            referenceRange: 'Follicular: 0.1 - 0.9 | Luteal: 1.8 - 23.9 | Postmenopausal: < 0.2',
+            fieldType: 'Number',
+            gender: 'Both'
+          },
+          {
+            name: 'Prolactin',
+            displayName: 'Prolactin',
+            unit: 'ng/mL',
+            referenceRange: '< 15 ng/mL (Non-pregnant: 4.8 - 23.3)',
+            fieldType: 'Number',
+            gender: 'Both'
+          },
+          {
+            name: 'Luteinising Hormone, LH',
+            displayName: 'Luteinising Hormone, LH',
+            unit: 'mIU/mL',
+            referenceRange: 'Follicular: 2.4 - 12.6 | Ovulatory: 14.0 - 95.6 | Luteal: 1.0 - 11.4',
+            fieldType: 'Number',
+            gender: 'Both'
+          },
+          {
+            name: 'Follicle Stimulating Hormone, FSH',
+            displayName: 'Follicle Stimulating Hormone, FSH',
+            unit: 'mIU/mL',
+            referenceRange: 'Follicular: 3.5 - 12.5 | Ovulatory: 4.7 - 21.5 | Luteal: 1.7 - 7.7',
+            fieldType: 'Number',
+            gender: 'Both'
+          },
+          {
+            name: 'Random Blood Sugar',
+            displayName: 'Random Blood Sugar',
+            unit: 'mg/dl',
+            referenceRange: '70 - 140',
+            fieldType: 'Number',
+            gender: 'Both'
+          },
+          {
+            name: 'Estradiol',
+            displayName: 'Estradiol',
+            unit: 'pg/mL',
+            referenceRange: 'Follicular: 12.5 - 166.0 | Ovulatory: 85.8 - 498.0 | Luteal: 43.8 - 211.0',
+            fieldType: 'Number',
+            gender: 'Both'
+          }
+        ]
+      };
+    }
+
+    // Built-in fallback template for AMH Panel / AMH Fertility Profile
+    if (queryNorm === 'amhpanel' || queryNorm.includes('amhpanel') || (queryNorm.includes('amh') && queryNorm.includes('panel')) || queryNorm.includes('amhprofile')) {
+      return {
+        _id: found?._id || 'built_in_amh_panel',
+        title: found?.title || 'AMH PANEL',
+        test: found?.test || 'AMH PANEL',
+        category: 'LAB',
+        department: 'BIOCHEMISTRY',
+        parameters: [
+          {
+            name: 'ANTI MULLERIAN HORMONE',
+            displayName: 'ANTI MULLERIAN HORMONE',
+            unit: 'ng/mL',
+            referenceRange: '< 0.50 Poor | 0.50 - 1.0 Limited | 1.00 - 3.50 Optimal | > 3.50 High/PCOS',
+            fieldType: 'Number',
+            gender: 'Both'
+          },
+          {
+            name: 'Serum thyroxine, T4',
+            displayName: 'Serum thyroxine, T4',
+            unit: 'ng/mL',
+            referenceRange: '52 - 127',
+            fieldType: 'Number',
+            gender: 'Both'
+          },
+          {
+            name: 'Thyroid-Stimulating Hormone, TSH',
+            displayName: 'Thyroid-Stimulating Hormone, TSH',
+            unit: 'µIU/mL',
+            referenceRange: '0.3 - 4.5',
+            fieldType: 'Number',
+            gender: 'Both'
+          },
+          {
+            name: 'Prolactin',
+            displayName: 'Prolactin',
+            unit: 'ng/mL',
+            referenceRange: '< 15 ng/mL',
+            fieldType: 'Number',
+            gender: 'Both'
+          },
+          {
+            name: 'Luteinising Hormone, LH',
+            displayName: 'Luteinising Hormone, LH',
+            unit: 'mIU/mL',
+            referenceRange: 'Follicular: 2.4 - 12.6 | Ovulatory: 14.0 - 95.6 | Luteal: 1.0 - 11.4',
+            fieldType: 'Text',
+            gender: 'Both'
+          },
+          {
+            name: 'Follicle Stimulating Hormone, FSH',
+            displayName: 'Follicle Stimulating Hormone, FSH',
+            unit: 'mIU/mL',
+            referenceRange: 'Follicular: 3.5 - 12.5 | Ovulatory: 4.7 - 21.5 | Luteal: 1.7 - 7.7',
+            fieldType: 'Number',
+            gender: 'Both'
+          },
+          {
+            name: 'Estradiol',
+            displayName: 'Estradiol',
+            unit: 'pg/mL',
+            referenceRange: 'Follicular: 12.5 - 166.0 | Ovulatory: 85.8 - 498.0 | Luteal: 43.8 - 211.0',
+            fieldType: 'Number',
+            gender: 'Both'
+          }
+        ]
+      };
+    }
+
+    // Built-in fallback template for single AMH test
+    if (queryNorm === 'amh' || queryNorm === 'antimullerianhormone' || queryNorm.includes('antimullerian')) {
+      return {
+        _id: found?._id || 'built_in_amh',
+        title: found?.title || 'AMH (Anti Mullerian Hormone)',
+        test: found?.test || 'AMH (Anti Mullerian Hormone)',
+        category: 'LAB',
+        department: 'BIOCHEMISTRY',
+        parameters: [
+          {
+            name: 'AMH(Anti Mullerian Hormone)',
+            displayName: 'AMH (Anti Mullerian Hormone)',
+            unit: 'ng/mL',
+            referenceRange: '< 0.50 Poor | 0.50 - 1.0 Limited | 1.00 - 3.50 Optimal | > 3.50 High/PCOS',
+            fieldType: 'Number',
+            gender: 'Both'
+          }
+        ]
+      };
+    }
+
+    // Built-in fallback template for eGFR (Estimated Glomerular Filtration Rate)
+    if (queryNorm === 'egfr' || queryNorm.includes('egfr') || queryNorm.includes('glomerularfiltrationrate') || queryNorm.includes('estimatedglomerular')) {
+      return {
+        _id: found?._id || 'built_in_egfr',
+        title: found?.title || 'Estimated Glomerular Filtration Rate (eGFR)',
+        test: found?.test || 'eGFR',
+        category: 'LAB',
+        department: 'BIOCHEMISTRY',
+        interpretation: `Estimated Glomerular Filtration Rate (eGFR) is calculated using the standardized CKD-EPI (2021) equation based on serum creatinine, age, and sex for kidney function and CKD staging:
+
+• Stage G1 (Normal / High): eGFR >= 90 mL/min/1.73m²
+• Stage G2 (Mildly Decreased): eGFR 60 - 89 mL/min/1.73m²
+• Stage G3a (Mild-to-Moderately Decreased): eGFR 45 - 59 mL/min/1.73m²
+• Stage G3b (Moderately-to-Severely Decreased): eGFR 30 - 44 mL/min/1.73m²
+• Stage G4 (Severely Decreased): eGFR 15 - 29 mL/min/1.73m²
+• Stage G5 (Kidney Failure / ESRD): eGFR < 15 mL/min/1.73m²
+
+Clinical Note:
+1. Persistent eGFR < 60 mL/min/1.73m² for >= 3 months confirms Chronic Kidney Disease (CKD).
+2. eGFR >= 60 mL/min/1.73m² without urine albuminuria does not constitute CKD.`,
+        parameters: [
+          {
+            name: 'Serum Creatinine',
+            displayName: 'Serum Creatinine',
+            unit: 'mg/dL',
+            referenceRange: '0.7 - 1.3',
+            fieldType: 'Number',
+            gender: 'Both'
+          },
+          {
+            name: 'eGFR',
+            displayName: 'eGFR (CKD-EPI 2021)',
+            unit: 'mL/min/1.73m²',
+            referenceRange: '>= 90 Normal | 60 - 89 Mild | 45 - 59 Moderate | 30 - 44 Severe | < 15 Failure',
+            fieldType: 'Number',
+            gender: 'Both'
+          },
+          {
+            name: 'eGFR Category',
+            displayName: 'eGFR Category',
+            unit: '',
+            referenceRange: 'G1 - G5',
+            fieldType: 'Text',
+            gender: 'Both'
+          }
+        ]
+      };
+    }
+
+    // Built-in fallback template for Oral Glucose Challenge Test (OGCT / GCT)
+    if (queryNorm === 'gct' || queryNorm === 'ogct' || queryNorm.includes('glucosechallenge') || queryNorm.includes('oralglucosechallenge') || queryNorm.includes('challengetest')) {
+      return {
+        _id: found?._id || 'built_in_ogct',
+        title: found?.title || 'Oral Glucose Challenge Test (OGCT / GCT)',
+        test: found?.test || 'OGCT',
+        category: 'LAB',
+        department: 'BIOCHEMISTRY',
+        interpretation: `Clinical Significance:
+The Oral Glucose Challenge Test (OGCT / GCT) is a standard screening test for Gestational Diabetes Mellitus (GDM), typically performed between 24 and 28 weeks of gestation in pregnant women. Plasma glucose is measured following oral administration of a 75g (or 50g) glucose load.
+
+Reference Ranges & Screening Cut-offs:
+• Fasting Plasma Glucose : 70 – 99 mg/dL
+• 1-Hour Plasma Glucose (< 140 mg/dL Normal | 140 - 199 mg/dL Positive/Impaired | ≥ 200 mg/dL GDM)
+• 2-Hour Plasma Glucose (75g DIPSI) (< 140 mg/dL Normal | ≥ 140 mg/dL Diagnostic of GDM)
+
+Clinical Interpretation:
+• Plasma Glucose < 140 mg/dL : Negative screen (GDM unlikely).
+• Plasma Glucose 140 – 199 mg/dL : Positive screen (Impaired gestational glucose tolerance; warrants follow-up diagnostic OGTT / DIPSI criteria).
+• Plasma Glucose ≥ 200 mg/dL : Highly suggestive of Gestational Diabetes Mellitus.`,
+        parameters: [
+          {
+            name: 'Fasting Plasma Glucose (FPG)',
+            displayName: 'Fasting Plasma Glucose (FPG)',
+            unit: 'mg/dL',
+            referenceRange: '70 - 99',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: [
+              { value: 'Normal (< 100 mg/dL)', isAbnormal: false },
+              { value: 'Impaired Fasting Glucose (100 - 125 mg/dL)', isAbnormal: true },
+              { value: 'Diabetes Mellitus (≥ 126 mg/dL)', isAbnormal: true }
+            ]
+          },
+          {
+            name: 'Oral Glucose Challenge Test (OGCT) - 1 Hour',
+            displayName: 'Oral Glucose Challenge Test (OGCT) - 1 Hour (75g)',
+            unit: 'mg/dL',
+            referenceRange: '< 140 Normal | 140 - 199 Positive | ≥ 200 GDM',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: [
+              { value: 'Negative (< 140 mg/dL)', isAbnormal: false },
+              { value: 'Positive / Impaired (140 - 199 mg/dL)', isAbnormal: true },
+              { value: 'GDM Highly Suggestive (≥ 200 mg/dL)', isAbnormal: true }
+            ]
+          },
+          {
+            name: 'Oral Glucose Challenge Test (OGCT) - 2 Hours',
+            displayName: 'Oral Glucose Challenge Test (OGCT) - 2 Hours (75g DIPSI)',
+            unit: 'mg/dL',
+            referenceRange: '< 140 Normal | ≥ 140 Diagnostic of GDM',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: [
+              { value: 'Normal (< 140 mg/dL)', isAbnormal: false },
+              { value: 'Diagnostic of GDM (≥ 140 mg/dL)', isAbnormal: true }
+            ]
+          },
+          {
+            name: 'Screening Result / Impression',
+            displayName: 'Screening Result / Impression',
+            unit: '',
+            referenceRange: 'Negative / Normal',
+            fieldType: 'Text',
+            gender: 'Both',
+            valueOptions: [
+              { value: 'Negative (< 140 mg/dL)', isAbnormal: false },
+              { value: 'Positive Screen (140 - 199 mg/dL)', isAbnormal: true },
+              { value: 'Gestational Diabetes Mellitus (≥ 200 mg/dL)', isAbnormal: true },
+              { value: 'Normal Glucose Tolerance', isAbnormal: false },
+              { value: 'Impaired Glucose Tolerance (IGT)', isAbnormal: true }
+            ]
+          }
+        ]
+      };
+    }
+
+    // Built-in fallback template for Oral Glucose Tolerance Test (OGTT / GTT)
+    if (queryNorm === 'gtt' || queryNorm === 'ogtt' || queryNorm.includes('glucosetolerance') || queryNorm.includes('oralglucosetolerance') || queryNorm.includes('tolerancetest')) {
+      return {
+        _id: found?._id || 'built_in_ogtt',
+        title: found?.title || 'Oral Glucose Tolerance Test (OGTT / GTT)',
+        test: found?.test || 'OGTT',
+        category: 'LAB',
+        department: 'BIOCHEMISTRY',
+        interpretation: `Standard WHO / ADA 75g Oral Glucose Tolerance Test (OGTT):
+• Normal: Fasting < 100 mg/dL and 2-Hour < 140 mg/dL
+• Impaired Fasting Glucose (IFG): Fasting 100 - 125 mg/dL
+• Impaired Glucose Tolerance (IGT): 2-Hour 140 - 199 mg/dL
+• Diabetes Mellitus: Fasting ≥ 126 mg/dL or 2-Hour ≥ 200 mg/dL`,
+        parameters: [
+          {
+            name: 'Fasting Plasma Glucose (0 hr)',
+            displayName: 'Fasting Plasma Glucose (0 hr)',
+            unit: 'mg/dL',
+            referenceRange: '70 - 99',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: [
+              { value: 'Normal (< 100 mg/dL)', isAbnormal: false },
+              { value: 'Impaired (100 - 125 mg/dL)', isAbnormal: true },
+              { value: 'Diabetic (≥ 126 mg/dL)', isAbnormal: true }
+            ]
+          },
+          {
+            name: 'Plasma Glucose - 1/2 Hour (30 mins)',
+            displayName: 'Plasma Glucose - 1/2 Hour (30 mins)',
+            unit: 'mg/dL',
+            referenceRange: '110 - 170',
+            fieldType: 'Number',
+            gender: 'Both'
+          },
+          {
+            name: 'Plasma Glucose - 1 Hour (60 mins)',
+            displayName: 'Plasma Glucose - 1 Hour (60 mins)',
+            unit: 'mg/dL',
+            referenceRange: '120 - 170',
+            fieldType: 'Number',
+            gender: 'Both'
+          },
+          {
+            name: 'Plasma Glucose - 1.5 Hours (90 mins)',
+            displayName: 'Plasma Glucose - 1.5 Hours (90 mins)',
+            unit: 'mg/dL',
+            referenceRange: '100 - 140',
+            fieldType: 'Number',
+            gender: 'Both'
+          },
+          {
+            name: 'Plasma Glucose - 2 Hours (120 mins)',
+            displayName: 'Plasma Glucose - 2 Hours (120 mins)',
+            unit: 'mg/dL',
+            referenceRange: '< 140 Normal | 140 - 199 IGT | ≥ 200 Diabetic',
+            fieldType: 'Number',
+            gender: 'Both',
+            valueOptions: [
+              { value: 'Normal (< 140 mg/dL)', isAbnormal: false },
+              { value: 'Impaired Glucose Tolerance (140 - 199 mg/dL)', isAbnormal: true },
+              { value: 'Diabetes Mellitus (≥ 200 mg/dL)', isAbnormal: true }
+            ]
+          },
+          {
+            name: 'Urine Sugar (Fasting / 1 Hr / 2 Hr)',
+            displayName: 'Urine Sugar',
+            unit: '',
+            referenceRange: 'Nil / Absent',
+            fieldType: 'Text',
+            gender: 'Both',
+            valueOptions: [
+              { value: 'Nil', isAbnormal: false },
+              { value: 'Trace', isAbnormal: true },
+              { value: '+ (Present)', isAbnormal: true },
+              { value: '++ (Moderate)', isAbnormal: true },
+              { value: '+++ (Heavy)', isAbnormal: true }
+            ]
+          },
+          {
+            name: 'Impression / Clinical Diagnosis',
+            displayName: 'Impression / Clinical Diagnosis',
+            unit: '',
+            referenceRange: 'Normal Glucose Tolerance',
+            fieldType: 'Text',
+            gender: 'Both',
+            valueOptions: [
+              { value: 'Normal Glucose Tolerance (NGT)', isAbnormal: false },
+              { value: 'Impaired Fasting Glucose (IFG)', isAbnormal: true },
+              { value: 'Impaired Glucose Tolerance (IGT)', isAbnormal: true },
+              { value: 'Diabetes Mellitus (DM)', isAbnormal: true },
+              { value: 'Gestational Diabetes Mellitus (GDM)', isAbnormal: true }
+            ]
+          }
+        ]
+      };
+    }
+
+    return found || null;
   };
 
-  const handlePrintReport = (reportData) => {
+  const handlePrintReport = (reportData, filterTest = 'all') => {
     if (!reportData) return;
     const patient = reportData.patientId || {};
     let ageStr = '—';
@@ -747,8 +1133,13 @@ function DashboardContent() {
     const testList = Array.isArray(reportData.tests) 
       ? reportData.tests 
       : (typeof reportData.tests === 'string' 
-          ? reportData.tests.split(',').map(t => t.trim()) 
+          ? reportData.tests.split(',').map(t => t.trim()).filter(Boolean) 
           : []);
+    
+    // Determine tests to print (print all separately, or print single selected test)
+    const testsToPrint = (filterTest && filterTest !== 'all')
+      ? testList.filter(t => t.toLowerCase() === filterTest.toLowerCase())
+      : (testList.length > 0 ? testList : ['LAB INVESTIGATION']);
     
     const formatDateTime = (dateVal, timeVal, fallbackObj) => {
       let d = '';
@@ -818,7 +1209,7 @@ function DashboardContent() {
           ? new Date(reportData.updatedAt).toLocaleDateString('en-GB') + ' ' + new Date(reportData.updatedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
           : formatDateTime('', '', updDate));
 
-    const printWindow = window.open('', '_blank', 'width=800,height=600');
+    const printWindow = window.open('', '_blank', 'width=900,height=800');
     if (!printWindow) {
       showToast('Popup blocker prevented opening the print window. Please allow popups for this site.', 'error');
       return;
@@ -882,46 +1273,135 @@ function DashboardContent() {
       return result;
     };
     
+    // Complete Hospital Details from Admin Settings
+    const hospName = hospitalSettings?.hospitalName || user?.hospitalName || user?.hospital?.name || 'Aman Hospital';
+    const hospHeading = hospitalSettings?.hospitalHeading || '';
+    const hospAddress = hospitalSettings?.address || '';
+    
+    const contactNumbers = [];
+    if (Array.isArray(hospitalSettings?.mobileNumbers)) {
+      hospitalSettings.mobileNumbers.forEach(n => {
+        if (n && typeof n === 'string' && n.trim()) contactNumbers.push(n.trim());
+      });
+    }
+    if (Array.isArray(hospitalSettings?.phoneNumbers)) {
+      hospitalSettings.phoneNumbers.forEach(p => {
+        const num = typeof p === 'object' ? p.number : p;
+        const namePrefix = typeof p === 'object' && p.name ? `${p.name}: ` : '';
+        if (num && String(num).trim()) contactNumbers.push(`${namePrefix}${String(num).trim()}`);
+      });
+    }
+    if (hospitalSettings?.alternateMobileNumber && hospitalSettings.alternateMobileNumber.trim()) {
+      contactNumbers.push(hospitalSettings.alternateMobileNumber.trim());
+    }
+
+    const hospEmail = hospitalSettings?.emailAddress || '';
+    const hospWebsite = hospitalSettings?.website || '';
+    const hospReg = hospitalSettings?.registrationNumber || '';
+    const hospGst = hospitalSettings?.gstNumber || '';
+    const hospLogo = hospitalSettings?.logoUrl || '';
+
     let letterheadHtml = '';
     if (hospitalSettings?.letterheadImageUrl) {
       letterheadHtml = `
-        <div style="height: ${hospitalSettings.letterheadHeaderHeight || 4.6}cm; width: 100%; overflow: hidden; margin-bottom: 16px;">
+        <div style="height: ${hospitalSettings.letterheadHeaderHeight || 4.6}cm; width: 100%; overflow: hidden; margin-bottom: 12px;">
           <img src="${hospitalSettings.letterheadImageUrl}" style="width: 100%; height: 100%; object-fit: fill;" />
         </div>
       `;
     } else {
       letterheadHtml = `
-        <div style="width: 100%; border-bottom: 2px solid #000000; padding-bottom: 12px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; font-family: sans-serif;">
-          <div style="display: flex; align-items: center; gap: 16px;">
-            ${hospitalSettings?.logoUrl ? `<img src="${hospitalSettings.logoUrl}" style="width: 64px; height: 64px; object-fit: contain;" />` : `<div style="width: 64px; height: 64px; background: #f1f5f9; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #94a3b8; font-size: 12px;">LOGO</div>`}
+        <div style="width: 100%; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; font-family: sans-serif;">
+          <div style="display: flex; align-items: center; gap: 14px;">
+            ${hospLogo ? `<img src="${hospLogo}" style="width: 60px; height: 60px; object-fit: contain;" />` : `<div style="width: 60px; height: 60px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #94a3b8; font-size: 11px;">LOGO</div>`}
             <div style="text-align: left;">
-              <h1 style="font-size: 18px; font-weight: 900; color: #0f172a; margin: 0; line-height: 1.2;">${hospitalSettings?.hospitalName || user?.hospitalName || 'Virtual Care Hospital'}</h1>
-              ${hospitalSettings?.hospitalHeading ? `<p style="font-size: 10px; font-weight: bold; color: #64748b; margin: 2px 0 0 0;">${hospitalSettings.hospitalHeading}</p>` : ''}
-              <p style="font-size: 9px; color: #64748b; margin: 4px 0 0 0; max-width: 400px; font-weight: 500;">${hospitalSettings?.address || '123 Care Street, Medical Zone'}</p>
+              <h1 style="font-size: 18px; font-weight: 900; color: #0f172a; margin: 0; line-height: 1.2;">${hospName}</h1>
+              ${hospHeading ? `<p style="font-size: 11px; font-weight: bold; color: #ea580c; margin: 2px 0 0 0;">${hospHeading}</p>` : ''}
+              ${hospAddress ? `<p style="font-size: 9.5px; color: #475569; margin: 3px 0 0 0; max-width: 420px; font-weight: 600; line-height: 1.3;">${hospAddress}</p>` : ''}
+              ${(hospReg || hospGst) ? `<p style="font-size: 8.5px; color: #64748b; margin: 2px 0 0 0; font-weight: bold;">${hospReg ? `Reg No: ${hospReg}` : ''}${hospReg && hospGst ? ' | ' : ''}${hospGst ? `GSTIN: ${hospGst}` : ''}</p>` : ''}
             </div>
           </div>
-          <div style="text-align: right; font-size: 9px; color: #64748b; line-height: 1.4;">
-            ${hospitalSettings?.mobileNumbers && hospitalSettings.mobileNumbers.length > 0 ? `<p style="font-weight: bold; margin: 0;">📞 ${hospitalSettings.mobileNumbers.join(', ')}</p>` : ''}
-            ${hospitalSettings?.emailAddress ? `<p style="margin: 2px 0 0 0;">✉ ${hospitalSettings.emailAddress}</p>` : ''}
-            ${hospitalSettings?.website ? `<p style="margin: 2px 0 0 0;">🌐 ${hospitalSettings.website}</p>` : ''}
+          <div style="text-align: right; font-size: 9.5px; color: #475569; line-height: 1.4;">
+            ${contactNumbers.length > 0 ? `<p style="font-weight: 800; color: #0f172a; margin: 0;">📞 ${contactNumbers.join(', ')}</p>` : ''}
+            ${hospEmail ? `<p style="margin: 2px 0 0 0; font-weight: 600;">✉ ${hospEmail}</p>` : ''}
+            ${hospWebsite ? `<p style="margin: 2px 0 0 0; font-weight: 600; color: #2563eb;">🌐 ${hospWebsite}</p>` : ''}
           </div>
         </div>
       `;
     }
 
-    let rowsHtml = '';
-    testList.forEach(tName => {
-      const matchedTest = findMatchedTest(tName);
-      const testParams = matchedTest && Array.isArray(matchedTest.parameters) ? matchedTest.parameters : [];
-      
-      rowsHtml += `
-        <tr style="background: #f8fafc;">
-          <td colspan="4" style="padding: 8px 16px; font-weight: 900; text-transform: uppercase; color: #0f172a; border-top: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1;">
-            ${tName}
-          </td>
-        </tr>
-      `;
+    const patientDemographicsHtml = `
+      <div class="grid-container" style="display: grid; grid-template-columns: repeat(12, 1fr); border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-top: 8px; gap: 12px; font-size: 11px;">
+        <div class="col-6" style="grid-column: span 6; line-height: 1.6;">
+          <div style="font-size: 13px; font-weight: 900; color: #0f172a; margin-bottom: 2px;">${patient.patientName || 'Patient'}</div>
+          <div class="row-flex" style="display: flex;">
+            <span class="label" style="width: 32%; color: #64748b; font-weight: bold;">Age / Sex</span>
+            <span class="value" style="width: 68%; color: #0f172a; font-weight: 900;">: ${ageStr} / ${genderStr}</span>
+          </div>
+          <div class="row-flex" style="display: flex;">
+            <span class="label" style="width: 32%; color: #64748b; font-weight: bold;">Referred by</span>
+            <span class="value" style="width: 68%; color: #0f172a; font-weight: 900;">: ${reportData.remarks || 'Self'}</span>
+          </div>
+          <div class="row-flex" style="display: flex;">
+            <span class="label" style="width: 32%; color: #64748b; font-weight: bold;">Reg. no.</span>
+            <span class="value" style="width: 68%; color: #0f172a; font-weight: 900;">: ${reportData.labId ? (reportData.labId.startsWith('#') ? reportData.labId : `#${reportData.labId}`) : '—'}</span>
+          </div>
+        </div>
+        <div class="col-6" style="grid-column: span 6; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.6;">
+          <div style="width: 100%; max-width: 260px;">
+            <div class="row-flex" style="display: flex;">
+              <span class="label text-right pr-2" style="width: 42%; text-align: right; padding-right: 8px; color: #64748b; font-weight: bold;">Registered</span>
+              <span class="value" style="width: 58%; color: #0f172a; font-weight: 900;">: ${regDateStr}</span>
+            </div>
+            <div class="row-flex" style="display: flex;">
+              <span class="label text-right pr-2" style="width: 42%; text-align: right; padding-right: 8px; color: #64748b; font-weight: bold;">Collected</span>
+              <span class="value" style="width: 58%; color: #0f172a; font-weight: 900;">: ${collectedDateStr}</span>
+            </div>
+            <div class="row-flex" style="display: flex;">
+              <span class="label text-right pr-2" style="width: 42%; text-align: right; padding-right: 8px; color: #64748b; font-weight: bold;">Received</span>
+              <span class="value" style="width: 58%; color: #0f172a; font-weight: 900;">: ${receivedDateStr}</span>
+            </div>
+            <div class="row-flex" style="display: flex;">
+              <span class="label text-right pr-2" style="width: 42%; text-align: right; padding-right: 8px; color: #64748b; font-weight: bold;">Reported</span>
+              <span class="value" style="width: 58%; color: #0f172a; font-weight: 900;">: ${reportDateStr}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
 
+    const reportSignatory = (reportData.report?.signatoryId && typeof reportData.report.signatoryId === 'object' && reportData.report.signatoryId.name)
+      ? reportData.report.signatoryId
+      : (signatories.find(s => s._id === (reportData.report?.signatoryId || reportData.signatoryId || selectedSignatoryId)) || (signatories.length > 0 ? signatories[0] : null));
+
+    const signatoryHtml = reportSignatory ? `
+      <div class="signatory-box" style="display: flex; justify-content: flex-end; margin-top: 36px; padding-top: 16px; text-align: right; font-size: 11px; page-break-inside: avoid; break-inside: avoid; clear: both;">
+        <div style="display: inline-block; text-align: center; min-width: 160px; padding-top: 4px;">
+          ${reportSignatory.signatureImageUrl ? `<img class="signature-img" src="${reportSignatory.signatureImageUrl}" style="max-height: 48px; max-width: 150px; object-fit: contain; margin-bottom: 6px; display: block; margin-left: auto; margin-right: auto;" />` : ''}
+          <b style="font-size: 11px; color: #0f172a; display: block;">${reportSignatory.name}</b>
+          <span style="font-size: 10px; color: #475569; display: block; margin-top: 2px;">${reportSignatory.designation}</span>
+        </div>
+      </div>
+    ` : '';
+
+    // Build pages HTML - ONE PAGE PER LAB TEST SEPARATELY!
+    let allPagesHtml = '';
+    const patientGender = String(patient.gender || '').trim().toLowerCase();
+    const isFemalePatient = patientGender.startsWith('f');
+    const isMalePatient = patientGender.startsWith('m');
+
+    testsToPrint.forEach((tName) => {
+      const matchedTest = findMatchedTest(tName);
+      const rawParams = matchedTest && Array.isArray(matchedTest.parameters) ? matchedTest.parameters : [];
+      const genderFiltered = rawParams.filter(p => {
+        const pGender = String(p.gender || 'both').trim().toLowerCase();
+        if (pGender === 'both' || !pGender || pGender === 'all') return true;
+        if (pGender === 'male' || pGender === 'm') return isMalePatient || !patientGender;
+        if (pGender === 'female' || pGender === 'f') return isFemalePatient || !patientGender;
+        return true;
+      });
+      const testParams = genderFiltered.length > 0 ? genderFiltered : rawParams;
+
+      let rowsHtml = '';
       if (String(tName || '').toLowerCase().includes('widal')) {
         const dilutions = getWidalDilutions(tName);
         let widalGrid = getWidalDefaultGrid(tName);
@@ -940,253 +1420,107 @@ function DashboardContent() {
           <tr>
             <td colspan="4" style="padding: 10px 16px; border-bottom: 1px solid #cbd5e1;">
               <p style="font-size: 11px; font-weight: 600; color: #334155; margin: 0 0 8px 0;">Tube agglutination test for Salmonella group of organisms reveal following titers.</p>
-              <table style="width: 100%; border-collapse: collapse; text-align: center; font-size: 10.5px; border: 1px solid #475569; margin-bottom: 8px;">
+              <table style="width: 100%; border-collapse: collapse; font-size: 10.5px; border: 1px solid #94a3b8; text-align: center; margin-bottom: 12px;">
                 <thead>
-                  <tr style="background-color: #f8fafc; font-weight: 800; border-bottom: 1px solid #475569;">
-                    <th style="padding: 6px 12px; text-align: left; border: 1px solid #475569; width: 30%;">Antigen</th>
-                    ${dilutions.map(dil => `<th style="padding: 6px 8px; border: 1px solid #475569; width: 14%;">${dil}</th>`).join('')}
+                  <tr style="background: #f1f5f9; border-bottom: 1px solid #94a3b8;">
+                    <th style="padding: 6px 8px; border-right: 1px solid #cbd5e1; text-align: left; font-size: 10px;">Antigens / Dilutions</th>
+                    ${dilutions.map(d => `<th style="padding: 6px 8px; border-right: 1px solid #cbd5e1; font-size: 10px; font-weight: 800;">${d}</th>`).join('')}
+                    <th style="padding: 6px 8px; font-size: 10px; font-weight: 800;">Result</th>
                   </tr>
                 </thead>
                 <tbody>
-                  ${WIDAL_DEFAULT_ANTIGENS.map(antigen => `
-                    <tr style="border-bottom: 1px solid #cbd5e1;">
-                      <td style="padding: 6px 12px; text-align: left; font-weight: 800; border: 1px solid #475569;">${antigen}</td>
-                      ${dilutions.map(dil => {
-                        const cellVal = widalGrid[antigen]?.[dil] || '-';
-                        const isPos = cellVal === '+' || String(cellVal).includes('+');
-                        return `<td style="padding: 6px 8px; border: 1px solid #475569; font-weight: ${isPos ? '900; color: #dc2626;' : '500; color: #334155;'}">${cellVal}</td>`;
-                      }).join('')}
-                    </tr>
-                  `).join('')}
+                  ${Object.keys(widalGrid).map(antigen => {
+                    const posDils = dilutions.filter(d => (widalGrid[antigen]?.[d] || '').includes('+'));
+                    const highestTiter = posDils.length > 0 ? posDils[posDils.length - 1] : 'Non-Reactive';
+                    const displayVal = highestTiter !== 'Non-Reactive' 
+                      ? (highestTiter.startsWith('1:') ? `${highestTiter} (+)` : `1:${highestTiter.replace('1/', '')} (+)`) 
+                      : 'Non-Reactive';
+                    return `
+                      <tr style="border-bottom: 1px solid #e2e8f0;">
+                        <td style="padding: 5px 8px; border-right: 1px solid #cbd5e1; text-align: left; font-weight: bold; color: #0f172a;">${antigen}</td>
+                        ${dilutions.map(d => `<td style="padding: 5px 8px; border-right: 1px solid #cbd5e1; color: ${widalGrid[antigen]?.[d]?.includes('+') ? '#ea580c; font-weight: 900;' : '#64748b;'}">${widalGrid[antigen]?.[d] || '—'}</td>`).join('')}
+                        <td style="padding: 5px 8px; font-weight: 900; color: ${displayVal !== 'Non-Reactive' ? '#ea580c' : '#059669'}">${displayVal}</td>
+                      </tr>
+                    `;
+                  }).join('')}
                 </tbody>
               </table>
-              <div style="margin: 8px 0 6px 0; font-size: 11px; font-weight: 800; color: #0f172a;">
-                Comment: WIDAL TEST ${widalCommentVal}
+              <div style="font-size: 10.5px; font-weight: bold; color: #0f172a; margin-bottom: 6px;">
+                Comment: <span style="color: #ea580c; font-weight: 900;">WIDAL TEST ${widalCommentVal}</span>
               </div>
-              <div style="font-size: 9.5px; line-height: 1.5; color: #475569; padding-top: 4px; border-top: 1px solid #e2e8f0;">
+              <div style="font-size: 9.5px; color: #64748b; font-style: italic; line-height: 1.4;">
                 ${noteText}
               </div>
             </td>
           </tr>
         `;
-        return;
-      }
+      } else {
+        let lastGroup = null;
+        testParams.forEach(p => {
+          if (p.group && p.group !== lastGroup) {
+            lastGroup = p.group;
+            rowsHtml += `
+              <tr style="background: #f1f5f9;">
+                <td colspan="4" style="padding: 5px 16px; font-weight: 800; text-transform: uppercase; color: #334155; font-size: 10px; border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0;">
+                  ${p.group}
+                </td>
+              </tr>
+            `;
+          }
 
-      let currentPrintGroup = '';
-      testParams.filter((p) => {
-        const patientGender = patient?.gender?.toLowerCase() || '';
-        const pGender = (p.gender || 'both').toLowerCase();
-        if (pGender === 'male' && patientGender !== 'male') return false;
-        if (pGender === 'female' && patientGender !== 'female') return false;
-        return true;
-      }).forEach(p => {
-        if (p.group && p.group !== currentPrintGroup) {
-          currentPrintGroup = p.group;
+          const existingParam = reportData.report?.parameters?.find(ep => ep.name === p.name);
+          const pVal = existingParam ? existingParam.value : '—';
+          const pRemark = existingParam ? existingParam.remarks : '';
+          const isAbnormal = existingParam?.isAbnormal || false;
+
+          let refDisplay = '—';
+          if (p.referenceRange) {
+            refDisplay = p.referenceRange;
+          } else if (p.normalRange) {
+            refDisplay = p.normalRange;
+          } else if (p.min !== undefined && p.max !== undefined) {
+            refDisplay = `${p.min} - ${p.max}`;
+          }
+
           rowsHtml += `
-            <tr style="background: #f8fafc; border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0;">
-              <td colspan="4" style="padding: 6px 16px; font-weight: 800; font-size: 10px; color: #0f172a; text-transform: uppercase;">
-                ${p.group}
+            <tr style="border-bottom: 1px solid #f1f5f9;">
+              <td style="padding: 6px 16px; font-weight: 600; color: #1e293b;">
+                ${p.name}
+                ${pRemark ? `<div style="font-size: 9px; color: #64748b; font-style: italic; font-weight: normal; margin-top: 2px;">Note: ${pRemark}</div>` : ''}
+              </td>
+              <td style="padding: 6px 16px; font-weight: 800; color: ${isAbnormal ? '#dc2626' : '#0f172a'};">
+                ${pVal || '—'}
+              </td>
+              <td style="padding: 6px 16px; color: #64748b;">
+                ${p.unit || '—'}
+              </td>
+              <td style="padding: 6px 16px; color: #64748b;">
+                ${refDisplay}
               </td>
             </tr>
           `;
-        } else if (!p.group) {
-          currentPrintGroup = '';
-        }
+        });
+      }
 
-        const rVal = reportData.report?.parameters?.find(rp => rp.name === p.name);
-        const valText = rVal ? rVal.value : '';
-        const isBad = isOutOfRange(p.name, valText) || (rVal && rVal.isAbnormal);
-        
-        let statusSuffix = '';
-        if (p.referenceRange && p.referenceRange.trim() !== '' && p.referenceRange !== 'As per standards') {
-          const status = getValueRangeStatus(p.name, valText);
-          if (status === 'H') statusSuffix = ' (H)';
-          if (status === 'L') statusSuffix = ' (L)';
-        }
+      const testInterpretation = matchedTest?.interpretation || reportData.report?.interpretation || '';
+      const hasInterpretation = testInterpretation && testInterpretation.trim() !== '' && printInterpretation && reportData.printInterpretation !== false;
 
-        rowsHtml += `
-          <tr style="border-bottom: 1px solid #f1f5f9;">
-            <td style="padding: 8px 16px ${p.group ? '; padding-left: 36px' : ''}; font-weight: bold; color: ${p.group ? '#475569' : '#334155'}; text-transform: uppercase; width: 40%;">${p.displayName || p.name}</td>
-            <td style="padding: 8px 16px; font-weight: ${isBad ? '900' : 'bold'}; color: ${isBad ? '#ef4444' : '#0f172a'}; width: 20%;">${valText}${statusSuffix}</td>
-            <td style="padding: 8px 16px; font-weight: 600; color: #64748b; width: 20%;">${p.unit || '—'}</td>
-            <td style="padding: 8px 16px; font-weight: bold; color: #334155; width: 20%;">${p.referenceRange || 'As per standards'}</td>
-          </tr>
-        `;
-      });
-    });
-
-    const isInterpretationEmpty = !reportData.report?.interpretation || reportData.report.interpretation.trim() === '';
-
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>Lab Report - ${patient.patientName || 'Patient'}</title>
-          <style>
-            @page {
-              margin: 0;
-              size: A4;
-            }
-            body {
-              font-family: system-ui, -apple-system, sans-serif;
-              margin: 0;
-              padding: 0;
-              background: #ffffff;
-              color: #1e293b;
-            }
-            .container {
-              padding: 0 24px 24px 24px;
-              padding-top: ${hospitalSettings?.letterheadImageUrl ? `${hospitalSettings.letterheadHeaderHeight || 0}cm` : '5px'};
-              padding-bottom: ${hospitalSettings?.letterheadImageUrl ? `${hospitalSettings.letterheadFooterHeight || 0}cm` : '0px'};
-              max-width: 800px;
-              margin: 0 auto;
-              box-sizing: border-box;
-            }
-            .table-box {
-              border: 1px solid #cbd5e1;
-              border-radius: 8px;
-              overflow: hidden;
-              margin-top: 16px;
-            }
-            table {
-              width: 100%;
-              border-collapse: collapse;
-              font-size: 11px;
-            }
-            th {
-              background: #f1f5f9;
-              padding: 10px 16px;
-              font-weight: 800;
-              text-align: left;
-              color: #1e293b;
-              border-bottom: 2px solid #cbd5e1;
-            }
-            td {
-              text-align: left;
-            }
-            .grid-container {
-              display: grid;
-              grid-template-columns: repeat(12, 1fr);
-              border-bottom: 2px solid #0f172a;
-              padding-bottom: 16px;
-              margin-top: 16px;
-              gap: 16px;
-              font-size: 11px;
-            }
-            .col-6 {
-              grid-column: span 6;
-            }
-            .row-flex {
-              display: flex;
-              line-height: 1.6;
-            }
-            .label {
-              width: 33%;
-              color: #64748b;
-              font-weight: bold;
-            }
-            .value {
-              width: 67%;
-              color: #0f172a;
-              font-weight: 900;
-            }
-            .text-right {
-              text-align: right;
-            }
-            .pr-2 {
-              padding-right: 8px;
-            }
-            .italic-box {
-              font-style: italic;
-              font-size: 11px;
-              color: #475569;
-              margin-top: 12px;
-            }
-            .signatory-box {
-              display: flex;
-              justify-content: flex-end;
-              margin-top: 48px;
-              padding-top: 24px;
-              text-align: right;
-              font-size: 11px;
-              clear: both;
-            }
-            .signature-img {
-              max-height: 52px;
-              max-width: 150px;
-              object-fit: contain;
-              margin-bottom: 6px;
-              display: block;
-              margin-left: auto;
-              margin-right: auto;
-            }
-            .report-wrapper-table {
-              width: 100%;
-              border-collapse: collapse;
-              border: none;
-            }
-            .report-wrapper-table > thead {
-              display: table-header-group;
-            }
-            .report-wrapper-table > tbody {
-              display: table-row-group;
-            }
-            .report-wrapper-table > thead > tr > th {
-              border: none;
-              padding: 0;
-              text-align: left;
-              font-weight: normal;
-            }
-            .report-wrapper-table > tbody > tr > td {
-              border: none;
-              padding: 0;
-            }
-            .report-wrapper-table tr {
-              page-break-inside: auto;
-              break-inside: auto;
-            }
-            .table-box table tr {
-              page-break-inside: avoid;
-              break-inside: avoid;
-            }
-          </style>
-        </head>
-        <body>
+      allPagesHtml += `
+        <div class="report-page">
           <div class="container">
             <table class="report-wrapper-table">
               <thead>
                 <tr>
                   <th>
                     ${letterheadHtml}
-                    
-                    <div class="grid-container">
-                      <div class="col-6">
-                        <h2 style="font-size: 14px; font-weight: 800; color: #0f172a; margin: 0 0 8px 0;">${patient.patientName || 'Patient Name'}</h2>
-                        <div class="row-flex"><span class="label">Age / Sex</span><span class="value">: ${ageStr} / ${genderStr}</span></div>
-                        <div class="row-flex"><span class="label">Referred by</span><span class="value">: ${reportData.remarks || 'Self'}</span></div>
-                        <div class="row-flex"><span class="label">Reg. no.</span><span class="value">: ${reportData.labId || '—'}</span></div>
-                      </div>
-                      <div class="col-6" style="display: flex; flex-direction: column; align-items: flex-end;">
-                        <div style="width: 100%; max-width: 280px;">
-                          <div class="row-flex"><span class="label" style="width: 40%; text-align: right; padding-right: 8px;">Registered</span><span class="value" style="width: 60%;">: ${regDateStr || '—'}</span></div>
-                          <div class="row-flex"><span class="label" style="width: 40%; text-align: right; padding-right: 8px;">Collected</span><span class="value" style="width: 60%;">: ${collectedDateStr}</span></div>
-                          <div class="row-flex"><span class="label" style="width: 40%; text-align: right; padding-right: 8px;">Received</span><span class="value" style="width: 60%;">: ${receivedDateStr}</span></div>
-                          <div class="row-flex"><span class="label" style="width: 40%; text-align: right; padding-right: 8px;">Reported</span><span class="value" style="width: 60%;">: ${reportDateStr || '—'}</span></div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div style="padding: 8px 0; text-align: center; border-bottom: 1px solid #e2e8f0; margin-bottom: 12px;">
-                      <h3 style="font-size: 12px; font-weight: 900; letter-spacing: 2px; color: #0f172a; margin: 0; text-transform: uppercase;">
-                        ${(() => {
-                          const firstTest = testList.length > 0 ? findMatchedTest(testList[0]) : null;
-                          return firstTest?.department || reportData.category || 'BIOCHEMISTRY';
-                        })()}
+                    ${patientDemographicsHtml}
+                    <div style="text-align: center; margin: 12px 0 10px 0; border-bottom: 2px solid #0f172a; padding-bottom: 6px;">
+                      <h3 style="font-size: 13px; font-weight: 900; letter-spacing: 1px; color: #0f172a; margin: 0; text-transform: uppercase;">
+                        ${matchedTest?.department || reportData.category || 'DEPARTMENT OF PATHOLOGY'}
                       </h3>
-                      ${testList.length > 0 ? `
-                        <div style="font-size: 11px; font-weight: 800; color: #334155; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px;">
-                          ${testList.join(', ')}
-                        </div>
-                      ` : ''}
+                      <div style="font-size: 11px; font-weight: 800; color: #ea580c; margin-top: 3px; text-transform: uppercase; letter-spacing: 0.5px;">
+                        ${tName}
+                      </div>
                     </div>
                   </th>
                 </tr>
@@ -1214,35 +1548,107 @@ function DashboardContent() {
                     ${reportData.report?.remarks ? `<div class="italic-box"><b>Remarks:</b> ${reportData.report.remarks}</div>` : ''}
                     ${reportData.report?.advice ? `<div class="italic-box"><b>Advice:</b> ${reportData.report.advice}</div>` : ''}
                     
-                    ${(!isInterpretationEmpty && printInterpretation && reportData.printInterpretation !== false) ? `
+                    ${hasInterpretation ? `
                       <div style="margin-top: 16px; border-top: 1px solid #e2e8f0; padding-top: 12px; page-break-inside: avoid; break-inside: avoid;">
                         <h4 style="font-size: 11px; font-weight: 900; margin: 0 0 6px 0; text-transform: uppercase;">Interpretation</h4>
-                        <div style="font-size: 10px; line-height: 1.5; color: #334155;">${formatInterpretationToHtml(reportData.report.interpretation)}</div>
+                        <div style="font-size: 10px; line-height: 1.5; color: #334155;">${formatInterpretationToHtml(testInterpretation)}</div>
                       </div>
                     ` : ''}
 
-                    ${(() => {
-                      const reportSignatory = (reportData.report?.signatoryId && typeof reportData.report.signatoryId === 'object' && reportData.report.signatoryId.name)
-                        ? reportData.report.signatoryId
-                        : (signatories.find(s => s._id === (reportData.report?.signatoryId || reportData.signatoryId || selectedSignatoryId)) || (signatories.length > 0 ? signatories[0] : null));
-
-                      if (!reportSignatory) return '';
-
-                      return `
-                        <div class="signatory-box" style="display: flex; justify-content: flex-end; margin-top: 48px; padding-top: 24px; text-align: right; font-size: 11px; page-break-inside: avoid; break-inside: avoid; clear: both;">
-                          <div style="display: inline-block; text-align: center; min-width: 150px; padding-top: 8px;">
-                            ${reportSignatory.signatureImageUrl ? `<img class="signature-img" src="${reportSignatory.signatureImageUrl}" style="max-height: 52px; max-width: 150px; object-fit: contain; margin-bottom: 8px; display: block; margin-left: auto; margin-right: auto;" />` : ''}
-                            <b style="font-size: 11px; color: #0f172a; display: block;">${reportSignatory.name}</b>
-                            <span style="font-size: 10px; color: #475569; display: block; margin-top: 2px;">${reportSignatory.designation}</span>
-                          </div>
-                        </div>
-                      `;
-                    })()}
+                    ${signatoryHtml}
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
+        </div>
+      `;
+    });
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Lab Report - ${patient.patientName || 'Patient'}</title>
+          <style>
+            @page { margin: 0; size: A4; }
+            body {
+              font-family: system-ui, -apple-system, sans-serif;
+              margin: 0;
+              padding: 0;
+              background: #ffffff;
+              color: #1e293b;
+            }
+            .report-page {
+              page-break-after: always !important;
+              break-after: page !important;
+              min-height: 100vh;
+              box-sizing: border-box;
+              background: #ffffff;
+            }
+            .report-page:last-child {
+              page-break-after: auto !important;
+              break-after: auto !important;
+            }
+            .container {
+              padding: 0 24px 24px 24px;
+              padding-top: ${hospitalSettings?.letterheadImageUrl ? `${hospitalSettings.letterheadHeaderHeight || 0}cm` : '10px'};
+              padding-bottom: ${hospitalSettings?.letterheadImageUrl ? `${hospitalSettings.letterheadFooterHeight || 0}cm` : '10px'};
+              max-width: 800px;
+              margin: 0 auto;
+              box-sizing: border-box;
+            }
+            .table-box {
+              border: 1px solid #cbd5e1;
+              border-radius: 8px;
+              overflow: hidden;
+              margin-top: 12px;
+            }
+            table { width: 100%; border-collapse: collapse; font-size: 11px; }
+            th {
+              background: #f1f5f9;
+              padding: 9px 16px;
+              font-weight: 800;
+              text-align: left;
+              color: #1e293b;
+              border-bottom: 2px solid #cbd5e1;
+            }
+            td { text-align: left; }
+            .grid-container {
+              display: grid;
+              grid-template-columns: repeat(12, 1fr);
+              border-bottom: 2px solid #0f172a;
+              padding-bottom: 12px;
+              margin-top: 8px;
+              gap: 12px;
+              font-size: 11px;
+            }
+            .col-6 { grid-column: span 6; }
+            .row-flex { display: flex; line-height: 1.6; }
+            .label { width: 32%; color: #64748b; font-weight: bold; }
+            .value { width: 68%; color: #0f172a; font-weight: 900; }
+            .text-right { text-align: right; }
+            .pr-2 { padding-right: 8px; }
+            .italic-box { font-style: italic; font-size: 10.5px; color: #475569; margin-top: 10px; }
+            .signatory-box { font-size: 11px; }
+            .signature-img {
+              max-height: 48px;
+              max-width: 150px;
+              object-fit: contain;
+              margin-bottom: 6px;
+              display: block;
+              margin-left: auto;
+              margin-right: auto;
+            }
+            .report-wrapper-table { width: 100%; border-collapse: collapse; border: none; }
+            .report-wrapper-table > thead { display: table-header-group; }
+            .report-wrapper-table > tbody { display: table-row-group; }
+            .report-wrapper-table > thead > tr > th { border: none; padding: 0; text-align: left; font-weight: normal; }
+            .report-wrapper-table > tbody > tr > td { border: none; padding: 0; }
+            .table-box table tr { page-break-inside: avoid; break-inside: avoid; }
+          </style>
+        </head>
+        <body>
+          ${allPagesHtml}
           <script>
             window.onload = function() {
               window.print();
@@ -1270,8 +1676,8 @@ function DashboardContent() {
       setLabBills(Array.isArray(bills) ? bills : []);
       const patList = Array.isArray(regRes) ? regRes : (regRes?.registrations || []);
       setRegisteredPatients(patList);
-      if (settingsRes && settingsRes.exists && settingsRes.data) {
-        setHospitalSettings(settingsRes.data);
+      if (settingsRes && (settingsRes.data || settingsRes.hospitalName)) {
+        setHospitalSettings(settingsRes.data || settingsRes);
       }
       loadSignatories();
     } catch (err) {
@@ -1428,6 +1834,19 @@ function DashboardContent() {
   const countInProgress = reportsForSelectedDate.filter(r => r.statusCategory === 'in_progress').length;
   const countFinal = reportsForSelectedDate.filter(r => r.statusCategory === 'final').length;
   const countSignedOff = reportsForSelectedDate.filter(r => r.statusCategory === 'signed_off').length;
+
+  // Sorted and Paginated Today's Reports
+  const sortedReports = React.useMemo(() => {
+    return [...filteredReports].sort((a, b) => {
+      const timeA = a.createdAtDate ? a.createdAtDate.getTime() : 0;
+      const timeB = b.createdAtDate ? b.createdAtDate.getTime() : 0;
+      return sortOrder === 'newest' ? timeB - timeA : timeA - timeB;
+    });
+  }, [filteredReports, sortOrder]);
+
+  const totalReportPages = Math.max(1, Math.ceil(sortedReports.length / reportsPageSize));
+  const safeReportPage = Math.min(Math.max(reportsCurrentPage, 1), totalReportPages);
+  const paginatedReports = sortedReports.slice((safeReportPage - 1) * reportsPageSize, safeReportPage * reportsPageSize);
 
   // Search Lab Reports filtered list
   const searchFilteredReports = rawReportsList.filter(item => {
@@ -2227,6 +2646,7 @@ function DashboardContent() {
     setReportAdvice(reqItem.report?.advice || '');
     setReportInterpretation(reqItem.report?.interpretation || '');
     setShowReportEntryTab('');
+    setSelectedReportTestFilter('all');
     setIsEditLayoutMode(false);
     setSkippedParameters({});
     setCustomFieldDisplayNames({});
@@ -3186,10 +3606,7 @@ function DashboardContent() {
                     top: 0 !important;
                     width: 100% !important;
                     display: block !important;
-                    border: none !important;
-                    box-shadow: none !important;
-                    margin: 0 !important;
-                    padding: 0 24px 24px 24px !important;
+                    position: absolute !important; left: 0 !important; top: 0 !important; width: 100% !important; display: block !important; border: none !important; box-shadow: none !important; margin: 0 !important; padding: 0 24px 24px 24px !important;
                     padding-top: ${hospitalSettings?.letterheadImageUrl ? `${hospitalSettings.letterheadHeaderHeight || 0}cm` : '5px'} !important;
                     padding-bottom: ${hospitalSettings?.letterheadImageUrl ? `${hospitalSettings.letterheadFooterHeight || 0}cm` : '0px'} !important;
                   }
@@ -3197,34 +3614,47 @@ function DashboardContent() {
               `}} />
 
               {/* Header Action bar - Hidden on print */}
-              <div className="w-full max-w-4xl bg-white border border-slate-200 rounded-xl p-3 flex items-center justify-between shadow-md mb-4 no-print">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-extrabold text-slate-800">Lab Report Print Preview</span>
+              <div className="w-full max-w-4xl bg-white border border-slate-200 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md mb-4 no-print">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-extrabold text-slate-800 mr-1">Lab Report Preview:</span>
+                  {testList.length > 1 && (
+                    <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 gap-1 text-[11px] font-bold">
+                      <button
+                        type="button"
+                        onClick={() => setPrintModalTestFilter('all')}
+                        className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${printModalTestFilter === 'all' ? 'bg-orange-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}
+                      >
+                        All Tests ({testList.length} Pages)
+                      </button>
+                      {testList.map((tName, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setPrintModalTestFilter(tName)}
+                          className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${printModalTestFilter === tName ? 'bg-orange-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}
+                        >
+                          {tName}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2.5 shrink-0">
                   <label className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-slate-700 select-none bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg border border-slate-300 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={printInterpretation}
-                      onChange={(e) => setPrintInterpretation(e.target.checked)}
-                      className="rounded text-blue-600 cursor-pointer w-3.5 h-3.5"
-                    />
+                    <input type="checkbox" checked={printInterpretation} onChange={(e) => setPrintInterpretation(e.target.checked)} className="rounded text-blue-600 cursor-pointer w-3.5 h-3.5" />
                     <span>Print Interpretation</span>
                   </label>
                   <button
                     type="button"
-                    onClick={() => handlePrintReport(selectedReportForPrint)}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1"
+                    onClick={() => handlePrintReport(selectedReportForPrint, printModalTestFilter)}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1.5"
                   >
                     <span>🖨</span>
-                    <span>Print Report</span>
+                    <span>Print {printModalTestFilter === 'all' && testList.length > 1 ? `All (${testList.length} Pages)` : 'Report'}</span>
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      setShowReportPrintModal(false);
-                      setSelectedReportForPrint(null);
-                    }}
+                    onClick={() => { setShowReportPrintModal(false); setSelectedReportForPrint(null); }}
                     className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-bold cursor-pointer"
                   >
                     Close
@@ -3232,336 +3662,252 @@ function DashboardContent() {
                 </div>
               </div>
 
-              {/* Printable Area - styled exactly like the screenshot */}
-              <div className="print-area w-full max-w-4xl bg-white border border-slate-300 rounded-lg p-8 pt-[5px] shadow-2xl space-y-6 text-xs text-slate-800 font-sans print:shadow-none print:border-0 print:p-0">
+              {/* Printable Area - renders each test as a distinct page */}
+              {(() => {
+                const testsForModal = (printModalTestFilter && printModalTestFilter !== 'all')
+                  ? testList.filter(t => t.toLowerCase() === printModalTestFilter.toLowerCase())
+                  : (testList.length > 0 ? testList : ['LAB INVESTIGATION']);
+
+                const hospName = hospitalSettings?.hospitalName || user?.hospitalName || user?.hospital?.name || 'Aman Hospital';
+                const hospHeading = hospitalSettings?.hospitalHeading || '';
+                const hospAddress = hospitalSettings?.address || '';
                 
-                {/* Simulated/Real Letterhead Header Image */}
-                {hospitalSettings?.letterheadImageUrl ? (
-                  <div 
-                    style={{ height: `${hospitalSettings.letterheadHeaderHeight || 4.6}cm` }} 
-                    className="w-full overflow-hidden mb-4"
-                  >
-                    <img 
-                      src={hospitalSettings.letterheadImageUrl} 
-                      alt="Letterhead Header" 
-                      className="w-full h-full object-fill"
-                    />
-                  </div>
-                ) : (
-                  /* Default Letterhead from Consultation / Hospital Details */
-                  <div className="w-full border-b-2 border-slate-900 pb-3 mb-4 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      {hospitalSettings?.logoUrl ? (
-                        <img 
-                          src={hospitalSettings.logoUrl} 
-                          alt="Logo" 
-                          className="w-16 h-16 object-contain"
-                        />
-                      ) : (
-                        <div className="w-16 h-16 bg-slate-100 rounded-lg flex items-center justify-center font-bold text-slate-400">LOGO</div>
-                      )}
-                      <div className="text-left">
-                        <h1 className="text-lg font-black text-slate-900 leading-tight">{hospitalSettings?.hospitalName || user?.hospitalName || 'Virtual Care Hospital'}</h1>
-                        {hospitalSettings?.hospitalHeading && (
-                          <p className="text-[10px] font-bold text-slate-500">{hospitalSettings.hospitalHeading}</p>
-                        )}
-                        <p className="text-[9px] text-slate-500 font-medium max-w-md">{hospitalSettings?.address || '123 Care Street, Medical Zone'}</p>
-                      </div>
-                    </div>
-                    <div className="text-right text-[9px] text-slate-500 space-y-0.5">
-                      {hospitalSettings?.mobileNumbers && hospitalSettings.mobileNumbers.length > 0 && (
-                        <p className="font-bold">📞 {hospitalSettings.mobileNumbers.join(', ')}</p>
-                      )}
-                      {hospitalSettings?.emailAddress && (
-                        <p>✉ {hospitalSettings.emailAddress}</p>
-                      )}
-                      {hospitalSettings?.website && (
-                        <p>🌐 {hospitalSettings.website}</p>
-                      )}
-                    </div>
-                  </div>
-                )}
+                const contactNumbers = [];
+                if (Array.isArray(hospitalSettings?.mobileNumbers)) {
+                  hospitalSettings.mobileNumbers.forEach(n => { if (n && typeof n === 'string' && n.trim()) contactNumbers.push(n.trim()); });
+                }
+                if (Array.isArray(hospitalSettings?.phoneNumbers)) {
+                  hospitalSettings.phoneNumbers.forEach(p => {
+                    const num = typeof p === 'object' ? p.number : p;
+                    const namePrefix = typeof p === 'object' && p.name ? `${p.name}: ` : '';
+                    if (num && String(num).trim()) contactNumbers.push(`${namePrefix}${String(num).trim()}`);
+                  });
+                }
+                if (hospitalSettings?.alternateMobileNumber && hospitalSettings.alternateMobileNumber.trim()) {
+                  contactNumbers.push(hospitalSettings.alternateMobileNumber.trim());
+                }
 
-                {/* Header Table / Demographics Box */}
-                <div className="grid grid-cols-12 border-b-2 border-slate-800 pb-4 items-start gap-4">
-                  {/* Left 6 Cols: Patient details */}
-                  <div className="col-span-6 space-y-1 text-slate-800 text-[11px]">
-                    <h2 className="text-sm font-extrabold text-slate-900 leading-tight">{patient.patientName || 'Mr. Ravi 2'}</h2>
-                    <div className="grid grid-cols-12 leading-relaxed">
-                      <span className="col-span-4 font-bold text-slate-500">Age / Sex</span>
-                      <span className="col-span-8 font-black text-slate-900">: {ageStr} / {genderStr}</span>
-                      <span className="col-span-4 font-bold text-slate-500">Referred by</span>
-                      <span className="col-span-8 font-black text-slate-900">: {selectedReportForPrint.remarks || 'Self'}</span>
-                      <span className="col-span-4 font-bold text-slate-500">Reg. no.</span>
-                      <span className="col-span-8 font-black text-slate-900">: {selectedReportForPrint.labId || '1074'}</span>
-                    </div>
-                  </div>
+                const hospEmail = hospitalSettings?.emailAddress || '';
+                const hospWebsite = hospitalSettings?.website || '';
+                const hospReg = hospitalSettings?.registrationNumber || '';
+                const hospGst = hospitalSettings?.gstNumber || '';
+                const hospLogo = hospitalSettings?.logoUrl || '';
 
-                  {/* Right 6 Cols: Dates info */}
-                  <div className="col-span-6 flex flex-col items-end justify-start text-[11px]">
-                    <div className="w-full max-w-xs grid grid-cols-12 leading-relaxed text-slate-700 font-bold">
-                      <span className="col-span-5 text-right pr-2">Registered</span>
-                      <span className="col-span-7 text-slate-900 font-extrabold">: {regDateStr}</span>
-                      <span className="col-span-5 text-right pr-2">Collected</span>
-                      <span className="col-span-7 text-slate-900 font-extrabold">: {collectedDateStr}</span>
-                      <span className="col-span-5 text-right pr-2">Received</span>
-                      <span className="col-span-7 text-slate-900 font-extrabold">: {receivedDateStr}</span>
-                      <span className="col-span-5 text-right pr-2">Reported</span>
-                      <span className="col-span-7 text-slate-900 font-extrabold">: {reportDateStr}</span>
-                    </div>
-                  </div>
-                </div>
+                const sig = (selectedReportForPrint.report?.signatoryId && typeof selectedReportForPrint.report.signatoryId === 'object' && selectedReportForPrint.report.signatoryId.name)
+                  ? selectedReportForPrint.report.signatoryId
+                  : (signatories.find(s => s._id === (selectedReportForPrint.report?.signatoryId || selectedReportForPrint.signatoryId || selectedSignatoryId)) || (signatories.length > 0 ? signatories[0] : null));
 
-                {/* Modality Title Header */}
-                <div className="py-2.5 flex flex-col items-center justify-center border-b border-slate-200">
-                  <h3 className="text-xs font-black tracking-widest text-slate-900 border-b-2 border-slate-900 pb-0.5 uppercase">
-                    {(() => {
-                      const firstTest = testList.length > 0 ? findMatchedTest(testList[0]) : null;
-                      return firstTest?.department || selectedReportForPrint.category || 'BIOCHEMISTRY';
-                    })()}
-                  </h3>
-                  {testList.length > 0 && (
-                    <div className="text-[11px] font-extrabold text-slate-800 mt-1 uppercase tracking-wide">
-                      {testList.join(', ')}
-                    </div>
-                  )}
-                </div>
+                return (
+                  <div className="space-y-8 w-full max-w-4xl">
+                    {testsForModal.map((tName, tIdx) => {
+                      const matchedTest = findMatchedTest(tName);
+                      const rawParams = matchedTest && Array.isArray(matchedTest.parameters) ? matchedTest.parameters : [];
+                      const patientGender = String(patient.gender || '').trim().toLowerCase();
+                      const isFemalePatient = patientGender.startsWith('f');
+                      const isMalePatient = patientGender.startsWith('m');
+                      const genderFiltered = rawParams.filter(p => {
+                        const pGender = String(p.gender || 'both').trim().toLowerCase();
+                        if (pGender === 'both' || !pGender || pGender === 'all') return true;
+                        if (pGender === 'male' || pGender === 'm') return isMalePatient || !patientGender;
+                        if (pGender === 'female' || pGender === 'f') return isFemalePatient || !patientGender;
+                        return true;
+                      });
+                      const testParams = genderFiltered.length > 0 ? genderFiltered : rawParams;
+                      const testInterpretation = matchedTest?.interpretation || selectedReportForPrint.report?.interpretation || '';
+                      const hasInterpretation = testInterpretation && testInterpretation.trim() !== '' && printInterpretation && selectedReportForPrint.printInterpretation !== false;
 
-                {/* Parameter Values Table Box */}
-                <div className="border border-slate-400 rounded-lg overflow-hidden">
-                  <table className="w-full text-left border-collapse text-[11px] leading-relaxed">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-400 text-slate-800 font-extrabold uppercase text-[10px]">
-                        <th className="py-2.5 px-4 w-2/5">TEST</th>
-                        <th className="py-2.5 px-4 w-1/5">VALUE</th>
-                        <th className="py-2.5 px-4 w-1/5">UNIT</th>
-                        <th className="py-2.5 px-4 w-1/5">REFERENCE</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200">
-                      {testList.map((tName, tIdx) => {
-                        const tNameNorm = String(tName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-                        const matchedTest = findMatchedTest(tName);
+                      return (
+                        <div key={tIdx} className="print-area w-full bg-white border border-slate-300 rounded-xl p-8 pt-4 shadow-xl space-y-5 text-xs text-slate-800 font-sans print:shadow-none print:border-0 print:p-0">
+                          {testsForModal.length > 1 && (
+                            <div className="flex items-center justify-between bg-orange-50 border border-orange-200 px-3 py-1.5 rounded-lg text-orange-800 text-[11px] font-bold no-print mb-2">
+                              <span>📄 Page {tIdx + 1} of {testsForModal.length}</span>
+                              <span className="uppercase">{tName}</span>
+                            </div>
+                          )}
 
-                        const testParams = matchedTest && Array.isArray(matchedTest.parameters) ? matchedTest.parameters : [];
+                          {hospitalSettings?.letterheadImageUrl ? (
+                            <div style={{ height: `${hospitalSettings.letterheadHeaderHeight || 4.6}cm` }} className="w-full overflow-hidden mb-3">
+                              <img src={hospitalSettings.letterheadImageUrl} alt="Letterhead Header" className="w-full h-full object-fill" />
+                            </div>
+                          ) : (
+                            <div className="w-full border-b-2 border-slate-900 pb-3 mb-3 flex items-center justify-between">
+                              <div className="flex items-center gap-3.5">
+                                {hospLogo ? (
+                                  <img src={hospLogo} alt="Logo" className="w-14 h-14 object-contain" />
+                                ) : (
+                                  <div className="w-14 h-14 bg-slate-100 rounded-lg flex items-center justify-center font-bold text-slate-400 text-[11px]">LOGO</div>
+                                )}
+                                <div className="text-left">
+                                  <h1 className="text-lg font-black text-slate-900 leading-tight">{hospName}</h1>
+                                  {hospHeading && <p className="text-[11px] font-bold text-orange-600 mt-0.5">{hospHeading}</p>}
+                                  {hospAddress && <p className="text-[9.5px] text-slate-600 font-medium max-w-md mt-0.5">{hospAddress}</p>}
+                                  {(hospReg || hospGst) && (
+                                    <p className="text-[8.5px] text-slate-500 font-bold mt-0.5">
+                                      {hospReg && `Reg No: ${hospReg}`}{hospReg && hospGst && ' | '}{hospGst && `GSTIN: ${hospGst}`}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="text-right text-[9.5px] text-slate-600 space-y-0.5">
+                                {contactNumbers.length > 0 && <p className="font-extrabold text-slate-900">📞 {contactNumbers.join(', ')}</p>}
+                                {hospEmail && <p className="font-medium">✉ {hospEmail}</p>}
+                                {hospWebsite && <p className="font-medium text-blue-600">🌐 {hospWebsite}</p>}
+                              </div>
+                            </div>
+                          )}
 
-                        return (
-                          <React.Fragment key={tIdx}>
-                            {/* Modality Investigation Header Row */}
-                            <tr className="bg-slate-50/50">
-                              <td colSpan="4" className="py-2 px-4 font-black text-slate-900 uppercase tracking-wide">
-                                {tName}
-                              </td>
-                            </tr>
+                          <div className="grid grid-cols-12 border-b-2 border-slate-800 pb-3 items-start gap-4 text-[11px]">
+                            <div className="col-span-6 space-y-1 text-slate-800">
+                              <h2 className="text-sm font-extrabold text-slate-900 leading-tight">{patient.patientName || 'Patient'}</h2>
+                              <div className="grid grid-cols-12 leading-relaxed">
+                                <span className="col-span-4 font-bold text-slate-500">Age / Sex</span>
+                                <span className="col-span-8 font-black text-slate-900">: {ageStr} / {genderStr}</span>
+                                <span className="col-span-4 font-bold text-slate-500">Referred by</span>
+                                <span className="col-span-8 font-black text-slate-900">: {selectedReportForPrint.remarks || 'Self'}</span>
+                                <span className="col-span-4 font-bold text-slate-500">Reg. no.</span>
+                                <span className="col-span-8 font-black text-slate-900">: {selectedReportForPrint.labId ? (selectedReportForPrint.labId.startsWith('#') ? selectedReportForPrint.labId : `#${selectedReportForPrint.labId}`) : '—'}</span>
+                              </div>
+                            </div>
+                            <div className="col-span-6 flex flex-col items-end justify-start text-[11px]">
+                              <div className="w-full max-w-xs grid grid-cols-12 leading-relaxed text-slate-700 font-bold">
+                                <span className="col-span-5 text-right pr-2">Registered</span>
+                                <span className="col-span-7 text-slate-900 font-extrabold">: {regDateStr}</span>
+                                <span className="col-span-5 text-right pr-2">Collected</span>
+                                <span className="col-span-7 text-slate-900 font-extrabold">: {collectedDateStr}</span>
+                                <span className="col-span-5 text-right pr-2">Received</span>
+                                <span className="col-span-7 text-slate-900 font-extrabold">: {receivedDateStr}</span>
+                                <span className="col-span-5 text-right pr-2">Reported</span>
+                                <span className="col-span-7 text-slate-900 font-extrabold">: {reportDateStr}</span>
+                              </div>
+                            </div>
+                          </div>
 
-                            {String(tName || '').toLowerCase().includes('widal') ? (
-                              <tr>
-                                <td colSpan="4" className="p-4 bg-white">
-                                  <p className="text-[11px] font-semibold text-slate-700 mb-2">
-                                    Tube agglutination test for Salmonella group of organisms reveal following titers.
-                                  </p>
-                                  {(() => {
-                                    const dilutions = getWidalDilutions(tName);
-                                    let widalGrid = getWidalDefaultGrid(tName);
-                                    const widalParam = selectedReportForPrint.report?.parameters?.find(rp => rp.name === 'widal_matrix_json');
-                                    if (widalParam && widalParam.value) {
-                                      try {
-                                        widalGrid = typeof widalParam.value === 'string' ? JSON.parse(widalParam.value) : widalParam.value;
-                                      } catch(e) {}
-                                    }
-                                    const commentParam = selectedReportForPrint.report?.parameters?.find(rp => rp.name === 'widal_comment' || rp.name === 'Result' || rp.name === 'Comment');
-                                    let commentVal = commentParam?.value ? commentParam.value.replace(/^WIDAL TEST\s*/i, '').trim() : 'POSITIVE';
-                                    if (!commentVal) commentVal = 'POSITIVE';
-                                    const noteText = getWidalNote(tName);
+                          <div className="py-2 flex flex-col items-center justify-center border-b border-slate-200 text-center">
+                            <h3 className="text-xs font-black tracking-widest text-slate-900 border-b-2 border-slate-900 pb-0.5 uppercase">{matchedTest?.department || selectedReportForPrint.category || 'DEPARTMENT OF PATHOLOGY'}</h3>
+                            <div className="text-[11px] font-extrabold text-orange-600 mt-1 uppercase tracking-wide">{tName}</div>
+                          </div>
 
-                                    return (
-                                      <div className="space-y-2.5">
-                                        <table className="w-full border-collapse border border-slate-400 text-center text-[10.5px]">
-                                          <thead>
-                                            <tr className="bg-slate-100/80 border-b border-slate-400 font-extrabold text-slate-800">
-                                              <th className="py-1.5 px-3 text-left border border-slate-300 w-1/4">Antigen</th>
-                                              {dilutions.map((dil) => (
-                                                <th key={dil} className="py-1.5 px-2 border border-slate-300 w-[15%]">{dil}</th>
-                                              ))}
-                                            </tr>
-                                          </thead>
-                                          <tbody className="divide-y divide-slate-300">
-                                            {WIDAL_DEFAULT_ANTIGENS.map((antigen) => (
-                                              <tr key={antigen}>
-                                                <td className="py-1.5 px-3 text-left font-bold text-slate-900 border border-slate-300">{antigen}</td>
-                                                {dilutions.map((dil) => {
-                                                  const cellVal = widalGrid[antigen]?.[dil] || '-';
-                                                  const isPos = cellVal === '+' || String(cellVal).includes('+');
+                          <div className="border border-slate-300 rounded-lg overflow-hidden">
+                            <table className="w-full text-left border-collapse text-[11px] leading-relaxed">
+                              <thead>
+                                <tr className="bg-slate-50 border-b border-slate-300 text-slate-800 font-extrabold uppercase text-[10px]">
+                                  <th className="py-2 px-4 w-2/5">TEST</th>
+                                  <th className="py-2 px-4 w-1/5">VALUE</th>
+                                  <th className="py-2 px-4 w-1/5">UNIT</th>
+                                  <th className="py-2 px-4 w-1/5">REFERENCE</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {String(tName || '').toLowerCase().includes('widal') ? (
+                                  <tr>
+                                    <td colSpan="4" className="p-4 bg-white">
+                                      <p className="text-[11px] font-semibold text-slate-700 mb-2">Tube agglutination test for Salmonella group of organisms reveal following titers.</p>
+                                      {(() => {
+                                        const dilutions = getWidalDilutions(tName);
+                                        let widalGrid = getWidalDefaultGrid(tName);
+                                        const widalParam = selectedReportForPrint.report?.parameters?.find(rp => rp.name === 'widal_matrix_json');
+                                        if (widalParam && widalParam.value) { try { widalGrid = typeof widalParam.value === 'string' ? JSON.parse(widalParam.value) : widalParam.value; } catch(e) {} }
+                                        const commentParam = selectedReportForPrint.report?.parameters?.find(rp => rp.name === 'widal_comment' || rp.name === 'Result' || rp.name === 'Comment');
+                                        let commentVal = commentParam?.value ? commentParam.value.replace(/^WIDAL TEST\s*/i, '').trim() : 'POSITIVE';
+                                        if (!commentVal) commentVal = 'POSITIVE';
+                                        return (
+                                          <div className="space-y-2.5">
+                                            <table className="w-full border-collapse border border-slate-400 text-center text-[10.5px]">
+                                              <thead>
+                                                <tr className="bg-slate-100/80 border-b border-slate-400 font-extrabold text-slate-800">
+                                                  <th className="py-1.5 px-3 text-left border border-slate-300 w-1/4">Antigen</th>
+                                                  {dilutions.map((dil) => <th key={dil} className="py-1.5 px-2 border border-slate-300 w-[15%]">{dil}</th>)}
+                                                  <th className="py-1.5 px-3 border border-slate-300 w-1/4">Result</th>
+                                                </tr>
+                                              </thead>
+                                              <tbody>
+                                                {Object.keys(widalGrid).map((antigen) => {
+                                                  const posDils = dilutions.filter(d => (widalGrid[antigen]?.[d] || '').includes('+'));
+                                                  const highestTiter = posDils.length > 0 ? posDils[posDils.length - 1] : 'Non-Reactive';
+                                                  const displayVal = highestTiter !== 'Non-Reactive' ? (highestTiter.startsWith('1:') ? `${highestTiter} (+)` : `1:${highestTiter.replace('1/', '')} (+)`) : 'Non-Reactive';
                                                   return (
-                                                    <td key={dil} className={`py-1.5 px-2 border border-slate-300 ${isPos ? 'font-black text-red-600' : 'font-medium text-slate-700'}`}>
-                                                      {cellVal}
-                                                    </td>
+                                                    <tr key={antigen} className="border-b border-slate-200">
+                                                      <td className="py-1.5 px-3 border border-slate-300 text-left font-bold text-slate-900">{antigen}</td>
+                                                      {dilutions.map((dil) => <td key={dil} className={`py-1.5 px-2 border border-slate-300 ${widalGrid[antigen]?.[dil]?.includes('+') ? 'text-orange-600 font-black' : 'text-slate-600'}`}>{widalGrid[antigen]?.[dil] || '—'}</td>)}
+                                                      <td className={`py-1.5 px-3 border border-slate-300 font-black ${displayVal !== 'Non-Reactive' ? 'text-orange-600' : 'text-emerald-700'}`}>{displayVal}</td>
+                                                    </tr>
                                                   );
                                                 })}
-                                              </tr>
-                                            ))}
-                                          </tbody>
-                                        </table>
-                                        <div className="text-[11px] font-black text-slate-900 pt-1">
-                                          Comment: WIDAL TEST {commentVal}
-                                        </div>
-                                        <div className="text-[10px] leading-relaxed text-slate-600 pt-1 border-t border-slate-200">
-                                          {noteText}
-                                        </div>
-                                      </div>
-                                    );
-                                  })()}
-                                </td>
-                              </tr>
-                            ) : (() => {
-                              const filteredPrintParams = testParams.filter((p) => {
-                                const patientGender = selectedReportForPrint.patientId?.gender?.toLowerCase() || '';
-                                const pGender = (p.gender || 'both').toLowerCase();
-                                if (pGender === 'male' && patientGender !== 'male') return false;
-                                if (pGender === 'female' && patientGender !== 'female') return false;
-                                return true;
-                              });
+                                              </tbody>
+                                            </table>
+                                            <div className="text-xs font-bold text-slate-900">Comment: <span className="text-orange-600 font-black">WIDAL TEST {commentVal}</span></div>
+                                            <div className="text-[10px] text-slate-500 italic leading-relaxed">{getWidalNote(tName)}</div>
+                                          </div>
+                                        );
+                                      })()}
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  (() => {
+                                    let lastGroup = null;
+                                    return testParams.map((p, pIdx) => {
+                                      const rVal = selectedReportForPrint.report?.parameters?.find(rp => rp.name === p.name);
+                                      const valText = rVal ? rVal.value : '';
+                                      const isBad = isOutOfRange(p.name, valText) || (rVal && rVal.isAbnormal);
+                                      const isGroupHeaderNeeded = p.group && p.group !== lastGroup;
+                                      if (p.group) lastGroup = p.group;
+                                      let refDisplay = p.referenceRange || p.normalRange || (p.min !== undefined && p.max !== undefined ? `${p.min} - ${p.max}` : '—');
+                                      return (
+                                        <React.Fragment key={pIdx}>
+                                          {isGroupHeaderNeeded && (
+                                            <tr className="bg-slate-100/70 border-t border-slate-200">
+                                              <td colSpan="4" className="py-1 px-4 font-black text-slate-800 uppercase text-[10px] tracking-wide">{p.group}</td>
+                                            </tr>
+                                          )}
+                                          <tr className="hover:bg-slate-50/30 transition-colors">
+                                            <td className="py-2 px-4 font-bold text-slate-800">{p.displayName || p.name}{rVal?.remarks && <div className="text-[9px] text-slate-500 font-normal italic">Note: {rVal.remarks}</div>}</td>
+                                            <td className={`py-2 px-4 ${isBad ? 'font-black text-red-600 text-sm' : 'font-bold text-slate-900'}`}>{valText || '—'}</td>
+                                            <td className="py-2 px-4 text-slate-500 font-medium">{p.unit || '—'}</td>
+                                            <td className="py-2 px-4 text-slate-600 font-medium whitespace-pre-wrap">{refDisplay}</td>
+                                          </tr>
+                                        </React.Fragment>
+                                      );
+                                    });
+                                  })()
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
 
-                              return filteredPrintParams.map((p, pIdx) => {
-                                const rVal = selectedReportForPrint.report?.parameters?.find(rp => rp.name === p.name);
-                                const valText = rVal ? rVal.value : '';
-                                const isBad = isOutOfRange(p.name, valText) || (rVal && rVal.isAbnormal);
-                                const isGroupHeaderNeeded = p.group && (pIdx === 0 || filteredPrintParams[pIdx - 1]?.group !== p.group);
-                                const isMorphologyParam = p.fieldType === 'RichText' || p.fieldType === 'Multiline' || (p.group && p.group.toLowerCase().includes('morphology')) || p.name.toLowerCase().includes('morphology');
+                          {(selectedReportForPrint.report?.notes || selectedReportForPrint.report?.remarks || selectedReportForPrint.report?.advice) && (
+                            <div className="grid grid-cols-12 gap-y-1.5 pt-3 text-[11px] leading-relaxed border-t border-slate-200">
+                              {selectedReportForPrint.report?.notes && <><span className="col-span-2 font-black text-slate-900 italic">Notes</span><span className="col-span-10 font-bold text-slate-800 italic">: {selectedReportForPrint.report.notes}</span></>}
+                              {selectedReportForPrint.report?.remarks && <><span className="col-span-2 font-black text-slate-900 italic">Remarks</span><span className="col-span-10 font-bold text-slate-800 italic">: {selectedReportForPrint.report.remarks}</span></>}
+                              {selectedReportForPrint.report?.advice && <><span className="col-span-2 font-black text-slate-900 italic">Advice</span><span className="col-span-10 font-bold text-slate-800 italic">: {selectedReportForPrint.report.advice}</span></>}
+                            </div>
+                          )}
 
-                                return (
-                                  <React.Fragment key={pIdx}>
-                                    {isGroupHeaderNeeded && (
-                                      <tr className="bg-slate-100/70 border-t border-slate-200">
-                                        <td colSpan="4" className="py-1.5 px-4 pl-6 font-black text-slate-900 uppercase text-[11px] tracking-wide">
-                                          {p.group}
-                                        </td>
-                                      </tr>
-                                    )}
-                                    <tr className="hover:bg-slate-50/30 transition-colors">
-                                      {/* Param Name */}
-                                      <td className={`py-2 px-4 ${p.group ? 'pl-8' : 'pl-4'} font-bold text-slate-700 uppercase ${isMorphologyParam ? 'align-top' : ''}`}>
-                                        {p.displayName || p.name}
-                                      </td>
-                                      
-                                      {/* Value */}
-                                      {isMorphologyParam ? (
-                                        <td colSpan="3" className="py-2 px-4 text-slate-800 text-[11px] font-medium whitespace-pre-wrap">
-                                          {valText ? (
-                                            <span dangerouslySetInnerHTML={{
-                                              __html: String(valText)
-                                                .replace(/</g, '&lt;')
-                                                .replace(/>/g, '&gt;')
-                                                .replace(/&lt;b&gt;/gi, '<b>')
-                                                .replace(/&lt;\/b&gt;/gi, '</b>')
-                                                .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
-                                            }} />
-                                          ) : '—'}
-                                        </td>
-                                      ) : (
-                                        <>
-                                          <td className={`py-2 px-4 text-slate-800 text-[12px] ${isBad ? 'font-black text-slate-900 text-sm' : 'font-bold'}`}>
-                                            {valText || '—'}
-                                            {(() => {
-                                              const status = getValueRangeStatus(p.name, valText);
-                                              if (!status) return null;
-                                              return (
-                                                <span className="ml-1 text-slate-500 font-extrabold text-[10px]">
-                                                  ({status})
-                                                </span>
-                                              );
-                                            })()}
-                                          </td>
-                                          
-                                          {/* Unit */}
-                                          <td className="py-2 px-4 text-slate-500 font-semibold">
-                                            {p.unit || '—'}
-                                          </td>
+                          {hasInterpretation && (
+                            <div className="pt-3 border-t border-slate-200 text-[11px] leading-relaxed">
+                              <h4 className="font-extrabold text-slate-900 mb-1 uppercase tracking-wide">Interpretation:</h4>
+                              <div className="text-slate-800 space-y-2 [&_table]:w-full [&_table]:border-collapse [&_table]:my-2.5 [&_th]:border [&_th]:border-slate-300 [&_th]:p-1.5 [&_th]:bg-slate-50 [&_th]:font-bold [&_td]:border [&_td]:border-slate-300 [&_td]:p-1.5 leading-normal" dangerouslySetInnerHTML={{ __html: testInterpretation }} />
+                            </div>
+                          )}
 
-                                          {/* Reference Range */}
-                                          <td className="py-2 px-4 text-slate-600 font-medium whitespace-pre-wrap">
-                                            {p.referenceRange || 'As per lab standards'}
-                                          </td>
-                                        </>
-                                      )}
-                                    </tr>
-                                  </React.Fragment>
-                                );
-                              });
-                            })()}
-                          </React.Fragment>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                          {sig && (
+                            <div className="mt-8 pt-4 flex justify-end">
+                              <div className="text-center min-w-[160px] space-y-1">
+                                {sig.signatureImageUrl && <img src={sig.signatureImageUrl} alt="Doctor Signature" className="max-h-12 max-w-[150px] object-contain mx-auto mb-1.5" />}
+                                <div className="font-extrabold text-slate-900 text-xs">{sig.name}</div>
+                                <div className="text-[10px] text-slate-500 font-semibold">{sig.designation}</div>
+                              </div>
+                            </div>
+                          )}
 
-                {/* Notes, Remarks & Advice Section (Only when provided) */}
-                {(selectedReportForPrint.report?.notes || selectedReportForPrint.report?.remarks || selectedReportForPrint.report?.advice) && (
-                  <div className="grid grid-cols-12 gap-y-2.5 pt-4 text-[11px] leading-relaxed border-t border-slate-200">
-                    {selectedReportForPrint.report?.notes && (
-                      <>
-                        <span className="col-span-2 font-black text-slate-900 italic">Notes</span>
-                        <span className="col-span-10 font-bold text-slate-800 italic">: {selectedReportForPrint.report.notes}</span>
-                      </>
-                    )}
-                    {selectedReportForPrint.report?.remarks && (
-                      <>
-                        <span className="col-span-2 font-black text-slate-900 italic">Remarks</span>
-                        <span className="col-span-10 font-bold text-slate-800 italic">: {selectedReportForPrint.report.remarks}</span>
-                      </>
-                    )}
-                    {selectedReportForPrint.report?.advice && (
-                      <>
-                        <span className="col-span-2 font-black text-slate-900 italic">Advice</span>
-                        <span className="col-span-10 font-bold text-slate-800 italic">: {selectedReportForPrint.report.advice}</span>
-                      </>
-                    )}
+                          <div className="flex items-center justify-center pt-4">
+                            <span className="text-[10px] font-bold text-slate-400 tracking-wider">~~~ End of report ~~~</span>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                )}
-
-                {/* Interpretations Section with HTML / Table Formatting */}
-                {printInterpretation && selectedReportForPrint.report?.interpretation && (
-                  <div className="pt-4 border-t border-slate-200 text-[11px] leading-relaxed">
-                    <h4 className="font-extrabold text-slate-900 mb-1.5 uppercase tracking-wide">Interpretation:</h4>
-                    <div
-                      className="text-slate-800 space-y-2 [&_table]:w-full [&_table]:border-collapse [&_table]:my-2.5 [&_th]:border [&_th]:border-slate-300 [&_th]:p-1.5 [&_th]:bg-slate-50 [&_th]:font-bold [&_td]:border [&_td]:border-slate-300 [&_td]:p-1.5 leading-normal"
-                      dangerouslySetInnerHTML={{ __html: selectedReportForPrint.report.interpretation }}
-                    />
-                  </div>
-                )}
-
-                {/* Signatory Footer Block */}
-                {(() => {
-                  const sig = (selectedReportForPrint.report?.signatoryId && typeof selectedReportForPrint.report.signatoryId === 'object' && selectedReportForPrint.report.signatoryId.name)
-                    ? selectedReportForPrint.report.signatoryId
-                    : (signatories.find(s => s._id === (selectedReportForPrint.report?.signatoryId || selectedReportForPrint.signatoryId || selectedSignatoryId)) || (signatories.length > 0 ? signatories[0] : null));
-
-                  if (!sig) return null;
-
-                  return (
-                    <div className="mt-10 pt-8 flex justify-end">
-                      <div className="text-center min-w-[160px] space-y-1.5 pt-2">
-                        {sig.signatureImageUrl && (
-                          <img
-                            src={sig.signatureImageUrl}
-                            alt="Doctor Signature"
-                            className="max-h-14 max-w-[160px] object-contain mx-auto mb-2"
-                          />
-                        )}
-                        <div className="font-extrabold text-slate-900 text-xs">{sig.name}</div>
-                        <div className="text-[10px] text-slate-500 font-semibold">{sig.designation}</div>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* End of Report text */}
-                <div className="flex items-center justify-center pt-8">
-                  <span className="text-[10px] font-bold text-slate-400 tracking-wider">~~~ End of report ~~~</span>
-                </div>
-
-              </div>
+                );
+              })()}
             </div>
           );
         })()}
@@ -4355,6 +4701,40 @@ function DashboardContent() {
 
           {/* TABLE OF PARAMETERS RESULTS ENTRY */}
           <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+            {/* Multi-Test Selector Tabs when patient has multiple tests */}
+            {testNames.length > 1 && (
+              <div className="flex items-center gap-1.5 p-3 bg-orange-50/40 border-b border-orange-100/80 overflow-x-auto">
+                <span className="text-[11px] font-extrabold text-orange-950 uppercase tracking-wider mr-1 shrink-0">
+                  Tests on Bill ({testNames.length}):
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedReportTestFilter('all')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                    selectedReportTestFilter === 'all'
+                      ? 'bg-orange-500 text-white shadow-2xs'
+                      : 'bg-white text-slate-700 hover:bg-orange-50 border border-orange-200/80'
+                  }`}
+                >
+                  All Tests ({testNames.length})
+                </button>
+                {testNames.map((tName) => (
+                  <button
+                    key={tName}
+                    type="button"
+                    onClick={() => setSelectedReportTestFilter(tName)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                      selectedReportTestFilter === tName
+                        ? 'bg-orange-500 text-white shadow-2xs'
+                        : 'bg-white text-slate-700 hover:bg-orange-50 border border-orange-200/80'
+                    }`}
+                  >
+                    {tName}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
@@ -4380,19 +4760,22 @@ function DashboardContent() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {testNames.map((tName) => {
+                  {testNames.filter(t => selectedReportTestFilter === 'all' || t === selectedReportTestFilter).map((tName) => {
                     const matchedTest = findMatchedTest(tName);
                     const params = matchedTest?.parameters || [];
 
                     return (
-                      <Suspense key={tName} fallback={<tr><td colSpan="4">Loading params...</td></tr>}>
+                      <React.Fragment key={tName}>
                         {/* Test Group Header Checked Row */}
-                        <tr className="bg-slate-50/50">
-                          <td colSpan="4" className="py-2.5 px-5 font-bold text-slate-800 text-xs">
+                        <tr className="bg-slate-50/70 border-t border-slate-200/80">
+                          <td colSpan="4" className="py-2.5 px-5 font-bold text-slate-900 text-xs flex items-center justify-between">
                             <label className="flex items-center gap-2 cursor-pointer">
                               <input type="checkbox" defaultChecked className="rounded text-orange-500 cursor-pointer" />
-                              <span>{tName}</span>
+                              <span className="font-extrabold text-orange-950 uppercase">{tName}</span>
                             </label>
+                            <span className="text-[10px] text-slate-400 font-semibold uppercase">
+                              {params.length} parameters
+                            </span>
                           </td>
                         </tr>
 
@@ -4515,13 +4898,22 @@ function DashboardContent() {
                             </td>
                           </tr>
                         ) : (
-                          params.filter((p) => {
-                            const patientGender = selectedRequest?.patientId?.gender?.toLowerCase() || '';
-                            const pGender = (p.gender || 'both').toLowerCase();
-                            if (pGender === 'male' && patientGender !== 'male') return false;
-                            if (pGender === 'female' && patientGender !== 'female') return false;
-                            return true;
-                          }).map((p, pIdx, filteredArr) => {
+                          (() => {
+                            const patientGender = String(selectedRequest?.patientId?.gender || selectedRequest?.patientGender || '').trim().toLowerCase();
+                            const isFemalePatient = patientGender.startsWith('f');
+                            const isMalePatient = patientGender.startsWith('m');
+
+                            const genderFiltered = (params || []).filter((p) => {
+                              const pGender = String(p.gender || 'both').trim().toLowerCase();
+                              if (pGender === 'both' || !pGender || pGender === 'all') return true;
+                              if (pGender === 'male' || pGender === 'm') return isMalePatient || !patientGender;
+                              if (pGender === 'female' || pGender === 'f') return isFemalePatient || !patientGender;
+                              return true;
+                            });
+
+                            const displayParams = genderFiltered.length > 0 ? genderFiltered : (params || []);
+
+                            return displayParams.map((p, pIdx, filteredArr) => {
                             const isBad = isOutOfRange(p.name, parameterValues[p.name]);
                             const isRemarksExpanded = expandedRemarks[p.name];
                             const hasRefRangeOrRules = (p.referenceRange && p.referenceRange.trim().length > 0 && !p.referenceRange.toLowerCase().includes('standards') && !p.referenceRange.toLowerCase().includes('as per')) || (Array.isArray(p.referenceRules) && p.referenceRules.length > 0);
@@ -4744,7 +5136,8 @@ function DashboardContent() {
                                             value={parameterValues[p.name] || ''}
                                             onChange={(e) => handleParamValueChange(p.name, e.target.value)}
                                             onClick={() => {
-                                              if (hasRefRangeOrRules) return;
+                                              const hasOpts = (p.valueOptions || []).length > 0;
+                                              if (!hasOpts && hasRefRangeOrRules) return;
                                               if (activeValueOptionsDropdown === p.name) {
                                                 setActiveValueOptionsDropdown('');
                                               } else {
@@ -4763,7 +5156,7 @@ function DashboardContent() {
                                                   : 'border-slate-200 bg-slate-50 text-slate-800'
                                             }`}
                                           />
-                                          {!hasRefRangeOrRules && (
+                                          {((p.valueOptions || []).length > 0 || !hasRefRangeOrRules) && (
                                             <button
                                               type="button"
                                               onClick={() => {
@@ -4777,6 +5170,7 @@ function DashboardContent() {
                                                 }
                                               }}
                                               className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-[10px] cursor-pointer"
+                                              title="Select from value options"
                                             >
                                               ▼
                                             </button>
@@ -4784,7 +5178,7 @@ function DashboardContent() {
                                         </div>
 
                                         {/* VALUE CHOICE CONFIG DROPDOWN CARD OVERLAY */}
-                                        {!hasRefRangeOrRules && activeValueOptionsDropdown === p.name && (
+                                        {activeValueOptionsDropdown === p.name && (
                                           <div className="absolute left-0 mt-1.5 w-64 bg-white border border-slate-200 rounded-xl shadow-lg p-3.5 z-40 text-xs font-semibold text-slate-700 space-y-3">
                                             
                                             {/* Predefined Choices List */}
@@ -4914,22 +5308,20 @@ function DashboardContent() {
                                               <span>💬</span>
                                               <span>Add remark</span>
                                             </button>
-                                            {!hasRefRangeOrRules && (
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  setActiveValueOptionsDropdown(p.name);
-                                                  setActivePlusMenu('');
-                                                  setNewValueOptionText('');
-                                                  setNewValueOptionAbnormal(false);
-                                                  setEditingValueOptionIdx(null);
-                                                }}
-                                                className="w-full px-2.5 py-2 text-left hover:bg-slate-50 rounded-lg flex items-center gap-2 cursor-pointer text-slate-800 border-t border-slate-100/80"
-                                              >
-                                                <span>⚙️</span>
-                                                <span>Add abnormal choice</span>
-                                              </button>
-                                            )}
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setActiveValueOptionsDropdown(p.name);
+                                                setActivePlusMenu('');
+                                                setNewValueOptionText('');
+                                                setNewValueOptionAbnormal(false);
+                                                setEditingValueOptionIdx(null);
+                                              }}
+                                              className="w-full px-2.5 py-2 text-left hover:bg-slate-50 rounded-lg flex items-center gap-2 cursor-pointer text-slate-800 border-t border-slate-100/80"
+                                            >
+                                              <span>⚙️</span>
+                                              <span>Add value choices</span>
+                                            </button>
                                           </div>
                                         )}
                                       </div>
@@ -4993,9 +5385,9 @@ function DashboardContent() {
                             )}
                           </React.Fragment>
                         );
-                      })
-                    )}
-                    </Suspense>
+                      });
+                    })())}
+                    </React.Fragment>
                   );
                   })}
                 </tbody>
@@ -9553,14 +9945,14 @@ function DashboardContent() {
                         <span>Loading reports...</span>
                       </td>
                     </tr>
-                  ) : filteredReports.length === 0 ? (
+                  ) : sortedReports.length === 0 ? (
                     <tr>
                       <td colSpan="8" className="py-12 text-center text-slate-400 font-medium">
                         No reports match the current filter or date.
                       </td>
                     </tr>
                   ) : (
-                    filteredReports.map((report) => (
+                    paginatedReports.map((report) => (
                       <tr key={report.id} className="hover:bg-slate-50/80 transition-colors">
                         {/* REG. NO. */}
                         <td className="py-3 px-4">
@@ -9679,6 +10071,114 @@ function DashboardContent() {
                 </tbody>
               </table>
             </div>
+
+            {/* PAGINATION TOOLBAR */}
+            {sortedReports.length > 0 && (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-slate-50/80 border-t border-slate-200 text-xs font-semibold text-slate-600">
+                {/* Left: Range Info */}
+                <div className="flex items-center gap-3">
+                  <span>
+                    Showing <strong className="text-slate-900 font-bold">{(safeReportPage - 1) * reportsPageSize + 1}</strong> to <strong className="text-slate-900 font-bold">{Math.min(safeReportPage * reportsPageSize, sortedReports.length)}</strong> of <strong className="text-slate-900 font-bold">{sortedReports.length}</strong> reports
+                  </span>
+
+                  {/* Rows per page selector */}
+                  <div className="flex items-center gap-1.5 pl-3 border-l border-slate-200">
+                    <span className="text-[11px] text-slate-500">Per page:</span>
+                    <select
+                      value={reportsPageSize}
+                      onChange={(e) => {
+                        setReportsPageSize(Number(e.target.value));
+                        setReportsCurrentPage(1);
+                      }}
+                      className="h-7 px-2 bg-white border border-slate-300 rounded-md text-xs font-bold text-slate-800 outline-none focus:border-blue-500 cursor-pointer shadow-2xs"
+                    >
+                      <option value={5}>5</option>
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Right: Page Navigation Controls */}
+                <div className="flex items-center gap-1">
+                  {/* First Page */}
+                  <button
+                    type="button"
+                    disabled={safeReportPage <= 1}
+                    onClick={() => setReportsCurrentPage(1)}
+                    className="h-7 px-2 border border-slate-200 rounded-md bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-slate-700 font-bold transition-colors cursor-pointer shadow-2xs"
+                    title="First page"
+                  >
+                    «
+                  </button>
+
+                  {/* Prev Page */}
+                  <button
+                    type="button"
+                    disabled={safeReportPage <= 1}
+                    onClick={() => setReportsCurrentPage(prev => Math.max(1, prev - 1))}
+                    className="h-7 px-2.5 border border-slate-200 rounded-md bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-slate-700 font-bold transition-colors cursor-pointer shadow-2xs"
+                    title="Previous page"
+                  >
+                    ‹ Prev
+                  </button>
+
+                  {/* Numbered Page Buttons */}
+                  <div className="flex items-center gap-1 px-1">
+                    {(() => {
+                      const pages = [];
+                      const maxButtons = 5;
+                      let startPage = Math.max(1, safeReportPage - Math.floor(maxButtons / 2));
+                      let endPage = Math.min(totalReportPages, startPage + maxButtons - 1);
+                      if (endPage - startPage + 1 < maxButtons) {
+                        startPage = Math.max(1, endPage - maxButtons + 1);
+                      }
+                      for (let p = startPage; p <= endPage; p++) {
+                        pages.push(
+                          <button
+                            key={p}
+                            type="button"
+                            onClick={() => setReportsCurrentPage(p)}
+                            className={`h-7 min-w-[28px] px-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer shadow-2xs ${
+                              safeReportPage === p
+                                ? 'bg-blue-600 text-white border border-blue-600'
+                                : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                            }`}
+                          >
+                            {p}
+                          </button>
+                        );
+                      }
+                      return pages;
+                    })()}
+                  </div>
+
+                  {/* Next Page */}
+                  <button
+                    type="button"
+                    disabled={safeReportPage >= totalReportPages}
+                    onClick={() => setReportsCurrentPage(prev => Math.min(totalReportPages, prev + 1))}
+                    className="h-7 px-2.5 border border-slate-200 rounded-md bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-slate-700 font-bold transition-colors cursor-pointer shadow-2xs"
+                    title="Next page"
+                  >
+                    Next ›
+                  </button>
+
+                  {/* Last Page */}
+                  <button
+                    type="button"
+                    disabled={safeReportPage >= totalReportPages}
+                    onClick={() => setReportsCurrentPage(totalReportPages)}
+                    className="h-7 px-2 border border-slate-200 rounded-md bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-slate-700 font-bold transition-colors cursor-pointer shadow-2xs"
+                    title="Last page"
+                  >
+                    »
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
         {renderSharedModals()}

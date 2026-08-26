@@ -1,12 +1,13 @@
 const Patient = require('../models/Patient');
 const Visit = require('../models/Visit');
 const User = require('../models/User');
+const Hospital = require('../models/Hospital');
 const SameDayTreatment = require('../models/SameDayTreatment');
 const IpdAdminSettings = require('../models/IpdAdminSettings');
 const generateUhid = require('../utils/generateUhid');
 
 const tenantQuery = (req, extra = {}) => (
-  req.user.hospitalId ? { ...extra, hospitalId: req.user.hospitalId } : extra
+  req?.user?.hospitalId ? { ...extra, hospitalId: req.user.hospitalId } : extra
 );
 
 // @desc    Generate unique Registration Number format: REG-YYYYMMDD-XXXX
@@ -166,6 +167,30 @@ const createPatient = async (req, res) => {
     let isExistingPatient = false;
     let visitNumber = 1;
 
+    let resolvedHospitalId = req.user?.hospitalId || req.body?.hospitalId || req.hospital?._id;
+    if (!resolvedHospitalId) {
+      try {
+        const defaultHosp = await Hospital.findOne({ isActive: true }).select('_id');
+        if (defaultHosp) {
+          resolvedHospitalId = defaultHosp._id;
+        } else {
+          const anyHosp = await Hospital.findOne().select('_id');
+          if (anyHosp) {
+            resolvedHospitalId = anyHosp._id;
+          } else {
+            const createdHosp = await Hospital.create({
+              name: 'Virtual Care Hospital',
+              code: 'VCH',
+              isActive: true
+            });
+            resolvedHospitalId = createdHosp._id;
+          }
+        }
+      } catch (hospErr) {
+        console.warn('Could not resolve hospital ID for patient creation:', hospErr);
+      }
+    }
+
     if (existingPatient) {
       patient = existingPatient;
       let updated = false;
@@ -174,6 +199,7 @@ const createPatient = async (req, res) => {
       if (cleanMobile && patient.mobile !== cleanMobile) { patient.mobile = cleanMobile; updated = true; }
       if (cleanAddress && (!patient.address || patient.address === 'Not specified')) { patient.address = cleanAddress; updated = true; }
       if (cleanAadhaar && patient.aadhaar !== cleanAadhaar) { patient.aadhaar = cleanAadhaar; updated = true; }
+      if (!patient.hospitalId && resolvedHospitalId) { patient.hospitalId = resolvedHospitalId; updated = true; }
       if (updated) await patient.save();
 
       uhid = existingPatient.uhid;
@@ -187,7 +213,7 @@ const createPatient = async (req, res) => {
       uhid = await generateUhid(cleanAadhaar);
 
       patient = new Patient({
-        hospitalId: req.user.hospitalId,
+        hospitalId: resolvedHospitalId,
         uhid,
         patientName,
         mobile: cleanMobile,
@@ -203,11 +229,11 @@ const createPatient = async (req, res) => {
     }
 
     // Generate registration number
-    const registrationNumber = await generateRegistrationNumber(req.user.hospitalId);
+    const registrationNumber = await generateRegistrationNumber(resolvedHospitalId);
 
     // Generate appointment number (per doctor + department + date)
     const { appointmentNumber, appointmentDateSeq } = await generateAppointmentNumber(
-      req.user.hospitalId, docIdForAppt, finalDepartment, finalAppointmentDate
+      resolvedHospitalId, docIdForAppt, finalDepartment, finalAppointmentDate
     );
 
     // Determine visit type
@@ -238,7 +264,7 @@ const createPatient = async (req, res) => {
 
     // Create a Visit record
     const visit = new Visit({
-      hospitalId: req.user.hospitalId,
+      hospitalId: resolvedHospitalId,
       patientId: patient._id,
       uhid: patient.uhid,
       registrationNumber,

@@ -94,6 +94,14 @@ export default function Header({ toggleMobileSidebar }) {
                 <Sliders className="w-4 h-4 text-orange-500" />
                 <span>Ratelist & Tests</span>
               </Link>
+              <Link 
+                href="/setup/ratelist?tab=packages" 
+                onClick={() => setShowSetupMenu(false)}
+                className="flex items-center gap-2.5 px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-orange-50 hover:text-orange-600 transition-colors"
+              >
+                <Layers className="w-4 h-4 text-orange-500" />
+                <span>Health Packages</span>
+              </Link>
               {isAdminUser && (
                 <>
                   <Link 

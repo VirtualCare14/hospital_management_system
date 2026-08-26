@@ -11,6 +11,9 @@ const {
   deleteTestCategory,
   saveTest,
   deleteTest,
+  listPackages,
+  savePackage,
+  deletePackage,
   listProfiles,
   saveProfile,
   deleteProfile,
@@ -66,6 +69,11 @@ router.delete('/test-categories/:name', authMiddleware, deleteTestCategory);
 router.post('/tests', authMiddleware, saveTest);
 router.put('/tests/:id', authMiddleware, saveTest);
 router.delete('/tests/:id', authMiddleware, deleteTest);
+
+router.get('/packages', authMiddleware, listPackages);
+router.post('/packages', authMiddleware, savePackage);
+router.put('/packages/:id', authMiddleware, savePackage);
+router.delete('/packages/:id', authMiddleware, deletePackage);
 
 router.get('/profiles', authMiddleware, listProfiles);
 router.post('/profiles', authMiddleware, saveProfile);
