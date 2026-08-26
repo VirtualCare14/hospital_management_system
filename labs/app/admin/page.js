@@ -3596,11 +3596,12 @@ Diagnostic Notes:
           }
         ]
       })
-    } else if (presetType === 'H_ALB') {
+    } else if (presetType === 'H_ALB' || presetType === 'H-ALB' || presetType === 'H_Alb' || presetType === 'HALB') {
       setReportForm({
         title: 'H-ALB',
         test: 'H-ALB',
         category: 'LAB',
+        department: 'BIOCHEMISTRY',
         basePrice: 450,
         taxPercentage: 0,
         sampleType: 'Urine (Spot / Random Urine)',
@@ -7597,6 +7598,13 @@ Polycystic Ovarian Disease (PCOD / PCOS) is a complex endocrine disorder charact
                   className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs cursor-pointer shadow-xs"
                 >
                   Anemia Package
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('H-ALB')}
+                  className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs cursor-pointer shadow-xs"
+                >
+                  H-ALB
                 </button>
                 <button
                   type="button"
