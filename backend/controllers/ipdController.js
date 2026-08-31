@@ -125,7 +125,16 @@ const admitPatient = async (req, res) => {
     const formattedIpdNumber = `${settings.ipdPrefix || 'IPD'}${currentYear}${String(ipdSeq).padStart(6, '0')}`;
     const formattedPidNumber = `${settings.pidPrefix || 'PID'}${String(pidSeq).padStart(6, '0')}`;
 
-    // 6. Create IPD Admission record
+    // 6. Parse and validate admissionDate
+    let parsedAdmissionDate = new Date();
+    if (admissionDate) {
+      const parsed = new Date(admissionDate);
+      if (!isNaN(parsed.getTime())) {
+        parsedAdmissionDate = parsed;
+      }
+    }
+
+    // Create IPD Admission record
     const newAdmission = new IpdAdmission({
       hospitalId: req.user.hospitalId,
       patientId,
@@ -133,7 +142,7 @@ const admitPatient = async (req, res) => {
       bedId: bedId || null,
       doctorInCharge,
       referredDoctor: finalReferredDoctor,
-      admissionDate: admissionDate || new Date(),
+      admissionDate: parsedAdmissionDate,
       ipdNumber: formattedIpdNumber,
       pidNumber: formattedPidNumber,
       status: status || (bedId ? 'Admitted' : 'Pending Allocation'),
@@ -142,7 +151,7 @@ const admitPatient = async (req, res) => {
       bedHistory: (bedId && roomId && bed) ? [{
         roomId: roomId,
         bedId: bedId,
-        startDate: admissionDate || new Date(),
+        startDate: parsedAdmissionDate,
         pricePerDay: bed.pricePerDay || 0
       }] : []
     });

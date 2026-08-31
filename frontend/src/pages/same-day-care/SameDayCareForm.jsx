@@ -167,6 +167,12 @@ const SameDayCareForm = () => {
 
   // IPD Referral Modal States
   const [showIpdModal, setShowIpdModal] = useState(false);
+  const getCurrentLocalDatetime = () => {
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  };
+
   const [roomsList, setRoomsList] = useState([]);
   const [selectedRoomType, setSelectedRoomType] = useState('');
   const [bedsList, setBedsList] = useState([]);
@@ -175,7 +181,7 @@ const SameDayCareForm = () => {
   const [selectedDoctorId, setSelectedDoctorId] = useState('');
   const [skipBedAllocation, setSkipBedAllocation] = useState(false);
   const [hasActiveIpd, setHasActiveIpd] = useState(false);
-  const [admissionDate, setAdmissionDate] = useState(new Date().toISOString().substring(0, 16));
+  const [admissionDate, setAdmissionDate] = useState(getCurrentLocalDatetime());
   const [admissionStatus, setAdmissionStatus] = useState('Admitted');
   const [admittingPatient, setAdmittingPatient] = useState(false);
 
@@ -659,13 +665,20 @@ const SameDayCareForm = () => {
     setAdmittingPatient(true);
     try {
       const roomObj = roomsList.find(r => r.roomType === selectedRoomType);
+      let finalIso = new Date().toISOString();
+      if (admissionDate) {
+        const parsed = new Date(admissionDate);
+        if (!isNaN(parsed.getTime())) {
+          finalIso = parsed.toISOString();
+        }
+      }
       const admitPayload = {
         patientId,
         roomId: skipBedAllocation ? null : roomObj?._id,
         bedId: skipBedAllocation ? null : selectedBedId,
         doctorInCharge: selectedDoctorId,
         status: skipBedAllocation ? 'Pending Allocation' : admissionStatus,
-        admissionDate: admissionDate,
+        admissionDate: finalIso,
         isSameDayCare: true
       };
       await client.post('/ipd/admit', admitPayload);

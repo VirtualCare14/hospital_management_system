@@ -33,6 +33,7 @@ import client from '../../api/client';
 import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 import PaginationFooter from '../../components/PaginationFooter';
 import { formatUhid } from '../../utils/uhid';
+import { formatDateIST } from '../../utils/dateFormat';
 
 const statusColors = {
   'Admitted': 'bg-red-100 text-red-800',
@@ -480,20 +481,14 @@ const IpdPatientList = () => {
                       </td>
                       <td className="p-3 text-xs">
                         <CalendarDays className="h-3 w-3 inline mr-1 text-gray-400" />
-                        {new Date(admission.admissionDate).toLocaleDateString('en-IN', {
-                          day: '2-digit',
-                          month: 'short',
-                          year: 'numeric'
-                        })}
+                        {formatDateIST(admission.admissionDate)}
                       </td>
                       <td className="p-3">
                         <div className="flex flex-col gap-1 items-start">
-                          {admission.status === 'Discharged' ? (
+                           {admission.status === 'Discharged' ? (
                             <span className="text-xs text-gray-500">
                               {admission.dischargeDate
-                                ? new Date(admission.dischargeDate).toLocaleDateString('en-IN', {
-                                    day: '2-digit', month: 'short', year: 'numeric'
-                                  })
+                                ? formatDateIST(admission.dischargeDate)
                                 : '-'
                               }
                             </span>

@@ -27,6 +27,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useHeader } from '../../context/HeaderContext';
 import client from '../../api/client';
 import { formatUhid } from '../../utils/uhid';
+import { formatDateTimeIST, formatDateIST } from '../../utils/dateFormat';
 
 const IpdAdmission = () => {
   const { user } = useAuth();
@@ -353,7 +354,7 @@ const IpdAdmission = () => {
     const roomType = receiptModalAdmission.roomId?.roomType || 'Standard Ward';
     const bedNumber = receiptModalAdmission.bedId?.bedNumber || 'N/A';
     const bedType = receiptModalAdmission.bedId?.bedType ? ` (${receiptModalAdmission.bedId.bedType})` : '';
-    const admissionDate = new Date(receiptModalAdmission.admissionDate).toLocaleString();
+    const admissionDate = formatDateTimeIST(receiptModalAdmission.admissionDate);
     const bedPrice = receiptModalAdmission.bedId?.pricePerDay || 0;
 
     const doctorName = receiptModalAdmission.doctorInCharge?.doctorName || receiptModalAdmission.doctorInCharge?.username || 'Attending Physician';
@@ -725,6 +726,15 @@ const IpdAdmission = () => {
       }
     }
 
+    // Convert local datetime input to proper ISO string with timezone preserved
+    let finalAdmissionIsoDate = new Date().toISOString();
+    if (admissionDate) {
+      const parsed = new Date(admissionDate);
+      if (!isNaN(parsed.getTime())) {
+        finalAdmissionIsoDate = parsed.toISOString();
+      }
+    }
+
     // Now proceed to Admit Patient
     try {
       const admitPayload = {
@@ -734,7 +744,7 @@ const IpdAdmission = () => {
         doctorInCharge: selectedDoctorId,
         referredDoctor: referredDoctorId || undefined,
         status: selectedStatus,
-        admissionDate: admissionDate,
+        admissionDate: finalAdmissionIsoDate,
         provisionalDiagnosis: provisionalDiagnosis
       };
 
@@ -1130,14 +1140,7 @@ const IpdAdmission = () => {
                         </span>
                       </td>
                       <td className="p-3.5 text-gray-500 font-semibold">
-                        {new Date(admission.admissionDate).toLocaleString('en-IN', {
-                          day: '2-digit',
-                          month: 'short',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          hour12: true
-                        })}
+                        {formatDateTimeIST(admission.admissionDate)}
                       </td>
                       <td className="p-3.5">
                         <div className="flex items-center gap-1.5">
@@ -1236,7 +1239,7 @@ const IpdAdmission = () => {
                 <div className="flex bg-gray-150 p-1 rounded-xl text-xs gap-1">
                   <button
                     type="button"
-                    onClick={() => { setActiveTab('admit-existing'); setSelectedPatient(null); }}
+                    onClick={() => { setActiveTab('admit-existing'); setSelectedPatient(null); setAdmissionDate(getCurrentLocalDatetime()); }}
                     className={`px-3.5 py-1.5 font-black rounded-lg transition-all cursor-pointer ${
                       activeTab === 'admit-existing' 
                         ? 'bg-white text-blue-700 shadow border border-blue-200' 
@@ -1247,7 +1250,7 @@ const IpdAdmission = () => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setActiveTab('admit-new'); setSelectedPatient(null); }}
+                    onClick={() => { setActiveTab('admit-new'); setSelectedPatient(null); setAdmissionDate(getCurrentLocalDatetime()); }}
                     className={`px-3.5 py-1.5 font-black rounded-lg transition-all cursor-pointer ${
                       activeTab === 'admit-new' 
                         ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white shadow' 
@@ -1761,7 +1764,7 @@ const IpdAdmission = () => {
               <div className="border border-gray-200 rounded-xl overflow-hidden text-xs">
                 <div className="bg-gray-100 px-3 py-1 font-extrabold text-gray-800 text-[11px] uppercase tracking-wide border-b border-gray-200 flex justify-between items-center">
                   <span>Patient Demographics</span>
-                  <span className="text-[9px] text-gray-500 font-bold">Reg Date: {new Date(receiptModalAdmission.patientId?.createdAt || Date.now()).toLocaleDateString()}</span>
+                  <span className="text-[9px] text-gray-500 font-bold">Reg Date: {formatDateIST(receiptModalAdmission.patientId?.createdAt || Date.now())}</span>
                 </div>
                 <div className="p-2.5 grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">
                   <div>
@@ -1807,7 +1810,9 @@ const IpdAdmission = () => {
                   </div>
                   <div>
                     <span className="text-gray-500 text-[9px] font-bold uppercase block">Date & Time of Admission</span>
-                    <span className="font-extrabold text-gray-900">{new Date(receiptModalAdmission.admissionDate).toLocaleString()}</span>
+                    <span className="font-extrabold text-gray-900">
+                      {formatDateTimeIST(receiptModalAdmission.admissionDate)}
+                    </span>
                   </div>
                   <div>
                     <span className="text-gray-500 text-[9px] font-bold uppercase block">Daily Bed Charge</span>

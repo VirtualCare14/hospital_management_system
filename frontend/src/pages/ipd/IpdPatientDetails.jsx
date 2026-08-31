@@ -43,6 +43,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import client from '../../api/client';
 import { formatUhid } from '../../utils/uhid';
+import { formatDateIST, formatTimeIST } from '../../utils/dateFormat';
 import IpdMedicationChartContent from './IpdMedicationChartContent.jsx';
 
 const getStatusBadgeText = (status) => {
@@ -749,8 +750,8 @@ const IpdPatientDetails = () => {
           <div className="card p-5 space-y-4">
             <div className="flex items-center gap-2 border-b border-orange-100 pb-3"><Clock className="h-5 w-5 text-orange-500" /><h3 className="font-extrabold text-gray-900">Admission Information</h3></div>
             <div className="grid grid-cols-2 gap-4 text-sm">
-              <div className="col-span-2"><span className="block text-[10px] font-bold uppercase text-gray-400">Admission Date</span><div className="flex items-center gap-1 font-bold text-gray-800"><CalendarDays className="h-3.5 w-3.5 text-gray-400" />{new Date(admission.admissionDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</div></div>
-              <div className="col-span-2"><span className="block text-[10px] font-bold uppercase text-gray-400">Admission Time</span><div className="flex items-center gap-1 font-bold text-gray-800"><Clock className="h-3.5 w-3.5 text-gray-400" />{new Date(admission.admissionDate).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</div></div>
+              <div className="col-span-2"><span className="block text-[10px] font-bold uppercase text-gray-400">Admission Date</span><div className="flex items-center gap-1 font-bold text-gray-800"><CalendarDays className="h-3.5 w-3.5 text-gray-400" />{formatDateIST(admission.admissionDate, { month: 'long' })}</div></div>
+              <div className="col-span-2"><span className="block text-[10px] font-bold uppercase text-gray-400">Admission Time</span><div className="flex items-center gap-1 font-bold text-gray-800"><Clock className="h-3.5 w-3.5 text-gray-400" />{formatTimeIST(admission.admissionDate)}</div></div>
               <div className="col-span-2"><span className="block text-[10px] font-bold uppercase text-gray-400">Referred Doctor</span><div className="flex items-center gap-1 font-bold text-gray-800"><Stethoscope className="h-3.5 w-3.5 text-gray-400" />Dr. {admission.referredDoctor?.doctorName || admission.referredDoctor?.username || 'N/A'}</div></div>
               <div className="col-span-2"><span className="block text-[10px] font-bold uppercase text-gray-400">Consultant Doctor</span><div className="flex items-center gap-1 font-bold text-gray-800"><Stethoscope className="h-3.5 w-3.5 text-gray-400" />Dr. {admission.doctorInCharge?.doctorName || admission.doctorInCharge?.username || 'N/A'}</div></div>
               <div className="col-span-2"><span className="block text-[10px] font-bold uppercase text-gray-400">Provisional Diagnosis</span><span className="font-bold text-gray-800 block mt-1 p-2 bg-orange-50 rounded-lg">{admission.provisionalDiagnosis || 'No diagnosis recorded'}</span></div>

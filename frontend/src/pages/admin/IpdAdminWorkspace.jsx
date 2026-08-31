@@ -105,8 +105,15 @@ const IpdAdminWorkspace = () => {
 
     setUpdatingAdmissionDate(true);
     try {
+      let finalIso = new Date().toISOString();
+      if (editAdmissionDateVal) {
+        const parsed = new Date(editAdmissionDateVal);
+        if (!isNaN(parsed.getTime())) {
+          finalIso = parsed.toISOString();
+        }
+      }
       await client.put(`/ipd/admissions/${selectedAdmissionForEdit._id}/admission-date`, {
-        admissionDate: editAdmissionDateVal
+        admissionDate: finalIso
       });
       toast.success('Admission date & time updated successfully!');
       setSelectedAdmissionForEdit(null);

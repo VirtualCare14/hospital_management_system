@@ -41,3 +41,57 @@ export const formatDateShort = (dateInput) => {
   
   return `${day} ${month} ${year}`;
 };
+
+/**
+ * Format a datetime to Indian Standard Time (IST - Asia/Kolkata)
+ * e.g., "31 Aug 2026, 08:45 PM"
+ */
+export const formatDateTimeIST = (dateInput, options = {}) => {
+  if (!dateInput) return '-';
+  const date = new Date(dateInput);
+  if (isNaN(date.getTime())) return String(dateInput);
+  return date.toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+    ...options
+  });
+};
+
+/**
+ * Format a date to Indian Standard Time (IST - Asia/Kolkata)
+ * e.g., "31 Aug 2026"
+ */
+export const formatDateIST = (dateInput, options = {}) => {
+  if (!dateInput) return '-';
+  const date = new Date(dateInput);
+  if (isNaN(date.getTime())) return String(dateInput);
+  return date.toLocaleDateString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    ...options
+  });
+};
+
+/**
+ * Format a time to Indian Standard Time (IST - Asia/Kolkata)
+ * e.g., "08:45 PM"
+ */
+export const formatTimeIST = (dateInput, options = {}) => {
+  if (!dateInput) return '-';
+  const date = new Date(dateInput);
+  if (isNaN(date.getTime())) return String(dateInput);
+  return date.toLocaleTimeString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+    ...options
+  });
+};
