@@ -2067,29 +2067,6 @@ const standardTests = [
   },
   {
     "category": "LAB",
-    "test": "H-ALB",
-    "title": "H-ALB",
-    "basePrice": 450,
-    "taxPercentage": 0,
-    "sampleType": "Urine (Spot / Random Urine)",
-    "turnaroundTime": "Same Day",
-    "description": "Quantitative determination of Microalbumin (Human Albumin / H-ALB) in urine for early detection of diabetic nephropathy, hypertensive kidney damage, and vascular injury.",
-    "notes": "Clinical Significance:\nH-ALB (Human Albumin / High-Sensitivity Urine Albumin / Microalbumin) is an early and sensitive biomarker for the detection of glomerular injury and endothelial dysfunction, particularly in patients with diabetes mellitus and systemic arterial hypertension.\n\nReference Ranges (Spot / Random Urine):\n• Normal (Normoalbuminuria) : < 10 µg/mL (or < 20 mg/L)\n• Microalbuminuria (Early Nephropathy) : 10 – 200 µg/mL (20 – 200 mg/L)\n• Macroalbuminuria (Overt Clinical Nephropathy) : > 200 µg/mL (> 200 mg/L)\n\nClinical Associations:\n1. Diabetic Nephropathy: Persistent microalbuminuria is the earliest clinical herald of diabetic nephropathy in both Type 1 and Type 2 diabetes. Early detection and aggressive glycemic/BP control (with ACEi / ARBs) can retard or reverse progressive renal decline.\n2. Hypertensive Renal Damage: Marker of target organ damage and increased cardiovascular morbidity/mortality risk.\n3. Glomerular & Endothelial Dysfunction: Preeclampsia, systemic lupus erythematosus (SLE) nephritis, glomerulonephritis, and generalized vascular inflammation.\n\nTransient Non-Specific Elevations (False Positives):\nTransient increases in urinary albumin excretion may occur due to vigorous physical exercise, urinary tract infection (UTI), acute febrile illness, hematuria, congestive heart failure, upright posture (orthostatic proteinuria), or severe hyperglycemia.\n\nRecommendation:\nConfirmation of persistent microalbuminuria requires at least 2 of 3 positive specimens collected over a 3 to 6-month period, ideally alongside an Albumin-to-Creatinine Ratio (ACR).",
-    "interpretation": "Clinical Significance:\nH-ALB (Human Albumin / High-Sensitivity Urine Albumin / Microalbumin) is an early and sensitive biomarker for the detection of glomerular injury and endothelial dysfunction, particularly in patients with diabetes mellitus and systemic arterial hypertension.\n\nReference Ranges (Spot / Random Urine):\n• Normal (Normoalbuminuria) : < 10 µg/mL (or < 20 mg/L)\n• Microalbuminuria (Early Nephropathy) : 10 – 200 µg/mL (20 – 200 mg/L)\n• Macroalbuminuria (Overt Clinical Nephropathy) : > 200 µg/mL (> 200 mg/L)\n\nClinical Associations:\n1. Diabetic Nephropathy: Persistent microalbuminuria is the earliest clinical herald of diabetic nephropathy in both Type 1 and Type 2 diabetes. Early detection and aggressive glycemic/BP control (with ACEi / ARBs) can retard or reverse progressive renal decline.\n2. Hypertensive Renal Damage: Marker of target organ damage and increased cardiovascular morbidity/mortality risk.\n3. Glomerular & Endothelial Dysfunction: Preeclampsia, systemic lupus erythematosus (SLE) nephritis, glomerulonephritis, and generalized vascular inflammation.\n\nTransient Non-Specific Elevations (False Positives):\nTransient increases in urinary albumin excretion may occur due to vigorous physical exercise, urinary tract infection (UTI), acute febrile illness, hematuria, congestive heart failure, upright posture (orthostatic proteinuria), or severe hyperglycemia.\n\nRecommendation:\nConfirmation of persistent microalbuminuria requires at least 2 of 3 positive specimens collected over a 3 to 6-month period, ideally alongside an Albumin-to-Creatinine Ratio (ACR).",
-    "parameters": [
-      {
-        "name": "H-ALB",
-        "referenceRange": "< 10 µg/mL",
-        "unit": "µg/mL",
-        "gender": "Both",
-        "fieldType": "Number",
-        "valueOptions": [],
-        "status": "Active"
-      }
-    ]
-  },
-  {
-    "category": "LAB",
     "test": "GTT",
     "title": "Glucose Tolerance Test (GTT)",
     "basePrice": 350,

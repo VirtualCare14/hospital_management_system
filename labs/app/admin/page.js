@@ -244,8 +244,24 @@ function LabAdminDashboard() {
         api.get('/lab/test-categories').catch(() => [])
       ]);
 
-      const fetchedTests = (Array.isArray(testsRes) ? testsRes : []).filter(t => (t.category || '').toUpperCase() !== 'DIAGNOSIS');
-      setLabTests(fetchedTests);
+      const rawTests = (Array.isArray(testsRes) ? testsRes : []).filter(t => (t.category || '').toUpperCase() !== 'DIAGNOSIS');
+      const uniqueTestsMap = new Map();
+      rawTests.forEach(t => {
+        const name = String(t.title || t.test || t.testKey || '').trim().toLowerCase();
+        const cat = String(t.category || 'LAB').trim().toUpperCase();
+        const key = `${cat}#${name}`;
+        if (!uniqueTestsMap.has(key)) {
+          uniqueTestsMap.set(key, t);
+        } else {
+          const existing = uniqueTestsMap.get(key);
+          if (!existing.hospitalId && t.hospitalId) {
+            uniqueTestsMap.set(key, t);
+          } else if ((t.parameters?.length || 0) > (existing.parameters?.length || 0)) {
+            uniqueTestsMap.set(key, t);
+          }
+        }
+      });
+      setLabTests(Array.from(uniqueTestsMap.values()));
 
       let fetchedCats = (Array.isArray(catRes) ? catRes : []).filter(c => (c.name || c.category || '').toUpperCase() !== 'DIAGNOSIS');
 

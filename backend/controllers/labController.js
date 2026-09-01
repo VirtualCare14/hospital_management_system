@@ -148,27 +148,27 @@ const ensureCategory = async (req, name) => {
 const provisionedHospitals = new Set();
 
 // Make sure the current hospital always has the system "Diagnosis" category and the
-// predefined diagnosis test names configured, plus standard lab test templates (like Ammonia).
+// predefined diagnosis test names configured, plus global standard lab test templates if not yet in DB.
 const provisionStandardTemplatesForHospital = async (req) => {
   try {
     const hospitalId = req.user?.hospitalId || null;
-    const hospKey = String(hospitalId || 'global');
 
     await ensureSystemCategoryForHospital(hospitalId);
     for (const testName of DIAGNOSIS_TESTS) {
       await ensureDiagnosisTestForHospital(hospitalId, testName);
     }
 
-    if (!provisionedHospitals.has(hospKey) && Array.isArray(standardTests) && standardTests.length > 0) {
-      const existingTests = await LabTest.find({ hospitalId }, 'testKey title test').lean();
-      const existingKeys = new Set(existingTests.map(t => t.testKey || normalizeKey(t.title || t.test)));
+    // Only ensure global baseline standard tests once globally if DB has no global tests
+    if (!provisionedHospitals.has('global_seeded') && Array.isArray(standardTests) && standardTests.length > 0) {
+      const globalCount = await LabTest.countDocuments({
+        $or: [{ hospitalId: null }, { hospitalId: { $exists: false } }]
+      });
 
-      const toInsert = [];
-      for (const t of standardTests) {
-        const key = normalizeKey(t.title || t.test);
-        if (!existingKeys.has(key)) {
-          toInsert.push({
-            hospitalId: hospitalId || null,
+      if (globalCount === 0) {
+        const toInsert = standardTests.map(t => {
+          const key = normalizeKey(t.title || t.test);
+          return {
+            hospitalId: null,
             category: t.category || 'LAB',
             categoryKey: normalizeKey(t.category || 'LAB'),
             department: t.department || 'BIOCHEMISTRY',
@@ -186,16 +186,14 @@ const provisionStandardTemplatesForHospital = async (req) => {
             isManualTotal: false,
             parameters: t.parameters || [],
             status: 'Active'
-          });
-        }
-      }
+          };
+        });
 
-      if (toInsert.length > 0) {
         await LabTest.insertMany(toInsert, { ordered: false }).catch(err => {
-          console.warn('Standard tests insertion notice:', err.message);
+          console.warn('Standard global tests insertion notice:', err.message);
         });
       }
-      provisionedHospitals.add(hospKey);
+      provisionedHospitals.add('global_seeded');
     }
   } catch (error) {
     console.error('Provision standard templates error:', error.message);
@@ -726,28 +724,38 @@ const listTests = async (req, res) => {
   if (req.query.q) {
     query.$or = [
       { title: { $regex: req.query.q, $options: 'i' } },
+      { test: { $regex: req.query.q, $options: 'i' } },
       { category: { $regex: req.query.q, $options: 'i' } }
     ];
   }
   const tests = await LabTest.find(query).sort({ category: 1, test: 1, title: 1 });
 
-  if (req.user.hospitalId) {
-    const tenantMap = new Map();
-    tests.forEach((t) => {
-      const key = `${t.categoryKey || normalizeKey(t.category)}#${t.testKey || normalizeKey(t.test)}`;
-      const existing = tenantMap.get(key);
-      if (!existing) {
-        tenantMap.set(key, t);
-      } else {
-        if (t.hospitalId && String(t.hospitalId) === String(req.user.hospitalId)) {
-          tenantMap.set(key, t);
-        }
-      }
-    });
-    return res.json(Array.from(tenantMap.values()));
-  }
+  const tenantMap = new Map();
+  const userHospitalId = req.user?.hospitalId ? String(req.user.hospitalId) : null;
 
-  res.json(tests);
+  tests.forEach((t) => {
+    const rawName = t.title || t.test || t.testKey || '';
+    const normName = normalizeKey(rawName);
+    if (!normName) return;
+
+    const catKey = t.categoryKey || normalizeKey(t.category) || 'lab';
+    const key = `${catKey}#${normName}`;
+
+    const existing = tenantMap.get(key);
+    if (!existing) {
+      tenantMap.set(key, t);
+    } else {
+      if (userHospitalId && t.hospitalId && String(t.hospitalId) === userHospitalId) {
+        tenantMap.set(key, t);
+      } else if (!existing.hospitalId && t.hospitalId && userHospitalId && String(t.hospitalId) === userHospitalId) {
+        tenantMap.set(key, t);
+      } else if (!existing.hospitalId && !t.hospitalId && (t.parameters?.length || 0) > (existing.parameters?.length || 0)) {
+        tenantMap.set(key, t);
+      }
+    }
+  });
+
+  res.json(Array.from(tenantMap.values()));
 };
 
 const listTestCategories = async (req, res) => {

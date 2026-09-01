@@ -797,24 +797,22 @@ const PrescriptionPage = () => {
 
       {/* Printable Receipt Preview */}
       {showPreview && (
-        <div className="card p-4 bg-gray-50 border border-gray-200 shadow-inner space-y-2">
+        <div className="card p-4 bg-gray-50 border border-gray-200 shadow-inner space-y-2 no-print">
           <h3 className="text-xs font-extrabold text-gray-700 uppercase tracking-wider">A4 Printable Receipt Preview</h3>
           <div className="bg-white p-3 border border-gray-300 rounded shadow-xs overflow-x-auto">
-            <div ref={receiptRef}>
+            <div>
               <PatientReceipt patient={patient} prescription={buildPrescriptionDataForPrint()} printOptions={printOptions} />
             </div>
           </div>
         </div>
       )}
 
-      {/* Hidden printable ref if preview is closed */}
-      {!showPreview && (
-        <div className="hidden">
-          <div ref={receiptRef}>
-            <PatientReceipt patient={patient} prescription={buildPrescriptionDataForPrint()} printOptions={printOptions} />
-          </div>
+      {/* Dedicated Printable Prescription Container for window.print() & PDF */}
+      <div id="doctor-rx-print-container" className={showPreview ? "print:block" : "hidden print:block"}>
+        <div ref={receiptRef}>
+          <PatientReceipt patient={patient} prescription={buildPrescriptionDataForPrint()} printOptions={printOptions} />
         </div>
-      )}
+      </div>
     </div>
   );
 };

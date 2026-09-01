@@ -1348,7 +1348,7 @@ const RequestsView = () => {
                   <tr className="bg-gradient-to-r from-orange-50 to-amber-50 text-xs font-bold uppercase text-gray-600 border-b border-orange-100">
                     <th className="p-3.5 pl-4">Request #</th>
                     <th className="p-3.5">Patient Details</th>
-                    <th className="p-3.5">Procedure</th>
+                    <th className="p-3.5">Request Purpose</th>
                     <th className="p-3.5">Requested By</th>
                     <th className="p-3.5">Date</th>
                     <th className="p-3.5">Status</th>
@@ -1491,7 +1491,7 @@ const RequestsView = () => {
                   Process Doctor Request: {selectedRequest.requestNumber}
                 </h2>
                 <p className="text-xs text-gray-400 font-semibold mt-0.5">
-                  Procedure: {selectedRequest.procedureName}
+                  Request Purpose: {selectedRequest.procedureName}
                 </p>
               </div>
               <button 

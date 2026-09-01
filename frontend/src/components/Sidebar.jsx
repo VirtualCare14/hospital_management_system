@@ -19,7 +19,6 @@ import {
   Bed,
   Package,
   Pill,
-  Syringe,
   Scissors,
   CalendarDays,
   Bandage,
@@ -311,15 +310,6 @@ const Sidebar = () => {
               >
                 <Users className="h-5 w-5 shrink-0" />
                 {isExpanded && <span className="truncate">Patient List</span>}
-              </NavLink>
-              <NavLink
-                to="/ipd/services"
-                onClick={handleOptionClick}
-                title="Services"
-                className={({ isActive }) => getLinkClass(isActive)}
-              >
-                <Syringe className="h-5 w-5 shrink-0" />
-                {isExpanded && <span className="truncate">Services</span>}
               </NavLink>
               <NavLink
                 to="/ipd/ot-management"

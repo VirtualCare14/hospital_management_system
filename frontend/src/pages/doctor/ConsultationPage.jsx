@@ -772,12 +772,17 @@ const ConsultationPage = () => {
         } catch (printErr) {
           console.warn("Direct window.print() failed", printErr);
         }
+      }, 400);
+
+      const handleAfterPrint = () => {
+        window.removeEventListener('afterprint', handleAfterPrint);
         if (!sendToSameDayChecked) {
           setTimeout(() => {
             navigate('/doctor');
-          }, 1000);
+          }, 300);
         }
-      }, 500);
+      };
+      window.addEventListener('afterprint', handleAfterPrint);
 
     } catch (error) {
       console.error('Saving failed:', error);
@@ -1444,32 +1449,37 @@ const ConsultationPage = () => {
 
             {/* Live Inline Preview (Collapsible) */}
             {showPreview && (
-              <div className="space-y-2 pt-3 border-t border-orange-100">
+              <div className="space-y-2 pt-3 border-t border-orange-100 no-print">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-bold text-gray-800 flex items-center gap-1">
                     <Eye className="h-4 w-4 text-orange-600" /> Live Receipt & Digital Rx Preview
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => setShowPreview(false)}
-                    className="text-xs sm:text-sm font-bold text-gray-500 hover:text-gray-700 cursor-pointer"
-                  >
-                    Hide Preview
-                  </button>
-                </div>
-                <div className="bg-gray-100 p-4 border border-gray-300 rounded-xl overflow-x-auto max-h-[600px] overflow-y-auto">
-                  <div ref={receiptRef}>
-                    <PatientReceipt patient={buildPatientDataForReceipt()} prescription={buildPrescriptionDataForPrint()} language={language} />
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => window.print()}
+                      className="btn bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold py-1 px-3 rounded-lg flex items-center gap-1 cursor-pointer"
+                    >
+                      <Printer className="h-3.5 w-3.5" /> Print Rx
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowPreview(false)}
+                      className="text-xs sm:text-sm font-bold text-gray-500 hover:text-gray-700 cursor-pointer"
+                    >
+                      Hide Preview
+                    </button>
                   </div>
                 </div>
-              </div>
-            )}
-
-            {/* Hidden printable ref when inline preview is closed */}
-            {!showPreview && (
-              <div className="hidden">
-                <div ref={receiptRef}>
-                  <PatientReceipt patient={buildPatientDataForReceipt()} prescription={buildPrescriptionDataForPrint()} language={language} />
+                <div className="bg-gray-100 p-4 border border-gray-300 rounded-xl overflow-x-auto max-h-[600px] overflow-y-auto">
+                  <div>
+                    <PatientReceipt 
+                      patient={buildPatientDataForReceipt()} 
+                      prescription={buildPrescriptionDataForPrint()} 
+                      language={typeof language === 'object' ? language.value : language} 
+                      printOptions={printOptions}
+                    />
+                  </div>
                 </div>
               </div>
             )}
@@ -1952,10 +1962,10 @@ const ConsultationPage = () => {
 
       {/* Show Preview Modal Popup */}
       {showPreviewModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-gray-200 animate-in fade-in zoom-in duration-150">
-            {/* Modal Header */}
-            <div className="p-4 bg-gray-900 text-white flex items-center justify-between">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto print:static print:bg-transparent print:backdrop-blur-none print:p-0 print:overflow-visible print:z-auto">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-gray-200 animate-in fade-in zoom-in duration-150 print:bg-transparent print:shadow-none print:border-none print:rounded-none print:w-full print:max-w-none print:h-auto print:overflow-visible print:p-0">
+            {/* Modal Header - Hidden when printing */}
+            <div className="p-4 bg-gray-900 text-white flex items-center justify-between no-print print:hidden">
               <div className="flex items-center gap-2">
                 <Printer className="h-5 w-5 text-orange-400" />
                 <h3 className="text-base font-extrabold">Patient Receipt & Digital Prescription Preview</h3>
@@ -1983,6 +1993,14 @@ const ConsultationPage = () => {
 
                 <button
                   type="button"
+                  onClick={() => window.print()}
+                  className="btn bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold py-1.5 px-3 flex items-center gap-1.5 rounded-lg cursor-pointer"
+                >
+                  <Printer className="h-4 w-4" /> Print Now
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => setShowPreviewModal(false)}
                   className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors cursor-pointer"
                 >
@@ -1992,30 +2010,52 @@ const ConsultationPage = () => {
             </div>
 
             {/* Modal Body: Printable Receipt Preview */}
-            <div className="p-4 sm:p-6 overflow-y-auto bg-slate-200/90 flex-1 flex justify-center items-start">
-              <div className="bg-white shadow-2xl rounded-sm w-full max-w-[210mm] border border-gray-300 overflow-hidden">
+            <div className="p-4 sm:p-6 overflow-y-auto bg-slate-200/90 flex-1 flex justify-center items-start print:bg-transparent print:p-0 print:overflow-visible">
+              <div className="bg-white shadow-2xl rounded-sm w-full max-w-[210mm] border border-gray-300 overflow-hidden print:shadow-none print:border-none print:rounded-none print:w-full print:max-w-none print:overflow-visible print:p-0">
                 <PatientReceipt 
                   ref={receiptRef}
                   patient={buildPatientDataForReceipt()}
                   prescription={buildPrescriptionDataForPrint()}
-                  language={language}
+                  language={typeof language === 'object' ? language.value : language}
                   printOptions={printOptions}
                 />
               </div>
             </div>
 
-            {/* Modal Footer */}
-            <div className="p-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+            {/* Modal Footer - Hidden when printing */}
+            <div className="p-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between no-print print:hidden">
               <span className="text-xs font-bold text-gray-500">Live preview generated automatically from consultation data</span>
-              <button
-                type="button"
-                onClick={() => setShowPreviewModal(false)}
-                className="btn-secondary text-xs px-4 py-2 font-bold cursor-pointer"
-              >
-                Close Preview
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="btn bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-4 py-2 font-bold flex items-center gap-1.5 cursor-pointer rounded-lg shadow-sm"
+                >
+                  <Printer className="h-4 w-4" /> Print Prescription
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowPreviewModal(false)}
+                  className="btn-secondary text-xs px-4 py-2 font-bold cursor-pointer"
+                >
+                  Close Preview
+                </button>
+              </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Dedicated Printable Prescription Container for window.print() when preview modal is not open */}
+      {!showPreviewModal && (
+        <div id="doctor-rx-print-container" className="hidden print:block">
+          <PatientReceipt 
+            ref={receiptRef}
+            patient={buildPatientDataForReceipt()} 
+            prescription={buildPrescriptionDataForPrint()} 
+            language={typeof language === 'object' ? language.value : language} 
+            printOptions={printOptions}
+          />
         </div>
       )}
 

@@ -113,6 +113,7 @@ const TABS = [
 
 const SERVICE_CATEGORIES = [
   { id: 'consumables', label: 'Consumable Services', icon: Activity },
+  { id: 'medicines', label: 'Medicines', icon: Pill },
   { id: 'lab-tests', label: 'Lab Tests', icon: FlaskConical },
   { id: 'medication-chart', label: 'Medication Chart', icon: ClipboardList },
 ];
@@ -497,6 +498,18 @@ const IpdPatientDetails = () => {
   };
 
   const handleReceivedMedicineSelect = (itemName) => {
+    const recMed = receivedMedicines.find(m => m.itemName === itemName);
+    if (recMed) {
+      setSelectedReceivedMed(recMed);
+      setMedicineForm({
+        medicineName: recMed.itemName,
+        quantity: '1',
+        unitPrice: String(recMed.unitPrice || 0),
+        gst: String(recMed.gst || 0),
+        baseUnitPrice: String(recMed.baseUnitPrice || recMed.unitPrice || 0)
+      });
+      return;
+    }
     const med = pharmacyMedsList.find(m => m.itemName === itemName);
     if (med) {
       const totalGst = (med.sgst || 0) + (med.cst || 0);
@@ -832,12 +845,45 @@ const IpdPatientDetails = () => {
       {activeTab === 'services' && (
         <div className="space-y-6">
           <div className="flex gap-2 overflow-x-auto">
-            {SERVICE_CATEGORIES.map(cat => (
-              <button key={cat.id} onClick={() => setServiceCategory(cat.id)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${serviceCategory === cat.id ? 'bg-orange-500 text-white shadow-md' : 'bg-white border border-orange-200 text-gray-600 hover:bg-orange-50'}`}>
-                <cat.icon className="h-4 w-4" /> {cat.label}
-              </button>
-            ))}
+            {SERVICE_CATEGORIES.map(cat => {
+              const isMedicinesTab = cat.id === 'medicines';
+              const hasReceivedMeds = Array.isArray(receivedMedicines) && receivedMedicines.length > 0;
+              const isMedicinesDisabled = isMedicinesTab && !hasReceivedMeds;
+
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  disabled={isMedicinesDisabled}
+                  onClick={() => !isMedicinesDisabled && setServiceCategory(cat.id)}
+                  title={
+                    isMedicinesDisabled
+                      ? 'Disabled: No medicines received from Pharmacy yet. Request and receive medicines in Pharmacy Requests tab first.'
+                      : cat.label
+                  }
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${
+                    serviceCategory === cat.id
+                      ? 'bg-orange-500 text-white shadow-md'
+                      : isMedicinesDisabled
+                        ? 'bg-gray-100 border border-gray-200 text-gray-400 cursor-not-allowed opacity-60'
+                        : 'bg-white border border-orange-200 text-gray-600 hover:bg-orange-50 cursor-pointer'
+                  }`}
+                >
+                  <cat.icon className="h-4 w-4" />
+                  <span>{cat.label}</span>
+                  {isMedicinesTab && hasReceivedMeds && (
+                    <span className="ml-1 px-1.5 py-0.5 text-[10px] bg-green-100 text-green-700 rounded-full font-extrabold border border-green-200">
+                      {receivedMedicines.length} Received
+                    </span>
+                  )}
+                  {isMedicinesTab && !hasReceivedMeds && (
+                    <span className="ml-1 px-1.5 py-0.5 text-[10px] bg-gray-200 text-gray-500 rounded-full font-semibold">
+                      Not Received
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
 
           {serviceCategory === 'consumables' && (
@@ -904,33 +950,84 @@ const IpdPatientDetails = () => {
           {serviceCategory === 'medicines' && (
             <div className="card overflow-hidden">
               <div className="p-4 border-b border-orange-100 flex items-center justify-between bg-orange-50/30">
-                <h3 className="font-extrabold text-gray-900 flex items-center gap-2"><Pill className="h-5 w-5 text-orange-500" /> Administered Medicines</h3>
+                <div>
+                  <h3 className="font-extrabold text-gray-900 flex items-center gap-2">
+                    <Pill className="h-5 w-5 text-orange-500" /> Administered Medicines
+                  </h3>
+                  <p className="text-[11px] text-gray-500 mt-0.5">
+                    Log administration of medicines received from Pharmacy
+                  </p>
+                </div>
                 {admission.status !== 'Discharged' && (
-                  <button onClick={() => setShowAddMedicine(!showAddMedicine)} className="btn text-xs py-2 px-3"><Plus className="h-3.5 w-3.5" /> Administer Medicine</button>
+                  <button 
+                    onClick={() => setShowAddMedicine(!showAddMedicine)} 
+                    disabled={!receivedMedicines || receivedMedicines.length === 0}
+                    className="btn text-xs py-2 px-3 flex items-center gap-1.5"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Administer Medicine
+                  </button>
                 )}
               </div>
+
+              {/* Received Stock Summary Cards */}
+              {receivedMedicines && receivedMedicines.length > 0 && (
+                <div className="p-4 bg-orange-50/30 border-b border-orange-100">
+                  <h4 className="text-xs font-black uppercase text-gray-700 mb-2.5 flex items-center gap-1.5">
+                    <CheckCircle className="h-4 w-4 text-green-600" /> Received from Pharmacy (Available to Administer)
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                    {receivedMedicines.map((m, idx) => {
+                      const avail = m.availableQty !== undefined ? m.availableQty : (m.totalReceived - (m.totalReturned || 0) - (m.totalDamaged || 0));
+                      return (
+                        <div key={idx} className="p-3 bg-white border border-orange-100 rounded-xl flex items-center justify-between shadow-2xs">
+                          <div>
+                            <p className="font-bold text-gray-900 text-xs">{m.itemName}</p>
+                            <p className="text-[10px] text-gray-500">Unit Price: ₹{m.unitPrice} {m.gst ? `(+${m.gst}% GST)` : ''}</p>
+                          </div>
+                          <div className="text-right">
+                            <span className={`inline-block px-2 py-0.5 rounded-md font-black text-xs ${avail > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-700'}`}>
+                              {avail} Avail
+                            </span>
+                            <p className="text-[10px] text-gray-400 font-semibold">Total: {m.totalReceived}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {showAddMedicine && (
                 <div className="p-4 border-b border-orange-100 bg-orange-50/20">
                   <form onSubmit={handleAddMedicine} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="sm:col-span-2">
-                      <label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">Medicine Name</label>
+                      <label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">
+                        Select Received Medicine
+                      </label>
                       <input 
                         type="text"
                         list="ipd-pharmacy-medicines-datalist"
-                        className="input py-2 text-xs" 
-                        placeholder="Search or select medicine from pharmacy"
+                        className="input py-2 text-xs font-semibold" 
+                        placeholder="Search or select from received pharmacy items..."
                         value={medicineForm.medicineName}
                         onChange={(e) => handleReceivedMedicineSelect(e.target.value)}
                       />
+                      <datalist id="ipd-pharmacy-medicines-datalist">
+                        {receivedMedicines.map((m, idx) => (
+                          <option key={idx} value={m.itemName}>
+                            Available: {m.availableQty ?? m.totalReceived} | Price: ₹{m.unitPrice}
+                          </option>
+                        ))}
+                      </datalist>
                     </div>
                     <div>
                       <label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">
-                        Qty
+                        Quantity
                       </label>
                       <input 
                         type="number" 
                         min="1" 
-                        className="input py-2 text-xs" 
+                        className="input py-2 text-xs font-bold" 
                         value={medicineForm.quantity} 
                         onChange={(e) => setMedicineForm(p => ({ ...p, quantity: e.target.value }))} 
                       />
@@ -943,8 +1040,8 @@ const IpdPatientDetails = () => {
                       >
                         Cancel
                       </button>
-                      <button type="submit" className="btn text-xs py-2 px-4">
-                        <Plus className="h-3.5 w-3.5" /> Add
+                      <button type="submit" className="btn text-xs py-2 px-4 flex items-center gap-1.5">
+                        <Plus className="h-3.5 w-3.5" /> Administer
                       </button>
                     </div>
                   </form>
@@ -1331,7 +1428,7 @@ const IpdPatientDetails = () => {
                 <thead>
                   <tr className="bg-gray-50 text-xs font-bold uppercase text-gray-500 border-b border-orange-100">
                     <th className="p-3 pl-4">Request #</th>
-                    <th className="p-3">Procedure Name</th>
+                    <th className="p-3">Request Purpose</th>
                     <th className="p-3">Requested By</th>
                     <th className="p-3">Date</th>
                     <th className="p-3">Status</th>
@@ -1416,7 +1513,7 @@ const IpdPatientDetails = () => {
                       <Pill className="text-orange-500 h-5 w-5" />
                       Request {selectedRequest.requestNumber} Details
                     </h2>
-                    <p className="text-xs text-gray-400 font-semibold mt-0.5">Procedure: {selectedRequest.procedureName}</p>
+                    <p className="text-xs text-gray-400 font-semibold mt-0.5">Request Purpose: {selectedRequest.procedureName}</p>
                   </div>
                   <button onClick={() => setSelectedRequest(null)} className="text-gray-400 hover:text-gray-600 p-1 hover:bg-orange-50 rounded-lg cursor-pointer"><X className="h-5 w-5" /></button>
                 </div>
@@ -1507,7 +1604,7 @@ const IpdPatientDetails = () => {
 
                 <div className="space-y-4">
                   <div>
-                    <label className="mb-1 block text-xs font-bold uppercase text-gray-500">Procedure Name *</label>
+                    <label className="mb-1 block text-xs font-bold uppercase text-gray-500">Request Purpose *</label>
                     <input 
                       type="text" 
                       className="input py-2 text-sm" 
@@ -1639,7 +1736,7 @@ const IpdPatientDetails = () => {
                     <button 
                       onClick={async () => {
                         if (!requestForm.procedureName.trim()) {
-                          toast.error('Procedure name is required');
+                          toast.error('Request purpose is required');
                           return;
                         }
                         if (requestForm.items.length === 0) {

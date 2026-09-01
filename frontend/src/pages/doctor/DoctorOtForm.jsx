@@ -959,7 +959,7 @@ const DoctorOtForm = () => {
             <div className="flex items-center justify-between border-b border-orange-50 pb-3">
               <div>
                 <h3 className="text-lg font-bold text-gray-900">Record Consumption & Return Unused</h3>
-                <p className="text-xs text-gray-500">Request #{showReturnModal.requestNumber} | Procedure: {showReturnModal.procedureName}</p>
+                <p className="text-xs text-gray-500">Request #{showReturnModal.requestNumber} | Request Purpose: {showReturnModal.procedureName}</p>
               </div>
               <button 
                 onClick={() => setShowReturnModal(null)} 

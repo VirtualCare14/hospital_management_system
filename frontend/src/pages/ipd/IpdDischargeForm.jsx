@@ -659,15 +659,10 @@ const IpdDischargeForm = () => {
         </div>
       )}
 
-      <style>{`
-        @media print {
-          body { background: white; font-size: 12pt; }
-          aside, header, nav, .no-print { display: none !important; }
-          .print\\:block { display: block !important; }
-          .card { border: 1px solid #ddd !important; box-shadow: none !important; }
-          @page { margin: 15mm; }
-        }
-      `}</style>
+      {/* Dedicated Printable Discharge Summary Container for window.print() */}
+      <div id="ipd-discharge-print-container" className="hidden print:block bg-white w-full max-w-[210mm] mx-auto p-2 text-gray-900">
+        {renderDischargeReport(form, hospitalInfo, user, dischargeRecord)}
+      </div>
     </div>
   );
 };

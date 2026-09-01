@@ -3730,8 +3730,8 @@ const BillingPage = () => {
         const generalDiscountAmount = (printBillObj.discountAmount || 0) - totalItemDiscounts;
         const footerColSpan = hasItemDiscounts ? 8 : 6;
         return (
-          <div className="fixed inset-0 bg-black/75 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto animate-fadeIn">
-            <div className="bg-gray-100 rounded-2xl shadow-2xl max-w-4xl w-full flex flex-col h-[90vh]">
+          <div className="fixed inset-0 bg-black/75 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto animate-fadeIn print:static print:p-0 print:bg-transparent print:backdrop-blur-none print:overflow-visible print:z-auto">
+            <div className="bg-gray-100 rounded-2xl shadow-2xl max-w-4xl w-full flex flex-col h-[90vh] print:bg-transparent print:shadow-none print:max-w-none print:w-full print:h-auto print:border-none print:rounded-none print:overflow-visible">
               
               {/* Modal Header */}
               <div className="bg-white border-b border-gray-200 px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0 rounded-t-2xl print:hidden">
@@ -3777,10 +3777,10 @@ const BillingPage = () => {
               </div>
 
               {/* Print Area Preview Container */}
-              <div className="flex-1 overflow-y-auto p-8 flex justify-center bg-gray-200/50">
+              <div className="flex-1 overflow-y-auto p-8 flex justify-center bg-gray-200/50 print:bg-transparent print:p-0 print:overflow-visible">
                 <div
                   ref={printAreaRef}
-                  className="a4-receipt bg-white shadow-lg w-[210mm] min-h-[297mm] p-10 border border-gray-300 relative text-gray-900 overflow-hidden text-left leading-normal"
+                  className="a4-receipt bg-white shadow-lg w-[210mm] min-h-[297mm] p-10 border border-gray-300 relative text-gray-900 overflow-hidden text-left leading-normal print:w-full print:max-w-none print:shadow-none print:border-none print:p-4 print:m-0"
                   id="invoice-print-area"
                 >
                   {/* Printout stylesheet rules */}
@@ -3820,28 +3820,6 @@ const BillingPage = () => {
                     #invoice-print-area .logo-grayscale {
                       filter: grayscale(100%) !important;
                       -webkit-filter: grayscale(100%) !important;
-                    }
-                    @media print {
-                      body * {
-                        visibility: hidden !important;
-                      }
-                      #invoice-print-area, #invoice-print-area *, .a4-receipt, .a4-receipt * {
-                        visibility: visible !important;
-                        color: #000000 !important;
-                        background-color: transparent !important;
-                        background: none !important;
-                        box-shadow: none !important;
-                      }
-                      #invoice-print-area, .a4-receipt {
-                        position: absolute !important;
-                        left: 0 !important;
-                        top: 0 !important;
-                        width: 100% !important;
-                        border: none !important;
-                        box-shadow: none !important;
-                        padding: 10mm !important;
-                        margin: 0 !important;
-                      }
                     }
                   `}</style>
 
