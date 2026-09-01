@@ -273,7 +273,7 @@ const Sidebar = () => {
           <div>
             {renderSectionHeader('Diagnostics')}
             <a
-              href={getLabsPortalUrl(localStorage.getItem('hms_token'), user)}
+              href={getLabsPortalUrl()}
               onClick={handleOptionClick}
               title="Open Labs Portal (labs.medora360.com)"
               className="flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs md:text-sm font-medium text-gray-700 hover:bg-orange-50 hover:text-orange-600 transition-all duration-200 cursor-pointer"

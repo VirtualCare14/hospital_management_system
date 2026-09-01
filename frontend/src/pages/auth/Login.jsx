@@ -18,10 +18,7 @@ const Login = () => {
 
   useEffect(() => {
     if (String(selectedModule) === '4') {
-      const token = localStorage.getItem('hms_token');
-      const userStr = localStorage.getItem('hms_user');
-      const user = userStr ? JSON.parse(userStr) : null;
-      window.location.href = getLabsPortalUrl(token, user);
+      window.location.href = getLabsPortalUrl();
     }
   }, [selectedModule]);
 
@@ -41,8 +38,7 @@ const Login = () => {
         if (!hasModuleQuery && user.moduleAccess && user.moduleAccess.length > 0) {
           const firstModule = user.moduleAccess[0];
           if (Number(firstModule) === 4 || user.role === 'lab' || user.role === 'labadmin' || user.role === 'lab_admin') {
-            const token = localStorage.getItem('hms_token');
-            window.location.href = getLabsPortalUrl(token, user);
+            window.location.href = getLabsPortalUrl();
             return;
           }
           navigate(getDefaultPathForUser(user, String(firstModule), hospitalId));
@@ -62,8 +58,7 @@ const Login = () => {
 
       // If Lab module selected (module 4) or user is lab staff/admin, redirect directly to Next.js Labs portal
       if (String(selectedModule) === '4' || user.role === 'lab' || user.role === 'labadmin' || user.role === 'lab_admin') {
-        const token = localStorage.getItem('hms_token');
-        window.location.href = getLabsPortalUrl(token, user);
+        window.location.href = getLabsPortalUrl();
         return;
       }
 

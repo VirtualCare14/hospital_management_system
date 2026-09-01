@@ -71,6 +71,9 @@ export function AuthProvider({ children }) {
               // fallback
             }
           }
+          if (window.history && window.history.replaceState) {
+            window.history.replaceState({}, '', window.location.pathname);
+          }
         }
       } catch (e) {
         console.warn('URL token check failed:', e);
@@ -139,9 +142,7 @@ export function AuthProvider({ children }) {
       setToken(response.token);
       setUser(normalizedUser);
 
-      if (normalizedUser.role === 'labadmin' || normalizedUser.role === 'lab_admin') {
-        router.push('/admin');
-      } else {
+      if (response.token) {
         router.push('/dashboard');
       }
       return normalizedUser;

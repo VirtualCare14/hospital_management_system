@@ -60,7 +60,7 @@ const Home = () => {
           <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
             {moduleCards.map((module) => {
               const isLabModule = String(module.id) === '4';
-              const labPortalUrl = getLabsPortalUrl(localStorage.getItem('hms_token'), user);
+              const labPortalUrl = getLabsPortalUrl();
 
               if (isLabModule) {
                 return (

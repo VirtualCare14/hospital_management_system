@@ -89,20 +89,10 @@ export const getDefaultPathForUser = (user, requestedModule) => {
   return firstModule ? `/module/${firstModule}` : '/';
 };
 
-export const getLabsPortalUrl = (token = null, user = null) => {
+export const getLabsPortalUrl = () => {
   let baseUrl = 'https://labs.medora360.com';
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname;
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      baseUrl = 'http://localhost:3000';
-    }
-  }
   if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_LABS_URL) {
     baseUrl = import.meta.env.VITE_LABS_URL.replace(/\/$/, '');
   }
-  if (token) {
-    const userParam = user ? `&user=${encodeURIComponent(typeof user === 'string' ? user : JSON.stringify(user))}` : '';
-    return `${baseUrl}/login?token=${encodeURIComponent(token)}${userParam}`;
-  }
-  return baseUrl;
+  return `${baseUrl}/login`;
 };

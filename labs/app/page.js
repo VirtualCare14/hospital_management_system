@@ -15,12 +15,7 @@ export default function Home() {
         if (typeof window !== 'undefined' && window.location.search.includes('token=')) {
           window.history.replaceState({}, '', window.location.pathname);
         }
-        const role = (user?.role || '').toLowerCase();
-        if (role === 'labadmin' || role === 'lab_admin' || role === 'admin') {
-          router.replace('/admin');
-        } else {
-          router.replace('/dashboard');
-        }
+        router.replace('/dashboard');
       } else {
         router.replace('/login');
       }

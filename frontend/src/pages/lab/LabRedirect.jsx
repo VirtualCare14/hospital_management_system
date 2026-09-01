@@ -7,10 +7,9 @@ const LabRedirect = () => {
   const { user } = useAuth();
 
   useEffect(() => {
-    const token = localStorage.getItem('hms_token');
-    const targetUrl = getLabsPortalUrl(token, user);
+    const targetUrl = getLabsPortalUrl();
     window.location.href = targetUrl;
-  }, [user]);
+  }, []);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white/70 backdrop-blur-md rounded-3xl border border-orange-100 shadow-sm max-w-lg mx-auto my-12">
