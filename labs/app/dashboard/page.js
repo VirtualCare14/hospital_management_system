@@ -1475,7 +1475,7 @@ Clinical Interpretation:
           const existingParam = reportData.report?.parameters?.find(ep => ep.name === p.name);
           const pVal = existingParam ? existingParam.value : '—';
           const pRemark = existingParam ? existingParam.remarks : '';
-          const isAbnormal = existingParam?.isAbnormal || false;
+          const isAbnormal = existingParam?.isAbnormal || (pVal && pVal !== '—' && isOutOfRange(p.name, pVal, p, reportData.patientId)) || false;
 
           let refDisplay = '—';
           if (p.referenceRange) {
@@ -3287,19 +3287,48 @@ Clinical Interpretation:
           let valOptions = [];
           let paramGroup = '';
           let paramDisplayName = '';
-          availableLabTests.forEach(t => {
-            if (Array.isArray(t.parameters)) {
-              const found = t.parameters.find(p => p.name === pName);
-              if (found) {
-                refRange = found.referenceRange || '';
-                unit = found.unit || '';
-                refRules = found.referenceRules || [];
-                valOptions = found.valueOptions || [];
-                paramGroup = found.group || '';
-                paramDisplayName = found.displayName || '';
+          let matchedParamObj = null;
+
+          // Search current request tests first to ensure parameter metadata matches the exact test
+          const currentReqTests = (selectedRequest?.tests && selectedRequest.tests.length > 0)
+            ? selectedRequest.tests
+            : [selectedRequest?.testName || selectedRequest?.testId?.name || selectedRequest?.testId?.title || ''];
+
+          for (const tName of currentReqTests) {
+            if (!tName) continue;
+            const matched = findMatchedTest(tName);
+            if (matched && Array.isArray(matched.parameters)) {
+              const p = matched.parameters.find(p => p.name === pName || (p.displayName && p.displayName === pName));
+              if (p) {
+                matchedParamObj = p;
+                break;
               }
             }
-          });
+          }
+
+          if (!matchedParamObj) {
+            for (const t of availableLabTests) {
+              if (Array.isArray(t.parameters)) {
+                const p = t.parameters.find(p => p.name === pName || (p.displayName && p.displayName === pName));
+                if (p) {
+                  matchedParamObj = p;
+                  break;
+                }
+              }
+            }
+          }
+
+          if (matchedParamObj) {
+            refRange = matchedParamObj.referenceRange || '';
+            unit = matchedParamObj.unit || '';
+            refRules = matchedParamObj.referenceRules || [];
+            valOptions = matchedParamObj.valueOptions || [];
+            paramGroup = matchedParamObj.group || '';
+            paramDisplayName = matchedParamObj.displayName || '';
+          }
+
+          const isBad = isOutOfRange(pName, pVal, matchedParamObj, selectedRequest?.patientId);
+
           return {
             name: pName,
             value: pVal !== '' ? pVal : '-',
@@ -3309,7 +3338,8 @@ Clinical Interpretation:
             referenceRules: refRules,
             valueOptions: valOptions,
             group: paramGroup,
-            displayName: customFieldDisplayNames[pName] || paramDisplayName || pName
+            displayName: customFieldDisplayNames[pName] || paramDisplayName || pName,
+            isAbnormal: isBad
           };
         });
 
@@ -3863,7 +3893,7 @@ Clinical Interpretation:
                                     return testParams.map((p, pIdx) => {
                                       const rVal = selectedReportForPrint.report?.parameters?.find(rp => rp.name === p.name);
                                       const valText = rVal ? rVal.value : '';
-                                      const isBad = isOutOfRange(p.name, valText) || (rVal && rVal.isAbnormal);
+                                      const isBad = isOutOfRange(p.name, valText, p, selectedReportForPrint.report?.patientId || selectedReportForPrint.patientId) || (rVal && rVal.isAbnormal);
                                       const isGroupHeaderNeeded = p.group && p.group !== lastGroup;
                                       if (p.group) lastGroup = p.group;
                                       let refDisplay = p.referenceRange || p.normalRange || (p.min !== undefined && p.max !== undefined ? `${p.min} - ${p.max}` : '—');
@@ -3976,15 +4006,40 @@ Clinical Interpretation:
                       {Object.keys(parameterValues).map((pName) => {
                         let refRange = '';
                         let unit = '';
-                        availableLabTests.forEach(t => {
-                          if (Array.isArray(t.parameters)) {
-                            const found = t.parameters.find(p => p.name === pName);
-                            if (found) {
-                              refRange = found.referenceRange || '';
-                              unit = found.unit || '';
+                        let matchedParamObj = null;
+
+                        const currentReqTests = (selectedRequest?.tests && selectedRequest.tests.length > 0)
+                          ? selectedRequest.tests
+                          : [selectedRequest?.testName || selectedRequest?.testId?.name || selectedRequest?.testId?.title || ''];
+
+                        for (const tName of currentReqTests) {
+                          if (!tName) continue;
+                          const matched = findMatchedTest(tName);
+                          if (matched && Array.isArray(matched.parameters)) {
+                            const p = matched.parameters.find(p => p.name === pName || (p.displayName && p.displayName === pName));
+                            if (p) {
+                              matchedParamObj = p;
+                              break;
                             }
                           }
-                        });
+                        }
+
+                        if (!matchedParamObj) {
+                          for (const t of availableLabTests) {
+                            if (Array.isArray(t.parameters)) {
+                              const p = t.parameters.find(p => p.name === pName || (p.displayName && p.displayName === pName));
+                              if (p) {
+                                matchedParamObj = p;
+                                break;
+                              }
+                            }
+                          }
+                        }
+
+                        if (matchedParamObj) {
+                          refRange = matchedParamObj.referenceRange || '';
+                          unit = matchedParamObj.unit || '';
+                        }
 
                         return (
                           <div key={pName} className="p-3 bg-white border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
@@ -4141,91 +4196,158 @@ Clinical Interpretation:
     setDatesInfo(prev => ({ ...prev, [field]: val }));
   };
 
-  const getValueRangeStatus = (paramName, valueStr) => {
-    if (!valueStr) return null;
+  const getValueRangeStatus = (paramName, valueStr, paramObj = null, patientObj = null) => {
+    if (valueStr === undefined || valueStr === null || String(valueStr).trim() === '') return null;
 
-    // A. Check if the value matches any predefined option marked as Abnormal
-    let foundAbnormalMatch = false;
-    availableLabTests.forEach(t => {
-      if (Array.isArray(t.parameters)) {
-        const found = t.parameters.find(p => p.name === paramName);
-        if (found && Array.isArray(found.valueOptions)) {
-          const matchOpt = found.valueOptions.find(o => String(o.value).trim() === String(valueStr).trim());
-          if (matchOpt && matchOpt.isAbnormal) {
-            foundAbnormalMatch = true;
+    // A. Resolve parameter object (rules, options, default range)
+    let rules = [];
+    let defaultRange = '';
+    let valueOptions = [];
+
+    if (paramObj && typeof paramObj === 'object') {
+      rules = Array.isArray(paramObj.referenceRules) ? paramObj.referenceRules : [];
+      defaultRange = paramObj.referenceRange || paramObj.normalRange || '';
+      valueOptions = Array.isArray(paramObj.valueOptions) ? paramObj.valueOptions : [];
+    } else {
+      // Look in current selectedRequest tests first to avoid cross-contamination from other tests
+      const currentReqTests = (selectedRequest?.tests && selectedRequest.tests.length > 0)
+        ? selectedRequest.tests
+        : [selectedRequest?.testName || selectedRequest?.testId?.name || selectedRequest?.testId?.title || ''];
+
+      let foundParam = null;
+      for (const tName of currentReqTests) {
+        if (!tName) continue;
+        const matched = findMatchedTest(tName);
+        if (matched && Array.isArray(matched.parameters)) {
+          const p = matched.parameters.find(p => p.name === paramName || (p.displayName && p.displayName === paramName));
+          if (p) {
+            foundParam = p;
+            break;
           }
         }
       }
-    });
-    if (foundAbnormalMatch) return 'H';
 
-    if (isNaN(valueStr)) return null;
-    const value = parseFloat(valueStr);
-    
-    let rules = [];
-    let defaultRange = '';
-    availableLabTests.forEach(t => {
-      if (Array.isArray(t.parameters)) {
-        const found = t.parameters.find(p => p.name === paramName);
-        if (found) {
-          rules = found.referenceRules || [];
-          defaultRange = found.referenceRange || '';
+      // Fallback: search availableLabTests
+      if (!foundParam) {
+        for (const t of availableLabTests) {
+          if (Array.isArray(t.parameters)) {
+            const p = t.parameters.find(p => p.name === paramName || (p.displayName && p.displayName === paramName));
+            if (p) {
+              foundParam = p;
+              break;
+            }
+          }
         }
       }
-    });
 
-    const rawGender = selectedRequest?.patientId?.gender || 'Male';
-    const pGender = (rawGender.toLowerCase().startsWith('f') || rawGender.toLowerCase().startsWith('w')) ? 'Female' : 'Male';
-    const pAge = Number(selectedRequest?.patientId?.age) || 30;
-
-    const matchRule = rules.find(r => {
-      const sexMatch = !r.sex || r.sex === 'Any' || r.sex.toLowerCase() === pGender.toLowerCase();
-      if (!sexMatch) return false;
-
-      let minYears = Number(r.minAge) || 0;
-      if (r.minAgeUnit === 'Months') minYears = minYears / 12;
-      if (r.minAgeUnit === 'Days') minYears = minYears / 365;
-
-      let maxYears = Number(r.maxAge) || 100;
-      if (r.maxAgeUnit === 'Months') maxYears = maxYears / 12;
-      if (r.maxAgeUnit === 'Days') maxYears = maxYears / 365;
-
-      return pAge >= minYears && pAge <= maxYears;
-    });
-
-    if (matchRule) {
-      const lower = parseFloat(matchRule.lowerValue);
-      const upper = parseFloat(matchRule.upperValue);
-      if (!isNaN(lower) && value < lower) return 'L';
-      if (!isNaN(upper) && value > upper) return 'H';
-      return null;
+      if (foundParam) {
+        rules = Array.isArray(foundParam.referenceRules) ? foundParam.referenceRules : [];
+        defaultRange = foundParam.referenceRange || foundParam.normalRange || '';
+        valueOptions = Array.isArray(foundParam.valueOptions) ? foundParam.valueOptions : [];
+      }
     }
 
-    if (defaultRange) {
-      const cleanRange = defaultRange.replace(/[–—−]/g, '-').replace(/\s+/g, ' ');
-      
-      // Parse gender-specific string ranges like "Male: ~13.8–17.2; Female: ~12.1–15.1"
-      if (defaultRange.toLowerCase().includes('male') || defaultRange.toLowerCase().includes('female')) {
+    // B. Check if the value matches any predefined option marked as Abnormal
+    if (valueOptions && valueOptions.length > 0) {
+      const matchOpt = valueOptions.find(o => String(o.value || '').trim().toLowerCase() === String(valueStr).trim().toLowerCase());
+      if (matchOpt && matchOpt.isAbnormal) {
+        return 'H';
+      }
+    }
+
+    // C. Clean numeric value (strip commas, spaces, trim)
+    const cleanValStr = String(valueStr).replace(/,/g, '').trim();
+    if (cleanValStr === '' || isNaN(Number(cleanValStr))) return null;
+    const value = parseFloat(cleanValStr);
+    if (isNaN(value)) return null;
+
+    // D. Patient Age & Gender Resolution
+    const currentPatient = patientObj || selectedRequest?.patientId || selectedRequest;
+    const rawGender = String(currentPatient?.gender || currentPatient?.patientGender || 'Male').trim();
+    const pGender = (rawGender.toLowerCase().startsWith('f') || rawGender.toLowerCase().startsWith('w')) ? 'Female' : 'Male';
+    const pAge = Number(currentPatient?.age || currentPatient?.patientAge) || 30;
+
+    // E. Match age & gender specific Reference Rules if present
+    if (rules && rules.length > 0) {
+      const matchRule = rules.find(r => {
+        const sexMatch = !r.sex || r.sex === 'Any' || r.sex.toLowerCase() === pGender.toLowerCase();
+        if (!sexMatch) return false;
+
+        let minYears = Number(r.minAge) || 0;
+        if (r.minAgeUnit === 'Months') minYears = minYears / 12;
+        if (r.minAgeUnit === 'Days') minYears = minYears / 365;
+
+        let maxYears = Number(r.maxAge) || 100;
+        if (r.maxAgeUnit === 'Months') maxYears = maxYears / 12;
+        if (r.maxAgeUnit === 'Days') maxYears = maxYears / 365;
+
+        return pAge >= minYears && pAge <= maxYears;
+      });
+
+      if (matchRule) {
+        const lower = parseFloat(String(matchRule.lowerValue || '').replace(/,/g, ''));
+        const upper = parseFloat(String(matchRule.upperValue || '').replace(/,/g, ''));
+        if (!isNaN(lower) && value < lower) return 'L';
+        if (!isNaN(upper) && value > upper) return 'H';
+        return null;
+      }
+    }
+
+    // F. Parse string referenceRange (e.g. "4,800 - 10,800", "40 - 80", "< 2", "13 - 17", "Male: 0-9; Female: 0-20", etc.)
+    if (defaultRange && typeof defaultRange === 'string') {
+      const cleanRange = defaultRange
+        .replace(/[–—−]/g, '-')
+        .replace(/,/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      // F1. Gender-specific range strings (e.g., "Male: 13.8 - 17.2; Female: 12.1 - 15.1" or "Male: 0 - 9; Female: 0 - 20")
+      if (cleanRange.toLowerCase().includes('male') || cleanRange.toLowerCase().includes('female')) {
         const isMale = pGender.toLowerCase() === 'male';
-        const maleMatch = defaultRange.match(/male:\s*~?([-+]?[0-9]*\.?[0-9]+)\s*[-–—−]\s*([-+]?[0-9]*\.?[0-9]+)/i);
-        const femaleMatch = defaultRange.match(/female:\s*~?([-+]?[0-9]*\.?[0-9]+)\s*[-–—−]\s*([-+]?[0-9]*\.?[0-9]+)/i);
-        
-        if (isMale && maleMatch) {
-          const ml = parseFloat(maleMatch[1]);
-          const mu = parseFloat(maleMatch[2]);
-          if (value < ml) return 'L';
-          if (value > mu) return 'H';
-          return null;
-        } else if (!isMale && femaleMatch) {
-          const fl = parseFloat(femaleMatch[1]);
-          const fu = parseFloat(femaleMatch[2]);
-          if (value < fl) return 'L';
-          if (value > fu) return 'H';
-          return null;
+        const targetRegex = isMale
+          ? /male\s*:\s*~?([<>]?\s*[-+]?[0-9]*\.?[0-9]+(?:\s*[-to]+\s*[-+]?[0-9]*\.?[0-9]+)?)/i
+          : /female\s*:\s*~?([<>]?\s*[-+]?[0-9]*\.?[0-9]+(?:\s*[-to]+\s*[-+]?[0-9]*\.?[0-9]+)?)/i;
+        const gMatch = cleanRange.match(targetRegex);
+        if (gMatch && gMatch[1]) {
+          const subRange = gMatch[1].trim();
+          const subNumbers = subRange.match(/[-+]?[0-9]*\.?[0-9]+/g);
+          if (subRange.startsWith('<') && subNumbers && subNumbers.length > 0) {
+            const maxVal = parseFloat(subNumbers[0]);
+            if (!isNaN(maxVal) && value > maxVal) return 'H';
+            return null;
+          } else if (subRange.startsWith('>') && subNumbers && subNumbers.length > 0) {
+            const minVal = parseFloat(subNumbers[0]);
+            if (!isNaN(minVal) && value < minVal) return 'L';
+            return null;
+          } else if (subNumbers && subNumbers.length >= 2) {
+            const lower = parseFloat(subNumbers[0]);
+            const upper = parseFloat(subNumbers[1]);
+            if (!isNaN(lower) && !isNaN(upper)) {
+              if (value < lower) return 'L';
+              if (value > upper) return 'H';
+              return null;
+            }
+          }
         }
       }
 
-      // Fallback: standard numeric range parser
+      // F2. Less than format (e.g. "< 2", "<= 2", "< 2.0", "< 50", "less than 2", "up to 2")
+      const ltMatch = cleanRange.match(/^(?:<|<=|less\s+than|up\s+to)\s*([-+]?[0-9]*\.?[0-9]+)/i);
+      if (ltMatch) {
+        const upper = parseFloat(ltMatch[1]);
+        if (!isNaN(upper) && value > upper) return 'H';
+        return null;
+      }
+
+      // F3. Greater than format (e.g. "> 50", ">= 60", "greater than 50", "more than 50")
+      const gtMatch = cleanRange.match(/^(?:>|>=|greater\s+than|more\s+than)\s*([-+]?[0-9]*\.?[0-9]+)/i);
+      if (gtMatch) {
+        const lower = parseFloat(gtMatch[1]);
+        if (!isNaN(lower) && value < lower) return 'L';
+        return null;
+      }
+
+      // F4. Standard numeric range format (e.g. "4800 - 10800", "40 - 80", "1.5 - 4.1", "0 - 9")
       const numbers = cleanRange.match(/[-+]?[0-9]*\.?[0-9]+/g);
       if (numbers && numbers.length >= 2) {
         const lower = parseFloat(numbers[0]);
@@ -4241,8 +4363,8 @@ Clinical Interpretation:
     return null;
   };
 
-  const isOutOfRange = (paramName, valueStr) => {
-    return getValueRangeStatus(paramName, valueStr) !== null;
+  const isOutOfRange = (paramName, valueStr, paramObj = null, patientObj = null) => {
+    return getValueRangeStatus(paramName, valueStr, paramObj, patientObj) !== null;
   };
 
   const handleUpdateParameterRules = async (paramName, updatedRules) => {
@@ -4929,7 +5051,7 @@ Clinical Interpretation:
                             const displayParams = genderFiltered.length > 0 ? genderFiltered : (params || []);
 
                             return displayParams.map((p, pIdx, filteredArr) => {
-                            const isBad = isOutOfRange(p.name, parameterValues[p.name]);
+                            const isBad = isOutOfRange(p.name, parameterValues[p.name], p, selectedRequest?.patientId);
                             const isRemarksExpanded = expandedRemarks[p.name];
                             const hasRefRangeOrRules = (p.referenceRange && p.referenceRange.trim().length > 0 && !p.referenceRange.toLowerCase().includes('standards') && !p.referenceRange.toLowerCase().includes('as per')) || (Array.isArray(p.referenceRules) && p.referenceRules.length > 0);
                             const formulaInfo = getParamFormula(p.name, p);
@@ -5121,7 +5243,7 @@ Clinical Interpretation:
                                   ) : (
                                     <div className="flex items-center gap-1.5 w-full">
                                       {(() => {
-                                        const status = getValueRangeStatus(p.name, parameterValues[p.name]);
+                                        const status = getValueRangeStatus(p.name, parameterValues[p.name], p, selectedRequest?.patientId);
                                         if (!status) return null;
                                         return (
                                           <span className={`px-2 py-0.5 rounded text-[10px] font-black tracking-wider animate-in zoom-in-50 duration-150 shrink-0 ${
