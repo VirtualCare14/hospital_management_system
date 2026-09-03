@@ -572,8 +572,15 @@ const IpdPatientDetails = () => {
     try {
       const { data: rooms } = await client.get('/rooms');
       setChangeBedRooms(rooms);
-      setNewRoomType(admission?.roomId?.roomType || rooms[0]?.roomType || '');
+      const targetRoomType = admission?.roomId?.roomType || rooms[0]?.roomType || '';
+      setNewRoomType(targetRoomType);
       setNewBedId('');
+      if (targetRoomType) {
+        const { data: beds } = await client.get(`/rooms/beds?roomType=${encodeURIComponent(targetRoomType)}`);
+        setChangeBedBeds((beds || []).filter(b => b.status === 'Available'));
+      } else {
+        setChangeBedBeds([]);
+      }
     } catch (err) {
       toast.error('Failed to load rooms configuration');
       setShowChangeBedModal(false);
@@ -1956,89 +1963,90 @@ const IpdPatientDetails = () => {
               </div>
             </div>
           )}
-          {/* Change Bed Modal */}
-          {showChangeBedModal && (
-            <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-orange-100 shadow-2xl relative animate-in fade-in zoom-in duration-200">
+        </div>
+      )}
+
+      {/* Change Bed Modal */}
+      {showChangeBedModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-orange-100 shadow-2xl relative animate-in fade-in zoom-in duration-200">
+            <button
+              type="button"
+              onClick={() => setShowChangeBedModal(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-1 hover:bg-orange-50 rounded-lg cursor-pointer"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <div className="mb-4">
+              <h2 className="font-extrabold text-gray-900 text-lg flex items-center gap-2">
+                <RefreshCw className="text-orange-500 h-5 w-5 animate-spin" style={{ animationDuration: '3s' }} />
+                Change Patient Bed
+              </h2>
+              <p className="text-xs text-gray-400 font-semibold mt-0.5">Select a new room type and bed number</p>
+            </div>
+
+            <form onSubmit={handleChangeBedSubmit} className="space-y-4">
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-500">Room Type</label>
+                <select
+                  className="input py-2 text-sm text-gray-600"
+                  value={newRoomType}
+                  onChange={(e) => setNewRoomType(e.target.value)}
+                  required
+                  disabled={loadingRooms}
+                >
+                  {loadingRooms ? (
+                    <option value="">Loading Room Types...</option>
+                  ) : (
+                    <>
+                      <option value="">-- Select Room Type --</option>
+                      {[...new Set(changeBedRooms.map(r => r.roomType))].map((type) => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </>
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-500">New Bed Number</label>
+                <select
+                  className="input py-2 text-sm text-gray-600"
+                  value={newBedId}
+                  onChange={(e) => setNewBedId(e.target.value)}
+                  required
+                  disabled={loadingRooms || !newRoomType}
+                >
+                  <option value="">-- Select Bed --</option>
+                  {changeBedBeds.map((bed) => (
+                    <option key={bed._id} value={bed._id}>
+                      {bed.bedNumber} | {bed.bedType} | ₹{bed.pricePerDay}/day
+                    </option>
+                  ))}
+                </select>
+                {changeBedBeds.length === 0 && newRoomType && !loadingRooms && (
+                  <p className="text-xs text-red-500 mt-1 font-semibold">No available beds in this room type.</p>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2 border-t border-orange-50 pt-4">
                 <button
                   type="button"
                   onClick={() => setShowChangeBedModal(false)}
-                  className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-1 hover:bg-orange-50 rounded-lg cursor-pointer"
+                  className="btn-secondary text-xs py-2 px-4 cursor-pointer"
                 >
-                  <X className="h-5 w-5" />
+                  Cancel
                 </button>
-                <div className="mb-4">
-                  <h2 className="font-extrabold text-gray-900 text-lg flex items-center gap-2">
-                    <RefreshCw className="text-orange-500 h-5 w-5 animate-spin" style={{ animationDuration: '3s' }} />
-                    Change Patient Bed
-                  </h2>
-                  <p className="text-xs text-gray-400 font-semibold mt-0.5">Select a new room type and bed number</p>
-                </div>
-
-                <form onSubmit={handleChangeBedSubmit} className="space-y-4">
-                  <div>
-                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-500">Room Type</label>
-                    <select
-                      className="input py-2 text-sm text-gray-600"
-                      value={newRoomType}
-                      onChange={(e) => setNewRoomType(e.target.value)}
-                      required
-                      disabled={loadingRooms}
-                    >
-                      {loadingRooms ? (
-                        <option value="">Loading Room Types...</option>
-                      ) : (
-                        <>
-                          <option value="">-- Select Room Type --</option>
-                          {[...new Set(changeBedRooms.map(r => r.roomType))].map((type) => (
-                            <option key={type} value={type}>{type}</option>
-                          ))}
-                        </>
-                      )}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-500">New Bed Number</label>
-                    <select
-                      className="input py-2 text-sm text-gray-600"
-                      value={newBedId}
-                      onChange={(e) => setNewBedId(e.target.value)}
-                      required
-                      disabled={loadingRooms || !newRoomType}
-                    >
-                      <option value="">-- Select Bed --</option>
-                      {changeBedBeds.map((bed) => (
-                        <option key={bed._id} value={bed._id}>
-                          {bed.bedNumber} | {bed.bedType} | ₹{bed.pricePerDay}/day
-                        </option>
-                      ))}
-                    </select>
-                    {changeBedBeds.length === 0 && newRoomType && !loadingRooms && (
-                      <p className="text-xs text-red-500 mt-1 font-semibold">No available beds in this room type.</p>
-                    )}
-                  </div>
-
-                  <div className="flex justify-end gap-2 border-t border-orange-50 pt-4">
-                    <button
-                      type="button"
-                      onClick={() => setShowChangeBedModal(false)}
-                      className="btn-secondary text-xs py-2 px-4 cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={changingBed || loadingRooms || !newBedId}
-                      className="btn text-xs py-2 px-4 cursor-pointer bg-orange-500 hover:bg-orange-600"
-                    >
-                      {changingBed ? 'Changing...' : 'Change Bed'}
-                    </button>
-                  </div>
-                </form>
+                <button
+                  type="submit"
+                  disabled={changingBed || loadingRooms || !newBedId}
+                  className="btn text-xs py-2 px-4 cursor-pointer bg-orange-500 hover:bg-orange-600"
+                >
+                  {changingBed ? 'Changing...' : 'Change Bed'}
+                </button>
               </div>
-            </div>
-          )}
+            </form>
+          </div>
         </div>
       )}
       <datalist id="ipd-pharmacy-medicines-datalist">

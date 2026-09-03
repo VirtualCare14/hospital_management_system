@@ -729,6 +729,7 @@ const getBillingSummary = async (req, res) => {
 
     let roomCharges = 0;
     let daysAdmitted = 0;
+    const bedPricePerDay = admission.bedId?.pricePerDay || 0;
     if (admission.bedHistory && admission.bedHistory.length > 0) {
       admission.bedHistory.forEach(hist => {
         const startDate = new Date(hist.startDate);
@@ -738,7 +739,6 @@ const getBillingSummary = async (req, res) => {
         roomCharges += (hist.pricePerDay || 0) * days;
       });
     } else {
-      const bedPricePerDay = admission.bedId?.pricePerDay || 0;
       const admissionDate = new Date(admission.admissionDate);
       const currentDate = admission.status === 'Discharged' && admission.dischargeDate
         ? new Date(admission.dischargeDate) : new Date();
