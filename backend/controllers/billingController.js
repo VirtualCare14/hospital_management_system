@@ -52,15 +52,11 @@ const checkPatientDischargeStatus = async (req, patientId, billType = '') => {
   }
 
   // 2. Check Active Same Day Care / Same Day Treatment (status != Completed)
-  const activeSdt = await SameDayTreatment.findOne(tenantFilter(req, {
-    patientId,
-    status: { $ne: 'Completed' }
-  })).sort({ createdAt: -1 });
-
-  if (activeSdt) {
+  const latestSdt = await SameDayTreatment.findOne(tenantFilter(req, { patientId })).sort({ createdAt: -1 });
+  if (latestSdt && latestSdt.status !== 'Completed' && latestSdt.treatmentType && latestSdt.treatmentType.trim() !== '') {
     return {
       allowed: false,
-      reason: `Cannot finalize bill: Patient is currently undergoing Same Day Care (${activeSdt.treatmentType || 'Care'}) and has not been marked completed/discharged yet.`
+      reason: `Cannot finalize bill: Patient is currently undergoing Same Day Care (${latestSdt.treatmentType || 'Care'}) and has not been marked completed/discharged yet.`
     };
   }
 
@@ -730,19 +726,42 @@ const generateBillItems = async (req, res) => {
         // Base treatment charge (if billType is All or SameDayTreatment)
         if (!billType || billType === 'All' || billType === 'SameDayTreatment') {
           if (!billedSourceIds.has(t._id.toString())) {
-            const price = t.price || 0;
-            if (price > 0) {
-              items.push({
-                category: 'SameDayTreatment',
-                date: fmtDate(t.treatmentDate),
-                description: `${t.treatmentType || 'Same Day Care'} Treatment`,
-                price: price,
-                quantity: 1,
-                total: price,
-                sourceId: t._id,
-                sourceModel: 'SameDayTreatment'
-              });
+            let price = t.price || 0;
+            if (!price && t.treatmentType) {
+              if (adminSettings?.sameDayCareCategories) {
+                for (const cat of adminSettings.sameDayCareCategories) {
+                  const sub = cat.subServices?.find(s => s.name.toLowerCase() === t.treatmentType.toLowerCase());
+                  if (sub && sub.price) {
+                    price = sub.price;
+                    break;
+                  }
+                }
+              }
+              if (!price && adminSettings?.sameDayTreatmentPrices) {
+                const service = adminSettings.sameDayTreatmentPrices.find(s => s.name.toLowerCase() === t.treatmentType.toLowerCase());
+                if (service && service.price) price = service.price;
+              }
+              if (!price) {
+                const defaultPrices = {
+                  'Fracture': 500, 'Minor Injury': 300, 'Minor Stitches': 400,
+                  'Small Burns': 350, 'Mild Allergic Reactions': 250, 'Dialysis': 2000
+                };
+                price = defaultPrices[t.treatmentType] || 0;
+              }
             }
+
+            items.push({
+              category: 'SameDayTreatment',
+              date: fmtDate(t.treatmentDate || t.createdAt),
+              description: `${t.treatmentType || 'Same Day Care'} Procedure Fee`,
+              price: price,
+              mrpIncGst: price,
+              mrpExGst: price,
+              quantity: 1,
+              total: price,
+              sourceId: t._id,
+              sourceModel: 'SameDayTreatment'
+            });
           }
         }
 
@@ -1169,7 +1188,8 @@ const generateBillItems = async (req, res) => {
 
     // Check if patient is currently in IPD or Same Day Care and not discharged
     const activeIpdAdmission = await IpdAdmission.findOne(tenantFilter(req, { patientId: patient._id, status: { $ne: 'Discharged' } })).sort({ createdAt: -1 });
-    const activeSdtRecord = await SameDayTreatment.findOne(tenantFilter(req, { patientId: patient._id, status: { $ne: 'Completed' } })).sort({ createdAt: -1 });
+    const latestSdtRecord = await SameDayTreatment.findOne(tenantFilter(req, { patientId: patient._id })).sort({ createdAt: -1 });
+    const activeSdtRecord = (latestSdtRecord && latestSdtRecord.status !== 'Completed' && latestSdtRecord.treatmentType && latestSdtRecord.treatmentType.trim() !== '') ? latestSdtRecord : null;
 
     const dischargeBlocked = !!(activeIpdAdmission || activeSdtRecord);
     let dischargeBlockReason = null;

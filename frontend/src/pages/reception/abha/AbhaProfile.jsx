@@ -49,7 +49,11 @@ const AbhaProfile = () => {
 
   // Format date of birth
   const formatDateOfBirth = (data) => {
-    const dateValue = data.dateOfBirth || data.dob || data.yearOfBirth;
+    if (!data) return null;
+    const dateValue = data.dateOfBirth || 
+                      data.dob || 
+                      (data.dayOfBirth && data.monthOfBirth && data.yearOfBirth ? `${data.yearOfBirth}-${data.monthOfBirth}-${data.dayOfBirth}` : null) ||
+                      data.yearOfBirth;
     if (!dateValue) return null;
     
     // If it's just a year (4 digits)
@@ -71,23 +75,29 @@ const AbhaProfile = () => {
       // If parsing fails, return as is
     }
     
-    return dateValue;
+    return String(dateValue);
   };
 
   const dobValue = formatDateOfBirth(profileData);
 
   // Build a clean key-value display
+  const fullName = profileData?.name || 
+                   profileData?.fullName || 
+                   [profileData?.firstName, profileData?.middleName, profileData?.lastName].filter(Boolean).join(' ') || 
+                   null;
+
   const fields = profileData ? [
-    { label: 'ABHA Number', value: profileData.abhaNumber || profileData.abha || profileData.id, icon: IdCard },
-    { label: 'Name', value: profileData.name || profileData.fullName, icon: UserCircle },
+    { label: 'ABHA Number', value: profileData.abhaNumber || profileData.healthIdNumber || profileData.abha || profileData.id, icon: IdCard },
+    { label: 'ABHA Address', value: profileData.abhaAddress || profileData.healthId, icon: Hash },
+    { label: 'Name', value: fullName, icon: UserCircle },
     { label: 'Mobile', value: profileData.mobile || profileData.phoneNumber, icon: Phone },
     { label: 'Email', value: profileData.email, icon: Mail },
     { label: 'Gender', value: profileData.gender, icon: Hash },
     { label: 'Date of Birth', value: dobValue, icon: Calendar },
     { label: 'Address', value: profileData.address, icon: MapPin },
-    { label: 'State', value: profileData.state, icon: MapPin },
-    { label: 'District', value: profileData.district, icon: MapPin },
-    { label: 'Pincode', value: profileData.pincode, icon: Hash },
+    { label: 'District', value: profileData.district || profileData.districtName, icon: MapPin },
+    { label: 'State', value: profileData.state || profileData.stateName, icon: MapPin },
+    { label: 'Pincode', value: profileData.pincode || profileData.pinCode, icon: Hash },
   ].filter(f => f.value) : [];
 
   return (

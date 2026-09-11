@@ -28,7 +28,13 @@ app.use((req, res, next) => {
   }
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  
+  const requestedHeaders = req.headers['access-control-request-headers'];
+  if (requestedHeaders) {
+    res.header('Access-Control-Allow-Headers', requestedHeaders);
+  } else {
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, x-abha-token, X-Abha-Token, request-id, x-request-id');
+  }
   
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -36,9 +42,16 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(cors());
+app.use(cors({
+  origin: true,
+  credentials: true,
+  allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization', 'x-abha-token', 'X-Abha-Token', 'request-id', 'x-request-id']
+}));
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ extended: true, limit: '100mb' }));
+
+// ABDM Milestone 2 (HIP) Webhook Routes (Public for Gateway callbacks)
+app.use('/api/abdm/m2/webhooks', require('./modules/abdm-m2').m2WebhookRoutes);
 
 // API Routes
 app.use('/api/auth', require('./routes/authRoutes'));

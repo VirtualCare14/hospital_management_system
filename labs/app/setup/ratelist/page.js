@@ -256,6 +256,7 @@ function RatelistContent() {
   const [packageForm, setPackageForm] = useState({
     name: '',
     code: '',
+    category: 'LAB',
     price: '',
     selectedTests: [],
     forGender: 'Both',
@@ -312,6 +313,7 @@ function RatelistContent() {
             _id: 'pkg_1',
             name: 'Executive Health Checkup',
             code: 'PKG-EHC',
+            category: 'LAB',
             price: 1499,
             originalPrice: 2200,
             forGender: 'Both',
@@ -329,6 +331,7 @@ function RatelistContent() {
             _id: 'pkg_2',
             name: 'Diabetic Care Profile',
             code: 'PKG-DCP',
+            category: 'LAB',
             price: 799,
             originalPrice: 1200,
             forGender: 'Both',
@@ -346,6 +349,7 @@ function RatelistContent() {
             _id: 'pkg_3',
             name: 'Fever & Infection Panel',
             code: 'PKG-FIP',
+            category: 'LAB',
             price: 899,
             originalPrice: 1300,
             forGender: 'Both',
@@ -380,10 +384,11 @@ function RatelistContent() {
     setPackageForm({
       name: '',
       code: '',
+      category: selectedModality || 'LAB',
       price: '',
       selectedTests: [],
       forGender: 'Both',
-      sampleType: 'Blood / Serum / Urine',
+      sampleType: (selectedModality === 'LAB' || !selectedModality) ? 'Blood / Serum / Urine' : 'N/A / Scan',
       turnaroundTime: 'Same Day',
       description: '',
       status: 'Active'
@@ -397,12 +402,13 @@ function RatelistContent() {
     setPackageForm({
       name: pkg.name || '',
       code: pkg.code || '',
+      category: pkg.category || selectedModality || 'LAB',
       price: String(pkg.price || 0),
       selectedTests: (pkg.tests || []).map(t => ({
         id: t.testId || t._id || t.id,
         title: t.testName || t.title || t.name,
         price: t.price || 0,
-        department: t.department || 'PATHOLOGY'
+        department: t.department || pkg.category || 'PATHOLOGY'
       })),
       forGender: pkg.forGender || 'Both',
       sampleType: pkg.sampleType || 'Blood / Serum / Urine',
@@ -428,7 +434,7 @@ function RatelistContent() {
             id: testItem._id,
             title: testTitle,
             price: testItem.basePrice || testItem.totalAmount || 0,
-            department: testItem.department || 'PATHOLOGY'
+            department: testItem.department || prev.category || selectedModality || 'PATHOLOGY'
           }
         ];
       }
@@ -456,18 +462,19 @@ function RatelistContent() {
     }
 
     const calculatedOriginalPrice = packageForm.selectedTests.reduce((sum, t) => sum + (Number(t.price) || 0), 0);
+    const targetCategory = (packageForm.category || selectedModality || 'LAB').toUpperCase().trim();
 
     const payload = {
       name: packageForm.name.trim(),
       code: packageForm.code?.trim() || `PKG-${packageForm.name.substring(0, 3).toUpperCase()}`,
-      category: 'LAB',
+      category: targetCategory,
       price: enteredPrice,
       originalPrice: calculatedOriginalPrice,
       tests: packageForm.selectedTests.map(t => ({
         testId: t.id,
         testName: t.title,
         price: t.price,
-        department: t.department || 'PATHOLOGY'
+        department: t.department || targetCategory
       })),
       forGender: packageForm.forGender,
       sampleType: packageForm.sampleType,
@@ -485,7 +492,7 @@ function RatelistContent() {
       } else {
         const created = await api.post('/lab/packages', payload);
         setPackagesList(prev => [created || { _id: `pkg_${Date.now()}`, ...payload }, ...prev]);
-        showToast('Health package created and added to Lab Catalog!', 'success');
+        showToast(`Health package created for ${targetCategory}!`, 'success');
       }
       setShowAddPackageModal(false);
       loadTests();
@@ -813,146 +820,160 @@ function RatelistContent() {
           </div>
 
           {/* Action Bar & Controls */}
-          {(activeSection === 'packages' || categoryTypeFilter === 'Packages') ? (
-            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
-                <div>
-                  <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                    <PackageIcon className="w-5 h-5 text-orange-500" />
-                    <span>Health Packages & Profiles</span>
-                    <span className="text-xs bg-orange-100 text-orange-700 px-2.5 py-0.5 rounded-full font-bold">
-                      {packagesList.length} Packages
-                    </span>
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-0.5 font-medium">
-                    Create bundled test packages with custom selling prices. Selecting a package in New Bill registers all bundled tests for that patient.
-                  </p>
-                </div>
+          {(activeSection === 'packages' || categoryTypeFilter === 'Packages') ? (() => {
+            const categoryPackagesList = packagesList.filter(p => {
+              const pkgCat = (p.category || 'LAB').toUpperCase();
+              const selectedCat = (selectedModality || 'LAB').toUpperCase();
+              if (selectedCat === 'USG') return pkgCat === 'USG' || pkgCat.includes('USG');
+              if (selectedCat === 'DIGITAL X-RAY' || selectedCat === 'DIGITAL XRAY') return pkgCat.includes('X-RAY') || pkgCat.includes('XRAY');
+              if (selectedCat === 'XRAY') return pkgCat === 'XRAY' || pkgCat === 'X-RAY';
+              return pkgCat === selectedCat;
+            });
 
-                <div className="flex items-center gap-2">
-                  <div className="relative w-60">
-                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={packageSearchQuery}
-                      onChange={(e) => setPackageSearchQuery(e.target.value)}
-                      placeholder="Search packages by name or code..."
-                      className="w-full h-9 pl-9 pr-3 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-orange-500"
-                    />
+            const filteredCategoryPackages = categoryPackagesList.filter(p => {
+              const q = packageSearchQuery.toLowerCase().trim();
+              if (!q) return true;
+              return (p.name || '').toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q);
+            });
+
+            return (
+              <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
+                  <div>
+                    <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                      <PackageIcon className="w-5 h-5 text-orange-500" />
+                      <span>{selectedModality} Packages & Profiles</span>
+                      <span className="text-xs bg-orange-100 text-orange-700 px-2.5 py-0.5 rounded-full font-bold">
+                        {categoryPackagesList.length} {categoryPackagesList.length === 1 ? 'Package' : 'Packages'}
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5 font-medium">
+                      Create bundled test packages for {selectedModality} with custom selling prices. Selecting a package in New Bill registers all bundled tests for that patient.
+                    </p>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={handleOpenAddPackage}
-                    className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm shadow-orange-500/20 cursor-pointer transition-colors"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>+ Create Package</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <div className="relative w-60">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={packageSearchQuery}
+                        onChange={(e) => setPackageSearchQuery(e.target.value)}
+                        placeholder={`Search ${selectedModality} packages...`}
+                        className="w-full h-9 pl-9 pr-3 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-orange-500"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleOpenAddPackage}
+                      className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm shadow-orange-500/20 cursor-pointer transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>+ Create Package</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              {/* Packages Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50/90 text-slate-600 font-bold uppercase text-[11px] tracking-wider border-b border-slate-200">
-                      <th className="py-3 px-4">PACKAGE NAME & CODE</th>
-                      <th className="py-3 px-4">INCLUDED TESTS</th>
-                      <th className="py-3 px-4">ORIGINAL SUM</th>
-                      <th className="py-3 px-4">PACKAGE PRICE</th>
-                      <th className="py-3 px-4">SAVINGS</th>
-                      <th className="py-3 px-4">GENDER</th>
-                      <th className="py-3 px-4">STATUS</th>
-                      <th className="py-3 px-4 text-center">ACTIONS</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-800">
-                    {loadingPackages ? (
-                      <tr>
-                        <td colSpan="8" className="py-12 text-center text-slate-400">
-                          <Loader2 className="w-6 h-6 animate-spin mx-auto text-orange-500 mb-1" />
-                          <span>Loading health packages...</span>
-                        </td>
+                {/* Packages Table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50/90 text-slate-600 font-bold uppercase text-[11px] tracking-wider border-b border-slate-200">
+                        <th className="py-3 px-4">PACKAGE NAME & CODE</th>
+                        <th className="py-3 px-4">INCLUDED TESTS</th>
+                        <th className="py-3 px-4">ORIGINAL SUM</th>
+                        <th className="py-3 px-4">PACKAGE PRICE</th>
+                        <th className="py-3 px-4">SAVINGS</th>
+                        <th className="py-3 px-4">GENDER</th>
+                        <th className="py-3 px-4">STATUS</th>
+                        <th className="py-3 px-4 text-center">ACTIONS</th>
                       </tr>
-                    ) : packagesList.filter(p => {
-                      const q = packageSearchQuery.toLowerCase().trim();
-                      if (!q) return true;
-                      return (p.name || '').toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q);
-                    }).length === 0 ? (
-                      <tr>
-                        <td colSpan="8" className="py-12 text-center text-slate-400 font-medium">
-                          No packages found. Click <b>"+ Create Package"</b> to bundle multiple tests into a discounted package.
-                        </td>
-                      </tr>
-                    ) : (
-                      packagesList.filter(p => {
-                        const q = packageSearchQuery.toLowerCase().trim();
-                        if (!q) return true;
-                        return (p.name || '').toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q);
-                      }).map((pkg) => {
-                        const originalSum = (pkg.tests || []).reduce((sum, t) => sum + (Number(t.price) || 0), 0) || pkg.originalPrice || pkg.price;
-                        const savingsAmt = Math.max(0, originalSum - (pkg.price || 0));
-                        const discountPct = originalSum > 0 ? Math.round((savingsAmt / originalSum) * 100) : 0;
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-slate-800">
+                      {loadingPackages ? (
+                        <tr>
+                          <td colSpan="8" className="py-12 text-center text-slate-400">
+                            <Loader2 className="w-6 h-6 animate-spin mx-auto text-orange-500 mb-1" />
+                            <span>Loading {selectedModality} packages...</span>
+                          </td>
+                        </tr>
+                      ) : filteredCategoryPackages.length === 0 ? (
+                        <tr>
+                          <td colSpan="8" className="py-12 text-center text-slate-400 font-medium">
+                            No packages found for <strong className="text-slate-700">{selectedModality}</strong>. Click <b>"+ Create Package"</b> to bundle {selectedModality} tests into a discounted package.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredCategoryPackages.map((pkg) => {
+                          const originalSum = (pkg.tests || []).reduce((sum, t) => sum + (Number(t.price) || 0), 0) || pkg.originalPrice || pkg.price;
+                          const savingsAmt = Math.max(0, originalSum - (pkg.price || 0));
+                          const discountPct = originalSum > 0 ? Math.round((savingsAmt / originalSum) * 100) : 0;
 
-                        return (
-                          <tr key={pkg._id} className="hover:bg-slate-50/70 transition-colors">
-                            <td className="py-3 px-4">
-                              <div className="flex flex-col">
-                                <span className="font-extrabold text-slate-900 text-xs">{pkg.name}</span>
-                                <div className="flex items-center gap-1.5 mt-0.5">
-                                  {pkg.code && (
-                                    <span className="text-[10px] font-mono bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold">
-                                      {pkg.code}
+                          return (
+                            <tr key={pkg._id} className="hover:bg-slate-50/70 transition-colors">
+                              <td className="py-3 px-4">
+                                <div className="flex flex-col">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-extrabold text-slate-900 text-xs">{pkg.name}</span>
+                                    <span className="text-[9px] font-bold bg-orange-100 text-orange-800 px-1.5 py-0.2 rounded">
+                                      {pkg.category || selectedModality}
                                     </span>
-                                  )}
-                                  {pkg.description && (
-                                    <span className="text-[10px] text-slate-400 truncate max-w-xs" title={pkg.description}>
-                                      {pkg.description}
+                                  </div>
+                                  <div className="flex items-center gap-1.5 mt-0.5">
+                                    {pkg.code && (
+                                      <span className="text-[10px] font-mono bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold">
+                                        {pkg.code}
+                                      </span>
+                                    )}
+                                    {pkg.description && (
+                                      <span className="text-[10px] text-slate-400 truncate max-w-xs" title={pkg.description}>
+                                        {pkg.description}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+
+                              <td className="py-3 px-4 max-w-sm">
+                                <div className="flex flex-wrap items-center gap-1">
+                                  {(pkg.tests || []).slice(0, 3).map((t, idx) => (
+                                    <span key={idx} className="bg-orange-50 text-orange-800 border border-orange-200/80 px-2 py-0.5 rounded-md text-[10px] font-semibold">
+                                      {t.testName || t.title || t.name}
+                                    </span>
+                                  ))}
+                                  {(pkg.tests || []).length > 3 && (
+                                    <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                                      +{(pkg.tests || []).length - 3} more
                                     </span>
                                   )}
                                 </div>
-                              </div>
-                            </td>
+                              </td>
 
-                            <td className="py-3 px-4 max-w-sm">
-                              <div className="flex flex-wrap items-center gap-1">
-                                {(pkg.tests || []).slice(0, 3).map((t, idx) => (
-                                  <span key={idx} className="bg-orange-50 text-orange-800 border border-orange-200/80 px-2 py-0.5 rounded-md text-[10px] font-semibold">
-                                    {t.testName || t.title || t.name}
+                              <td className="py-3 px-4 font-bold text-slate-400 line-through text-xs">
+                                ₹{originalSum}
+                              </td>
+
+                              <td className="py-3 px-4 font-black text-slate-900 text-sm">
+                                ₹{pkg.price}
+                              </td>
+
+                              <td className="py-3 px-4">
+                                {discountPct > 0 ? (
+                                  <span className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-2 py-0.5 rounded-full text-[10px] font-extrabold flex items-center gap-0.5 w-fit">
+                                    <Sparkles className="w-3 h-3 text-emerald-600" />
+                                    <span>{discountPct}% OFF</span>
                                   </span>
-                                ))}
-                                {(pkg.tests || []).length > 3 && (
-                                  <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[10px] font-bold">
-                                    +{(pkg.tests || []).length - 3} more
-                                  </span>
+                                ) : (
+                                  <span className="text-[10px] text-slate-400 font-semibold">—</span>
                                 )}
-                              </div>
-                            </td>
+                              </td>
 
-                            <td className="py-3 px-4 font-bold text-slate-400 line-through text-xs">
-                              ₹{originalSum}
-                            </td>
-
-                            <td className="py-3 px-4 font-black text-slate-900 text-sm">
-                              ₹{pkg.price}
-                            </td>
-
-                            <td className="py-3 px-4">
-                              {discountPct > 0 ? (
-                                <span className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-2 py-0.5 rounded-full text-[10px] font-extrabold flex items-center gap-0.5 w-fit">
-                                  <Sparkles className="w-3 h-3 text-emerald-600" />
-                                  <span>{discountPct}% OFF</span>
+                              <td className="py-3 px-4">
+                                <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                                  {pkg.forGender || 'Both'}
                                 </span>
-                              ) : (
-                                <span className="text-[10px] text-slate-400 font-semibold">—</span>
-                              )}
-                            </td>
-
-                            <td className="py-3 px-4 text-xs font-semibold text-slate-700">
-                              {pkg.forGender || 'Both'}
-                            </td>
-
+                              </td>
                             <td className="py-3 px-4">
                               <button
                                 type="button"
@@ -995,7 +1016,8 @@ function RatelistContent() {
                 </table>
               </div>
             </div>
-          ) : (
+          );
+        })() : (
             <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3.5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 {/* Search */}
@@ -1417,267 +1439,318 @@ function RatelistContent() {
         </div>
       )}
 
-      {/* CREATE / EDIT HEALTH PACKAGE MODAL */}
-      {showAddPackageModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-2xl max-w-3xl w-full space-y-5 animate-in fade-in zoom-in-95 my-8">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                  <PackageIcon className="w-5 h-5 text-orange-500" />
-                  <span>{editingPackageId ? 'Edit Health Package' : 'Create New Health Package'}</span>
-                </h3>
-                <p className="text-xs text-slate-500 font-medium mt-0.5">
-                  Select multiple lab tests and configure a fixed package selling price.
-                </p>
-              </div>
-              <button 
-                type="button"
-                onClick={() => setShowAddPackageModal(false)} 
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+                      {/* CREATE / EDIT HEALTH PACKAGE MODAL */}
+                      {showAddPackageModal && (
+                        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+                          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-2xl max-w-3xl w-full space-y-5 animate-in fade-in zoom-in-95 my-8">
+                            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                              <div>
+                                <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                                  <PackageIcon className="w-5 h-5 text-orange-500" />
+                                  <span>{editingPackageId ? 'Edit Health Package' : 'Create New Health Package'}</span>
+                                </h3>
+                                <p className="text-xs text-slate-500 font-medium mt-0.5">
+                                  Select multiple lab / diagnostic tests and configure a fixed package selling price.
+                                </p>
+                              </div>
+                              <button 
+                                type="button"
+                                onClick={() => setShowAddPackageModal(false)} 
+                                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                              >
+                                <X className="w-5 h-5" />
+                              </button>
+                            </div>
 
-            <form onSubmit={handleSavePackage} className="space-y-4 text-xs">
-              {/* Basic Package Info */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-slate-800 font-bold mb-1">
-                    Package Name <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={packageForm.name}
-                    onChange={(e) => setPackageForm(p => ({ ...p, name: e.target.value }))}
-                    placeholder="e.g. Senior Citizen Health Package"
-                    className="w-full h-9 px-3 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-orange-500"
-                  />
-                </div>
+                            <form onSubmit={handleSavePackage} className="space-y-4 text-xs">
+                              {/* Basic Package Info */}
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div className="sm:col-span-1">
+                                  <label className="block text-slate-800 font-bold mb-1">
+                                    Package Name <span className="text-red-500">*</span>
+                                  </label>
+                                  <input
+                                    type="text"
+                                    required
+                                    value={packageForm.name}
+                                    onChange={(e) => setPackageForm(p => ({ ...p, name: e.target.value }))}
+                                    placeholder="e.g. Full Body Package"
+                                    className="w-full h-9 px-3 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-orange-500"
+                                  />
+                                </div>
 
-                <div>
-                  <label className="block text-slate-800 font-bold mb-1">
-                    Package Code (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={packageForm.code}
-                    onChange={(e) => setPackageForm(p => ({ ...p, code: e.target.value }))}
-                    placeholder="e.g. PKG-SCHP"
-                    className="w-full h-9 px-3 border border-slate-300 rounded-xl text-xs font-mono font-semibold text-slate-900 focus:outline-none focus:border-orange-500"
-                  />
-                </div>
-              </div>
+                                <div className="sm:col-span-1">
+                                  <label className="block text-slate-800 font-bold mb-1">
+                                    Investigation Category <span className="text-red-500">*</span>
+                                  </label>
+                                  <select
+                                    value={packageForm.category || selectedModality || 'LAB'}
+                                    onChange={(e) => setPackageForm(p => ({ ...p, category: e.target.value }))}
+                                    className="w-full h-9 px-2 border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:border-orange-500 bg-white"
+                                  >
+                                    {MODALITIES.map(m => (
+                                      <option key={m.id} value={m.id}>{m.label}</option>
+                                    ))}
+                                  </select>
+                                </div>
 
-              {/* MULTI-TEST SELECTOR */}
-              <div className="border border-slate-200 rounded-2xl p-4 bg-slate-50/50 space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <span className="font-extrabold text-slate-900 text-xs flex items-center gap-1.5">
-                      <span>Select Tests to Include</span>
-                      <span className="bg-orange-500 text-white px-2 py-0.5 rounded-full text-[10px] font-bold">
-                        {packageForm.selectedTests.length} selected
-                      </span>
-                    </span>
-                    <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-                      Check any tests from your catalog that are part of this package.
-                    </p>
-                  </div>
+                                <div className="sm:col-span-1">
+                                  <label className="block text-slate-800 font-bold mb-1">
+                                    Package Code (Optional)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={packageForm.code}
+                                    onChange={(e) => setPackageForm(p => ({ ...p, code: e.target.value }))}
+                                    placeholder="e.g. PKG-01"
+                                    className="w-full h-9 px-3 border border-slate-300 rounded-xl text-xs font-mono font-semibold text-slate-900 focus:outline-none focus:border-orange-500"
+                                  />
+                                </div>
+                              </div>
 
-                  <div className="relative w-56">
-                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={testPickerSearch}
-                      onChange={(e) => setTestPickerSearch(e.target.value)}
-                      placeholder="Search tests..."
-                      className="w-full h-8 pl-8 pr-3 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-orange-500"
-                    />
-                  </div>
-                </div>
+                              {/* MULTI-TEST SELECTOR */}
+                              <div className="border border-slate-200 rounded-2xl p-4 bg-slate-50/50 space-y-3">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div>
+                                    <span className="font-extrabold text-slate-900 text-xs flex items-center gap-1.5">
+                                      <span>Select Tests to Include</span>
+                                      <span className="bg-orange-500 text-white px-2 py-0.5 rounded-full text-[10px] font-bold">
+                                        {packageForm.selectedTests.length} selected
+                                      </span>
+                                    </span>
+                                    <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                                      Showing tests for <strong>{packageForm.category || selectedModality}</strong>. Check tests to bundle in this package.
+                                    </p>
+                                  </div>
 
-                {/* Selected Tests Summary Chips */}
-                {packageForm.selectedTests.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-1.5 p-2 bg-white rounded-xl border border-slate-200/80 max-h-24 overflow-y-auto">
-                    {packageForm.selectedTests.map((st) => (
-                      <span
-                        key={st.id || st.title}
-                        className="inline-flex items-center gap-1.5 bg-orange-50 text-orange-900 border border-orange-200 px-2 py-1 rounded-lg text-[11px] font-bold shadow-2xs"
-                      >
-                        <span>{st.title}</span>
-                        <span className="text-[10px] text-orange-600">₹{st.price || 0}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleTestInPackage({ _id: st.id, title: st.title })}
-                          className="text-orange-400 hover:text-red-600 cursor-pointer"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
+                                  <div className="relative w-56">
+                                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                                    <input
+                                      type="text"
+                                      value={testPickerSearch}
+                                      onChange={(e) => setTestPickerSearch(e.target.value)}
+                                      placeholder="Search tests..."
+                                      className="w-full h-8 pl-8 pr-3 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-orange-500"
+                                    />
+                                  </div>
+                                </div>
 
-                {/* Scrollable Tests Picker List */}
-                <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-xl bg-white divide-y divide-slate-100">
-                  {tests.filter(t => {
-                    const q = testPickerSearch.toLowerCase().trim();
-                    if (!q) return true;
-                    return (t.title || t.test || '').toLowerCase().includes(q);
-                  }).map((testItem) => {
-                    const testTitle = testItem.title || testItem.test;
-                    const isSelected = packageForm.selectedTests.some(st => (st.id && st.id === testItem._id) || st.title === testTitle);
-                    const itemPrice = testItem.basePrice || testItem.totalAmount || 0;
+                                {/* Selected Tests Summary Chips */}
+                                {packageForm.selectedTests.length > 0 && (
+                                  <div className="flex flex-wrap items-center gap-1.5 p-2 bg-white rounded-xl border border-slate-200/80 max-h-24 overflow-y-auto">
+                                    {packageForm.selectedTests.map((st) => (
+                                      <span
+                                        key={st.id || st.title}
+                                        className="inline-flex items-center gap-1.5 bg-orange-50 text-orange-900 border border-orange-200 px-2 py-1 rounded-lg text-[11px] font-bold shadow-2xs"
+                                      >
+                                        <span>{st.title}</span>
+                                        <span className="text-[10px] text-orange-600">₹{st.price || 0}</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleToggleTestInPackage({ _id: st.id, title: st.title })}
+                                          className="text-orange-400 hover:text-red-600 cursor-pointer"
+                                        >
+                                          <X className="w-3 h-3" />
+                                        </button>
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
 
-                    return (
-                      <div
-                        key={testItem._id}
-                        onClick={() => handleToggleTestInPackage(testItem)}
-                        className={`flex items-center justify-between p-2.5 px-3.5 hover:bg-orange-50/40 cursor-pointer transition-colors ${
-                          isSelected ? 'bg-orange-50/70' : ''
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => {}}
-                            className="w-4 h-4 text-orange-500 rounded border-slate-300 focus:ring-orange-500 cursor-pointer"
-                          />
-                          <div>
-                            <span className={`text-xs ${isSelected ? 'font-black text-orange-950' : 'font-semibold text-slate-800'}`}>
-                              {testTitle}
-                            </span>
-                            <span className="text-[10px] text-slate-400 ml-2 font-medium">
-                              ({testItem.category || 'LAB'})
-                            </span>
+                                {/* Scrollable Tests Picker List */}
+                                <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-xl bg-white divide-y divide-slate-100">
+                                  {(() => {
+                                    const activePkgCat = (packageForm.category || selectedModality || 'LAB').toUpperCase();
+                                    const catalogFallback = (INITIAL_CATALOG[activePkgCat] || []).map((t, idx) => ({
+                                      _id: `cat_def_${activePkgCat}_${idx}`,
+                                      title: t.title,
+                                      test: t.title,
+                                      category: activePkgCat,
+                                      basePrice: t.basePrice || 0,
+                                      totalAmount: t.basePrice || 0
+                                    }));
+
+                                    const combinedTests = [...tests, ...catalogFallback];
+                                    const uniqueTestsMap = new Map();
+                                    combinedTests.forEach(t => {
+                                      const tCat = (t.category || 'LAB').toUpperCase();
+                                      const key = `${tCat}__${(t.title || t.test || '').toLowerCase()}`;
+                                      if (!uniqueTestsMap.has(key)) {
+                                        uniqueTestsMap.set(key, t);
+                                      }
+                                    });
+
+                                    const filteredTestsList = Array.from(uniqueTestsMap.values()).filter(t => {
+                                      const q = testPickerSearch.toLowerCase().trim();
+                                      const tCat = (t.category || 'LAB').toUpperCase();
+                                      const catMatch = tCat === activePkgCat || (activePkgCat === 'USG' && tCat.includes('USG')) || (activePkgCat === 'DIGITAL X-RAY' && tCat.includes('XRAY'));
+                                      if (q) {
+                                        return (t.title || t.test || '').toLowerCase().includes(q);
+                                      }
+                                      return catMatch;
+                                    });
+
+                                    if (filteredTestsList.length === 0) {
+                                      return (
+                                        <div className="p-4 text-center text-slate-400 text-xs">
+                                          No tests found for {activePkgCat}. Search above or add tests in Ratelist first.
+                                        </div>
+                                      );
+                                    }
+
+                                    return filteredTestsList.map((testItem) => {
+                                      const testTitle = testItem.title || testItem.test;
+                                      const isSelected = packageForm.selectedTests.some(st => (st.id && st.id === testItem._id) || st.title === testTitle);
+                                      const itemPrice = testItem.basePrice || testItem.totalAmount || 0;
+
+                                      return (
+                                        <div
+                                          key={testItem._id || testTitle}
+                                          onClick={() => handleToggleTestInPackage(testItem)}
+                                          className={`flex items-center justify-between p-2.5 px-3.5 hover:bg-orange-50/40 cursor-pointer transition-colors ${
+                                            isSelected ? 'bg-orange-50/70' : ''
+                                          }`}
+                                        >
+                                          <div className="flex items-center gap-2.5">
+                                            <input
+                                              type="checkbox"
+                                              checked={isSelected}
+                                              onChange={() => {}}
+                                              className="w-4 h-4 text-orange-500 rounded border-slate-300 focus:ring-orange-500 cursor-pointer"
+                                            />
+                                            <div>
+                                              <span className={`text-xs ${isSelected ? 'font-black text-orange-950' : 'font-semibold text-slate-800'}`}>
+                                                {testTitle}
+                                              </span>
+                                              <span className="text-[10px] text-slate-400 ml-2 font-medium">
+                                                ({testItem.category || activePkgCat})
+                                              </span>
+                                            </div>
+                                          </div>
+
+                                          <span className="font-extrabold text-slate-700 text-xs">
+                                            ₹{itemPrice}
+                                          </span>
+                                        </div>
+                                      );
+                                    });
+                                  })()}
+                                </div>
+                              </div>
+
+                              {/* Pricing & Financial Summary */}
+                              {(() => {
+                                const totalOriginal = packageForm.selectedTests.reduce((sum, t) => sum + (Number(t.price) || 0), 0);
+                                const sellingPrice = parseFloat(packageForm.price) || 0;
+                                const savings = Math.max(0, totalOriginal - sellingPrice);
+                                const discountPercentage = totalOriginal > 0 ? Math.round((savings / totalOriginal) * 100) : 0;
+
+                                return (
+                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-orange-50/40 border border-orange-200/80 rounded-2xl items-center">
+                                    <div>
+                                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                                        Original Sum of Tests
+                                      </span>
+                                      <span className="text-base font-extrabold text-slate-600 line-through">
+                                        ₹{totalOriginal}
+                                      </span>
+                                    </div>
+
+                                    <div>
+                                      <label className="block text-[11px] font-bold text-orange-900 uppercase tracking-wider mb-0.5">
+                                        Package Selling Price (₹) <span className="text-red-500">*</span>
+                                      </label>
+                                      <input
+                                        type="number"
+                                        required
+                                        value={packageForm.price}
+                                        onChange={(e) => setPackageForm(p => ({ ...p, price: e.target.value }))}
+                                        placeholder="e.g. 999"
+                                        className="w-full h-9 px-3 border border-orange-300 bg-white rounded-xl text-sm font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                      />
+                                    </div>
+
+                                    <div className="bg-white p-2 rounded-xl border border-orange-100 text-center">
+                                      <span className="text-[10px] font-bold text-slate-400 block uppercase">
+                                        Patient Savings
+                                      </span>
+                                      <span className="text-sm font-black text-emerald-600">
+                                        ₹{savings} ({discountPercentage}% OFF)
+                                      </span>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
+
+                              {/* Additional Options: Gender, Turnaround Time, Description */}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-slate-700 font-bold mb-1">Applicable Gender</label>
+                                  <select
+                                    value={packageForm.forGender}
+                                    onChange={(e) => setPackageForm(p => ({ ...p, forGender: e.target.value }))}
+                                    className="w-full h-9 px-2 border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:border-orange-500"
+                                  >
+                                    <option value="Both">Both (All Patients)</option>
+                                    <option value="Female">Female Only</option>
+                                    <option value="Male">Male Only</option>
+                                  </select>
+                                </div>
+
+                                <div>
+                                  <label className="block text-slate-700 font-bold mb-1">Turnaround Time</label>
+                                  <input
+                                    type="text"
+                                    value={packageForm.turnaroundTime}
+                                    onChange={(e) => setPackageForm(p => ({ ...p, turnaroundTime: e.target.value }))}
+                                    placeholder="e.g. Same Day / 24 Hours"
+                                    className="w-full h-9 px-3 border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:border-orange-500"
+                                  />
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="block text-slate-700 font-bold mb-1">Description / Summary</label>
+                                <textarea
+                                  rows="2"
+                                  value={packageForm.description}
+                                  onChange={(e) => setPackageForm(p => ({ ...p, description: e.target.value }))}
+                                  placeholder="e.g. Full body screening recommended for routine health checkups."
+                                  className="w-full p-2.5 border border-slate-300 rounded-xl text-xs focus:outline-none focus:border-orange-500 resize-none"
+                                />
+                              </div>
+
+                              <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
+                                <button
+                                  type="button"
+                                  onClick={() => setShowAddPackageModal(false)}
+                                  className="px-4 py-2 border border-slate-300 text-slate-700 rounded-xl font-bold cursor-pointer hover:bg-slate-50 transition-colors"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="submit"
+                                  disabled={savingPackage}
+                                  className="px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-bold shadow-md shadow-orange-500/20 cursor-pointer transition-colors flex items-center gap-1.5"
+                                >
+                                  {savingPackage && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                                  <span>{editingPackageId ? 'Update Package' : 'Save Package'}</span>
+                                </button>
+                              </div>
+                            </form>
                           </div>
                         </div>
+                      )}
+                    </DashboardLayout>
+                  );
+                }
 
-                        <span className="font-extrabold text-slate-700 text-xs">
-                          ₹{itemPrice}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Pricing & Financial Summary */}
-              {(() => {
-                const totalOriginal = packageForm.selectedTests.reduce((sum, t) => sum + (Number(t.price) || 0), 0);
-                const sellingPrice = parseFloat(packageForm.price) || 0;
-                const savings = Math.max(0, totalOriginal - sellingPrice);
-                const discountPercentage = totalOriginal > 0 ? Math.round((savings / totalOriginal) * 100) : 0;
-
-                return (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-orange-50/40 border border-orange-200/80 rounded-2xl items-center">
-                    <div>
-                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
-                        Original Sum of Tests
-                      </span>
-                      <span className="text-base font-extrabold text-slate-600 line-through">
-                        ₹{totalOriginal}
-                      </span>
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-bold text-orange-900 uppercase tracking-wider mb-0.5">
-                        Package Selling Price (₹) <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="number"
-                        required
-                        value={packageForm.price}
-                        onChange={(e) => setPackageForm(p => ({ ...p, price: e.target.value }))}
-                        placeholder="e.g. 999"
-                        className="w-full h-9 px-3 border border-orange-300 bg-white rounded-xl text-sm font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      />
-                    </div>
-
-                    <div className="bg-white p-2 rounded-xl border border-orange-100 text-center">
-                      <span className="text-[10px] font-bold text-slate-400 block uppercase">
-                        Patient Savings
-                      </span>
-                      <span className="text-sm font-black text-emerald-600">
-                        ₹{savings} ({discountPercentage}% OFF)
-                      </span>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Additional Options: Gender, Turnaround Time, Description */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">Applicable Gender</label>
-                  <select
-                    value={packageForm.forGender}
-                    onChange={(e) => setPackageForm(p => ({ ...p, forGender: e.target.value }))}
-                    className="w-full h-9 px-2 border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:border-orange-500"
-                  >
-                    <option value="Both">Both (All Patients)</option>
-                    <option value="Female">Female Only</option>
-                    <option value="Male">Male Only</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">Turnaround Time</label>
-                  <input
-                    type="text"
-                    value={packageForm.turnaroundTime}
-                    onChange={(e) => setPackageForm(p => ({ ...p, turnaroundTime: e.target.value }))}
-                    placeholder="e.g. Same Day / 24 Hours"
-                    className="w-full h-9 px-3 border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:border-orange-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-slate-700 font-bold mb-1">Description / Summary</label>
-                <textarea
-                  rows="2"
-                  value={packageForm.description}
-                  onChange={(e) => setPackageForm(p => ({ ...p, description: e.target.value }))}
-                  placeholder="e.g. Full body screening recommended for routine health checkups."
-                  className="w-full p-2.5 border border-slate-300 rounded-xl text-xs focus:outline-none focus:border-orange-500 resize-none"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setShowAddPackageModal(false)}
-                  className="px-4 py-2 border border-slate-300 text-slate-700 rounded-xl font-bold cursor-pointer hover:bg-slate-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingPackage}
-                  className="px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-bold shadow-md shadow-orange-500/20 cursor-pointer transition-colors flex items-center gap-1.5"
-                >
-                  {savingPackage && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  <span>{editingPackageId ? 'Update Package' : 'Save Package'}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </DashboardLayout>
-  );
-}
-
-export default function RatelistPage() {
-  return (
-    <ProtectedRoute>
-      <Suspense fallback={<div className="p-8 text-center text-slate-400">Loading ratelist & packages...</div>}>
-        <RatelistContent />
-      </Suspense>
-    </ProtectedRoute>
-  );
-}
+                export default function RatelistPage() {
+                  return (
+                    <ProtectedRoute>
+                      <Suspense fallback={<div className="p-8 text-center text-slate-400">Loading ratelist & packages...</div>}>
+                        <RatelistContent />
+                      </Suspense>
+                    </ProtectedRoute>
+                  );
+                }

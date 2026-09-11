@@ -4,6 +4,7 @@ const IpdAdminSettings = require('../models/IpdAdminSettings');
 const Patient = require('../models/Patient');
 const Visit = require('../models/Visit');
 const IpdAdmission = require('../models/IpdAdmission');
+const Billing = require('../models/Billing');
 
 const tenantFilter = (req, query = {}) => (
   req.user.hospitalId ? { ...query, hospitalId: req.user.hospitalId } : query
@@ -151,6 +152,14 @@ const createTreatment = async (req, res) => {
           await sdtItem.save();
         }
       }
+
+      // Clean up any lingering blank draft placeholder records
+      await SameDayTreatment.deleteMany(tenantFilter(req, {
+        patientId: record.patientId,
+        _id: { $ne: record._id },
+        status: 'Draft',
+        treatmentType: ''
+      }));
     }
 
     res.status(201).json({ message: 'Same day care record saved', record });
@@ -170,6 +179,22 @@ const updateTreatment = async (req, res) => {
 
     const record = await SameDayTreatment.findOne(tenantFilter(req, { _id: id }));
     if (!record) return res.status(404).json({ message: 'Care record not found' });
+
+    // Check if an active bill has already been generated for this patient/treatment
+    const activeBill = await Billing.findOne(tenantFilter(req, {
+      patientId: record.patientId,
+      status: { $ne: 'Cancelled' },
+      $or: [
+        { 'items.sourceId': record._id },
+        { billType: { $in: ['SameDayTreatment', 'All'] } }
+      ]
+    })).sort({ createdAt: -1 });
+
+    if (activeBill) {
+      return res.status(400).json({
+        message: `Cannot edit care record: Invoice (${activeBill.invoiceNo || activeBill.billNo}) has already been generated for this patient. Edits are locked.`
+      });
+    }
 
     const fields = [
       'treatmentType', 'diagnosis', 'treatmentNotes', 'prescription', 'followUpRequired', 'followUpDate',
@@ -298,28 +323,38 @@ const updateTreatment = async (req, res) => {
 
     // Sync SdtItem records for completed treatments to make them billable
     await SdtItem.deleteMany({ treatmentId: record._id });
-    if (record.status === 'Completed' && record.prescriptionMedicines && record.prescriptionMedicines.length > 0) {
-      for (const item of record.prescriptionMedicines) {
-        const sdtItem = new SdtItem({
-          hospitalId: record.hospitalId,
-          patientId: record.patientId,
-          treatmentId: record._id,
-          itemType: item.itemType === 'Consumable' ? 'Consumable' : 'Medicine',
-          name: item.medicineName,
-          price: 0,
-          quantity: item.qty || 1,
-          totalAmount: 0,
-          addedBy: req.user._id,
-          date: record.treatmentDate ? new Date(record.treatmentDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
-        });
-        await sdtItem.save();
+    if (record.status === 'Completed') {
+      if (record.prescriptionMedicines && record.prescriptionMedicines.length > 0) {
+        for (const item of record.prescriptionMedicines) {
+          const sdtItem = new SdtItem({
+            hospitalId: record.hospitalId,
+            patientId: record.patientId,
+            treatmentId: record._id,
+            itemType: item.itemType === 'Consumable' ? 'Consumable' : 'Medicine',
+            name: item.medicineName,
+            price: 0,
+            quantity: item.qty || 1,
+            totalAmount: 0,
+            addedBy: req.user._id,
+            date: record.treatmentDate ? new Date(record.treatmentDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+          });
+          await sdtItem.save();
+        }
       }
+
+      // Clean up any lingering blank draft placeholder records
+      await SameDayTreatment.deleteMany(tenantFilter(req, {
+        patientId: record.patientId,
+        _id: { $ne: record._id },
+        status: 'Draft',
+        treatmentType: ''
+      }));
     }
 
     res.json({ message: 'Care record updated', record });
   } catch (error) {
     console.error('Update Care Record Error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 };
 
@@ -333,7 +368,24 @@ const getTreatmentsByPatient = async (req, res) => {
       .populate('createdBy', 'username doctorName')
       .populate('hospitalId', 'name code')
       .sort({ createdAt: -1 });
-    res.json(records);
+
+    const activeBills = await Billing.find(tenantFilter(req, {
+      patientId,
+      status: { $ne: 'Cancelled' }
+    })).select('billNo invoiceNo grandTotal paymentStatus createdAt items.sourceId billType').sort({ createdAt: -1 });
+
+    const results = records.map(r => {
+      const recObj = r.toObject();
+      const matchedBill = activeBills.find(b => 
+        (b.items && b.items.some(i => i.sourceId && i.sourceId.toString() === r._id.toString())) ||
+        b.billType === 'SameDayTreatment' || b.billType === 'All'
+      );
+      recObj.isBillGenerated = !!matchedBill;
+      recObj.billingDetails = matchedBill || null;
+      return recObj;
+    });
+
+    res.json(results);
   } catch (error) {
     console.error('Get Care Records Error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -350,7 +402,21 @@ const getTreatmentById = async (req, res) => {
       .populate('createdBy', 'username doctorName')
       .populate('hospitalId', 'name code');
     if (!record) return res.status(404).json({ message: 'Care record not found' });
-    res.json(record);
+
+    const activeBill = await Billing.findOne(tenantFilter(req, {
+      patientId: record.patientId,
+      status: { $ne: 'Cancelled' },
+      $or: [
+        { 'items.sourceId': record._id },
+        { billType: { $in: ['SameDayTreatment', 'All'] } }
+      ]
+    })).select('billNo invoiceNo grandTotal paymentStatus createdAt').sort({ createdAt: -1 });
+
+    const recObj = record.toObject();
+    recObj.isBillGenerated = !!activeBill;
+    recObj.billingDetails = activeBill;
+
+    res.json(recObj);
   } catch (error) {
     console.error('Get Care Record Error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -389,7 +455,28 @@ const getAllTreatments = async (req, res) => {
       .populate('createdBy', 'username doctorName')
       .populate('hospitalId', 'name code')
       .sort({ createdAt: -1 });
-    res.json(records);
+
+    const patientIds = records.map(r => r.patientId).filter(Boolean);
+    const activeBills = await Billing.find(tenantFilter(req, {
+      patientId: { $in: patientIds },
+      status: { $ne: 'Cancelled' }
+    })).select('patientId billNo invoiceNo grandTotal paymentStatus createdAt items.sourceId billType').sort({ createdAt: -1 });
+
+    const results = records.map(r => {
+      const recObj = r.toObject();
+      const pIdStr = r.patientId ? (r.patientId._id || r.patientId).toString() : '';
+      const matchedBill = activeBills.find(b => 
+        (b.patientId && b.patientId.toString() === pIdStr) && (
+          (b.items && b.items.some(i => i.sourceId && i.sourceId.toString() === r._id.toString())) ||
+          b.billType === 'SameDayTreatment' || b.billType === 'All'
+        )
+      );
+      recObj.isBillGenerated = !!matchedBill;
+      recObj.billingDetails = matchedBill || null;
+      return recObj;
+    });
+
+    res.json(results);
   } catch (error) {
     console.error('Get All Care Records Error:', error);
     res.status(500).json({ message: 'Server error' });

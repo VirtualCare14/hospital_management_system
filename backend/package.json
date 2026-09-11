@@ -10,7 +10,8 @@
     "seed:symptoms": "node seeds/seedSymptoms.js",
     "seed:lab-tests": "node seeds/seedLabTests.js",
     "seed:standard-lab-tests": "node seeds/seedStandardLabTemplates.js",
-    "seed:diagnosis": "node seeds/seedDiagnosisCategory.js"
+    "seed:diagnosis": "node seeds/seedDiagnosisCategory.js",
+    "test:m2": "node scripts/testM2Suite.js"
   },
   "keywords": [],
   "author": "",

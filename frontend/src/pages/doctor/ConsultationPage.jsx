@@ -242,9 +242,39 @@ const ConsultationPage = () => {
   }, [patientId, reset]);
 
   useEffect(() => {
-    client.get('/lab/tests').then(({ data }) => {
-      const testNames = data.map((test) => test.test || test.title).filter(Boolean);
-      setAvailableTests([...new Set(testNames)]);
+    Promise.allSettled([
+      client.get('/lab/tests'),
+      client.get('/lab/packages')
+    ]).then(([testsRes, pkgsRes]) => {
+      const testsData = testsRes.status === 'fulfilled' && Array.isArray(testsRes.value.data) ? testsRes.value.data : [];
+      const pkgsData = pkgsRes.status === 'fulfilled' && Array.isArray(pkgsRes.value.data) ? pkgsRes.value.data : [];
+
+      const mappedPkgs = pkgsData.filter(p => p.status !== 'Inactive').map(p => ({
+        name: p.name,
+        category: (p.category || 'LAB').toUpperCase(),
+        isPackage: true,
+        price: p.price,
+        code: p.code,
+        tests: p.tests || []
+      }));
+
+      const mappedTests = testsData.map(t => ({
+        name: t.test || t.title,
+        category: (t.category || 'LAB').toUpperCase(),
+        isPackage: false,
+        price: t.basePrice || t.totalAmount
+      })).filter(t => Boolean(t.name));
+
+      // Merge avoiding duplicate names
+      const seen = new Set();
+      const combined = [];
+      [...mappedPkgs, ...mappedTests].forEach(item => {
+        if (!seen.has(item.name.toLowerCase())) {
+          seen.add(item.name.toLowerCase());
+          combined.push(item);
+        }
+      });
+      setAvailableTests(combined);
     }).catch(() => setAvailableTests([]));
 
     client.get('/ipd/settings').then(({ data }) => {
@@ -1180,21 +1210,53 @@ const ConsultationPage = () => {
                   />
                   {testQuery.trim() && (
                     <div className="absolute z-20 mt-1 w-full bg-white border border-orange-200 rounded-xl shadow-xl max-h-56 overflow-y-auto">
-                      {/* Filtered existing tests */}
+                      {/* Filtered existing tests & packages */}
                       {availableTests
-                        .filter((test) => test.toLowerCase().includes(testQuery.toLowerCase()) && !selectedTests.includes(test))
-                        .slice(0, 8)
-                        .map((test) => (
-                          <button
-                            key={test}
-                            type="button"
-                            className="w-full text-left px-3 py-2 text-sm font-bold text-gray-800 hover:bg-orange-50 border-b border-gray-50 last:border-b-0 cursor-pointer flex items-center justify-between"
-                            onClick={() => selectTest(test)}
-                          >
-                            <span>{test}</span>
-                            <span className="text-[10px] text-gray-400 font-semibold uppercase">Catalog Test</span>
-                          </button>
-                        ))}
+                        .filter((item) => {
+                          const name = typeof item === 'string' ? item : item.name;
+                          return name.toLowerCase().includes(testQuery.toLowerCase()) && !selectedTests.includes(name);
+                        })
+                        .slice(0, 10)
+                        .map((item) => {
+                          const itemName = typeof item === 'string' ? item : item.name;
+                          const isPkg = typeof item === 'object' && item.isPackage;
+                          const cat = typeof item === 'object' ? item.category : 'LAB';
+                          const price = typeof item === 'object' ? item.price : null;
+                          const included = typeof item === 'object' && Array.isArray(item.tests) ? item.tests : [];
+
+                          return (
+                            <button
+                              key={itemName}
+                              type="button"
+                              className="w-full text-left px-3 py-2 text-xs font-bold text-gray-800 hover:bg-orange-50 border-b border-gray-50 last:border-b-0 cursor-pointer flex items-center justify-between"
+                              onClick={() => selectTest(itemName)}
+                            >
+                              <div className="flex flex-col">
+                                <div className="flex items-center gap-1.5">
+                                  {isPkg && (
+                                    <span className="bg-orange-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded tracking-wide uppercase">
+                                      PACKAGE
+                                    </span>
+                                  )}
+                                  <span className="font-extrabold text-gray-900 text-xs">{itemName}</span>
+                                  {price !== null && price !== undefined && (
+                                    <span className="text-gray-500 text-[11px] font-bold">
+                                      (₹{price})
+                                    </span>
+                                  )}
+                                </div>
+                                {isPkg && included.length > 0 && (
+                                  <span className="text-[10px] text-gray-500 font-normal mt-0.5">
+                                    Includes: {included.map(t => t.testName || t.name || t.title).join(', ')}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold uppercase shrink-0">
+                                {cat || 'LAB'}
+                              </span>
+                            </button>
+                          );
+                        })}
 
                       {/* Custom Lab Test Add Option */}
                       {!selectedTests.includes(testQuery.trim()) && (
@@ -1216,14 +1278,23 @@ const ConsultationPage = () => {
 
                 {selectedTests.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 pt-1">
-                    {selectedTests.map((t) => (
-                      <span key={t} className="bg-orange-100 text-orange-950 px-2.5 py-1 rounded-lg text-xs font-extrabold flex items-center gap-1.5 border border-orange-200">
-                        {t}
-                        <button type="button" onClick={() => removeTest(t)} className="text-orange-600 hover:text-orange-900 cursor-pointer">
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      </span>
-                    ))}
+                    {selectedTests.map((t) => {
+                      const matchedItem = availableTests.find(item => (typeof item === 'object' ? item.name : item).toLowerCase() === t.toLowerCase());
+                      const isPkg = matchedItem && typeof matchedItem === 'object' && matchedItem.isPackage;
+                      return (
+                        <span key={t} className="bg-orange-100 text-orange-950 px-2.5 py-1 rounded-lg text-xs font-extrabold flex items-center gap-1.5 border border-orange-200">
+                          {isPkg && (
+                            <span className="bg-orange-500 text-white text-[8px] font-black px-1 py-0.2 rounded uppercase">
+                              PKG
+                            </span>
+                          )}
+                          <span>{t}</span>
+                          <button type="button" onClick={() => removeTest(t)} className="text-orange-600 hover:text-orange-900 cursor-pointer">
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </span>
+                      );
+                    })}
                   </div>
                 )}
               </div>

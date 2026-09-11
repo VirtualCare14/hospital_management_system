@@ -441,11 +441,11 @@ const IpdPatientDetails = () => {
       const minutes = String(now.getMinutes()).padStart(2, '0');
       const timeStr = `${hours}:${minutes}`;
 
-      const payload = { 
-        admissionId: id, 
-        serviceName, 
-        price: parseFloat(price), 
-        gst: parseFloat(gst || '0'), 
+      const payload = {
+        admissionId: id,
+        serviceName,
+        price: parseFloat(price),
+        gst: parseFloat(gst || '0'),
         quantity: parseInt(quantity),
         date: dateStr,
         time: timeStr
@@ -868,13 +868,12 @@ const IpdPatientDetails = () => {
                       ? 'Disabled: No medicines received from Pharmacy yet. Request and receive medicines in Pharmacy Requests tab first.'
                       : cat.label
                   }
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${
-                    serviceCategory === cat.id
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${serviceCategory === cat.id
                       ? 'bg-orange-500 text-white shadow-md'
                       : isMedicinesDisabled
                         ? 'bg-gray-100 border border-gray-200 text-gray-400 cursor-not-allowed opacity-60'
                         : 'bg-white border border-orange-200 text-gray-600 hover:bg-orange-50 cursor-pointer'
-                  }`}
+                    }`}
                 >
                   <cat.icon className="h-4 w-4" />
                   <span>{cat.label}</span>
@@ -933,21 +932,22 @@ const IpdPatientDetails = () => {
                       <tr>
                         <td colSpan="6" className="p-8">
                           <SkeletonTable rows={4} columns={6} className="w-full" />
+
                         </td>
                       </tr>
                     ) : consumables.length === 0 ? <tr><td colSpan="6" className="p-8 text-center text-gray-400"><Activity className="h-8 w-8 mx-auto mb-2 opacity-50" /><p className="font-bold">No consumable services added yet</p></td></tr>
-                    : consumables.map(c => (
-                      <tr key={c._id} className="hover:bg-orange-50/20">
-                        <td className="p-3 pl-4 text-xs">{c.date}</td><td className="p-3 text-xs">{c.time}</td>
-                        <td className="p-3 font-bold text-gray-800">{c.serviceName}</td><td className="p-3">{c.quantity}</td>
-                        <td className="p-3 text-xs text-gray-500">{c.addedBy?.doctorName || c.addedBy?.username || 'N/A'}</td>
-                        <td className="p-3 pr-4 text-center">
-                          {admission.status !== 'Discharged' && (
-                            <button onClick={() => handleDeleteConsumable(c._id)} className="p-1 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="h-3.5 w-3.5" /></button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                      : consumables.map(c => (
+                        <tr key={c._id} className="hover:bg-orange-50/20">
+                          <td className="p-3 pl-4 text-xs">{c.date}</td><td className="p-3 text-xs">{c.time}</td>
+                          <td className="p-3 font-bold text-gray-800">{c.serviceName}</td><td className="p-3">{c.quantity}</td>
+                          <td className="p-3 text-xs text-gray-500">{c.addedBy?.doctorName || c.addedBy?.username || 'N/A'}</td>
+                          <td className="p-3 pr-4 text-center">
+                            {admission.status !== 'Discharged' && (
+                              <button onClick={() => handleDeleteConsumable(c._id)} className="p-1 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="h-3.5 w-3.5" /></button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
                   </tbody>
                 </table>
               </div>
@@ -966,8 +966,8 @@ const IpdPatientDetails = () => {
                   </p>
                 </div>
                 {admission.status !== 'Discharged' && (
-                  <button 
-                    onClick={() => setShowAddMedicine(!showAddMedicine)} 
+                  <button
+                    onClick={() => setShowAddMedicine(!showAddMedicine)}
                     disabled={!receivedMedicines || receivedMedicines.length === 0}
                     className="btn text-xs py-2 px-3 flex items-center gap-1.5"
                   >
@@ -1011,10 +1011,10 @@ const IpdPatientDetails = () => {
                       <label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">
                         Select Received Medicine
                       </label>
-                      <input 
+                      <input
                         type="text"
                         list="ipd-pharmacy-medicines-datalist"
-                        className="input py-2 text-xs font-semibold" 
+                        className="input py-2 text-xs font-semibold"
                         placeholder="Search or select from received pharmacy items..."
                         value={medicineForm.medicineName}
                         onChange={(e) => handleReceivedMedicineSelect(e.target.value)}
@@ -1031,18 +1031,18 @@ const IpdPatientDetails = () => {
                       <label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">
                         Quantity
                       </label>
-                      <input 
-                        type="number" 
-                        min="1" 
-                        className="input py-2 text-xs font-bold" 
-                        value={medicineForm.quantity} 
-                        onChange={(e) => setMedicineForm(p => ({ ...p, quantity: e.target.value }))} 
+                      <input
+                        type="number"
+                        min="1"
+                        className="input py-2 text-xs font-bold"
+                        value={medicineForm.quantity}
+                        onChange={(e) => setMedicineForm(p => ({ ...p, quantity: e.target.value }))}
                       />
                     </div>
                     <div className="col-span-full flex justify-end gap-2">
-                      <button 
-                        type="button" 
-                        onClick={() => { setShowAddMedicine(false); setMedicineForm({ medicineName: '', quantity: '1', unitPrice: '', gst: '', baseUnitPrice: '' }); setSelectedReceivedMed(null); }} 
+                      <button
+                        type="button"
+                        onClick={() => { setShowAddMedicine(false); setMedicineForm({ medicineName: '', quantity: '1', unitPrice: '', gst: '', baseUnitPrice: '' }); setSelectedReceivedMed(null); }}
                         className="btn-secondary text-xs py-2 px-4"
                       >
                         Cancel
@@ -1165,25 +1165,25 @@ const IpdPatientDetails = () => {
                         </td>
                       </tr>
                     ) : labTests.length === 0 ? <tr><td colSpan="8" className="p-8 text-center text-gray-400"><FlaskConical className="h-8 w-8 mx-auto mb-2 opacity-50" /><p className="font-bold">No lab tests ordered yet</p></td></tr>
-                    : labTests.map(t => (
-                      <tr key={t._id} className="hover:bg-orange-50/20">
-                        <td className="p-3 pl-4 text-xs">{t.date}</td><td className="p-3 text-xs">{t.time}</td>
-                        <td className="p-3 font-bold text-gray-800">{t.testName}</td><td className="p-3 text-xs">{t.testCategory || '-'}</td>
-                        <td className="p-3"><span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold ${reportStatusColors[t.reportStatus] || 'bg-gray-100 text-gray-700'}`}>{t.reportStatus === 'Completed' || t.reportStatus === 'Approved' ? <CheckCircle className="h-3 w-3" /> : <Clock className="h-3 w-3" />}{t.reportStatus}</span></td>
-                        <td className="p-3 text-xs">{t.reportDate || '-'}</td>
-                        <td className="p-3 text-xs text-gray-500">{t.addedBy?.doctorName || t.addedBy?.username || 'N/A'}</td>
-                        <td className="p-3 pr-4 text-center">
-                          <div className="flex justify-center gap-1">
-                            {t.labRequestId && (t.reportStatus === 'Completed' || t.reportStatus === 'Approved') && (
-                              <a href={`/lab?section=tracking&requestId=${t.labRequestId?._id || t.labRequestId}`} target="_blank" rel="noopener noreferrer" className="p-1 text-blue-600 hover:bg-blue-50 rounded-lg" title="View Report"><Eye className="h-3.5 w-3.5" /></a>
-                            )}
-                            {admission.status !== 'Discharged' && (
-                              <button onClick={() => handleDeleteLabTest(t._id)} className="p-1 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="h-3.5 w-3.5" /></button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                      : labTests.map(t => (
+                        <tr key={t._id} className="hover:bg-orange-50/20">
+                          <td className="p-3 pl-4 text-xs">{t.date}</td><td className="p-3 text-xs">{t.time}</td>
+                          <td className="p-3 font-bold text-gray-800">{t.testName}</td><td className="p-3 text-xs">{t.testCategory || '-'}</td>
+                          <td className="p-3"><span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold ${reportStatusColors[t.reportStatus] || 'bg-gray-100 text-gray-700'}`}>{t.reportStatus === 'Completed' || t.reportStatus === 'Approved' ? <CheckCircle className="h-3 w-3" /> : <Clock className="h-3 w-3" />}{t.reportStatus}</span></td>
+                          <td className="p-3 text-xs">{t.reportDate || '-'}</td>
+                          <td className="p-3 text-xs text-gray-500">{t.addedBy?.doctorName || t.addedBy?.username || 'N/A'}</td>
+                          <td className="p-3 pr-4 text-center">
+                            <div className="flex justify-center gap-1">
+                              {t.labRequestId && (t.reportStatus === 'Completed' || t.reportStatus === 'Approved') && (
+                                <a href={`/lab?section=tracking&requestId=${t.labRequestId?._id || t.labRequestId}`} target="_blank" rel="noopener noreferrer" className="p-1 text-blue-600 hover:bg-blue-50 rounded-lg" title="View Report"><Eye className="h-3.5 w-3.5" /></a>
+                              )}
+                              {admission.status !== 'Discharged' && (
+                                <button onClick={() => handleDeleteLabTest(t._id)} className="p-1 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="h-3.5 w-3.5" /></button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
                   </tbody>
                 </table>
               </div>
@@ -1253,7 +1253,7 @@ const IpdPatientDetails = () => {
             <div className="p-4 border-b border-orange-100 flex items-center justify-between bg-gradient-to-r from-red-50 to-white">
               <h3 className="font-extrabold text-gray-900 flex items-center gap-2"><DoorOpen className="h-5 w-5 text-red-500" /> Discharge Records</h3>
               {admission.status !== 'Discharged' && (
-                <button 
+                <button
                   onClick={() => {
                     const existing = dischargeRecords[0];
                     if (existing) {
@@ -1265,7 +1265,7 @@ const IpdPatientDetails = () => {
                     } else {
                       navigate(`/ipd/discharge/${id}`);
                     }
-                  }} 
+                  }}
                   className="btn text-xs py-2 px-3 flex items-center gap-1 bg-red-600 hover:bg-red-700"
                 >
                   <DoorOpen className="h-3.5 w-3.5" /> Discharge Patient
@@ -1288,12 +1288,11 @@ const IpdPatientDetails = () => {
                       <tr key={record._id} className="hover:bg-red-50/20">
                         <td className="p-3 pl-4 text-xs font-bold text-gray-800">{record.dischargeDate ? new Date(record.dischargeDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</td>
                         <td className="p-3">
-                          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold border ${
-                            record.status === 'Completed' ? 'bg-green-100 text-green-800 border-green-200' :
-                            record.status === 'Pending Review' ? 'bg-blue-100 text-blue-800 border-blue-200' :
-                            record.status === 'Rejected' ? 'bg-red-100 text-red-800 border-red-200' :
-                            'bg-yellow-100 text-yellow-800 border-yellow-200'
-                          }`}>
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold border ${record.status === 'Completed' ? 'bg-green-100 text-green-800 border-green-200' :
+                              record.status === 'Pending Review' ? 'bg-blue-100 text-blue-800 border-blue-200' :
+                                record.status === 'Rejected' ? 'bg-red-100 text-red-800 border-red-200' :
+                                  'bg-yellow-100 text-yellow-800 border-yellow-200'
+                            }`}>
                             {record.status === 'Completed' && <CheckCircle className="h-3 w-3" />}
                             {record.status === 'Pending Review' && <Clock className="h-3 w-3 animate-pulse" />}
                             {record.status === 'Rejected' && <AlertCircle className="h-3 w-3" />}
@@ -1310,18 +1309,18 @@ const IpdPatientDetails = () => {
                             {(record.status === 'Draft' || record.status === 'Rejected') && (
                               <button onClick={() => navigate(`/ipd/discharge/${id}?dischargeId=${record._id}`)} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg cursor-pointer" title="Edit Summary"><Edit3 className="h-3.5 w-3.5" /></button>
                             )}
-                            <button 
-                              disabled={record.status !== 'Completed'} 
-                              onClick={() => { navigate(`/ipd/discharge/${id}?dischargeId=${record._id}&view=true`); setTimeout(() => window.print(), 1500); }} 
-                              className={`p-1.5 rounded-lg cursor-pointer ${record.status === 'Completed' ? 'text-green-600 hover:bg-green-50' : 'text-gray-300 cursor-not-allowed'}`} 
+                            <button
+                              disabled={record.status !== 'Completed'}
+                              onClick={() => { navigate(`/ipd/discharge/${id}?dischargeId=${record._id}&view=true`); setTimeout(() => window.print(), 1500); }}
+                              className={`p-1.5 rounded-lg cursor-pointer ${record.status === 'Completed' ? 'text-green-600 hover:bg-green-50' : 'text-gray-300 cursor-not-allowed'}`}
                               title="Print (Approved Only)"
                             >
                               <Printer className="h-3.5 w-3.5" />
                             </button>
-                            <button 
-                              disabled={record.status !== 'Completed'} 
-                              onClick={() => { navigate(`/ipd/discharge/${id}?dischargeId=${record._id}&view=true`); setTimeout(() => { toast.success('Use browser Print → Save as PDF'); window.print(); }, 1500); }} 
-                              className={`p-1.5 rounded-lg cursor-pointer ${record.status === 'Completed' ? 'text-purple-600 hover:bg-purple-50' : 'text-gray-300 cursor-not-allowed'}`} 
+                            <button
+                              disabled={record.status !== 'Completed'}
+                              onClick={() => { navigate(`/ipd/discharge/${id}?dischargeId=${record._id}&view=true`); setTimeout(() => { toast.success('Use browser Print → Save as PDF'); window.print(); }, 1500); }}
+                              className={`p-1.5 rounded-lg cursor-pointer ${record.status === 'Completed' ? 'text-purple-600 hover:bg-purple-50' : 'text-gray-300 cursor-not-allowed'}`}
                               title="Download PDF"
                             >
                               <Download className="h-3.5 w-3.5" />
@@ -1396,8 +1395,8 @@ const IpdPatientDetails = () => {
                     </p>
                   </div>
                 </div>
-                <button 
-                  onClick={() => handleDismissNotification(noti._id)} 
+                <button
+                  onClick={() => handleDismissNotification(noti._id)}
                   className="text-xs font-bold text-green-700 bg-green-100 hover:bg-green-200 py-1.5 px-3 rounded-lg border border-green-300 cursor-pointer transition whitespace-nowrap"
                 >
                   Acknowledge & Dismiss
@@ -1415,12 +1414,12 @@ const IpdPatientDetails = () => {
             </div>
             {/* Create Request button - only for doctor/admin/nursing/ipd role */}
             {(user.role === 'doctor' || user.role === 'admin' || user.role === 'nursing' || user.role === 'ipd') && (
-              <button 
+              <button
                 onClick={() => {
                   setShowAddRequest(true);
                   setRequestItemType('medicine');
                   setRequestForm({ procedureName: '', items: [] });
-                }} 
+                }}
                 className="btn text-xs py-2 px-3 flex items-center gap-1 cursor-pointer"
               >
                 <Plus className="h-3.5 w-3.5" /> Create Request
@@ -1470,14 +1469,14 @@ const IpdPatientDetails = () => {
                         </td>
                         <td className="p-3 pr-4">
                           <div className="flex items-center justify-center gap-2">
-                            <button 
+                            <button
                               onClick={() => setSelectedRequest(reqItem)}
                               className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg text-xs font-bold flex items-center gap-1 border border-blue-100 bg-white shadow-sm cursor-pointer"
                             >
                               <Eye className="h-3.5 w-3.5" /> Details
                             </button>
                             {(reqItem.status === 'Issued' || reqItem.status === 'Remaining Items Issued') && (
-                              <button 
+                              <button
                                 onClick={() => handleOpenConsumeModal(reqItem)}
                                 className="p-1.5 text-orange-600 hover:bg-orange-50 rounded-lg text-xs font-bold flex items-center gap-1 border border-orange-100 bg-white shadow-sm cursor-pointer"
                               >
@@ -1485,7 +1484,7 @@ const IpdPatientDetails = () => {
                               </button>
                             )}
                             {reqItem.status === 'Sent' && (
-                              <button 
+                              <button
                                 onClick={() => handleMarkRequestReceived(reqItem._id)}
                                 className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg text-xs font-bold flex items-center gap-1 border border-green-100 bg-white shadow-sm cursor-pointer"
                               >
@@ -1493,7 +1492,7 @@ const IpdPatientDetails = () => {
                               </button>
                             )}
                             {reqItem.status === 'Received' && (
-                              <button 
+                              <button
                                 onClick={() => handleOpenReturnModal(reqItem)}
                                 className="p-1.5 text-purple-600 hover:bg-purple-50 rounded-lg text-xs font-bold flex items-center gap-1 border border-purple-100 bg-white shadow-sm cursor-pointer"
                               >
@@ -1612,10 +1611,10 @@ const IpdPatientDetails = () => {
                 <div className="space-y-4">
                   <div>
                     <label className="mb-1 block text-xs font-bold uppercase text-gray-500">Request Purpose *</label>
-                    <input 
-                      type="text" 
-                      className="input py-2 text-sm" 
-                      placeholder="e.g. Appendectomy, Daily Dressing" 
+                    <input
+                      type="text"
+                      className="input py-2 text-sm"
+                      placeholder="e.g. Appendectomy, Daily Dressing"
                       value={requestForm.procedureName}
                       onChange={(e) => setRequestForm(p => ({ ...p, procedureName: e.target.value }))}
                       required
@@ -1662,8 +1661,8 @@ const IpdPatientDetails = () => {
                         <label className="mb-0.5 block text-[10px] uppercase font-bold text-gray-400">
                           {requestItemType === 'medicine' ? 'Medicine Name' : 'Consumable Name'}
                         </label>
-                        <input 
-                          type="text" 
+                        <input
+                          type="text"
                           list={requestItemType === 'medicine' ? "ipd-pharmacy-medicines-datalist" : "ipd-consumables-datalist"}
                           className="input py-1.5 text-xs"
                           placeholder={requestItemType === 'medicine' ? "Type or search medicine" : "Type or search consumable"}
@@ -1673,16 +1672,16 @@ const IpdPatientDetails = () => {
                       </div>
                       <div>
                         <label className="mb-0.5 block text-[10px] uppercase font-bold text-gray-400">Qty</label>
-                        <input 
-                          type="number" 
+                        <input
+                          type="number"
                           id="add-item-qty"
-                          min="1" 
+                          min="1"
                           defaultValue="1"
                           className="input py-1.5 text-xs"
                         />
                       </div>
                     </div>
-                    <button 
+                    <button
                       type="button"
                       onClick={() => {
                         const qtyInput = document.getElementById('add-item-qty');
@@ -1720,7 +1719,7 @@ const IpdPatientDetails = () => {
                             <span className="font-bold text-gray-800">{item.itemName}</span>
                             <div className="flex items-center gap-3">
                               <span className="font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-lg border border-orange-100 font-mono">Qty: {item.requestedQty}</span>
-                              <button 
+                              <button
                                 onClick={() => {
                                   setRequestForm(p => ({
                                     ...p,
@@ -1740,7 +1739,7 @@ const IpdPatientDetails = () => {
 
                   <div className="flex justify-end gap-2 border-t border-orange-50 pt-4">
                     <button type="button" onClick={() => setShowAddRequest(false)} className="btn-secondary text-xs py-2 px-4 cursor-pointer">Cancel</button>
-                    <button 
+                    <button
                       onClick={async () => {
                         if (!requestForm.procedureName.trim()) {
                           toast.error('Request purpose is required');
@@ -1806,9 +1805,9 @@ const IpdPatientDetails = () => {
                             <td className="p-2.5 pl-4 font-bold text-gray-800">{item.itemName}</td>
                             <td className="p-2.5 font-bold text-blue-700">{item.issuedQty}</td>
                             <td className="p-2.5">
-                              <input 
-                                type="number" 
-                                min="0" 
+                              <input
+                                type="number"
+                                min="0"
                                 max={item.issuedQty}
                                 className="input py-1 px-1.5 text-center text-xs w-[70px]"
                                 value={item.usedQty}
@@ -1821,9 +1820,9 @@ const IpdPatientDetails = () => {
                               />
                             </td>
                             <td className="p-2.5">
-                              <input 
-                                type="number" 
-                                min="0" 
+                              <input
+                                type="number"
+                                min="0"
                                 max={item.issuedQty}
                                 className="input py-1 px-1.5 text-center text-xs w-[70px]"
                                 value={item.unusedQty}
@@ -1836,9 +1835,9 @@ const IpdPatientDetails = () => {
                               />
                             </td>
                             <td className="p-2.5 pr-4">
-                              <input 
-                                type="number" 
-                                min="0" 
+                              <input
+                                type="number"
+                                min="0"
                                 max={item.issuedQty}
                                 className="input py-1 px-1.5 text-center text-xs w-[70px]"
                                 value={item.damagedQty}
@@ -1858,7 +1857,7 @@ const IpdPatientDetails = () => {
 
                   <div className="flex justify-end gap-2 border-t border-orange-50 pt-4">
                     <button type="button" onClick={() => setShowConsumeModal(false)} className="btn-secondary text-xs py-2 px-4 cursor-pointer">Cancel</button>
-                    <button 
+                    <button
                       onClick={async () => {
                         // Validate sums
                         for (const item of consumeForm) {
@@ -1921,9 +1920,9 @@ const IpdPatientDetails = () => {
                             <td className="p-2.5 font-semibold text-gray-600">{item.receivedQty}</td>
                             <td className="p-2.5 text-gray-500">{item.returnedQty}</td>
                             <td className="p-2.5 pr-4">
-                              <input 
-                                type="number" 
-                                min="0" 
+                              <input
+                                type="number"
+                                min="0"
                                 max={item.receivedQty - item.returnedQty}
                                 className="input py-1 px-1.5 text-center text-xs w-[80px]"
                                 value={item.returnQty}
@@ -1943,9 +1942,9 @@ const IpdPatientDetails = () => {
 
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-gray-500">Remarks / Return Reason</label>
-                    <input 
-                      type="text" 
-                      className="input py-2 text-xs" 
+                    <input
+                      type="text"
+                      className="input py-2 text-xs"
                       placeholder="e.g. Leftover doses, patient shifted..."
                       value={returnRemarks}
                       onChange={(e) => setReturnRemarks(e.target.value)}

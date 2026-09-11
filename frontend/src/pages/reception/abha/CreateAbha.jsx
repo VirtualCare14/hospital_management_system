@@ -13,6 +13,7 @@ const CreateAbha = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
+  const [linkedPatient, setLinkedPatient] = useState(null);
   const otpRefs = useRef([]);
 
   const handleRequestOtp = async (e) => {
@@ -53,8 +54,11 @@ const CreateAbha = () => {
       const res = await verifyAadhaarOtp(txnId, otp, mobile);
       const data = res.data?.data || res.data;
       setResult(data);
+      if (res.data?.patient) {
+        setLinkedPatient(res.data.patient);
+      }
       setStep(2);
-      toast.success('ABHA created successfully!');
+      toast.success('ABHA created and saved to Medora Patient database!');
     } catch (err) {
       const msg = err.response?.data?.error?.message || err.response?.data?.message || 'OTP verification failed';
       setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
@@ -71,6 +75,7 @@ const CreateAbha = () => {
     setTxnId(null);
     setError(null);
     setResult(null);
+    setLinkedPatient(null);
   };
 
   const copyToClipboard = (text) => {
@@ -178,6 +183,22 @@ const CreateAbha = () => {
               </div>
               <h3 className="text-lg font-bold text-gray-800 mb-2">ABHA Created Successfully!</h3>
               <div className="space-y-2 mt-4">
+                {linkedPatient?.uhid && (
+                  <div className="flex items-center justify-between bg-white rounded-lg px-4 py-3 border border-orange-200 bg-orange-50/50">
+                    <div className="text-left">
+                      <span className="text-xs text-orange-600 font-bold uppercase tracking-wider">Medora Patient UHID (Saved in Database)</span>
+                      <p className="text-sm font-bold text-gray-900 font-mono">{linkedPatient.uhid}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(linkedPatient.uhid)}
+                      className="text-orange-500 hover:text-orange-600 p-1"
+                      title="Copy UHID"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
                 {result.abhaNumber && (
                   <div className="flex items-center justify-between bg-white rounded-lg px-4 py-3 border border-green-100">
                     <div className="text-left">

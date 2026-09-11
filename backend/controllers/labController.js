@@ -1837,7 +1837,97 @@ const receivePayment = async (req, res) => {
 
 const listPackages = async (req, res) => {
   try {
-    const packages = await LabPackage.find(tenantQuery(req)).sort({ createdAt: -1 });
+    const query = tenantQuery(req);
+    if (req.query.category) {
+      query.category = { $regex: `^${escapeRegex(req.query.category.trim())}$`, $options: 'i' };
+    }
+    let packages = await LabPackage.find(query).sort({ createdAt: -1 });
+
+    // Auto-seed default packages if database has 0 packages for this hospital
+    if (packages.length === 0 && !req.query.category) {
+      const totalCount = await LabPackage.countDocuments(tenantQuery(req));
+      if (totalCount === 0) {
+        const defaultPkgs = [
+          {
+            hospitalId: req.user?.hospitalId,
+            name: 'Executive Health Checkup',
+            code: 'PKG-EHC',
+            category: 'LAB',
+            price: 1499,
+            originalPrice: 2150,
+            forGender: 'Both',
+            turnaroundTime: 'Same Day',
+            description: 'Comprehensive vital organ screening including CBC, Lipid Profile, Liver & Kidney function tests.',
+            status: 'Active',
+            tests: [
+              { testName: 'Complete Blood Count (CBC)', department: 'PATHOLOGY', price: 350 },
+              { testName: 'Lipid Profile', department: 'PATHOLOGY', price: 550 },
+              { testName: 'Liver Function Test (LFT)', department: 'PATHOLOGY', price: 650 },
+              { testName: 'Kidney Function Test (KFT)', department: 'PATHOLOGY', price: 600 }
+            ]
+          },
+          {
+            hospitalId: req.user?.hospitalId,
+            name: 'Diabetic Care Profile',
+            code: 'PKG-DCP',
+            category: 'LAB',
+            price: 799,
+            originalPrice: 1130,
+            forGender: 'Both',
+            turnaroundTime: 'Same Day',
+            description: 'Fasting Glucose, HbA1c screening, and Urine Routine examination.',
+            status: 'Active',
+            tests: [
+              { testName: 'Fasting Blood Sugar (FBS)', department: 'PATHOLOGY', price: 80 },
+              { testName: 'Glucose Tolerance Test (GTT)', department: 'PATHOLOGY', price: 350 },
+              { testName: 'Lipid Profile', department: 'PATHOLOGY', price: 550 },
+              { testName: 'Urine Routine Examination', department: 'PATHOLOGY', price: 150 }
+            ]
+          },
+          {
+            hospitalId: req.user?.hospitalId,
+            name: 'Fever & Infection Panel',
+            code: 'PKG-FIP',
+            category: 'LAB',
+            price: 899,
+            originalPrice: 1300,
+            forGender: 'Both',
+            turnaroundTime: 'Same Day',
+            description: 'Complete CBC, Dengue NS1 Antigen, and Widal test.',
+            status: 'Active',
+            tests: [
+              { testName: 'Complete Blood Count (CBC)', department: 'PATHOLOGY', price: 350 },
+              { testName: 'Dengue NS1 Antigen', department: 'PATHOLOGY', price: 600 },
+              { testName: 'Widal Slide & Tube Test', department: 'PATHOLOGY', price: 350 }
+            ]
+          }
+        ];
+
+        try {
+          packages = await LabPackage.insertMany(defaultPkgs);
+          // Sync default package templates to LabTest as well
+          for (const dp of defaultPkgs) {
+            await LabTest.findOneAndUpdate(
+              tenantQuery(req, { title: dp.name, category: dp.category }),
+              {
+                hospitalId: req.user?.hospitalId,
+                title: dp.name,
+                test: dp.name,
+                category: dp.category,
+                basePrice: dp.price,
+                totalAmount: dp.price,
+                entryType: 'Package',
+                status: 'Active'
+              },
+              { upsert: true, new: true }
+            );
+          }
+        } catch (seedErr) {
+          console.warn('Default packages auto-seed error:', seedErr);
+        }
+      }
+    }
+
     res.json(packages);
   } catch (error) {
     console.error('List packages error:', error);
@@ -1854,21 +1944,23 @@ const savePackage = async (req, res) => {
       return res.status(400).json({ message: 'Please select at least one test for the package' });
     }
 
+    const category = (body.category || 'LAB').toUpperCase().trim();
+
     const payload = {
       hospitalId: req.user.hospitalId,
       name,
       code: body.code?.trim() || '',
-      category: 'LAB',
+      category,
       price: Number(body.price) || 0,
       originalPrice: Number(body.originalPrice) || 0,
       tests: body.tests.map(t => ({
         testId: t.testId || t.id || t._id,
         testName: t.testName || t.title || t.name || t.test,
-        department: t.department || 'PATHOLOGY',
+        department: t.department || (category === 'LAB' ? 'PATHOLOGY' : category),
         price: Number(t.price || t.basePrice || t.totalAmount) || 0
       })),
       forGender: body.forGender || 'Both',
-      sampleType: body.sampleType || 'Blood / Serum / Urine',
+      sampleType: body.sampleType || (category === 'LAB' ? 'Blood / Serum / Urine' : 'N/A / Scan'),
       turnaroundTime: body.turnaroundTime || 'Same Day',
       description: body.description || '',
       status: body.status || 'Active'
@@ -1886,12 +1978,12 @@ const savePackage = async (req, res) => {
       pkg = await LabPackage.create(payload);
     }
 
-    // Also sync as a LabTest template in LAB category so it shows in test searches seamlessly
+    // Also sync as a LabTest template in that category so it shows in test searches seamlessly
     try {
       const packageTestPayload = {
         hospitalId: req.user.hospitalId,
-        category: 'LAB',
-        categoryKey: 'lab',
+        category: payload.category,
+        categoryKey: normalizeKey(payload.category),
         test: name,
         testKey: normalizeKey(name),
         title: name,

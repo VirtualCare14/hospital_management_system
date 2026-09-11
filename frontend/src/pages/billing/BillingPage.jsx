@@ -1676,8 +1676,45 @@ const BillingPage = () => {
                                         )}
                                       </div>
                                     </td>
-                                    <td className="p-3 text-right font-semibold text-gray-600">
-                                      ₹{(item.price || 0).toFixed(2)}
+                                    <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
+                                      {isPaidAtReception ? (
+                                        <span className="font-semibold text-gray-600">₹{(item.price || 0).toFixed(2)}</span>
+                                      ) : (
+                                        <div className="relative inline-block w-24">
+                                          <span className="absolute left-1.5 top-1.5 text-gray-400 font-bold text-[10px] pointer-events-none">₹</span>
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            className="input text-xs py-0.5 pl-4 pr-1 font-mono font-bold w-full text-right bg-white border border-orange-200 rounded-lg focus:ring-1 focus:ring-orange-500 shadow-2xs"
+                                            value={item.price !== undefined && item.price !== null ? item.price : ''}
+                                            placeholder="0.00"
+                                            title="Edit price for this item"
+                                            onChange={(e) => {
+                                              const newPrice = Math.max(0, parseFloat(e.target.value) || 0);
+                                              setItems(prev => prev.map((itemVal, valIdx) => {
+                                                if (valIdx === idx) {
+                                                  const discountVal = Math.min(newPrice, itemVal.discountAmount || 0);
+                                                  const qty = itemVal.quantity || 1;
+                                                  const baseAmt = (newPrice - discountVal) * qty;
+                                                  const gstPct = itemVal.gstPercentage || 0;
+                                                  const gstAmt = itemVal.addGst !== false && gstPct > 0 ? baseAmt * (gstPct / 100) : 0;
+                                                  return {
+                                                    ...itemVal,
+                                                    price: newPrice,
+                                                    mrpIncGst: newPrice,
+                                                    mrpExGst: newPrice,
+                                                    discountAmount: discountVal,
+                                                    gstAmount: Number(gstAmt.toFixed(2)),
+                                                    total: Number((baseAmt + gstAmt).toFixed(2))
+                                                  };
+                                                }
+                                                return itemVal;
+                                              }));
+                                            }}
+                                          />
+                                        </div>
+                                      )}
                                     </td>
                                     {accessDiscount && (
                                       <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>

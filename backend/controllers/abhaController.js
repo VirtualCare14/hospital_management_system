@@ -5,6 +5,103 @@ const enrollmentService = require("../services/abhaEnrollmentService");
 const loginService = require("../services/abhaLoginService");
 const accountService = require("../services/abhaAccountService");
 const profileService = require("../services/abhaProfileService");
+const Patient = require("../models/Patient");
+const Hospital = require("../models/Hospital");
+const generateUhid = require("../utils/generateUhid");
+
+// ======================================
+// Helper: Save or Update Patient with ABHA details in MongoDB
+// ======================================
+const saveOrUpdatePatientWithAbha = async (abhaData, mobileHint = null, req = null) => {
+    try {
+        if (!abhaData) return null;
+
+        const abhaNumber = abhaData.ABHANumber || abhaData.abhaNumber || abhaData.healthIdNumber || abhaData.id || '';
+        const abhaAddress = abhaData.preferredAbhaAddress || abhaData.abhaAddress || abhaData.healthId || '';
+        const patientName = abhaData.name || abhaData.fullName || (abhaData.firstName ? `${abhaData.firstName} ${abhaData.lastName || ''}`.trim() : 'ABHA Patient');
+        const mobile = abhaData.mobile || mobileHint || '';
+        const rawGender = String(abhaData.gender || 'M').toUpperCase();
+        const gender = rawGender.startsWith('F') ? 'Female' : (rawGender.startsWith('O') ? 'Other' : 'Male');
+        
+        let dob = null;
+        if (abhaData.dob) {
+            dob = new Date(abhaData.dob);
+        } else if (abhaData.yearOfBirth) {
+            dob = new Date(`${abhaData.yearOfBirth}-01-01`);
+        } else if (abhaData.dayOfBirth && abhaData.monthOfBirth && abhaData.yearOfBirth) {
+            dob = new Date(`${abhaData.yearOfBirth}-${String(abhaData.monthOfBirth).padStart(2, '0')}-${String(abhaData.dayOfBirth).padStart(2, '0')}`);
+        }
+        if (!dob || isNaN(dob.getTime())) {
+            dob = new Date('1990-01-01');
+        }
+
+        const address = abhaData.address || 'Not specified';
+        const abdmPatientId = abhaAddress || abhaNumber;
+        const authMethods = Array.isArray(abhaData.authMethods) ? abhaData.authMethods : [];
+
+        // Match existing patient by abhaNumber, abhaAddress, or mobile
+        let patient = null;
+        const hospitalId = req?.user?.hospitalId || req?.hospital?._id || null;
+        const matchCriteria = [];
+        if (abhaNumber) matchCriteria.push({ abhaNumber });
+        if (abhaAddress) matchCriteria.push({ abhaAddress });
+        if (mobile && mobile.length >= 10) matchCriteria.push({ mobile: { $regex: `${mobile.slice(-10)}$` } });
+
+        if (matchCriteria.length > 0) {
+            const query = { $or: matchCriteria };
+            if (hospitalId) query.hospitalId = hospitalId;
+            patient = await Patient.findOne(query);
+        }
+
+        if (patient) {
+            // Update existing patient with ABHA identity
+            if (abhaNumber) patient.abhaNumber = abhaNumber;
+            if (abhaAddress) patient.abhaAddress = abhaAddress;
+            if (abdmPatientId) patient.abdmPatientId = abdmPatientId;
+            if (patientName && (!patient.patientName || patient.patientName === 'Not specified')) patient.patientName = patientName;
+            if (mobile && (!patient.mobile || patient.mobile.length < 10)) patient.mobile = mobile;
+            patient.abhaStatus = 'ACTIVE';
+            patient.abhaVerificationStatus = 'VERIFIED';
+            patient.abhaEnrolledAt = new Date();
+            if (authMethods.length > 0) patient.abhaAuthMethods = authMethods;
+            await patient.save();
+            console.log(`✅ Linked existing Medora Patient [${patient.uhid}] with ABHA [${abhaNumber || abhaAddress}]`);
+            return patient;
+        } else {
+            // Create new patient record
+            let resolvedHospitalId = hospitalId;
+            if (!resolvedHospitalId) {
+                const defaultHosp = await Hospital.findOne({ isActive: true }).select('_id');
+                resolvedHospitalId = defaultHosp?._id || null;
+            }
+
+            const uhid = await generateUhid();
+            patient = new Patient({
+                hospitalId: resolvedHospitalId,
+                uhid,
+                patientName,
+                mobile: mobile || '0000000000',
+                address,
+                dob,
+                gender,
+                abhaNumber: abhaNumber || undefined,
+                abhaAddress: abhaAddress || undefined,
+                abdmPatientId: abdmPatientId || undefined,
+                abhaStatus: 'ACTIVE',
+                abhaVerificationStatus: 'VERIFIED',
+                abhaEnrolledAt: new Date(),
+                abhaAuthMethods: authMethods
+            });
+
+            await patient.save();
+            console.log(`✅ Created new Medora Patient [${patient.uhid}] with ABHA [${abhaNumber || abhaAddress}]`);
+            return patient;
+        }
+    } catch (err) {
+        console.error("❌ Error saving patient ABHA mapping:", err.message);
+        return null;
+    }
+};
 
 // ======================================
 // Health Check
@@ -340,9 +437,22 @@ exports.verifyOtp = async (req, res) => {
             mobile
         });
 
+        // Persist/link ABHA details with Medora Patient in MongoDB
+        const abhaData = response?.data || response?.ABHAProfile || response;
+        const savedPatient = await saveOrUpdatePatientWithAbha(abhaData, mobile, req);
+
         res.status(200).json({
             success: true,
-            data: response
+            data: response,
+            patient: savedPatient ? {
+                _id: savedPatient._id,
+                uhid: savedPatient.uhid,
+                patientName: savedPatient.patientName,
+                mobile: savedPatient.mobile,
+                gender: savedPatient.gender,
+                abhaNumber: savedPatient.abhaNumber,
+                abhaAddress: savedPatient.abhaAddress
+            } : null
         });
 
     } catch (error) {
@@ -425,10 +535,22 @@ exports.verifyLoginOtp = async (req, res) => {
                        response?.data?.token || 
                        response?.token;
 
+        const abhaData = response?.data || response;
+        const savedPatient = await saveOrUpdatePatientWithAbha(abhaData, null, req);
+
         res.status(200).json({
             success: true,
             data: response.data || response,
-            xtoken: xtoken || null
+            xtoken: xtoken || null,
+            patient: savedPatient ? {
+                _id: savedPatient._id,
+                uhid: savedPatient.uhid,
+                patientName: savedPatient.patientName,
+                mobile: savedPatient.mobile,
+                gender: savedPatient.gender,
+                abhaNumber: savedPatient.abhaNumber,
+                abhaAddress: savedPatient.abhaAddress
+            } : null
         });
 
     } catch (error) {
@@ -971,6 +1093,17 @@ exports.createAbhaAddress = async (req, res) => {
         }
 
         const response = await accountService.createAbhaAddress(txnId, abhaAddress, preferred);
+
+        // Update Patient record with the newly configured ABHA address if matching by abhaNumber or mobile
+        if (abhaAddress) {
+            const abhaNumber = response?.ABHANumber || response?.abhaNumber || response?.healthIdNumber;
+            if (abhaNumber) {
+                await Patient.updateOne(
+                    { abhaNumber },
+                    { $set: { abhaAddress: String(abhaAddress).trim() } }
+                );
+            }
+        }
 
         return res.status(200).json({
             success: true,

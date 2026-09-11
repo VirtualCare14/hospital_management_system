@@ -168,6 +168,71 @@ const DEFAULT_CATALOG = {
   ]
 };
 
+const DEFAULT_PACKAGES = [
+  {
+    id: 'pkg_ehc_default',
+    title: 'Executive Health Checkup',
+    category: 'LAB',
+    packageCode: 'PKG-EHC',
+    price: 1499,
+    originalPrice: 2150,
+    isPackage: true,
+    description: 'Comprehensive vital organ screening including CBC, Lipid Profile, LFT, KFT',
+    tests: [
+      { testName: 'Complete Blood Count (CBC)', price: 350 },
+      { testName: 'Lipid Profile', price: 550 },
+      { testName: 'Liver Function Test (LFT)', price: 650 },
+      { testName: 'Kidney Function Test (KFT)', price: 600 }
+    ]
+  },
+  {
+    id: 'pkg_dcp_default',
+    title: 'Diabetic Care Profile',
+    category: 'LAB',
+    packageCode: 'PKG-DCP',
+    price: 699,
+    originalPrice: 980,
+    isPackage: true,
+    description: 'Specialized diabetic monitor package (FBS, GTT, Lipid Profile)',
+    tests: [
+      { testName: 'Fasting Blood Sugar (FBS)', price: 80 },
+      { testName: 'Glucose Tolerance Test (GTT)', price: 350 },
+      { testName: 'Lipid Profile', price: 550 }
+    ]
+  },
+  {
+    id: 'pkg_fip_default',
+    title: 'Fever & Infection Panel',
+    category: 'LAB',
+    packageCode: 'PKG-FIP',
+    price: 899,
+    originalPrice: 1250,
+    isPackage: true,
+    description: 'Essential diagnostic panel for acute fever (CBC, Dengue NS1, ESR, Widal)',
+    tests: [
+      { testName: 'Complete Blood Count (CBC)', price: 350 },
+      { testName: 'Dengue NS1 Antigen', price: 600 },
+      { testName: 'Erythrocyte Sedimentation Rate (ESR)', price: 100 },
+      { testName: 'Widal Card Test', price: 200 }
+    ]
+  },
+  {
+    id: 'pkg_usg_default',
+    title: 'Complete Abdominal & Pelvic Scan Package',
+    category: 'USG',
+    packageCode: 'PKG-USG-01',
+    price: 1599,
+    originalPrice: 2000,
+    isPackage: true,
+    description: 'Complete Upper & Lower Abdomen, KUB, Pelvis scan',
+    tests: [
+      { testName: 'Whole Abdomen Female', price: 500 },
+      { testName: 'K.U.B. FEMALE', price: 400 },
+      { testName: 'Lower Abdomen', price: 400 }
+    ]
+  }
+];
+
 const toast = {
   success: (msg) => console.log('Notice:', msg),
   error: (msg) => alert(msg)
@@ -261,7 +326,20 @@ export default function ServiceSelector({ selectedServices, onToggleService, onR
           api.get('/lab/packages').catch(() => [])
         ]);
 
-        const formattedTests = (Array.isArray(testsRes) ? testsRes : [])
+        const rawTests = (Array.isArray(testsRes) && testsRes.length > 0) ? testsRes : [];
+        const rawPkgs = (Array.isArray(pkgsRes) && pkgsRes.length > 0) ? pkgsRes : DEFAULT_PACKAGES;
+
+        // Flatten DEFAULT_CATALOG into array of fallback tests
+        const catalogFallback = Object.entries(DEFAULT_CATALOG).flatMap(([cat, tests]) => 
+          tests.map(t => ({
+            id: t.id,
+            title: t.title,
+            category: cat.toUpperCase(),
+            price: t.price
+          }))
+        );
+
+        const formattedTests = rawTests
           .filter(t => (t.category || '').toUpperCase() !== 'DIAGNOSIS')
           .map(t => ({
             id: t._id || t.id,
@@ -270,21 +348,27 @@ export default function ServiceSelector({ selectedServices, onToggleService, onR
             price: t.basePrice || t.totalAmount || t.amount || 400
           }));
 
-        const formattedPkgs = (Array.isArray(pkgsRes) ? pkgsRes : [])
+        // Merge rawTests with catalogFallback to ensure everything is searchable
+        const testMap = new Map();
+        catalogFallback.forEach(t => testMap.set(`${t.category}_${t.title.toLowerCase()}`, t));
+        formattedTests.forEach(t => testMap.set(`${t.category}_${t.title.toLowerCase()}`, t));
+        const mergedTests = Array.from(testMap.values());
+
+        const formattedPkgs = rawPkgs
           .filter(p => p.status !== 'Inactive')
           .map(pkg => ({
             id: pkg._id || pkg.id,
-            title: pkg.name,
-            category: 'LAB',
+            title: pkg.name || pkg.title,
+            category: (pkg.category || 'LAB').toUpperCase(),
             price: pkg.price || 0,
             originalPrice: pkg.originalPrice || 0,
             isPackage: true,
-            packageCode: pkg.code || '',
+            packageCode: pkg.code || pkg.packageCode || '',
             tests: pkg.tests || [],
             description: pkg.description || ''
           }));
 
-        setAllTests([...formattedPkgs, ...formattedTests]);
+        setAllTests([...formattedPkgs, ...mergedTests]);
       } catch (err) {
         console.warn(err);
       } finally {
@@ -309,7 +393,14 @@ export default function ServiceSelector({ selectedServices, onToggleService, onR
 
   // Get test catalog for a given category
   const getCatalogForCategory = (catId) => {
-    return allTests.filter(t => t.category === catId || (catId === 'DIGITAL XRAY' && t.category.includes('XRAY')));
+    const targetCat = (catId || 'LAB').toUpperCase();
+    return allTests.filter(t => {
+      const itemCat = (t.category || 'LAB').toUpperCase();
+      if (targetCat === 'USG') return itemCat === 'USG' || itemCat.includes('USG');
+      if (targetCat === 'DIGITAL XRAY' || targetCat === 'DIGITAL X-RAY') return itemCat.includes('XRAY') || itemCat.includes('X-RAY');
+      if (targetCat === 'XRAY') return itemCat === 'XRAY' || itemCat === 'X-RAY';
+      return itemCat === targetCat;
+    });
   };
 
   // Handle adding test from dropdown
@@ -449,10 +540,22 @@ export default function ServiceSelector({ selectedServices, onToggleService, onR
             return false;
           });
 
-          // Filter catalog by search query
-          const filteredCatalog = catalog.filter(t => 
-            t.title.toLowerCase().includes(currentSearch.toLowerCase())
-          );
+          // Filter catalog by search query (matches title, package code, description, or bundled tests)
+          const q = currentSearch.trim().toLowerCase();
+          const filteredCatalog = catalog.filter(t => {
+            if (!q) return true;
+            if (t.title && t.title.toLowerCase().includes(q)) return true;
+            if (t.packageCode && t.packageCode.toLowerCase().includes(q)) return true;
+            if (t.code && t.code.toLowerCase().includes(q)) return true;
+            if (t.description && t.description.toLowerCase().includes(q)) return true;
+            if (t.isPackage && Array.isArray(t.tests)) {
+              return t.tests.some(child => {
+                const childName = (typeof child === 'string' ? child : child.testName || child.title || child.name || '').toLowerCase();
+                return childName.includes(q);
+              });
+            }
+            return false;
+          });
 
           // Calculate box totals & auto-fill Paid if not manually overridden
           const boxTotal = boxSelectedTests.reduce((sum, t) => sum + Number(t.price || 0), 0);
@@ -492,7 +595,11 @@ export default function ServiceSelector({ selectedServices, onToggleService, onR
                       {boxSelectedTests.map((test) => (
                         <span
                           key={test.id || test.title}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-md text-xs font-bold text-slate-800"
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold ${
+                            test.isPackage 
+                              ? 'bg-orange-100 text-orange-950 border border-orange-300' 
+                              : 'bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800'
+                          }`}
                         >
                           <button
                             type="button"
@@ -500,10 +607,15 @@ export default function ServiceSelector({ selectedServices, onToggleService, onR
                               e.stopPropagation();
                               onRemoveService(test);
                             }}
-                            className="text-slate-500 hover:text-red-600"
+                            className="text-slate-500 hover:text-red-600 cursor-pointer"
                           >
                             <X className="w-3 h-3" />
                           </button>
+                          {test.isPackage && (
+                            <span className="bg-orange-500 text-white text-[8px] font-black px-1 py-0.2 rounded uppercase tracking-wider">
+                              PKG
+                            </span>
+                          )}
                           <span>{test.title} (Rs.{test.price})</span>
                           <button
                             type="button"
@@ -512,7 +624,7 @@ export default function ServiceSelector({ selectedServices, onToggleService, onR
                               setUpdateFeeModalTest(test);
                               setUpdateFeeValue(String(test.price));
                             }}
-                            className="text-[10px] text-orange-600 underline font-semibold ml-1"
+                            className="text-[10px] text-orange-600 underline font-semibold ml-1 cursor-pointer"
                             title="Edit fee"
                           >
                             Edit

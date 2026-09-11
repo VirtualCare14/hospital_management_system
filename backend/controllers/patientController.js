@@ -1332,6 +1332,93 @@ const getFollowUpPatients = async (req, res) => {
   }
 };
 
+// @desc    Get patient's linked ABDM care contexts and consent status
+// @route   GET /api/patients/:id/abdm-care-contexts
+const getPatientAbdmCareContexts = async (req, res) => {
+  try {
+    const patient = await Patient.findById(req.params.id);
+    if (!patient) {
+      return res.status(404).json({ success: false, message: 'Patient not found' });
+    }
+
+    const AbdmCareContext = require('../models/AbdmCareContext');
+    const AbdmConsent = require('../models/AbdmConsent');
+
+    const careContexts = await AbdmCareContext.find({
+      $or: [
+        { patientId: patient._id },
+        { patientUhid: patient.uhid }
+      ]
+    }).sort({ linkedAt: -1, createdAt: -1 }).lean();
+
+    const consents = await AbdmConsent.find({
+      $or: [
+        { patientAbha: patient.abhaAddress },
+        { patientUhid: patient.uhid }
+      ]
+    }).sort({ grantedAt: -1, createdAt: -1 }).lean();
+
+    res.json({
+      success: true,
+      patient: {
+        uhid: patient.uhid,
+        patientName: patient.patientName,
+        abhaNumber: patient.abhaNumber,
+        abhaAddress: patient.abhaAddress,
+        abhaStatus: patient.abhaStatus,
+        abhaVerificationStatus: patient.abhaVerificationStatus
+      },
+      careContexts,
+      consents
+    });
+  } catch (error) {
+    console.error('Error fetching ABDM care contexts:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Trigger HIP Care Context Linking for Patient
+// @route   POST /api/patients/:id/abdm-link
+const triggerPatientAbdmLink = async (req, res) => {
+  try {
+    const patient = await Patient.findById(req.params.id);
+    if (!patient) {
+      return res.status(404).json({ success: false, message: 'Patient not found' });
+    }
+
+    if (!patient.abhaAddress && !patient.abhaNumber) {
+      return res.status(400).json({ success: false, message: 'Patient does not have an ABHA Address or ABHA Number' });
+    }
+
+    const { visitRegNumber } = req.body;
+    if (!visitRegNumber) {
+      return res.status(400).json({ success: false, message: 'visitRegNumber / record reference is required' });
+    }
+
+    const m2HipLinkingService = require('../modules/abdm-m2/services/m2HipLinkingService');
+    const birthYear = patient.dob ? new Date(patient.dob).getFullYear() : 1990;
+
+    const result = await m2HipLinkingService.requestLinkToken({
+      abhaNumber: patient.abhaNumber,
+      abhaAddress: patient.abhaAddress,
+      name: patient.patientName,
+      gender: patient.gender,
+      yearOfBirth: birthYear,
+      patientUhid: patient.uhid,
+      visitRegNumber
+    });
+
+    res.json({
+      success: true,
+      message: 'HIP Care Context linking initiated with ABDM Gateway',
+      result
+    });
+  } catch (error) {
+    console.error('Error triggering ABDM link:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   createPatient,
   getPatients,
@@ -1347,5 +1434,8 @@ module.exports = {
   updatePatientDiscount,
   updatePatient,
   updateFollowUpDate,
-  getFollowUpPatients
+  getFollowUpPatients,
+  getPatientAbdmCareContexts,
+  triggerPatientAbdmLink
 };
+

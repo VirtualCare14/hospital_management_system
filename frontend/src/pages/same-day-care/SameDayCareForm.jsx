@@ -148,6 +148,8 @@ const SameDayCareForm = () => {
   // Locking/Editing confirmation states
   const [isLockedState, setIsLockedState] = useState(!!recordId);
   const [showEditConfirmModal, setShowEditConfirmModal] = useState(false);
+  const [isBillGenerated, setIsBillGenerated] = useState(false);
+  const [billingDetails, setBillingDetails] = useState(null);
 
   // Print & Hospital Settings State
   const [hospitalSettings, setHospitalSettings] = useState(null);
@@ -228,10 +230,10 @@ const SameDayCareForm = () => {
   });
 
   const [isUnlocked, setIsUnlocked] = useState(false);
-  const viewMode = viewModeParam && !isUnlocked;
+  const viewMode = (viewModeParam || isBillGenerated) && !isUnlocked;
 
   const isCompleted = form.status === 'Completed';
-  const isLocked = (isLockedState || isCompleted || viewModeParam) && !isUnlocked;
+  const isLocked = (isBillGenerated || isLockedState || isCompleted || viewModeParam) && (!isUnlocked || isBillGenerated);
   const setIsLocked = setIsLockedState;
 
   // Current prescription item helper state
@@ -464,6 +466,24 @@ const SameDayCareForm = () => {
           const { data: recData } = await client.get(`/same-day-care/treatment/${recordId}`);
           setRecord(recData);
           currentType = recData.treatmentType || treatmentType;
+          if (recData.isBillGenerated) {
+            setIsBillGenerated(true);
+            setBillingDetails(recData.billingDetails);
+          }
+          
+          try {
+            const { data: patientBills } = await client.get(`/billing/patient/${patientData.uhid}`);
+            const activeBill = (patientBills || []).find(b => b.status !== 'Cancelled' && (
+              (b.items && b.items.some(i => i.sourceId && i.sourceId.toString() === recordId)) ||
+              b.billType === 'SameDayTreatment' || b.billType === 'All'
+            ));
+            if (activeBill) {
+              setIsBillGenerated(true);
+              setBillingDetails(activeBill);
+            }
+          } catch (bErr) {
+            // ignore
+          }
           
           setForm({
             patientId: patientId,
@@ -592,6 +612,11 @@ const SameDayCareForm = () => {
   }, [selectedRoomType, showIpdModal]);
 
   const handleSave = async (completionStatus) => {
+    if (isBillGenerated) {
+      toast.error('Cannot edit record: An invoice has already been generated for this patient.');
+      return;
+    }
+
     const statusToSave = completionStatus || form.status;
     
     // Validations
@@ -766,7 +791,26 @@ const SameDayCareForm = () => {
       </div>
 
       {/* Warning/Status Alerts */}
-      {isLocked && (
+      {isBillGenerated ? (
+        <div className="no-print flex items-center justify-between p-4 bg-red-50 border-2 border-red-200 rounded-2xl animate-in fade-in slide-in-from-top-1 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-red-100 rounded-xl shrink-0">
+              <ShieldAlert className="h-5 w-5 text-red-600" />
+            </div>
+            <div>
+              <p className="text-xs font-black text-red-900 uppercase tracking-wide">
+                Invoice Generated — Clinical Record Permanently Locked
+              </p>
+              <p className="text-[11px] text-red-700 mt-0.5 font-medium">
+                An invoice/bill <span className="font-bold font-mono text-red-950">({billingDetails?.invoiceNo || billingDetails?.billNo || 'Generated'})</span> has already been finalized for this patient. Treatment &amp; clinical data cannot be edited.
+              </p>
+            </div>
+          </div>
+          <span className="px-3 py-1.5 text-xs font-black bg-red-600 text-white rounded-xl shadow-xs shrink-0 tracking-wide uppercase">
+            Locked (Billed)
+          </span>
+        </div>
+      ) : isLocked && (
         <div className="no-print flex items-center justify-between p-4 bg-amber-50 border border-amber-200 rounded-2xl animate-in fade-in slide-in-from-top-1">
           <div className="flex items-center gap-2.5">
             <ShieldAlert className="h-5 w-5 text-amber-600" />
@@ -779,7 +823,7 @@ const SameDayCareForm = () => {
           </div>
           <button
             onClick={() => setShowEditConfirmModal(true)}
-            className="btn py-1.5 px-4 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white font-extrabold"
+            className="btn py-1.5 px-4 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white font-extrabold cursor-pointer"
           >
             Confirm Edit
           </button>

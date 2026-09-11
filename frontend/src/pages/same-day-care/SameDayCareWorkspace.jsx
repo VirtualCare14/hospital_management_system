@@ -6,7 +6,8 @@ import {
   Activity, Search, User, Loader2, Eye,
   Plus, Stethoscope, CalendarDays, Phone, Clock,
   RefreshCw, Bandage, Bone, Flame, Droplets, Wind, Syringe,
-  X, FolderHeart, CheckCircle, Printer, Download, PlusCircle, Trash2, ListPlus, Pill, ClipboardCheck, ShieldAlert
+  X, FolderHeart, CheckCircle, Printer, Download, PlusCircle, Trash2, ListPlus, Pill, ClipboardCheck, ShieldAlert,
+  MoreVertical, CreditCard, Lock, FileText
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import client from '../../api/client';
@@ -176,6 +177,17 @@ const SameDayCareWorkspace = () => {
   const [trackRecord, setTrackRecord] = useState(null);
   const [admissions, setAdmissions] = useState([]);
   const [trackMedAdministrations, setTrackMedAdministrations] = useState([]);
+  const [actionMenuRowId, setActionMenuRowId] = useState(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (!e.target.closest('.action-menu-dropdown') && !e.target.closest('.action-menu-btn')) {
+        setActionMenuRowId(null);
+      }
+    };
+    window.addEventListener('click', handleOutsideClick);
+    return () => window.removeEventListener('click', handleOutsideClick);
+  }, []);
 
   const loadPatients = async () => {
     setLoading(true);
@@ -568,17 +580,17 @@ const SameDayCareWorkspace = () => {
               <div className="p-4 border-b border-orange-100 bg-orange-50/30 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-4">
                   <h3 className="font-extrabold text-gray-900 flex items-center gap-2"><Clock className="h-5 w-5 text-orange-500" /> Treatment Pending</h3>
-                  <div className="relative w-48 sm:w-64 font-medium">
-                    <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+                  <div className="relative w-48 sm:w-64 font-medium flex items-center">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
                     <input
                       type="text"
-                      className="input pl-8 py-1.5 text-xs bg-white border-orange-100 rounded-lg"
+                      className="input pl-9 pr-8 py-1.5 text-xs bg-white border-orange-100 rounded-lg w-full"
                       placeholder="Search pending patients..."
                       value={queueSearch}
                       onChange={(e) => setQueueSearch(e.target.value)}
                     />
                     {queueSearch && (
-                      <button onClick={() => setQueueSearch('')} className="absolute right-2.5 top-2 p-0.5 text-gray-400 hover:text-gray-600">
+                      <button onClick={() => setQueueSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-600">
                         <X className="h-3 w-3" />
                       </button>
                     )}
@@ -682,48 +694,71 @@ const SameDayCareWorkspace = () => {
                             )}
                           </td>
                           <td className="p-3 text-xs">{new Date(item.treatmentDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
-                          <td className="p-3 pr-4 text-center flex items-center justify-center gap-2">
+                          <td className="p-3 pr-4 text-center relative" onClick={(e) => e.stopPropagation()}>
                             {(() => {
                               const activeAdmission = admissions.find(adm => adm.patientId?._id === item.patientId && adm.status !== 'Discharged');
-                              if (activeAdmission) {
-                                return (
-                                  <>
-                                    <button
-                                      onClick={() => handleViewTreatment(item)}
-                                      className="btn-secondary py-1.5 px-3 text-xs font-semibold flex items-center gap-1.5"
-                                      title="View Details"
-                                    >
-                                      <Eye className="h-3.5 w-3.5" /> View
-                                    </button>
-                                    <button
-                                      onClick={() => handleOpenTrack(item)}
-                                      className="btn-secondary py-1.5 px-3 text-xs font-semibold flex items-center gap-1.5 border-sky-200 text-sky-700 hover:bg-sky-50"
-                                      title="Track Timeline"
-                                    >
-                                      <Activity className="h-3.5 w-3.5" /> Track
-                                    </button>
-                                    <button
-                                      onClick={() => navigate(`/same-day-care/ipd-chart/${activeAdmission._id}`)}
-                                      className="btn py-1.5 px-3 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1.5 font-extrabold"
-                                      title="Inpatient Drug Chart"
-                                    >
-                                      <ClipboardCheck className="h-3.5 w-3.5" /> Drug Chart
-                                    </button>
-                                  </>
-                                );
-                              } else {
-                                return (
-                                  <button onClick={() => {
-                                    if (item.treatmentType === 'Dialysis') {
-                                      navigate(`/same-day-care/dialysis/treatment/${item.patientId}?recordId=${item._id}`);
-                                    } else {
-                                      navigate(`/same-day-care/treatment/${item.patientId}?type=${item.treatmentType}&recordId=${item._id}`);
-                                    }
-                                  }} className="btn text-xs py-1.5 px-3 flex items-center gap-1.5 font-bold">
-                                    <Activity className="h-3.5 w-3.5" /> Start Care
+                              return (
+                                <div className="relative inline-block text-left">
+                                  <button
+                                    type="button"
+                                    onClick={() => setActionMenuRowId(actionMenuRowId === item._id ? null : item._id)}
+                                    className="action-menu-btn p-1.5 hover:bg-orange-100/70 text-gray-600 hover:text-orange-700 rounded-lg transition-colors border border-orange-200/80 bg-white shadow-2xs inline-flex items-center justify-center cursor-pointer"
+                                    title="Actions"
+                                  >
+                                    <MoreVertical className="h-4 w-4" />
                                   </button>
-                                );
-                              }
+
+                                  {actionMenuRowId === item._id && (
+                                    <div className="action-menu-dropdown absolute right-0 z-50 mt-1 w-44 bg-white rounded-xl shadow-xl border border-orange-100 py-1 space-y-0.5 animate-in fade-in zoom-in-95 duration-100 text-left">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setActionMenuRowId(null);
+                                          if (item.treatmentType === 'Dialysis') {
+                                            navigate(`/same-day-care/dialysis/treatment/${item.patientId}?recordId=${item._id}`);
+                                          } else {
+                                            navigate(`/same-day-care/treatment/${item.patientId}?type=${item.treatmentType}&recordId=${item._id}`);
+                                          }
+                                        }}
+                                        className="w-full px-3 py-1.5 text-xs font-bold text-orange-700 hover:bg-orange-50 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                                      >
+                                        <Activity className="h-3.5 w-3.5 text-orange-600" /> Start Care
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => { setActionMenuRowId(null); handleViewTreatment(item); }}
+                                        className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                                      >
+                                        <Eye className="h-3.5 w-3.5 text-gray-500" /> View Details
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => { setActionMenuRowId(null); handleOpenTrack(item); }}
+                                        className="w-full px-3 py-1.5 text-xs font-bold text-sky-700 hover:bg-sky-50 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                                      >
+                                        <Activity className="h-3.5 w-3.5 text-sky-600" /> Track Timeline
+                                      </button>
+                                      {activeAdmission && (
+                                        <button
+                                          type="button"
+                                          onClick={() => { setActionMenuRowId(null); navigate(`/same-day-care/ipd-chart/${activeAdmission._id}`); }}
+                                          className="w-full px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-50 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                                        >
+                                          <ClipboardCheck className="h-3.5 w-3.5 text-blue-600" /> Inpatient Drug Chart
+                                        </button>
+                                      )}
+                                      <div className="border-t border-orange-100/70 my-0.5"></div>
+                                      <button
+                                        type="button"
+                                        onClick={() => { setActionMenuRowId(null); navigate(`/billing?search=${item.uhid || item.patientName}`); }}
+                                        className="w-full px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-50 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                                      >
+                                        <CreditCard className="h-3.5 w-3.5 text-emerald-600" /> Open Billing
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              );
                             })()}
                           </td>
                         </tr>
@@ -741,17 +776,17 @@ const SameDayCareWorkspace = () => {
                   <h3 className="font-extrabold text-gray-900 flex items-center gap-2">
                     <CheckCircle className="h-5 w-5 text-green-500" /> Treatment Completed
                   </h3>
-                  <div className="relative w-48 sm:w-64 font-medium">
-                    <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+                  <div className="relative w-48 sm:w-64 font-medium flex items-center">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
                     <input
                       type="text"
-                      className="input pl-8 py-1.5 text-xs bg-white border-orange-100 rounded-lg"
+                      className="input pl-9 pr-8 py-1.5 text-xs bg-white border-orange-100 rounded-lg w-full"
                       placeholder="Search completed patients..."
                       value={queueSearch}
                       onChange={(e) => setQueueSearch(e.target.value)}
                     />
                     {queueSearch && (
-                      <button onClick={() => setQueueSearch('')} className="absolute right-2.5 top-2 p-0.5 text-gray-400 hover:text-gray-600">
+                      <button onClick={() => setQueueSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-600">
                         <X className="h-3 w-3" />
                       </button>
                     )}
@@ -841,7 +876,14 @@ const SameDayCareWorkspace = () => {
                       }).map(item => (
                         <tr key={item._id} className="hover:bg-orange-50/20">
                           <td className="p-3 pl-4">
-                            <span className="font-bold text-gray-955 block">{item.patientName}</span>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-bold text-gray-955 block">{item.patientName}</span>
+                              {item.isBillGenerated && (
+                                <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black bg-purple-100 text-purple-800 border border-purple-200" title={`Invoice: ${item.billingDetails?.invoiceNo || item.billingDetails?.billNo || 'Generated'}`}>
+                                  <Lock className="h-2.5 w-2.5" /> Billed
+                                </span>
+                              )}
+                            </div>
                             <span className="text-[10px] text-gray-500 font-bold block mt-0.5">
                               {item.source === 'Doctor Referral' 
                                 ? `Referred by: Dr. ${item.referredByDoctorName || 'Doctor'}` 
@@ -859,28 +901,51 @@ const SameDayCareWorkspace = () => {
                               year: 'numeric'
                             })}
                           </td>
-                          <td className="p-3 pr-4 text-center flex items-center justify-center gap-2">
-                            <button
-                              onClick={() => handleOpenPrint(item)}
-                              className="btn py-1.5 px-3 text-xs font-bold bg-orange-500 hover:bg-orange-600 flex items-center gap-1.5"
-                              title="Print Report"
-                            >
-                              <Printer className="h-3.5 w-3.5" /> Print
-                            </button>
-                            <button
-                              onClick={() => handleViewTreatment(item)}
-                              className="btn-secondary py-1.5 px-3 text-xs font-semibold flex items-center gap-1.5"
-                              title="View Details"
-                            >
-                              <Eye className="h-3.5 w-3.5" /> View
-                            </button>
-                            <button
-                              onClick={() => handleOpenTrack(item)}
-                              className="btn-secondary py-1.5 px-3 text-xs font-semibold flex items-center gap-1.5 border-sky-200 text-sky-700 hover:bg-sky-50"
-                              title="Track Timeline"
-                            >
-                              <Activity className="h-3.5 w-3.5" /> Track
-                            </button>
+                          <td className="p-3 pr-4 text-center relative" onClick={(e) => e.stopPropagation()}>
+                            <div className="relative inline-block text-left">
+                              <button
+                                type="button"
+                                onClick={() => setActionMenuRowId(actionMenuRowId === item._id ? null : item._id)}
+                                className="action-menu-btn p-1.5 hover:bg-orange-100/70 text-gray-600 hover:text-orange-700 rounded-lg transition-colors border border-orange-200/80 bg-white shadow-2xs inline-flex items-center justify-center cursor-pointer"
+                                title="Actions"
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </button>
+
+                              {actionMenuRowId === item._id && (
+                                <div className="action-menu-dropdown absolute right-0 z-50 mt-1 w-44 bg-white rounded-xl shadow-xl border border-orange-100 py-1 space-y-0.5 animate-in fade-in zoom-in-95 duration-100 text-left">
+                                  <button
+                                    type="button"
+                                    onClick={() => { setActionMenuRowId(null); handleOpenPrint(item); }}
+                                    className="w-full px-3 py-1.5 text-xs font-bold text-orange-700 hover:bg-orange-50 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                                  >
+                                    <Printer className="h-3.5 w-3.5 text-orange-600" /> Print Report
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => { setActionMenuRowId(null); handleViewTreatment(item); }}
+                                    className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                                  >
+                                    <Eye className="h-3.5 w-3.5 text-gray-500" /> View Details
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => { setActionMenuRowId(null); handleOpenTrack(item); }}
+                                    className="w-full px-3 py-1.5 text-xs font-bold text-sky-700 hover:bg-sky-50 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                                  >
+                                    <Activity className="h-3.5 w-3.5 text-sky-600" /> Track Timeline
+                                  </button>
+                                  <div className="border-t border-orange-100/70 my-0.5"></div>
+                                  <button
+                                    type="button"
+                                    onClick={() => { setActionMenuRowId(null); navigate(`/billing?search=${item.uhid || item.patientName}`); }}
+                                    className="w-full px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-50 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                                  >
+                                    <CreditCard className="h-3.5 w-3.5 text-emerald-600" /> Billing Desk
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))
@@ -952,17 +1017,66 @@ const SameDayCareWorkspace = () => {
                             <td className="p-3 text-xs font-semibold">{item.treatmentType}</td>
                             <td className="p-3 text-xs font-medium text-orange-700">{item.nextProcedurePlanned || 'Routine Checkup'}</td>
                             <td className="p-3 text-xs truncate max-w-[200px]" title={item.reviewNotes}>{item.reviewNotes || '-'}</td>
-                            <td className="p-3 pr-4 text-center">
-                              <button onClick={async () => {
-                                try {
-                                  const { data: pat } = await client.get(`/patients/${item.patientId?._id || item.patientId}`);
-                                  loadPatientTreatments(pat);
-                                } catch (err) {
-                                  toast.error("Failed to load patient details");
-                                }
-                              }} className="btn text-xs py-1.5 px-3">
-                                <Activity className="h-3.5 w-3.5" /> Start Care
-                              </button>
+                            <td className="p-3 pr-4 text-center relative" onClick={(e) => e.stopPropagation()}>
+                              <div className="relative inline-block text-left">
+                                <button
+                                  type="button"
+                                  onClick={() => setActionMenuRowId(actionMenuRowId === item._id ? null : item._id)}
+                                  className="action-menu-btn p-1.5 hover:bg-orange-100/70 text-gray-600 hover:text-orange-700 rounded-lg transition-colors border border-orange-200/80 bg-white shadow-2xs inline-flex items-center justify-center cursor-pointer"
+                                  title="Actions"
+                                >
+                                  <MoreVertical className="h-4 w-4" />
+                                </button>
+
+                                {actionMenuRowId === item._id && (
+                                  <div className="action-menu-dropdown absolute right-0 z-50 mt-1 w-44 bg-white rounded-xl shadow-xl border border-orange-100 py-1 space-y-0.5 animate-in fade-in zoom-in-95 duration-100 text-left">
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        setActionMenuRowId(null);
+                                        try {
+                                          const { data: pat } = await client.get(`/patients/${item.patientId?._id || item.patientId}`);
+                                          loadPatientTreatments(pat);
+                                        } catch (err) {
+                                          toast.error("Failed to load patient details");
+                                        }
+                                      }}
+                                      className="w-full px-3 py-1.5 text-xs font-bold text-orange-700 hover:bg-orange-50 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                                    >
+                                      <Activity className="h-3.5 w-3.5 text-orange-600" /> Start Care
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => { setActionMenuRowId(null); handleViewTreatment(item); }}
+                                      className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                                    >
+                                      <Eye className="h-3.5 w-3.5 text-gray-500" /> View Details
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => { setActionMenuRowId(null); handleOpenPrint(item); }}
+                                      className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                                    >
+                                      <Printer className="h-3.5 w-3.5 text-orange-500" /> Print Report
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => { setActionMenuRowId(null); handleOpenTrack(item); }}
+                                      className="w-full px-3 py-1.5 text-xs font-bold text-sky-700 hover:bg-sky-50 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                                    >
+                                      <Activity className="h-3.5 w-3.5 text-sky-600" /> Track Timeline
+                                    </button>
+                                    <div className="border-t border-orange-100/70 my-0.5"></div>
+                                    <button
+                                      type="button"
+                                      onClick={() => { setActionMenuRowId(null); navigate(`/billing?search=${item.uhid || item.patientName}`); }}
+                                      className="w-full px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-50 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                                    >
+                                      <CreditCard className="h-3.5 w-3.5 text-emerald-600" /> Billing Desk
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))
@@ -1074,27 +1188,51 @@ const SameDayCareWorkspace = () => {
                                 {item.status === 'Completed' ? 'Completed' : 'Draft/Pending'}
                               </span>
                             </td>
-                            <td className="p-3.5 pr-4 text-center">
-                              <div className="flex gap-2 justify-center font-bold">
+                            <td className="p-3.5 pr-4 text-center relative" onClick={(e) => e.stopPropagation()}>
+                              <div className="relative inline-block text-left">
                                 <button
-                                  onClick={() => handleViewTreatment(item)}
-                                  className="btn-secondary py-1.5 px-3 text-[10px] font-bold border-orange-200 text-orange-755 hover:bg-orange-50 flex items-center gap-1 rounded-lg"
+                                  type="button"
+                                  onClick={() => setActionMenuRowId(actionMenuRowId === item._id ? null : item._id)}
+                                  className="action-menu-btn p-1.5 hover:bg-orange-100/70 text-gray-600 hover:text-orange-700 rounded-lg transition-colors border border-orange-200/80 bg-white shadow-2xs inline-flex items-center justify-center cursor-pointer"
+                                  title="Actions"
                                 >
-                                  <Eye className="h-3 w-3" /> View
+                                  <MoreVertical className="h-4 w-4" />
                                 </button>
-                                <button
-                                  onClick={() => handleOpenTrack(item)}
-                                  className="btn-secondary py-1.5 px-3 text-[10px] font-bold border-sky-200 text-sky-750 hover:bg-sky-50 flex items-center gap-1 rounded-lg"
-                                >
-                                  <Activity className="h-3 w-3" /> Track
-                                </button>
-                                {item.status === 'Completed' && (
-                                  <button
-                                    onClick={() => handleOpenPrint(item)}
-                                    className="btn py-1.5 px-3 text-[10px] font-extrabold bg-orange-600 hover:bg-orange-700 text-white flex items-center gap-1 rounded-lg"
-                                  >
-                                    <Printer className="h-3 w-3" /> Print
-                                  </button>
+
+                                {actionMenuRowId === item._id && (
+                                  <div className="action-menu-dropdown absolute right-0 z-50 mt-1 w-44 bg-white rounded-xl shadow-xl border border-orange-100 py-1 space-y-0.5 animate-in fade-in zoom-in-95 duration-100 text-left">
+                                    <button
+                                      type="button"
+                                      onClick={() => { setActionMenuRowId(null); handleViewTreatment(item); }}
+                                      className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                                    >
+                                      <Eye className="h-3.5 w-3.5 text-orange-600" /> View Details
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => { setActionMenuRowId(null); handleOpenTrack(item); }}
+                                      className="w-full px-3 py-1.5 text-xs font-bold text-sky-700 hover:bg-sky-50 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                                    >
+                                      <Activity className="h-3.5 w-3.5 text-sky-600" /> Track Timeline
+                                    </button>
+                                    {item.status === 'Completed' && (
+                                      <button
+                                        type="button"
+                                        onClick={() => { setActionMenuRowId(null); handleOpenPrint(item); }}
+                                        className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                                      >
+                                        <Printer className="h-3.5 w-3.5 text-orange-500" /> Print Report
+                                      </button>
+                                    )}
+                                    <div className="border-t border-orange-100/70 my-0.5"></div>
+                                    <button
+                                      type="button"
+                                      onClick={() => { setActionMenuRowId(null); navigate(`/billing?search=${item.uhid || item.patientName}`); }}
+                                      className="w-full px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-50 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                                    >
+                                      <CreditCard className="h-3.5 w-3.5 text-emerald-600" /> Billing Desk
+                                    </button>
+                                  </div>
                                 )}
                               </div>
                             </td>
@@ -1111,10 +1249,10 @@ const SameDayCareWorkspace = () => {
               {/* Patient Search */}
               <div className="card p-4">
                 <form onSubmit={handleSearch} className="flex gap-3">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-                    <input type="text" className="input pl-9 py-2.5" placeholder="Search patients by name, UHID, or mobile..." value={search} onChange={(e) => setSearch(e.target.value)} />
-                    {search && <button type="button" onClick={() => { setSearch(''); loadPatients(); }} className="absolute right-2 top-2 p-1"><X className="h-4 w-4" /></button>}
+                  <div className="relative flex-1 flex items-center">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                    <input type="text" className="input pl-10 pr-9 py-2.5 w-full" placeholder="Search patients by name, UHID, or mobile..." value={search} onChange={(e) => setSearch(e.target.value)} />
+                    {search && <button type="button" onClick={() => { setSearch(''); loadPatients(); }} className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"><X className="h-4 w-4" /></button>}
                   </div>
                   <button type="submit" className="btn py-2.5 px-6"><Search className="h-4 w-4" /> Search</button>
                 </form>
