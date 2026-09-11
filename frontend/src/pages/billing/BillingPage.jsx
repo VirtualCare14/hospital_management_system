@@ -570,9 +570,9 @@ const BillingPage = () => {
       const activePrice = addGst ? mrpIncGst : mrpExGst;
       const gstPct = addGst ? totalGstPct : 0;
       const gstAmt = addGst ? ((mrpIncGst - mrpExGst) * i.quantity) : 0;
-      const totalAmt = addGst
-        ? ((mrpIncGst - (i.discountAmount || 0)) * i.quantity)
-        : ((mrpExGst - (i.discountAmount || 0)) * i.quantity);
+      const lineGross = activePrice * i.quantity;
+      const lineDiscount = Math.min(lineGross, i.discountAmount || 0);
+      const totalAmt = Math.max(0, lineGross - lineDiscount);
 
       return {
         ...i,
@@ -581,7 +581,7 @@ const BillingPage = () => {
         mrpExGst,
         price: activePrice,
         defaultGstPercentage: totalGstPct,
-        discountAmount: i.discountAmount || 0,
+        discountAmount: lineDiscount,
         gstPercentage: gstPct,
         gstAmount: Number(gstAmt.toFixed(2)),
         total: Number(totalAmt.toFixed(2))
@@ -603,9 +603,9 @@ const BillingPage = () => {
         const activePrice = isChecked ? mrpIncGst : mrpExGst;
         const newGstPct = isChecked ? totalGstPct : 0;
         const gstAmt = isChecked ? ((mrpIncGst - mrpExGst) * itemVal.quantity) : 0;
-        const totalAmt = isChecked
-          ? ((mrpIncGst - (itemVal.discountAmount || 0)) * itemVal.quantity)
-          : ((mrpExGst - (itemVal.discountAmount || 0)) * itemVal.quantity);
+        const lineGross = activePrice * itemVal.quantity;
+        const lineDiscount = Math.min(lineGross, itemVal.discountAmount || 0);
+        const totalAmt = Math.max(0, lineGross - lineDiscount);
 
         return {
           ...itemVal,
@@ -744,11 +744,12 @@ const BillingPage = () => {
     }
 
     const effectiveCat = (categorySelectOption === 'Other / Custom' ? customCategory : categorySelectOption).trim() || 'Other';
-    const discVal = Math.min(priceVal, parseFloat(customDiscount) || 0);
-    const gstPct = Math.min(100, Math.max(0, parseFloat(customGst) || 0));
     const qtyVal = Math.max(1, parseInt(customQty) || 1);
+    const grossAmt = priceVal * qtyVal;
+    const discVal = Math.min(grossAmt, parseFloat(customDiscount) || 0);
+    const gstPct = Math.min(100, Math.max(0, parseFloat(customGst) || 0));
 
-    const baseAmt = (priceVal - discVal) * qtyVal;
+    const baseAmt = Math.max(0, grossAmt - discVal);
     const gstAmt = baseAmt * (gstPct / 100);
     const totalAmt = baseAmt + gstAmt;
 
@@ -811,11 +812,12 @@ const BillingPage = () => {
       return;
     }
     const newPrice = Math.max(0, parseFloat(editItemPrice) || 0);
-    const newDisc = Math.min(newPrice, Math.max(0, parseFloat(editItemDiscount) || 0));
-    const newGstPct = Math.min(100, Math.max(0, parseFloat(editItemGst) || 0));
     const newQty = Math.max(1, parseInt(editItemQty) || 1);
+    const grossAmt = newPrice * newQty;
+    const newDisc = Math.min(grossAmt, Math.max(0, parseFloat(editItemDiscount) || 0));
+    const newGstPct = Math.min(100, Math.max(0, parseFloat(editItemGst) || 0));
 
-    const baseAmt = (newPrice - newDisc) * newQty;
+    const baseAmt = Math.max(0, grossAmt - newDisc);
     const gstAmt = baseAmt * (newGstPct / 100);
     const totalAmt = baseAmt + gstAmt;
 
@@ -845,9 +847,9 @@ const BillingPage = () => {
 
   // Totals calculations based ONLY on selected checkboxes
   const selectedItems = items.filter((_, idx) => selectedItemIndexes.includes(idx));
-  const baseSubtotal = selectedItems.reduce((sum, i) => sum + ((i.price - (i.discountAmount || 0)) * i.quantity), 0);
-  const rowGstAmountTotal = selectedItems.reduce((sum, i) => sum + (((i.price - (i.discountAmount || 0)) * i.quantity) * ((i.gstPercentage || 0) / 100)), 0);
-  const itemDiscountTotal = selectedItems.reduce((sum, i) => sum + ((i.discountAmount || 0) * i.quantity), 0);
+  const baseSubtotal = selectedItems.reduce((sum, i) => sum + Math.max(0, (i.price * i.quantity) - (i.discountAmount || 0)), 0);
+  const rowGstAmountTotal = selectedItems.reduce((sum, i) => sum + (Math.max(0, (i.price * i.quantity) - (i.discountAmount || 0)) * ((i.gstPercentage || 0) / 100)), 0);
+  const itemDiscountTotal = selectedItems.reduce((sum, i) => sum + Math.min((i.price * i.quantity), (i.discountAmount || 0)), 0);
 
   // Automated/Dynamic Discount Calculation (computed during render to avoid useEffect state cycles and TDZ)
   let discountPercentage = accessDiscount ? parseFloat(directDiscountPercent || 0) : 0;
@@ -1694,9 +1696,10 @@ const BillingPage = () => {
                                               const newPrice = Math.max(0, parseFloat(e.target.value) || 0);
                                               setItems(prev => prev.map((itemVal, valIdx) => {
                                                 if (valIdx === idx) {
-                                                  const discountVal = Math.min(newPrice, itemVal.discountAmount || 0);
                                                   const qty = itemVal.quantity || 1;
-                                                  const baseAmt = (newPrice - discountVal) * qty;
+                                                  const grossAmt = newPrice * qty;
+                                                  const discountVal = Math.min(grossAmt, itemVal.discountAmount || 0);
+                                                  const baseAmt = Math.max(0, grossAmt - discountVal);
                                                   const gstPct = itemVal.gstPercentage || 0;
                                                   const gstAmt = itemVal.addGst !== false && gstPct > 0 ? baseAmt * (gstPct / 100) : 0;
                                                   return {
@@ -1723,20 +1726,25 @@ const BillingPage = () => {
                                           <input
                                             type="number"
                                             min="0"
-                                            max={item.price}
+                                            max={(item.price || 0) * (item.quantity || 1)}
                                             className="input text-xs py-0.5 pl-4 pr-1 font-mono font-bold w-full text-right bg-white border border-orange-200 rounded-lg focus:ring-1 focus:ring-orange-500"
-                                            value={item.discountAmount || ''}
+                                            value={item.discountAmount !== undefined && item.discountAmount !== null ? item.discountAmount : ''}
+                                            placeholder="0.00"
                                             onChange={(e) => {
-                                              const discountVal = Math.min(item.price, parseFloat(e.target.value) || 0);
+                                              const rawVal = parseFloat(e.target.value) || 0;
                                               setItems(prev => prev.map((itemVal, valIdx) => {
                                                 if (valIdx === idx) {
-                                                  const baseAmt = (itemVal.price - discountVal) * itemVal.quantity;
-                                                  const gstAmt = baseAmt * ((itemVal.gstPercentage || 0) / 100);
+                                                  const qty = itemVal.quantity || 1;
+                                                  const grossAmt = (itemVal.price || 0) * qty;
+                                                  const discountVal = Math.min(grossAmt, Math.max(0, rawVal));
+                                                  const baseAmt = Math.max(0, grossAmt - discountVal);
+                                                  const gstPct = itemVal.gstPercentage || 0;
+                                                  const gstAmt = itemVal.addGst !== false && gstPct > 0 ? baseAmt * (gstPct / 100) : 0;
                                                   return {
                                                     ...itemVal,
                                                     discountAmount: discountVal,
-                                                    gstAmount: gstAmt,
-                                                    total: baseAmt + gstAmt
+                                                    gstAmount: Number(gstAmt.toFixed(2)),
+                                                    total: Number((baseAmt + gstAmt).toFixed(2))
                                                   };
                                                 }
                                                 return itemVal;
@@ -1774,8 +1782,10 @@ const BillingPage = () => {
                                               const gstVal = Math.min(100, Math.max(0, parseFloat(e.target.value) || 0));
                                               setItems(prev => prev.map((itemVal, valIdx) => {
                                                 if (valIdx === idx) {
-                                                  const discAmt = itemVal.discountAmount || 0;
-                                                  const baseAmt = (itemVal.price - discAmt) * itemVal.quantity;
+                                                  const qty = itemVal.quantity || 1;
+                                                  const grossAmt = (itemVal.price || 0) * qty;
+                                                  const discAmt = Math.min(grossAmt, itemVal.discountAmount || 0);
+                                                  const baseAmt = Math.max(0, grossAmt - discAmt);
                                                   const gstAmt = baseAmt * (gstVal / 100);
                                                   return {
                                                     ...itemVal,
@@ -3762,10 +3772,10 @@ const BillingPage = () => {
       {/* ===================== MODAL 3: PRINT PREVIEW DRAWER ===================== */}
       {showPrintModal && printBillObj && (() => {
         const hasItemDiscounts = (printBillObj.items || []).some(item => (item.discountAmount || 0) > 0);
-        const totalItemDiscounts = (printBillObj.items || []).reduce((sum, item) => sum + ((item.discountAmount || 0) * item.quantity), 0);
+        const totalItemDiscounts = (printBillObj.items || []).reduce((sum, item) => sum + (item.discountAmount || 0), 0);
         const actualGrossSubtotal = (printBillObj.items || []).reduce((sum, item) => sum + ((item.price || 0) * item.quantity), 0);
-        const generalDiscountAmount = (printBillObj.discountAmount || 0) - totalItemDiscounts;
-        const footerColSpan = hasItemDiscounts ? 8 : 6;
+        const generalDiscountAmount = Math.max(0, (printBillObj.discountAmount || 0) - totalItemDiscounts);
+        const footerColSpan = hasItemDiscounts ? 7 : 6;
         return (
           <div className="fixed inset-0 bg-black/75 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto animate-fadeIn print:static print:p-0 print:bg-transparent print:backdrop-blur-none print:overflow-visible print:z-auto">
             <div className="bg-gray-100 rounded-2xl shadow-2xl max-w-4xl w-full flex flex-col h-[90vh] print:bg-transparent print:shadow-none print:max-w-none print:w-full print:h-auto print:border-none print:rounded-none print:overflow-visible">
@@ -3927,11 +3937,10 @@ const BillingPage = () => {
                           <th>Service Name</th>
                           <th>Category</th>
                           <th className="text-right w-12">Qty</th>
-                          <th className="text-right w-20">Actual Price</th>
-                          <th className="text-right w-20">Discount Price</th>
-                          <th className="text-right w-20">Total Discount</th>
+                          <th className="text-right w-20">Rate</th>
+                          <th className="text-right w-20">Discount</th>
                           <th className="text-right w-16">GST (%)</th>
-                          <th className="text-right w-20">Amount</th>
+                          <th className="text-right w-24">Amount</th>
                         </tr>
                       ) : (
                         <tr>
@@ -3948,7 +3957,6 @@ const BillingPage = () => {
                     <tbody>
                       {(printBillObj.items || []).map((item, idx) => {
                         const itemDisc = item.discountAmount || 0;
-                        const itemTotalDisc = itemDisc * item.quantity;
                         return hasItemDiscounts ? (
                           <tr key={idx}>
                             <td className="text-center">{idx + 1}</td>
@@ -3956,8 +3964,7 @@ const BillingPage = () => {
                             <td>{item.category}</td>
                             <td className="text-right">{item.quantity}</td>
                             <td className="text-right font-mono">₹{(item.price || 0).toFixed(2)}</td>
-                            <td className="text-right font-mono text-green-700">₹{itemDisc.toFixed(2)}</td>
-                            <td className="text-right font-mono text-green-700">₹{itemTotalDisc.toFixed(2)}</td>
+                            <td className="text-right font-mono text-green-700">{itemDisc > 0 ? `₹${itemDisc.toFixed(2)}` : '—'}</td>
                             <td className="text-right font-mono">{item.gstPercentage || 0}%</td>
                             <td className="text-right font-mono font-bold">₹{(item.total || 0).toFixed(2)}</td>
                           </tr>

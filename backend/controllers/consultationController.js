@@ -655,15 +655,21 @@ const getAllPatientConsultations = async (req, res) => {
 const getCompletedConsultationDetails = async (req, res) => {
   try {
     const consultation = await Consultation.findOne(tenantQuery(req, { _id: req.params.consultationId }))
-      .populate('patientId', 'uhid patientName mobile gender dob department appointmentDate slot address aadhaar')
+      .populate('patientId')
       .populate('doctorId', 'doctorName username department')
       .populate({
         path: 'visitId',
-        select: 'createdBy',
-        populate: {
-          path: 'createdBy',
-          select: 'username doctorName role'
-        }
+        select: 'registrationNumber department appointmentDate slot doctorId createdBy opdFee netOpdFee paymentMode paymentStatus billNumber demographics',
+        populate: [
+          {
+            path: 'createdBy',
+            select: 'username doctorName role'
+          },
+          {
+            path: 'doctorId',
+            select: 'doctorName username department'
+          }
+        ]
       });
 
     if (!consultation) return res.status(404).json({ message: 'Consultation not found' });
@@ -691,7 +697,23 @@ const getCompletedConsultationDetails = async (req, res) => {
       .populate('report.generatedBy', 'doctorName username')
       .sort({ createdAt: -1 });
 
-    res.json({ consultation, patient: consultation.patientId, prescription, allPrescriptions, labRequests });
+    const patientObj = {
+      ...(consultation.patientId ? (consultation.patientId.toObject ? consultation.patientId.toObject() : consultation.patientId) : {}),
+      department: consultation.visitId?.department || consultation.doctorId?.department || consultation.department || 'OPD',
+      doctorId: consultation.doctorId || consultation.visitId?.doctorId || null,
+      appointmentDate: consultation.visitId?.appointmentDate || consultation.consultationCompletedDate || consultation.createdAt,
+      slot: consultation.visitId?.slot || '',
+      registrationNumber: consultation.visitId?.registrationNumber || '',
+      demographics: consultation.visitId?.demographics || consultation.vitals || null,
+      registeredBy: consultation.visitId?.createdBy ? (consultation.visitId.createdBy.doctorName || consultation.visitId.createdBy.username) : 'Receptionist',
+      opdFee: consultation.visitId?.opdFee || 0,
+      netOpdFee: consultation.visitId?.netOpdFee || 0,
+      paymentMode: consultation.visitId?.paymentMode || 'Cash',
+      paymentStatus: consultation.visitId?.paymentStatus || 'Paid',
+      billNumber: consultation.visitId?.billNumber || null
+    };
+
+    res.json({ consultation, patient: patientObj, prescription, allPrescriptions, labRequests });
   } catch (error) {
     console.error('Get Completed Consultation Details Error:', error);
     res.status(500).json({ message: 'Server error' });

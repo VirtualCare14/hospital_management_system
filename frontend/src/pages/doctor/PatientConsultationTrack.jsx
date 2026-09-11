@@ -108,11 +108,26 @@ const PatientConsultationTrack = () => {
     const { consultation: consObj, prescription: rxObj } = pendingPrintRx;
 
     setPrintData({
+      patient: {
+        ...patient,
+        department: patient?.department || consObj?.department || consObj?.doctorId?.department || 'OPD',
+        doctorId: patient?.doctorId || consObj?.doctorId || { doctorName: 'Doctor' },
+        appointmentDate: patient?.appointmentDate || consObj?.consultationCompletedDate || consObj?.createdAt,
+        slot: patient?.slot || '',
+        registrationNumber: patient?.registrationNumber || '-',
+        address: patient?.address || 'Not specified',
+        demographics: patient?.demographics || consObj?.vitals || {}
+      },
       prescription: {
         ...rxObj,
         diagnosisRemark: consObj?.diagnosisRemark || rxObj.diagnosisRemark,
-        symptoms: consObj?.symptoms || rxObj.symptoms,
+        symptoms: consObj?.symptoms || rxObj.symptoms || [],
+        pastHistory: consObj?.generalPastHistory || consObj?.pastHistory || rxObj.pastHistory,
+        tests: consObj?.tests && consObj?.tests.length > 0 ? consObj.tests : (rxObj.tests || []),
+        patientAdvice: consObj?.patientAdvice || rxObj.patientAdvice,
+        vitals: consObj?.vitals || rxObj.vitals,
         followUpDate: consObj?.followUpDate || rxObj.followUpDate,
+        followUpRemarks: consObj?.followUpRemarks || rxObj.followUpRemarks,
         language: chosenLang
       }
     });
@@ -513,11 +528,12 @@ const PatientConsultationTrack = () => {
 
       {/* Hidden receipt for printing */}
       {printData && (
-        <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', opacity: 0, pointerEvents: 'none' }}>
+        <div style={{ position: 'fixed', left: '-9999px', top: '0', width: '210mm', opacity: 1, pointerEvents: 'none', zIndex: -1000 }}>
           <PatientReceipt 
             ref={printReceiptRef} 
-            patient={patient} 
+            patient={printData.patient || patient} 
             prescription={printData.prescription}
+            language={printData.prescription?.language || 'English'}
           />
         </div>
       )}

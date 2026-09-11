@@ -632,8 +632,8 @@ const generateBillItems = async (req, res) => {
         b.items.forEach(item => {
           if (item.sourceModel === 'Prescription' && item.sourceId) {
             billedPrescriptionIds.add(item.sourceId.toString());
-            // Also track per medicine name from description (format: "MedName — Rx by Dr. X...")
-            const medName = (item.description || '').split(' \u2014')[0].trim().toLowerCase();
+            // Also track per medicine name from description
+            const medName = (item.description || '').split(' \u2014')[0].split(' —')[0].trim().toLowerCase();
             if (medName) {
               billedPrescriptionMedKeys.add(`${item.sourceId}_${medName}`);
             }
@@ -1162,7 +1162,7 @@ const generateBillItems = async (req, res) => {
           items.push({
             category: 'Medicine',
             date: dateLabel,
-            description: `${medName} \u2014 Rx by Dr. ${doctorLabel}${med.strength ? ` (${med.strength})` : ''}${med.duration ? `, ${med.duration}` : ''}`,
+            description: medName,
             price,
             mrpIncGst: mrpIncGst || price,
             mrpExGst: mrpExGst || price,
@@ -1329,7 +1329,9 @@ const createBill = async (req, res) => {
     let computedGstAmount = 0;
     
     activeItems.forEach(i => {
-      const baseAmount = (parseFloat(i.price) - parseFloat(i.discountAmount || 0)) * parseInt(i.quantity || 1);
+      const lineGross = parseFloat(i.price) * parseInt(i.quantity || 1);
+      const lineDiscount = Math.min(lineGross, parseFloat(i.discountAmount || 0));
+      const baseAmount = Math.max(0, lineGross - lineDiscount);
       const gstAmt = baseAmount * (parseFloat(i.gstPercentage || 0) / 100);
       i.gstAmount = Number(gstAmt.toFixed(2));
       i.total = Number((baseAmount + gstAmt).toFixed(2));
@@ -1345,7 +1347,7 @@ const createBill = async (req, res) => {
     
     const gstAmt = computedGstAmount + invoiceGstAmt;
     const grandTotal = discountedSubtotal + gstAmt;
-    const itemDiscountTotal = activeItems.reduce((sum, i) => sum + ((parseFloat(i.discountAmount || 0)) * parseInt(i.quantity || 1)), 0);
+    const itemDiscountTotal = activeItems.reduce((sum, i) => sum + Math.min((parseFloat(i.price) * parseInt(i.quantity || 1)), (parseFloat(i.discountAmount || 0))), 0);
     const discountAmt = itemDiscountTotal + percentDiscountAmt;
 
     const subtotal = computedSubtotal;
@@ -1563,7 +1565,9 @@ const updateBill = async (req, res) => {
     let computedGstAmount = 0;
     
     bill.items.forEach(i => {
-      const baseAmount = (parseFloat(i.price) - parseFloat(i.discountAmount || 0)) * parseInt(i.quantity || 1);
+      const lineGross = parseFloat(i.price) * parseInt(i.quantity || 1);
+      const lineDiscount = Math.min(lineGross, parseFloat(i.discountAmount || 0));
+      const baseAmount = Math.max(0, lineGross - lineDiscount);
       const gstAmt = baseAmount * (parseFloat(i.gstPercentage || 0) / 100);
       i.gstAmount = Number(gstAmt.toFixed(2));
       i.total = Number((baseAmount + gstAmt).toFixed(2));
@@ -1576,7 +1580,7 @@ const updateBill = async (req, res) => {
     let finalGstPercentage = parseFloat(bill.gstPercentage || 0);
     bill.gstPercentage = finalGstPercentage;
 
-    const itemDiscountTotal = bill.items.reduce((sum, i) => sum + ((parseFloat(i.discountAmount || 0)) * parseInt(i.quantity || 1)), 0);
+    const itemDiscountTotal = bill.items.reduce((sum, i) => sum + Math.min((parseFloat(i.price) * parseInt(i.quantity || 1)), (parseFloat(i.discountAmount || 0))), 0);
     const percentDiscountAmt = computedSubtotal * (bill.discountPercentage / 100);
     bill.discountAmount = itemDiscountTotal + percentDiscountAmt;
     const discountedSubtotal = Math.max(0, computedSubtotal - percentDiscountAmt);

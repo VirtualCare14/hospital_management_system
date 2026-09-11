@@ -157,9 +157,25 @@ const CompletedConsultationDetails = () => {
   const receiptPrescription = activeRx ? {
     ...activeRx,
     diagnosisRemark: consultation.diagnosisRemark,
-    symptoms: consultation.symptoms,
+    symptoms: consultation.symptoms || [],
+    pastHistory: consultation.generalPastHistory || consultation.pastHistory || activeRx.pastHistory,
+    tests: consultation.tests && consultation.tests.length > 0 ? consultation.tests : (labRequests?.map(l => l.testName || l.labTestName).filter(Boolean) || activeRx.tests || []),
+    patientAdvice: consultation.patientAdvice || activeRx.patientAdvice,
+    vitals: consultation.vitals || activeRx.vitals,
     followUpDate: consultation.followUpDate,
+    followUpRemarks: consultation.followUpRemarks,
     language: activePrintLang || activeRx.language || 'English'
+  } : null;
+
+  const receiptPatient = patient ? {
+    ...patient,
+    department: patient.department || consultation.visitId?.department || consultation.doctorId?.department || consultation.department || 'OPD',
+    doctorId: patient.doctorId || consultation.doctorId || consultation.visitId?.doctorId || { doctorName: 'Doctor' },
+    appointmentDate: patient.appointmentDate || consultation.visitId?.appointmentDate || consultation.consultationCompletedDate || consultation.createdAt,
+    slot: patient.slot || consultation.visitId?.slot || '',
+    registrationNumber: patient.registrationNumber || consultation.visitId?.registrationNumber || '-',
+    address: patient.address || 'Not specified',
+    demographics: patient.demographics || consultation.vitals || {}
   } : null;
 
   return (
@@ -743,11 +759,12 @@ const CompletedConsultationDetails = () => {
       )}
 
       {/* Hidden receipt for printing */}
-      <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', opacity: 0, pointerEvents: 'none' }}>
+      <div style={{ position: 'fixed', left: '-9999px', top: '0', width: '210mm', opacity: 1, pointerEvents: 'none', zIndex: -1000 }}>
         <PatientReceipt 
           ref={receiptRef} 
-          patient={patient} 
+          patient={receiptPatient} 
           prescription={receiptPrescription}
+          language={activePrintLang || receiptPrescription?.language || 'English'}
         />
       </div>
     </div>

@@ -52,9 +52,34 @@ const formatHospitalPhoneNumbers = (hospital) => {
   return 'N/A';
 };
 
+const convertImgToBase64 = (url) => {
+  return new Promise((resolve) => {
+    if (!url) return resolve('');
+    if (url.startsWith('data:image/')) return resolve(url);
+    const img = new Image();
+    img.crossOrigin = 'Anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth || img.width;
+        canvas.height = img.naturalHeight || img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const dataURL = canvas.toDataURL('image/png');
+        resolve(dataURL);
+      } catch (err) {
+        resolve(url);
+      }
+    };
+    img.onerror = () => resolve(url);
+    img.src = url;
+  });
+};
+
 const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, language, mode = 'all', printOptions: propPrintOptions }, ref) => {
   const activeLang = language || prescription?.language || 'English';
-  const [hospital, setHospital] = useState(null);
+  const [hospital, setHospital] = useState(hospitalSettings || null);
+  const [resolvedLogo, setResolvedLogo] = useState(hospitalSettings?.logoUrl || hospitalSettings?.logo || '');
 
   const printOptions = propPrintOptions || prescription?.printOptions || patient?.printOptions || {
     printVitals: true,
@@ -65,13 +90,31 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
   };
 
   useEffect(() => {
-    if (hospitalSettings) {
-      setHospital(hospitalSettings);
-    } else {
-      client.get('/admin/hospital-settings').then(({ data }) => {
-        if (data.exists && data.data) setHospital(data.data);
-      }).catch(() => {});
-    }
+    let isMounted = true;
+    const loadSettings = async () => {
+      let data = hospitalSettings;
+      if (!data) {
+        try {
+          const res = await client.get('/admin/hospital-settings');
+          if (res.data?.exists && res.data?.data) {
+            data = res.data.data;
+          }
+        } catch (err) {}
+      }
+      if (data && isMounted) {
+        setHospital(data);
+        const rawLogo = data.logoUrl || data.logo || '';
+        if (rawLogo) {
+          setResolvedLogo(rawLogo);
+          const base64 = await convertImgToBase64(rawLogo);
+          if (isMounted && base64) {
+            setResolvedLogo(base64);
+          }
+        }
+      }
+    };
+    loadSettings();
+    return () => { isMounted = false; };
   }, [hospitalSettings]);
 
   if (!patient) return null;
@@ -108,7 +151,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
 
   const vitals = patient.demographics || prescription?.vitals || {};
   const hasVitals = vitals.weight || vitals.height || vitals.bloodPressure || vitals.temperature;
-  const documentTitle = isPatientSlipOnly ? 'OPD PATIENT SLIP' : (isBillReceiptOnly ? 'PAYMENT RECEIPT' : 'PRESCRIPTION');
+  const documentTitle = isBillReceiptOnly ? 'PAYMENT RECEIPT' : 'PRESCRIPTION';
 
   if (isBillReceiptOnly) {
     return (
@@ -135,8 +178,15 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
           marginBottom: '14px'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, paddingRight: '20px' }}>
-            {hospital?.logoUrl && (
-              <img src={hospital.logoUrl} alt="Logo" style={{ maxHeight: '75px', maxWidth: '75px', objectFit: 'contain', flexShrink: 0 }} />
+            {resolvedLogo && (
+              <div style={{ flexShrink: 0 }}>
+                <img 
+                  src={resolvedLogo} 
+                  crossOrigin="anonymous" 
+                  alt="Logo" 
+                  style={{ maxHeight: '75px', maxWidth: '75px', objectFit: 'contain', display: 'block' }} 
+                />
+              </div>
             )}
             <div>
               <h1 style={{ fontSize: '22px', fontWeight: '800', margin: '0', textTransform: 'uppercase', letterSpacing: '0.8px', color: '#111827' }}>
@@ -284,7 +334,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
     <div ref={ref} className="a4-receipt" style={{
       width: '100%',
       maxWidth: '210mm',
-      minHeight: 'auto',
+      minHeight: isPatientSlipOnly ? '280mm' : 'auto',
       padding: '5px 8mm 8mm 8mm',
       margin: '5px auto 0 auto',
       marginTop: '5px',
@@ -305,12 +355,13 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
         marginBottom: '14px'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, paddingRight: '20px' }}>
-          {hospital?.logoUrl && (
+          {resolvedLogo && (
             <div style={{ flexShrink: 0 }}>
               <img
-                src={hospital.logoUrl}
+                src={resolvedLogo}
+                crossOrigin="anonymous"
                 alt="Hospital Logo"
-                style={{ maxHeight: '75px', maxWidth: '75px', objectFit: 'contain' }}
+                style={{ maxHeight: '75px', maxWidth: '75px', objectFit: 'contain', display: 'block' }}
               />
             </div>
           )}
@@ -676,8 +727,11 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
       )}
 
       <div style={{ 
-        position: 'relative',
-        marginTop: '25px',
+        position: isPatientSlipOnly ? 'absolute' : 'relative',
+        bottom: isPatientSlipOnly ? '8mm' : 'auto',
+        left: isPatientSlipOnly ? '8mm' : 'auto',
+        right: isPatientSlipOnly ? '8mm' : 'auto',
+        marginTop: isPatientSlipOnly ? '0' : '25px',
         textAlign: 'center', 
         fontSize: '9px', 
         color: '#666', 

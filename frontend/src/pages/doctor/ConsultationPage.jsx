@@ -13,7 +13,7 @@ import client from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { durationUnits, languages } from '../../utils/options';
 import { formatDate } from '../../utils/dateFormat';
-import { sanitizeClonedDocumentForPdf } from '../../utils/pdfUtils';
+import { sanitizeClonedDocumentForPdf, openPdfPrintWindow } from '../../utils/pdfUtils';
 import PatientReceipt from '../../components/PatientReceipt';
 import PrintLanguageModal from '../../components/PrintLanguageModal';
 
@@ -481,8 +481,7 @@ const ConsultationPage = () => {
     ];
 
     const mergedDiagnosisRemark = [
-      diagnosisRemark ? `Diagnosis/Remark: ${diagnosisRemark}` : null,
-      patientAdvice ? `Advice: ${patientAdvice}` : null,
+      diagnosisRemark,
       printOptions.printPreviousHistory ? previousConsultation?.diagnosisRemark : null
     ].filter(Boolean).join('\n\n');
 
@@ -505,6 +504,7 @@ const ConsultationPage = () => {
       vitals: mergedVitals,
       symptoms: mergedSymptoms,
       diagnosisRemark: mergedDiagnosisRemark,
+      patientAdvice: patientAdvice,
       tests: mergedTests,
       pastHistory: mergedPastHistory,
       followUpDate: followUpDate || previousConsultation?.followUpDate,
@@ -527,9 +527,52 @@ const ConsultationPage = () => {
 
     return {
       ...patient,
+      department: patient?.department || user?.department || previousConsultation?.department || 'OPD',
+      appointmentDate: patient?.appointmentDate || previousConsultation?.appointmentDate || patient?.createdAt || new Date().toISOString(),
+      slot: patient?.slot || previousConsultation?.slot || '',
+      registrationNumber: patient?.registrationNumber || previousConsultation?.registrationNumber || '-',
+      address: patient?.address || 'Not specified',
       demographics: mergedVitals,
-      doctorId: { doctorName: user?.doctorName || user?.username || 'Doctor', username: user?.username }
+      doctorId: { 
+        doctorName: user?.doctorName || user?.username || 'Doctor', 
+        username: user?.username,
+        department: user?.department || patient?.department || 'OPD'
+      }
     };
+  };
+
+  const handleDirectPdfPrint = async (chosenLang) => {
+    const activeLang = chosenLang || (typeof language === 'object' ? language.value : (language || 'English'));
+    const toastId = toast.loading(`Generating PDF Prescription (${activeLang})...`);
+    try {
+      const element = receiptRef.current;
+      if (!element) {
+        toast.error('Print template not ready', { id: toastId });
+        return;
+      }
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        imageTimeout: 20000,
+        onclone: (clonedDoc) => sanitizeClonedDocumentForPdf(clonedDoc)
+      });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const width = pdf.internal.pageSize.getWidth();
+      const height = (canvas.height * width) / canvas.width;
+      const padding = 5;
+
+      pdf.addImage(imgData, 'PNG', padding, padding, width - (padding * 2), height);
+      pdf.autoPrint();
+      openPdfPrintWindow(pdf, 'Prescription / Consultation Receipt');
+      toast.dismiss(toastId);
+      toast.success(`Prescription Printed (${activeLang})!`);
+    } catch (err) {
+      console.error('PDF print error:', err);
+      toast.dismiss(toastId);
+      toast.error('Error generating print view');
+    }
   };
 
   const updateSymptom = async (index, field, value) => {
@@ -793,26 +836,48 @@ const ConsultationPage = () => {
         handleSendToSameDayOpen();
       }
 
-      toast.success(`Consultation & Prescription saved (${activeLang})! Opening print option...`);
       setShowPreview(true);
+      const toastId = toast.loading(`Generating PDF Prescription (${activeLang})...`);
 
-      setTimeout(() => {
+      setTimeout(async () => {
         try {
-          window.print();
-        } catch (printErr) {
-          console.warn("Direct window.print() failed", printErr);
-        }
-      }, 400);
+          const element = receiptRef.current;
+          if (!element) {
+            toast.error('Print template not ready', { id: toastId });
+            return;
+          }
 
-      const handleAfterPrint = () => {
-        window.removeEventListener('afterprint', handleAfterPrint);
-        if (!sendToSameDayChecked) {
-          setTimeout(() => {
-            navigate('/doctor');
-          }, 300);
+          const canvas = await html2canvas(element, {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: '#ffffff',
+            imageTimeout: 20000,
+            onclone: (clonedDoc) => sanitizeClonedDocumentForPdf(clonedDoc)
+          });
+
+          const imgData = canvas.toDataURL('image/png');
+          const pdf = new jsPDF('p', 'mm', 'a4');
+          const width = pdf.internal.pageSize.getWidth();
+          const height = (canvas.height * width) / canvas.width;
+          const padding = 5;
+
+          pdf.addImage(imgData, 'PNG', padding, padding, width - (padding * 2), height);
+          pdf.autoPrint();
+          openPdfPrintWindow(pdf, 'Prescription / Consultation Receipt');
+          toast.dismiss(toastId);
+          toast.success(`Consultation & Prescription saved and printed (${activeLang})!`);
+        } catch (printErr) {
+          console.error("PDF generation failed", printErr);
+          toast.dismiss(toastId);
+          toast.error("Failed to generate PDF receipt");
+        } finally {
+          if (!sendToSameDayChecked) {
+            setTimeout(() => {
+              navigate('/doctor');
+            }, 800);
+          }
         }
-      };
-      window.addEventListener('afterprint', handleAfterPrint);
+      }, 350);
 
     } catch (error) {
       console.error('Saving failed:', error);
@@ -1528,10 +1593,10 @@ const ConsultationPage = () => {
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => window.print()}
+                      onClick={() => handleDirectPdfPrint()}
                       className="btn bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold py-1 px-3 rounded-lg flex items-center gap-1 cursor-pointer"
                     >
-                      <Printer className="h-3.5 w-3.5" /> Print Rx
+                      <Printer className="h-3.5 w-3.5" /> Print Rx PDF
                     </button>
                     <button
                       type="button"
@@ -2064,7 +2129,7 @@ const ConsultationPage = () => {
 
                 <button
                   type="button"
-                  onClick={() => window.print()}
+                  onClick={() => handleDirectPdfPrint()}
                   className="btn bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold py-1.5 px-3 flex items-center gap-1.5 rounded-lg cursor-pointer"
                 >
                   <Printer className="h-4 w-4" /> Print Now
@@ -2084,7 +2149,6 @@ const ConsultationPage = () => {
             <div className="p-4 sm:p-6 overflow-y-auto bg-slate-200/90 flex-1 flex justify-center items-start print:bg-transparent print:p-0 print:overflow-visible">
               <div className="bg-white shadow-2xl rounded-sm w-full max-w-[210mm] border border-gray-300 overflow-hidden print:shadow-none print:border-none print:rounded-none print:w-full print:max-w-none print:overflow-visible print:p-0">
                 <PatientReceipt 
-                  ref={receiptRef}
                   patient={buildPatientDataForReceipt()}
                   prescription={buildPrescriptionDataForPrint()}
                   language={typeof language === 'object' ? language.value : language}
@@ -2099,7 +2163,7 @@ const ConsultationPage = () => {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => window.print()}
+                  onClick={() => handleDirectPdfPrint()}
                   className="btn bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-4 py-2 font-bold flex items-center gap-1.5 cursor-pointer rounded-lg shadow-sm"
                 >
                   <Printer className="h-4 w-4" /> Print Prescription
@@ -2117,18 +2181,16 @@ const ConsultationPage = () => {
         </div>
       )}
 
-      {/* Dedicated Printable Prescription Container for window.print() when preview modal is not open */}
-      {!showPreviewModal && (
-        <div id="doctor-rx-print-container" className="hidden print:block">
-          <PatientReceipt 
-            ref={receiptRef}
-            patient={buildPatientDataForReceipt()} 
-            prescription={buildPrescriptionDataForPrint()} 
-            language={typeof language === 'object' ? language.value : language} 
-            printOptions={printOptions}
-          />
-        </div>
-      )}
+      {/* Hidden dedicated receipt ref for html2canvas PDF generation */}
+      <div style={{ position: 'fixed', left: '-9999px', top: '0', width: '210mm', opacity: 1, pointerEvents: 'none', zIndex: -1000 }}>
+        <PatientReceipt 
+          ref={receiptRef}
+          patient={buildPatientDataForReceipt()} 
+          prescription={buildPrescriptionDataForPrint()} 
+          language={typeof language === 'object' ? language.value : language} 
+          printOptions={printOptions}
+        />
+      </div>
 
       {/* Same Day Care Modal */}
       {showSameDayModal && (
