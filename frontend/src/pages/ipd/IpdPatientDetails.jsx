@@ -531,7 +531,7 @@ const IpdPatientDetails = () => {
   const handleAddMedicine = async (e) => {
     e.preventDefault();
     const { medicineName, quantity, unitPrice, gst, baseUnitPrice } = medicineForm;
-    if (!medicineName || !quantity || !unitPrice) {
+    if (!medicineName || !quantity || unitPrice === undefined || unitPrice === null || unitPrice === '') {
       toast.error('Medicine name, quantity, and unit price are required');
       return;
     }
@@ -539,10 +539,10 @@ const IpdPatientDetails = () => {
       const payload = {
         admissionId: id,
         medicineName,
-        quantity: parseInt(quantity),
-        unitPrice: parseFloat(unitPrice),
-        gst: parseFloat(gst || '0'),
-        baseUnitPrice: parseFloat(baseUnitPrice || unitPrice)
+        quantity: parseInt(quantity, 10),
+        unitPrice: parseFloat(unitPrice) || 0,
+        gst: parseFloat(gst || '0') || 0,
+        baseUnitPrice: parseFloat(baseUnitPrice !== undefined && baseUnitPrice !== '' ? baseUnitPrice : (unitPrice || '0')) || 0
       };
       const { data } = await client.post('/ipd/services/medicines', payload);
       toast.success(data.message);
@@ -985,8 +985,17 @@ const IpdPatientDetails = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                     {receivedMedicines.map((m, idx) => {
                       const avail = m.availableQty !== undefined ? m.availableQty : (m.totalReceived - (m.totalReturned || 0) - (m.totalDamaged || 0));
+                      const isSelected = medicineForm.medicineName === m.itemName;
                       return (
-                        <div key={idx} className="p-3 bg-white border border-orange-100 rounded-xl flex items-center justify-between shadow-2xs">
+                        <div
+                          key={idx}
+                          onClick={() => {
+                            handleReceivedMedicineSelect(m.itemName);
+                            setShowAddMedicine(true);
+                          }}
+                          className={`p-3 bg-white border rounded-xl flex items-center justify-between shadow-2xs cursor-pointer transition-all ${isSelected ? 'border-orange-500 ring-2 ring-orange-200 bg-orange-50/50' : 'border-orange-100 hover:border-orange-300 hover:shadow-xs'}`}
+                          title="Click to select and administer"
+                        >
                           <div>
                             <p className="font-bold text-gray-900 text-xs">{m.itemName}</p>
                             <p className="text-[10px] text-gray-500">Unit Price: ₹{m.unitPrice} {m.gst ? `(+${m.gst}% GST)` : ''}</p>

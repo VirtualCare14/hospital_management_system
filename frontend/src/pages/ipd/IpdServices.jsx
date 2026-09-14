@@ -279,7 +279,7 @@ const IpdServices = () => {
   const handleAddMedicine = async (e) => {
     e.preventDefault();
     const { medicineName, quantity, unitPrice, gst, baseUnitPrice } = medicineForm;
-    if (!medicineName || !quantity || !unitPrice) {
+    if (!medicineName || !quantity || unitPrice === undefined || unitPrice === null || unitPrice === '') {
       toast.error('Medicine name, quantity, and unit price are required');
       return;
     }
@@ -287,10 +287,10 @@ const IpdServices = () => {
       const payload = {
         admissionId: selectedAdmission._id,
         medicineName,
-        quantity: parseInt(quantity),
-        unitPrice: parseFloat(unitPrice),
-        gst: parseFloat(gst || '0'),
-        baseUnitPrice: parseFloat(baseUnitPrice || unitPrice)
+        quantity: parseInt(quantity, 10),
+        unitPrice: parseFloat(unitPrice) || 0,
+        gst: parseFloat(gst || '0') || 0,
+        baseUnitPrice: parseFloat(baseUnitPrice !== undefined && baseUnitPrice !== '' ? baseUnitPrice : (unitPrice || '0')) || 0
       };
       const { data } = await client.post('/ipd/services/medicines', payload);
       toast.success(data.message);

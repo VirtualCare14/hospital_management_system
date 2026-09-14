@@ -63,13 +63,13 @@ const ipdDischargeSchema = new mongoose.Schema({
   // Physician Approval
   physicianApproval: {
     type: String,
-    enum: ['Yes', 'No'],
+    enum: ['Yes', 'No', ''],
     default: ''
   },
   // Reason for Discharge
   dischargeReason: {
     type: String,
-    enum: ['Patient Deceased', 'Patient Treated', 'Patient Transferred', 'Patient Left Against Advice', 'Other'],
+    enum: ['Patient Deceased', 'Patient Treated', 'Patient Transferred', 'Patient Left Against Advice', 'Other', ''],
     default: ''
   },
   otherDischargeReason: {
@@ -79,13 +79,13 @@ const ipdDischargeSchema = new mongoose.Schema({
   // Future Treatment
   futureTreatmentRequired: {
     type: String,
-    enum: ['Yes', 'No'],
+    enum: ['Yes', 'No', ''],
     default: ''
   },
   // Medication Prescribed
   medicationPrescribed: {
     type: String,
-    enum: ['Yes', 'No'],
+    enum: ['Yes', 'No', ''],
     default: ''
   },
   // Discharging Physician

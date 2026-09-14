@@ -122,8 +122,9 @@ const IpdDischargeForm = () => {
           const { data: disData } = await client.get(`/ipd/discharge/${activeDischargeId}`);
           setDischargeRecord(disData);
           setForm({
+            _id: disData._id,
             admissionId: id,
-            patientId: patient._id || '',
+            patientId: disData.patientId?._id || disData.patientId || patient._id || '',
             uhid: disData.uhid || patient.uhid || '',
             pidNumber: disData.pidNumber || admissionData.pidNumber || '',
             ipdNumber: disData.ipdNumber || admissionData.ipdNumber || '',
@@ -153,7 +154,8 @@ const IpdDischargeForm = () => {
         } else {
           setForm(prev => ({
             ...prev,
-            patientId: patient._id || '',
+            admissionId: id,
+            patientId: patient._id || admissionData.patientId || '',
             uhid: patient.uhid || '',
             pidNumber: admissionData.pidNumber || '',
             ipdNumber: admissionData.ipdNumber || '',
@@ -204,21 +206,26 @@ const IpdDischargeForm = () => {
     if (!validate(false)) return;
     setSaving(true);
     try {
+      const patientId = form.patientId || admission?.patientId?._id || admission?.patientId;
       const payload = {
         ...form,
         admissionId: id,
+        patientId,
         admissionDate: form.admissionDate ? new Date(form.admissionDate) : null,
         dischargeDate: form.dischargeDate ? new Date(form.dischargeDate) : new Date(),
         status: 'Draft'
       };
 
-      if (dischargeRecord?._id) {
-        await client.put(`/ipd/discharge/${dischargeRecord._id}`, payload);
+      if (dischargeRecord?._id || form._id) {
+        const disId = dischargeRecord?._id || form._id;
+        const { data } = await client.put(`/ipd/discharge/${disId}`, payload);
+        if (data?.record) setDischargeRecord(data.record);
         toast.success('Discharge draft saved');
       } else {
         const { data } = await client.post('/ipd/discharge', payload);
         toast.success('Discharge draft saved');
         if (data?.record?._id) {
+          setDischargeRecord(data.record);
           navigate(`/ipd/discharge/${id}?dischargeId=${data.record._id}`, { replace: true });
         }
       }
@@ -241,12 +248,14 @@ const IpdDischargeForm = () => {
 
     setSaving(true);
     try {
+      const patientId = form.patientId || admission?.patientId?._id || admission?.patientId;
       const payload = {
         ...form,
         admissionId: id,
+        patientId,
         admissionDate: form.admissionDate ? new Date(form.admissionDate) : null,
         dischargeDate: form.dischargeDate ? new Date(form.dischargeDate) : new Date(),
-        dischargeId: dischargeRecord?._id || undefined
+        dischargeId: dischargeRecord?._id || form._id || undefined
       };
 
       await client.post('/ipd/discharge/complete', payload);
@@ -268,9 +277,11 @@ const IpdDischargeForm = () => {
     
     setSaving(true);
     try {
+      const patientId = form.patientId || admission?.patientId?._id || admission?.patientId;
       const payload = {
         ...form,
         admissionId: id,
+        patientId,
         admissionDate: form.admissionDate ? new Date(form.admissionDate) : null,
         dischargeDate: form.dischargeDate ? new Date(form.dischargeDate) : new Date()
       };
@@ -279,8 +290,10 @@ const IpdDischargeForm = () => {
       if (!currentDischargeId) {
         const { data } = await client.post('/ipd/discharge', payload);
         currentDischargeId = data.record._id;
+        setDischargeRecord(data.record);
       } else {
-        await client.put(`/ipd/discharge/${currentDischargeId}`, payload);
+        const { data } = await client.put(`/ipd/discharge/${currentDischargeId}`, payload);
+        if (data?.record) setDischargeRecord(data.record);
       }
 
       await client.post('/ipd/discharge/submit-review', {

@@ -272,7 +272,7 @@ const addConsumable = async (req, res) => {
   try {
     const { admissionId, serviceName, price, gst, quantity, date, time } = req.body;
 
-    if (!admissionId || !serviceName || !price || !quantity) {
+    if (!admissionId || !serviceName || price === undefined || price === null || price === '' || !quantity) {
       return res.status(400).json({ message: 'Admission ID, service name, price, and quantity are required' });
     }
 
@@ -362,12 +362,27 @@ const addMedicine = async (req, res) => {
   try {
     const { admissionId, medicineName, quantity, unitPrice, gst, baseUnitPrice } = req.body;
 
-    if (!admissionId || !medicineName || !quantity || !unitPrice) {
+    if (!admissionId || !medicineName || !quantity || unitPrice === undefined || unitPrice === null || unitPrice === '') {
       return res.status(400).json({ message: 'Admission ID, medicine name, quantity, and unit price are required' });
     }
 
     const admission = await IpdAdmission.findOne(tenantFilter(req, { _id: admissionId }));
     if (!admission) return res.status(404).json({ message: 'Admission record not found' });
+
+    const numQty = parseInt(quantity, 10);
+    if (isNaN(numQty) || numQty <= 0) {
+      return res.status(400).json({ message: 'Valid quantity is required' });
+    }
+
+    const numUnitPrice = parseFloat(unitPrice);
+    if (isNaN(numUnitPrice) || numUnitPrice < 0) {
+      return res.status(400).json({ message: 'Unit price must be 0 or greater' });
+    }
+
+    const numGst = parseFloat(gst) || 0;
+    const numBasePrice = (baseUnitPrice !== undefined && baseUnitPrice !== null && baseUnitPrice !== '' && !isNaN(parseFloat(baseUnitPrice)))
+      ? parseFloat(baseUnitPrice)
+      : numUnitPrice;
 
     // Stock Check: Ensure medicine was received from pharmacy and we have available quantity
     const pharmacyRequests = await PharmacyRequest.find(tenantFilter(req, {
@@ -387,28 +402,28 @@ const addMedicine = async (req, res) => {
     const totalAdministered = administered.reduce((sum, item) => sum + item.quantity, 0);
 
     const availableQty = totalReceived - totalAdministered;
-    if (quantity > availableQty) {
+    if (numQty > availableQty) {
       return res.status(400).json({
-        message: `Only medicines received from the Pharmacy can be administered. Available received stock: ${availableQty}, requested: ${quantity}`
+        message: `Only medicines received from the Pharmacy can be administered. Available received stock: ${availableQty}, requested: ${numQty}`
       });
     }
 
     // totalAmount is quantity * unitPrice (unitPrice expected to be GST-inclusive when gst provided)
-    const totalAmount = quantity * unitPrice;
+    const totalAmount = Math.round(numQty * numUnitPrice * 100) / 100;
 
     const now = new Date();
     const dateStr = now.toISOString().split('T')[0];
     const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
 
     const medicine = await IpdMedicine.create({
-      hospitalId: req.user.hospitalId,
+      hospitalId: req.user.hospitalId || admission.hospitalId,
       admissionId,
       patientId: admission.patientId,
       medicineName,
-      quantity,
-      unitPrice,
-      gst: gst || 0,
-      baseUnitPrice: baseUnitPrice || unitPrice,
+      quantity: numQty,
+      unitPrice: numUnitPrice,
+      gst: numGst,
+      baseUnitPrice: numBasePrice,
       totalAmount,
       date: dateStr,
       time: timeStr,
@@ -417,15 +432,16 @@ const addMedicine = async (req, res) => {
 
     // Add timeline entry
     await addTimeline(req, admissionId, admission.patientId, 'Medicine Added',
-      `Medicine: ${medicineName} x ${quantity} = ₹${totalAmount}`);
+      `Medicine: ${medicineName} x ${numQty} = ₹${totalAmount}`,
+      { hospitalId: req.user.hospitalId || admission.hospitalId });
 
     const populated = await IpdMedicine.findById(medicine._id)
       .populate('addedBy', 'username doctorName');
 
-    res.status(201).json({ message: 'Medicine added', medicine: populated });
+    res.status(201).json({ message: 'Medicine administered successfully', medicine: populated });
   } catch (error) {
     console.error('Add Medicine Error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 };
 

@@ -6,7 +6,7 @@ const HospitalSettings = require('../models/HospitalSettings');
 
 // Helper to filter queries by hospitalId for multi-tenant isolation
 const tenantFilter = (req, query = {}) => (
-  req.user.hospitalId ? { ...query, hospitalId: req.user.hospitalId } : query
+  req.user?.hospitalId ? { ...query, hospitalId: req.user.hospitalId } : query
 );
 
 const addTimeline = async (req, admissionId, patientId, activity, description, metadata = {}) => {
@@ -15,17 +15,22 @@ const addTimeline = async (req, admissionId, patientId, activity, description, m
     const now = new Date();
     const dateStr = now.toISOString().split('T')[0];
     const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+    const hospitalId = req.user?.hospitalId || metadata?.hospitalId;
+
+    if (!hospitalId || !admissionId || !patientId) {
+      return;
+    }
 
     await IpdActivityTimeline.create({
-      hospitalId: req.user.hospitalId,
+      hospitalId,
       admissionId,
       patientId,
       activity,
-      description,
+      description: description || '',
       date: dateStr,
       time: timeStr,
-      performedBy: req.user._id,
-      performedByName: req.user.doctorName || req.user.username || 'System',
+      performedBy: req.user?._id,
+      performedByName: req.user?.doctorName || req.user?.username || 'System',
       metadata
     });
   } catch (err) {
@@ -65,42 +70,71 @@ const createDischarge = async (req, res) => {
       return res.status(400).json({ message: 'Patient has already been discharged' });
     }
 
-    const recordStatus = status === 'Completed' ? 'Completed' : 'Draft';
+    const hospitalId = req.user?.hospitalId || admission.hospitalId;
+    const recordStatus = status === 'Completed' ? 'Completed' : (status || 'Draft');
 
-    const discharge = new IpdDischarge({
-      hospitalId: req.user.hospitalId,
-      admissionId,
-      patientId,
-      uhid: uhid || '',
-      pidNumber: pidNumber || '',
-      ipdNumber: ipdNumber || '',
-      patientName: patientName || '',
-      admissionDate: admissionDate || null,
-      reason: reason || '',
-      diagnosisAtInternment: diagnosisAtInternment || '',
-      treatmentSummary: treatmentSummary || '',
-      dischargeDate: dischargeDate || new Date(),
-      dischargeTime: dischargeTime || '',
-      physicianApproval: physicianApproval || '',
-      dischargeReason: dischargeReason || '',
-      otherDischargeReason: otherDischargeReason || '',
-      futureTreatmentRequired: futureTreatmentRequired || '',
-      medicationPrescribed: medicationPrescribed || '',
-      dischargingPhysicianTitle: dischargingPhysicianTitle || '',
-      dischargingPhysicianFirstName: dischargingPhysicianFirstName || '',
-      dischargingPhysicianMiddleName: dischargingPhysicianMiddleName || '',
-      dischargingPhysicianLastName: dischargingPhysicianLastName || '',
-      dischargingPhysicianInitials: dischargingPhysicianInitials || '',
-      status: recordStatus,
-      createdBy: req.user._id,
-      updatedBy: req.user._id
-    });
+    // Check if an existing draft already exists for this admission
+    let discharge = await IpdDischarge.findOne(tenantFilter(req, { admissionId, status: { $ne: 'Completed' } }));
+
+    if (discharge) {
+      discharge.patientName = patientName || discharge.patientName;
+      discharge.uhid = uhid || discharge.uhid;
+      discharge.pidNumber = pidNumber || discharge.pidNumber;
+      discharge.ipdNumber = ipdNumber || discharge.ipdNumber;
+      discharge.admissionDate = admissionDate || discharge.admissionDate;
+      discharge.reason = reason !== undefined ? reason : discharge.reason;
+      discharge.diagnosisAtInternment = diagnosisAtInternment !== undefined ? diagnosisAtInternment : discharge.diagnosisAtInternment;
+      discharge.treatmentSummary = treatmentSummary !== undefined ? treatmentSummary : discharge.treatmentSummary;
+      discharge.dischargeDate = dischargeDate || discharge.dischargeDate;
+      discharge.dischargeTime = dischargeTime || discharge.dischargeTime;
+      discharge.physicianApproval = physicianApproval || '';
+      discharge.dischargeReason = dischargeReason || '';
+      discharge.otherDischargeReason = otherDischargeReason || '';
+      discharge.futureTreatmentRequired = futureTreatmentRequired || '';
+      discharge.medicationPrescribed = medicationPrescribed || '';
+      discharge.dischargingPhysicianTitle = dischargingPhysicianTitle || discharge.dischargingPhysicianTitle;
+      discharge.dischargingPhysicianFirstName = dischargingPhysicianFirstName || discharge.dischargingPhysicianFirstName;
+      discharge.dischargingPhysicianMiddleName = dischargingPhysicianMiddleName || discharge.dischargingPhysicianMiddleName;
+      discharge.dischargingPhysicianLastName = dischargingPhysicianLastName || discharge.dischargingPhysicianLastName;
+      discharge.dischargingPhysicianInitials = dischargingPhysicianInitials || discharge.dischargingPhysicianInitials;
+      discharge.status = recordStatus;
+      discharge.updatedBy = req.user?._id;
+    } else {
+      discharge = new IpdDischarge({
+        hospitalId,
+        admissionId,
+        patientId,
+        uhid: uhid || '',
+        pidNumber: pidNumber || '',
+        ipdNumber: ipdNumber || '',
+        patientName: patientName || '',
+        admissionDate: admissionDate || null,
+        reason: reason || '',
+        diagnosisAtInternment: diagnosisAtInternment || '',
+        treatmentSummary: treatmentSummary || '',
+        dischargeDate: dischargeDate || new Date(),
+        dischargeTime: dischargeTime || '',
+        physicianApproval: physicianApproval || '',
+        dischargeReason: dischargeReason || '',
+        otherDischargeReason: otherDischargeReason || '',
+        futureTreatmentRequired: futureTreatmentRequired || '',
+        medicationPrescribed: medicationPrescribed || '',
+        dischargingPhysicianTitle: dischargingPhysicianTitle || '',
+        dischargingPhysicianFirstName: dischargingPhysicianFirstName || '',
+        dischargingPhysicianMiddleName: dischargingPhysicianMiddleName || '',
+        dischargingPhysicianLastName: dischargingPhysicianLastName || '',
+        dischargingPhysicianInitials: dischargingPhysicianInitials || '',
+        status: recordStatus,
+        createdBy: req.user?._id,
+        updatedBy: req.user?._id
+      });
+    }
 
     const saved = await discharge.save();
     res.status(201).json({ message: 'Discharge record saved successfully', record: saved });
   } catch (error) {
     console.error('Create Discharge Error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 };
 
@@ -119,7 +153,7 @@ const completeDischarge = async (req, res) => {
       dischargingPhysicianTitle, dischargingPhysicianFirstName,
       dischargingPhysicianMiddleName, dischargingPhysicianLastName,
       dischargingPhysicianInitials,
-      dischargeId // if updating existing draft
+      dischargeId
     } = req.body;
 
     if (!admissionId || !patientId) {
@@ -147,14 +181,19 @@ const completeDischarge = async (req, res) => {
     const now = new Date();
     const dischargeDateTime = dischargeDate ? new Date(dischargeDate) : now;
     const dischargeTimeStr = dischargeTime || now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+    const hospitalId = req.user?.hospitalId || admission.hospitalId;
 
     // 1. Create or update the discharge record
     let discharge;
     if (dischargeId) {
       discharge = await IpdDischarge.findOne(tenantFilter(req, { _id: dischargeId }));
-      if (!discharge) {
-        return res.status(404).json({ message: 'Discharge record not found' });
-      }
+    }
+    
+    if (!discharge) {
+      discharge = await IpdDischarge.findOne(tenantFilter(req, { admissionId, status: { $ne: 'Completed' } }));
+    }
+
+    if (discharge) {
       Object.assign(discharge, {
         patientName: patientName || discharge.patientName,
         admissionDate: admissionDate || discharge.admissionDate,
@@ -174,11 +213,11 @@ const completeDischarge = async (req, res) => {
         dischargingPhysicianLastName: dischargingPhysicianLastName || discharge.dischargingPhysicianLastName,
         dischargingPhysicianInitials: dischargingPhysicianInitials || discharge.dischargingPhysicianInitials,
         status: 'Completed',
-        updatedBy: req.user._id
+        updatedBy: req.user?._id
       });
     } else {
       discharge = new IpdDischarge({
-        hospitalId: req.user.hospitalId,
+        hospitalId,
         admissionId,
         patientId,
         uhid: uhid || '',
@@ -202,8 +241,8 @@ const completeDischarge = async (req, res) => {
         dischargingPhysicianLastName: dischargingPhysicianLastName || '',
         dischargingPhysicianInitials: dischargingPhysicianInitials || '',
         status: 'Completed',
-        createdBy: req.user._id,
-        updatedBy: req.user._id
+        createdBy: req.user?._id,
+        updatedBy: req.user?._id
       });
     }
 
@@ -227,6 +266,15 @@ const completeDischarge = async (req, res) => {
       }
     }
 
+    await addTimeline(
+      req,
+      admission._id,
+      patientId,
+      'Patient Discharged',
+      `Patient discharged. Reason: ${dischargeReason}. Bed released.`,
+      { hospitalId }
+    );
+
     res.json({
       message: 'Patient discharged successfully',
       record: savedDischarge,
@@ -237,7 +285,7 @@ const completeDischarge = async (req, res) => {
     });
   } catch (error) {
     console.error('Complete Discharge Error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 };
 
@@ -281,13 +329,13 @@ const updateDischarge = async (req, res) => {
       }
     });
 
-    record.updatedBy = req.user._id;
+    record.updatedBy = req.user?._id;
     const updated = await record.save();
 
     res.json({ message: 'Discharge record updated successfully', record: updated });
   } catch (error) {
     console.error('Update Discharge Error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 };
 
@@ -307,7 +355,7 @@ const getDischargesByAdmission = async (req, res) => {
     res.json(records);
   } catch (error) {
     console.error('Get Discharges Error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 };
 
@@ -327,7 +375,7 @@ const getDischargesByPatient = async (req, res) => {
     res.json(records);
   } catch (error) {
     console.error('Get Patient Discharges Error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 };
 
@@ -349,7 +397,7 @@ const getDischargeById = async (req, res) => {
     res.json(record);
   } catch (error) {
     console.error('Get Discharge Error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 };
 
@@ -370,7 +418,7 @@ const checkDischargeStatus = async (req, res) => {
     });
   } catch (error) {
     console.error('Check Discharge Status Error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 };
 
@@ -395,7 +443,7 @@ const listDischargeReviewers = async (req, res) => {
     res.json(formatted);
   } catch (error) {
     console.error('List Discharge Reviewers Error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 };
 
@@ -421,43 +469,47 @@ const submitForReview = async (req, res) => {
     record.status = 'Pending Review';
     record.assignedDoctorId = reviewerId;
     record.rejectionRemarks = '';
-    record.updatedBy = req.user._id;
+    record.updatedBy = req.user?._id;
 
     const saved = await record.save();
 
-    // Log timeline event
+    // Log timeline event safely
     await addTimeline(
       req,
       record.admissionId,
       record.patientId,
       'Discharge Review Requested',
-      'Discharge summary submitted for doctor review.'
+      'Discharge summary submitted for doctor review.',
+      { hospitalId: record.hospitalId }
     );
 
     res.json({ message: 'Discharge summary submitted for review', record: saved });
   } catch (error) {
     console.error('Submit For Review Error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 };
 
-// @desc    Get pending reviews for the logged-in doctor/reviewer
+// @desc    Get pending reviews for the logged-in doctor/reviewer (or all for admin)
 // @route   GET /api/ipd/discharge/pending-reviews
 // @access  Private
 const getPendingReviews = async (req, res) => {
   try {
-    const records = await IpdDischarge.find(tenantFilter(req, {
-      assignedDoctorId: req.user._id,
-      status: 'Pending Review'
-    }))
+    const query = { status: 'Pending Review' };
+    if (req.user?.role !== 'admin' && req.user?.role !== 'superadmin') {
+      query.assignedDoctorId = req.user?._id;
+    }
+
+    const records = await IpdDischarge.find(tenantFilter(req, query))
       .populate('patientId', 'patientName uhid mobile gender dob age')
       .populate('admissionId', 'ipdNumber pidNumber admissionDate bedId roomId')
+      .populate('assignedDoctorId', 'doctorName username')
       .sort({ createdAt: -1 });
 
     res.json(records);
   } catch (error) {
     console.error('Get Pending Reviews Error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 };
 
@@ -486,17 +538,18 @@ const reviewDischarge = async (req, res) => {
       }
       record.status = 'Rejected';
       record.rejectionRemarks = remarks;
-      record.updatedBy = req.user._id;
+      record.updatedBy = req.user?._id;
 
       const saved = await record.save();
 
-      // Log timeline event
+      // Log timeline event safely
       await addTimeline(
         req,
         record.admissionId,
         record.patientId,
         'Discharge Summary Sent Back',
-        `Discharge summary sent back to IPD with remarks: "${remarks}".`
+        `Discharge summary sent back to IPD with remarks: "${remarks}".`,
+        { hospitalId: record.hospitalId }
       );
 
       return res.json({ message: 'Discharge summary sent back to IPD', record: saved });
@@ -506,11 +559,14 @@ const reviewDischarge = async (req, res) => {
       // 1. Update discharge summary details
       record.status = 'Completed';
       record.physicianApproval = 'Yes';
+      if (!record.dischargeReason) {
+        record.dischargeReason = 'Patient Treated';
+      }
       record.dischargePrescription = prescription || [];
-      record.updatedBy = req.user._id;
+      record.updatedBy = req.user?._id;
 
       // Extract details for physician initials/name if current reviewer is a doctor
-      if (req.user.doctorName) {
+      if (req.user?.doctorName) {
         const nameParts = req.user.doctorName.split(' ');
         record.dischargingPhysicianTitle = 'Dr.';
         record.dischargingPhysicianFirstName = nameParts[0] || '';
@@ -541,13 +597,14 @@ const reviewDischarge = async (req, res) => {
         }
       }
 
-      // Log timeline event
+      // Log timeline event safely
       await addTimeline(
         req,
         record.admissionId,
         record.patientId,
         'Discharge Summary Approved',
-        `Discharge approved by Dr. ${req.user.doctorName || req.user.username}. Patient Discharged and Bed released.`
+        `Discharge approved by Dr. ${req.user?.doctorName || req.user?.username || 'Doctor'}. Patient Discharged and Bed released.`,
+        { hospitalId: record.hospitalId }
       );
 
       return res.json({ message: 'Discharge approved and completed successfully', record: saved });
@@ -556,7 +613,7 @@ const reviewDischarge = async (req, res) => {
     res.status(400).json({ message: 'Invalid decision' });
   } catch (error) {
     console.error('Review Discharge Error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 };
 
