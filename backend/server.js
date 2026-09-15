@@ -53,6 +53,9 @@ app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 // ABDM Milestone 2 (HIP) Webhook Routes (Public for Gateway callbacks)
 app.use('/api/abdm/m2/webhooks', require('./modules/abdm-m2').m2WebhookRoutes);
 
+// ABDM Milestone 3 (HIU) Webhook Routes (Public for Gateway callbacks)
+app.use('/api/abdm/m3/webhooks', require('./modules/abdm-m3').m3WebhookRoutes);
+
 // API Routes
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/super-admin', require('./routes/superAdminRoutes'));

@@ -99,7 +99,11 @@ const ConsultationPage = () => {
     { medicine: '', dosageForm: 'Tablet', strength: '', dose: '1', morning: true, afternoon: false, night: true, duration: '5', remarks: 'After food', qty: 0 }
   ]);
 
-  const { register, handleSubmit, reset, watch } = useForm();
+  const { register, handleSubmit, reset, watch } = useForm({
+    defaultValues: {
+      sendToLab: true
+    }
+  });
   const isReadOnly = Boolean(patient?.isDischarged || isSaved);
 
   // Fetch Pharmacy Inventory Medicines
@@ -169,7 +173,8 @@ const ConsultationPage = () => {
             temperature: vitalsData.temperature || '',
             bloodPressure: vitalsData.bloodPressure || '',
             bmi: vitalsData.bmi || '',
-            drugAllergy: vitalsData.drugAllergy || ''
+            drugAllergy: vitalsData.drugAllergy || '',
+            sendToLab: true
           });
         }
 

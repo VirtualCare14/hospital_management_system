@@ -11,7 +11,8 @@
     "seed:lab-tests": "node seeds/seedLabTests.js",
     "seed:standard-lab-tests": "node seeds/seedStandardLabTemplates.js",
     "seed:diagnosis": "node seeds/seedDiagnosisCategory.js",
-    "test:m2": "node scripts/testM2Suite.js"
+    "test:m2": "node scripts/testM2Suite.js",
+    "test:m3": "node scripts/testM3Step1.js"
   },
   "keywords": [],
   "author": "",

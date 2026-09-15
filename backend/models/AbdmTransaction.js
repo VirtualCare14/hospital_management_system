@@ -13,15 +13,46 @@ const abdmTransactionSchema = new mongoose.Schema({
     trim: true,
     index: true
   },
+  consentId: {
+    type: String,
+    required: false,
+    trim: true,
+    index: true
+  },
+  consentRequestId: {
+    type: String,
+    required: false,
+    trim: true,
+    index: true
+  },
+  moduleType: {
+    type: String,
+    enum: ['HIP', 'HIU'],
+    default: 'HIP',
+    index: true
+  },
+  hiuId: {
+    type: String,
+    required: false,
+    trim: true
+  },
+  hipId: {
+    type: String,
+    required: false,
+    trim: true
+  },
   transactionType: {
     type: String,
-    enum: ['DISCOVERY', 'LINK_INIT', 'LINK_CONFIRM', 'LINK_TOKEN', 'DATA_REQUEST', 'CONSENT_NOTIFY', 'DEEP_LINK_SMS'],
+    enum: [
+      'DISCOVERY', 'LINK_INIT', 'LINK_CONFIRM', 'LINK_TOKEN', 'DATA_REQUEST', 'CONSENT_NOTIFY', 'DEEP_LINK_SMS',
+      'HIU_CONSENT_INIT', 'HIU_CONSENT_STATUS', 'HIU_CONSENT_FETCH', 'HIU_DATA_REQUEST', 'HIU_DATA_PUSH', 'HIU_NOTIFY'
+    ],
     required: true,
     index: true
   },
   status: {
     type: String,
-    enum: ['INITIATED', 'PENDING', 'COMPLETED', 'FAILED', 'ACKNOWLEDGED'],
+    enum: ['INITIATED', 'PENDING', 'COMPLETED', 'FAILED', 'ACKNOWLEDGED', 'REQUESTED', 'PROCESSING', 'RECEIVED', 'DELIVERED', 'ERROR'],
     default: 'INITIATED',
     index: true
   },

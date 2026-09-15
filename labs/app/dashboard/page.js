@@ -1764,6 +1764,10 @@ Clinical Interpretation:
     let refBy = 'Self';
     if (req.remarks && req.remarks.includes('Referred by:')) {
       refBy = req.remarks.split('Referred by:')[1].trim();
+    } else if (req.doctorId?.doctorName) {
+      refBy = `Dr. ${req.doctorId.doctorName}`;
+    } else if (req.doctorId?.username) {
+      refBy = `Dr. ${req.doctorId.username}`;
     }
 
     const testsStr = Array.isArray(req.tests) ? req.tests.join(', ') : (req.tests || 'Dengue IgG');
@@ -1776,7 +1780,7 @@ Clinical Interpretation:
       source = 'IPD';
     } else if (Array.isArray(req.statusHistory) && req.statusHistory.some(sh => sh.notes && sh.notes.toLowerCase().includes('ipd'))) {
       source = 'IPD';
-    } else if (req.doctorId?.department || (req.patientId && req.patientId.department) || (Array.isArray(req.statusHistory) && req.statusHistory.some(sh => sh.notes && sh.notes.toLowerCase().includes('lab request created')))) {
+    } else if (req.doctorId || req.doctorId?.department || (req.patientId && req.patientId.department) || (Array.isArray(req.statusHistory) && req.statusHistory.some(sh => sh.notes && (sh.notes.toLowerCase().includes('lab request created') || sh.notes.toLowerCase().includes('opd'))))) {
       source = 'OPD';
     } else if (matchedBill && matchedBill.paidAmount > 0 && !req.isOpd) {
       source = 'Direct';
@@ -1784,7 +1788,7 @@ Clinical Interpretation:
       source = 'OPD';
     }
 
-    const isOpdOrIpd = source === 'OPD' || source === 'IPD' || needsBill;
+    const isOpdOrIpd = source === 'OPD' || source === 'IPD' || needsBill || Boolean(req.doctorId);
 
     return {
       id: req._id,
@@ -1824,7 +1828,7 @@ Clinical Interpretation:
     if (!matchesSearch) return false;
 
     if (activeTabFilter === 'all') return true;
-    if (activeTabFilter === 'new') return item.statusCategory === 'new';
+    if (activeTabFilter === 'new') return item.statusCategory === 'new' || item.statusCategory === 'create_bill';
     if (activeTabFilter === 'create_bill') return item.statusCategory === 'create_bill';
     if (activeTabFilter === 'in_progress') return item.statusCategory === 'in_progress';
     if (activeTabFilter === 'final') return item.statusCategory === 'final';
@@ -1833,7 +1837,7 @@ Clinical Interpretation:
   });
 
   const countAll = reportsForSelectedDate.length;
-  const countNew = reportsForSelectedDate.filter(r => r.statusCategory === 'new').length;
+  const countNew = reportsForSelectedDate.filter(r => r.statusCategory === 'new' || r.statusCategory === 'create_bill').length;
   const countCreateBill = reportsForSelectedDate.filter(r => r.statusCategory === 'create_bill').length;
   const countInProgress = reportsForSelectedDate.filter(r => r.statusCategory === 'in_progress').length;
   const countFinal = reportsForSelectedDate.filter(r => r.statusCategory === 'final').length;
@@ -10349,54 +10353,67 @@ Clinical Interpretation:
         </div>
 
         {/* TOP DASHBOARD CARDS - MATCHING REFERENCE DESIGN */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1 items-stretch">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-1 items-stretch">
           
           {/* CARD 1: Payments due */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 flex flex-col justify-between h-[230px] min-h-[230px]">
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between min-h-[420px]">
             {/* Header */}
-            <div className="flex items-start justify-between">
+            <div className="flex items-start justify-between border-b border-slate-100 pb-3">
               <div>
-                <h2 className="text-base font-bold text-slate-800 tracking-tight">Payments due</h2>
-                <p className="text-xs text-slate-400 font-medium mt-0.5">For all time</p>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-slate-800 tracking-tight">Payments due</h2>
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-red-100 text-red-700">
+                    ₹{totalDueAmount.toLocaleString('en-IN')}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 font-medium mt-0.5">Pending dues across all patients</p>
               </div>
               <button
                 type="button"
                 onClick={() => router.push('/dashboard?view=due-reports')}
-                className="text-xs font-semibold text-blue-600 hover:underline cursor-pointer"
+                className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
               >
-                View all
+                View all ({filteredDueBills.length})
               </button>
             </div>
 
-            {/* Content / Empty State */}
-            <div className="my-auto py-3">
+            {/* Content / List */}
+            <div className="flex-1 py-3 flex flex-col justify-start">
               {filteredDueBills.length === 0 ? (
-                <div className="flex flex-col items-center justify-center text-center">
-                  <div className="w-8 h-8 rounded-md bg-slate-100/90 flex items-center justify-center text-slate-500 mb-2">
-                    <Check className="w-4 h-4 stroke-[2.5]" />
+                <div className="flex flex-col items-center justify-center text-center my-auto py-8">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 mb-2.5">
+                    <Check className="w-5 h-5 stroke-[2.5]" />
                   </div>
-                  <p className="text-sm font-bold text-slate-700">All dues are cleared.</p>
+                  <p className="text-sm font-bold text-slate-700">All dues are cleared</p>
+                  <p className="text-xs text-slate-400 font-medium mt-0.5">There are no outstanding lab dues.</p>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs text-slate-500 font-semibold border-b border-slate-100 pb-1.5">
-                    <span>Pending: {filteredDueBills.length} Patient(s)</span>
+                <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                  <div className="flex items-center justify-between text-xs text-slate-500 font-semibold pb-1">
+                    <span>Pending: <strong className="text-slate-800">{filteredDueBills.length}</strong> Patient(s)</span>
                     <span className="font-extrabold text-red-600">Total ₹{totalDueAmount.toLocaleString('en-IN')}</span>
                   </div>
-                  {filteredDueBills.slice(0, 2).map((bill) => (
-                    <div key={bill._id} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg border border-slate-100 text-xs">
-                      <div>
-                        <span className="font-bold text-slate-900 block">{bill.patientId?.patientName || 'Patient'}</span>
-                        <span className="text-[10px] text-slate-400 font-medium">Bill #{bill.billNo || bill.labId}</span>
+                  {filteredDueBills.slice(0, 5).map((bill) => (
+                    <div key={bill._id} className="flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100/80 rounded-xl border border-slate-150 text-xs transition-colors">
+                      <div className="min-w-0 flex-1 pr-2">
+                        <span className="font-bold text-slate-900 block truncate">{bill.patientId?.patientName || 'Patient'}</span>
+                        <div className="flex items-center gap-2 text-[10px] text-slate-500 font-medium mt-0.5">
+                          <span className="font-mono font-semibold">Bill #{bill.billNo || bill.labId}</span>
+                          <span>•</span>
+                          <span>{bill.patientId?.mobile || 'No Mobile'}</span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-extrabold text-red-600">₹{(bill.dueAmount || bill.totalAmount || 0).toLocaleString('en-IN')}</span>
+                      <div className="flex items-center gap-2.5 shrink-0">
+                        <div className="text-right">
+                          <span className="font-extrabold text-red-600 block text-sm">₹{(bill.dueAmount || bill.totalAmount || 0).toLocaleString('en-IN')}</span>
+                          <span className="text-[10px] text-slate-400 font-semibold">{bill.paymentStatus || 'Unpaid'}</span>
+                        </div>
                         <button
                           type="button"
                           onClick={() => handleOpenPaymentModal(bill)}
-                          className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg cursor-pointer"
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg cursor-pointer shadow-2xs transition-colors"
                         >
-                          Pay
+                          Collect
                         </button>
                       </div>
                     </div>
@@ -10404,201 +10421,316 @@ Clinical Interpretation:
                 </div>
               )}
             </div>
+
+            {/* Footer */}
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+              <span>{filteredDueBills.length} unpaid bill(s)</span>
+              <button
+                type="button"
+                onClick={() => router.push('/dashboard?view=due-reports')}
+                className="font-bold text-blue-600 hover:underline cursor-pointer"
+              >
+                Go to Due Reports →
+              </button>
+            </div>
           </div>
 
           {/* CARD 2: Recent transactions */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 flex flex-col justify-between h-[230px] min-h-[230px]">
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between min-h-[420px]">
             {/* Header */}
-            <div className="flex items-start justify-between">
+            <div className="flex items-start justify-between border-b border-slate-100 pb-3">
               <div>
-                <h2 className="text-base font-bold text-slate-800 tracking-tight">Recent transactions</h2>
-                <p className="text-xs text-slate-400 font-medium mt-0.5">For today</p>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-slate-800 tracking-tight">Recent transactions</h2>
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-100 text-emerald-800">
+                    {labBills.length} Total
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 font-medium mt-0.5">Collected lab billing records</p>
               </div>
               <button
                 type="button"
                 onClick={() => router.push('/dashboard?view=todays-reports')}
-                className="text-xs font-semibold text-blue-600 hover:underline cursor-pointer"
+                className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
               >
-                View all
+                View all ({labBills.length})
               </button>
             </div>
 
-            {/* Top center View all link matching screenshot */}
-            <div className="text-center -mt-2">
-              <button
-                type="button"
-                onClick={() => router.push('/dashboard?view=todays-reports')}
-                className="text-xs font-semibold text-blue-600 hover:underline cursor-pointer inline-flex items-center gap-0.5"
-              >
-                <span>View all</span>
-                <span>»</span>
-              </button>
-            </div>
-
-            {/* Content / Empty State */}
-            <div className="my-auto py-2">
+            {/* Content / List */}
+            <div className="flex-1 py-3 flex flex-col justify-start">
               {labBills.length === 0 ? (
-                <div className="flex flex-col items-center justify-center text-center">
-                  <div className="w-8 h-8 rounded-md bg-slate-100/90 flex items-center justify-center text-slate-400 mb-2">
-                    <Receipt className="w-4 h-4" />
+                <div className="flex flex-col items-center justify-center text-center my-auto py-8">
+                  <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 mb-2.5">
+                    <Receipt className="w-5 h-5" />
                   </div>
-                  <p className="text-sm font-bold text-slate-700">No transactions found for today.</p>
-                  <p className="text-xs text-slate-400 font-medium mt-0.5 mb-2.5">Get started by adding a new case.</p>
+                  <p className="text-sm font-bold text-slate-700">No transactions recorded yet</p>
+                  <p className="text-xs text-slate-400 font-medium mt-0.5 mb-3">Get started by creating a new bill.</p>
                   <button
                     type="button"
                     onClick={() => router.push('/new-bill')}
-                    className="px-3 py-1 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold shadow-2xs cursor-pointer inline-flex items-center gap-1"
+                    className="px-3.5 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-bold shadow-2xs cursor-pointer inline-flex items-center gap-1.5"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>Add new case</span>
+                    <span>Create Bill</span>
                   </button>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {labBills.slice(0, 2).map((bill) => (
-                    <div key={bill._id} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg border border-slate-100 text-xs">
-                      <div>
-                        <span className="font-bold text-slate-900 block">{bill.patientId?.patientName || 'Patient'}</span>
-                        <span className="text-[10px] text-slate-400 font-medium">#{bill.billNo || bill.labId} • {bill.paymentMethod || 'Cash'}</span>
+                <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                  {labBills.slice(0, 5).map((bill) => (
+                    <div key={bill._id} className="flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100/80 rounded-xl border border-slate-150 text-xs transition-colors">
+                      <div className="min-w-0 flex-1 pr-2">
+                        <span className="font-bold text-slate-900 block truncate">{bill.patientId?.patientName || 'Patient'}</span>
+                        <div className="flex items-center gap-2 text-[10px] text-slate-500 font-medium mt-0.5">
+                          <span className="font-mono font-semibold">#{bill.billNo || bill.labId}</span>
+                          <span>•</span>
+                          <span>{bill.paymentMethod || 'Cash'}</span>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <span className="font-extrabold text-emerald-600 block">₹{(bill.paidAmount || bill.totalAmount || 0).toLocaleString('en-IN')}</span>
-                        <span className="text-[10px] text-slate-400 font-semibold">{bill.paymentStatus || 'Paid'}</span>
+                      <div className="text-right shrink-0">
+                        <span className="font-extrabold text-emerald-600 block text-sm">₹{(bill.paidAmount || bill.totalAmount || 0).toLocaleString('en-IN')}</span>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                          bill.paymentStatus === 'Paid' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                        }`}>{bill.paymentStatus || 'Paid'}</span>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
+            </div>
+
+            {/* Footer */}
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+              <span>{labBills.length} recorded bill(s)</span>
+              <button
+                type="button"
+                onClick={() => router.push('/dashboard?view=todays-reports')}
+                className="font-bold text-blue-600 hover:underline cursor-pointer"
+              >
+                Go to Today's Reports →
+              </button>
             </div>
           </div>
 
           {/* CARD 3: Recent activities (Tracking of lab module) */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 flex flex-col justify-between h-[230px] min-h-[230px]">
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between min-h-[420px]">
             {/* Header */}
-            <div className="flex items-start justify-between">
+            <div className="flex items-start justify-between border-b border-slate-100 pb-3">
               <div>
-                <h2 className="text-base font-bold text-slate-800 tracking-tight">Recent activities</h2>
-                <div className="mt-1">
-                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100/80 text-amber-800 inline-flex items-center gap-1">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-slate-800 tracking-tight">Recent activities</h2>
+                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100/90 text-amber-800 inline-flex items-center gap-1">
                     <span>★</span>
-                    <span>Tracking of lab module</span>
+                    <span>Lab Audit</span>
                   </span>
                 </div>
+                <p className="text-xs text-slate-400 font-medium mt-0.5">Audit trail of orders, testing & sign-offs</p>
               </div>
               <button
                 type="button"
                 onClick={() => router.push('/dashboard?view=activities')}
-                className="text-xs font-semibold text-blue-600 hover:underline cursor-pointer"
+                className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
               >
-                View all
+                View all ({allLabActivities.length})
               </button>
             </div>
 
             {/* Lab Module Activity Feed */}
-            <div className="my-auto py-2">
+            <div className="flex-1 py-3 flex flex-col justify-start">
               {allLabActivities.length === 0 ? (
-                <div className="flex flex-col items-center justify-center text-center py-2">
-                  <Activity className="w-5 h-5 text-slate-300 mb-1" />
-                  <p className="text-xs font-bold text-slate-700">No recent lab activities</p>
-                  <p className="text-[11px] text-slate-400 font-medium mt-0.5">Test orders and updates will appear here.</p>
+                <div className="flex flex-col items-center justify-center text-center my-auto py-8">
+                  <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 mb-2.5">
+                    <Activity className="w-5 h-5 text-slate-400" />
+                  </div>
+                  <p className="text-sm font-bold text-slate-700">No recent lab activities</p>
+                  <p className="text-xs text-slate-400 font-medium mt-0.5">Test orders and updates will appear here.</p>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {allLabActivities.slice(0, 2).map((item) => (
+                <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                  {allLabActivities.slice(0, 5).map((item) => (
                     <div 
                       key={item.id} 
                       onClick={() => router.push('/dashboard?view=activities')}
-                      className="flex items-center gap-2.5 p-2 bg-slate-50 hover:bg-blue-50/50 rounded-lg border border-slate-100 transition-colors text-xs cursor-pointer"
+                      className="flex items-center gap-3 p-2.5 bg-slate-50 hover:bg-blue-50/60 rounded-xl border border-slate-150 transition-colors text-xs cursor-pointer"
                     >
-                      <div className={`w-2 h-2 rounded-full shrink-0 ${item.dotColor || 'bg-blue-500'}`} />
+                      <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${item.dotColor || 'bg-blue-500'}`} />
                       <div className="flex-1 min-w-0">
-                        <p className="font-bold text-slate-800 truncate">
+                        <p className="font-bold text-slate-900 truncate">
                           {item.patientName} <span className="font-normal text-slate-500">({item.tests || item.title})</span>
                         </p>
-                        <p className="text-[10px] text-slate-400 font-medium truncate">
-                          {item.labId} • <span className="font-semibold text-slate-700">{item.action}</span> • {item.performedBy}
+                        <p className="text-[10px] text-slate-500 font-medium truncate mt-0.5">
+                          <span className="font-mono font-semibold text-slate-700">{item.labId}</span> • <span className="font-bold text-slate-800">{item.action}</span> • {item.performedBy}
                         </p>
                       </div>
-                      <span className="text-[10px] text-slate-400 font-medium shrink-0">{formatTimeAgo(item.timestamp)}</span>
+                      <span className="text-[10px] text-slate-400 font-semibold shrink-0">{formatTimeAgo(item.timestamp)}</span>
                     </div>
                   ))}
                 </div>
               )}
             </div>
-          </div>
 
-          {/* CARD 4: Lab request (Orders from OPD & IPD modules) */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 flex flex-col justify-between h-[230px] min-h-[230px]">
-            {/* Header */}
-            <div className="flex items-start justify-between">
-              <div>
-                <h2 className="text-base font-bold text-slate-800 tracking-tight">Lab request</h2>
-                <p className="text-xs text-slate-400 font-medium mt-0.5">Orders from OPD & IPD modules</p>
-              </div>
+            {/* Footer */}
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+              <span>{allLabActivities.length} total event(s)</span>
               <button
                 type="button"
-                onClick={() => router.push('/new-bill')}
-                className="text-xs font-semibold text-blue-600 hover:underline cursor-pointer"
+                onClick={() => router.push('/dashboard?view=activities')}
+                className="font-bold text-blue-600 hover:underline cursor-pointer"
               >
-                + New request
+                View Audit Trail →
               </button>
             </div>
+          </div>
 
-            {/* Recent OPD / IPD Requests Overview */}
-            <div className="my-auto py-2">
+          {/* CARD 4: Lab request (Orders from OPD & IPD modules) - EXPANDED HEIGHT & FULL LIST */}
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between min-h-[420px]">
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-slate-800 tracking-tight">Lab request</h2>
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-blue-100 text-blue-800 border border-blue-200 flex items-center gap-1">
+                    <FlaskConical className="w-3 h-3 text-blue-600" />
+                    <span>{rawReportsList.filter(item => item.isOpdOrIpd).length} OPD/IPD</span>
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 font-medium mt-0.5">Real-time incoming test requests from OPD Doctors & IPD Wards</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => loadDashboardData()}
+                  className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors"
+                  title="Refresh OPD requests"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingDashboard ? 'animate-spin' : ''}`} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push('/new-bill')}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>New Request</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Recent OPD / IPD Requests Overview with Scrollable List */}
+            <div className="flex-1 py-3 flex flex-col justify-start">
               {rawReportsList.filter(item => item.isOpdOrIpd).length === 0 ? (
-                <div className="flex flex-col items-center justify-center text-center py-2">
-                  <div className="w-8 h-8 rounded-md bg-slate-100/90 flex items-center justify-center text-slate-400 mb-1.5">
-                    <FlaskConical className="w-4 h-4" />
+                <div className="flex flex-col items-center justify-center text-center my-auto py-8">
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-500 mb-2.5">
+                    <FlaskConical className="w-5 h-5" />
                   </div>
-                  <p className="text-xs font-bold text-slate-700">No OPD / IPD lab orders</p>
-                  <p className="text-[11px] text-slate-400 font-medium mt-0.5">Orders placed from OPD or IPD will appear here.</p>
+                  <p className="text-sm font-bold text-slate-700">No OPD / IPD lab orders found</p>
+                  <p className="text-xs text-slate-400 font-medium mt-0.5 mb-3">When doctors prescribe tests in OPD consultation, they will appear here automatically.</p>
+                  <button
+                    type="button"
+                    onClick={() => router.push('/new-bill')}
+                    className="px-3.5 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-bold shadow-2xs cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Create Direct Lab Bill</span>
+                  </button>
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
                   {rawReportsList
                     .filter(item => item.isOpdOrIpd)
-                    .slice(0, 2)
+                    .slice(0, 15)
                     .map((item) => (
-                      <div key={item.id} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg border border-slate-100 text-xs">
-                        <div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-slate-900">{item.patientName}</span>
-                            <span className={`text-[10px] px-1.5 py-0.2 rounded font-bold ${
-                              item.source === 'IPD' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
-                            }`}>{item.source || 'OPD'} • {item.regNo}</span>
+                      <div 
+                        key={item.id} 
+                        className="p-3 bg-slate-50 hover:bg-slate-100/90 rounded-xl border border-slate-150 text-xs transition-all space-y-2"
+                      >
+                        {/* Top Line: Patient name, source badge, reg no, time */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-extrabold text-slate-900 text-xs truncate">{item.patientName}</span>
+                            <span className="text-[10px] text-slate-500 font-semibold">{item.ageSex}</span>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold shrink-0 ${
+                              item.source === 'IPD' ? 'bg-purple-100 text-purple-800 border border-purple-200' : 'bg-blue-100 text-blue-800 border border-blue-200'
+                            }`}>
+                              {item.source || 'OPD'}
+                            </span>
                           </div>
-                          <span className="text-[10px] text-slate-500 font-medium block mt-0.5">{item.tests}</span>
+                          <span className="text-[10px] font-mono font-bold text-slate-500 shrink-0">{item.regNo}</span>
                         </div>
-                        {item.statusCategory === 'create_bill' ? (
-                          <button
-                            type="button"
-                            onClick={() => handleCreateBillFromOpd(item)}
-                            className="px-2.5 py-1 bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold rounded-md cursor-pointer shrink-0 shadow-2xs"
-                          >
-                            Create bill
-                          </button>
-                        ) : (item.statusCategory === 'final' || item.statusCategory === 'signed_off') ? (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenReportPrint(item.rawRequest)}
-                            className="px-2 py-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-md cursor-pointer shrink-0"
-                          >
-                            View report
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenProcessRequest(item.rawRequest)}
-                            className="px-2 py-1 text-[11px] font-bold text-blue-600 hover:bg-blue-50 border border-blue-200 rounded-md cursor-pointer shrink-0"
-                          >
-                            Enter results
-                          </button>
-                        )}
+
+                        {/* Middle Line: Tests ordered & Referrer */}
+                        <div className="flex items-center justify-between gap-2 text-[11px]">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <FlaskConical className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+                            <span className="font-bold text-slate-800 truncate">{item.tests}</span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-medium shrink-0">
+                            {formatTimeAgo(item.createdAtDate)}
+                          </span>
+                        </div>
+
+                        {/* Bottom Line: Referred by & Action buttons */}
+                        <div className="flex items-center justify-between pt-1 border-t border-slate-200/60">
+                          <div className="text-[10px] text-slate-500 font-medium truncate">
+                            <span className="text-slate-400">Ref:</span> <strong className="text-slate-700">{item.referredBy}</strong>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            {item.statusCategory === 'create_bill' ? (
+                              <button
+                                type="button"
+                                onClick={() => handleCreateBillFromOpd(item)}
+                                className="px-3 py-1 bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold rounded-lg cursor-pointer shadow-2xs transition-colors flex items-center gap-1"
+                              >
+                                <Receipt className="w-3 h-3" />
+                                <span>Create bill</span>
+                              </button>
+                            ) : (item.statusCategory === 'final' || item.statusCategory === 'signed_off') ? (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenReportPrint(item.rawRequest)}
+                                className="px-2.5 py-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg cursor-pointer transition-colors flex items-center gap-1"
+                              >
+                                <Printer className="w-3 h-3" />
+                                <span>View report</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenProcessRequest(item.rawRequest)}
+                                className="px-2.5 py-1 text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg cursor-pointer transition-colors flex items-center gap-1"
+                              >
+                                <Edit3 className="w-3 h-3" />
+                                <span>Enter results</span>
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => (item.statusCategory === 'final' || item.statusCategory === 'signed_off') ? handleOpenReportPrint(item.rawRequest) : handleOpenReceiptView(item)}
+                              className="px-2 py-1 text-[11px] font-semibold text-slate-600 hover:text-blue-600 hover:bg-slate-200/60 rounded-md cursor-pointer transition-colors"
+                              title="View details"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     ))}
                 </div>
               )}
+            </div>
+
+            {/* Footer */}
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+              <span>Showing {Math.min(15, rawReportsList.filter(item => item.isOpdOrIpd).length)} of {rawReportsList.filter(item => item.isOpdOrIpd).length} order(s)</span>
+              <button
+                type="button"
+                onClick={() => router.push('/dashboard?view=todays-reports')}
+                className="font-bold text-blue-600 hover:underline cursor-pointer"
+              >
+                View in Today's Reports →
+              </button>
             </div>
           </div>
 

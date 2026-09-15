@@ -142,26 +142,29 @@ const createConsultation = async (req, res) => {
       }
     }
 
-    // 3. Create Lab Request entries if tests are assigned and sendToLab is checked
-    if (tests && Array.isArray(tests) && tests.length > 0 && sendToLab) {
+    // 3. Create Lab Request entries if tests are assigned
+    const shouldSendToLab = sendToLab !== false && sendToLab !== 'false';
+    if (tests && Array.isArray(tests) && tests.length > 0 && shouldSendToLab) {
+      const docName = req.user.doctorName ? `Dr. ${req.user.doctorName}` : (req.user.username ? `Dr. ${req.user.username}` : 'OPD Doctor');
+      const isHomeCollection = collectionType === 'Home Sample Collection';
       const requests = tests.map((test) => {
-        const isHomeCollection = collectionType === 'Home Sample Collection';
+        const testName = typeof test === 'string' ? test.trim() : (test?.test || test?.title || test?.name || String(test));
         return {
           patientId,
           hospitalId: req.user.hospitalId,
           doctorId,
-          tests: [test],
+          tests: [testName],
           status: isHomeCollection ? 'assigned' : 'pending',
           sampleStatus: isHomeCollection ? 'Home Sample Assigned' : 'Not Collected',
           reportStatus: 'Pending',
           collectionType: collectionType || 'Lab Visit',
           collectionTime: collectionTime || '',
           bookingDate: bookingDate || new Date(),
-          remarks: isHomeCollection ? 'Home Collection Requested' : '',
+          remarks: `Referred by: ${docName} (OPD)`,
           statusHistory: [{
             status: isHomeCollection ? 'Home Sample Assigned' : 'Not Collected',
-            assistantName: 'System',
-            notes: isHomeCollection ? 'Home sample collection request created' : 'Lab request created'
+            assistantName: docName,
+            notes: isHomeCollection ? 'Home sample collection requested from OPD' : `Lab request created from OPD consultation by ${docName}`
           }]
         };
       });
@@ -214,7 +217,50 @@ const updateConsultation = async (req, res) => {
     if (pastHistory !== undefined) consultation.generalPastHistory = pastHistory;
     if (diagnosisRemark !== undefined) consultation.diagnosisRemark = diagnosisRemark;
     if (vitals !== undefined) consultation.vitals = sanitizeVitals(vitals);
-    if (tests !== undefined) consultation.tests = tests;
+    if (tests !== undefined) {
+      consultation.tests = tests;
+      // Ensure LabRequest entries exist for newly added tests
+      if (Array.isArray(tests) && tests.length > 0) {
+        const existingReqs = await LabRequest.find(tenantQuery(req, {
+          patientId: consultation.patientId,
+          doctorId
+        }));
+        const existingTestNames = new Set();
+        existingReqs.forEach(r => {
+          (r.tests || []).forEach(t => existingTestNames.add(String(t).toLowerCase().trim()));
+        });
+
+        const docName = req.user.doctorName ? `Dr. ${req.user.doctorName}` : (req.user.username ? `Dr. ${req.user.username}` : 'OPD Doctor');
+        const newTestsToCreate = tests.filter(t => {
+          const tName = typeof t === 'string' ? t.toLowerCase().trim() : (t?.test || t?.title || t?.name || '').toLowerCase().trim();
+          return tName && !existingTestNames.has(tName);
+        });
+
+        if (newTestsToCreate.length > 0) {
+          const requests = newTestsToCreate.map((test) => {
+            const testName = typeof test === 'string' ? test.trim() : (test?.test || test?.title || test?.name || String(test));
+            return {
+              patientId: consultation.patientId,
+              hospitalId: req.user.hospitalId,
+              doctorId,
+              tests: [testName],
+              status: 'pending',
+              sampleStatus: 'Not Collected',
+              reportStatus: 'Pending',
+              collectionType: 'Lab Visit',
+              bookingDate: new Date(),
+              remarks: `Referred by: ${docName} (OPD)`,
+              statusHistory: [{
+                status: 'Not Collected',
+                assistantName: docName,
+                notes: `Lab request added from OPD consultation update by ${docName}`
+              }]
+            };
+          });
+          await Promise.all(requests.map((request) => new LabRequest(request).save()));
+        }
+      }
+    }
     if (followUpDate !== undefined) consultation.followUpDate = followUpDate;
     if (followUpRemarks !== undefined) consultation.followUpRemarks = followUpRemarks;
 
