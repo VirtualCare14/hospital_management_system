@@ -31,7 +31,7 @@ const userSchema = new mongoose.Schema({
   role: {
     type: String,
     required: true,
-    enum: ['admin', 'reception', 'doctor', 'lab', 'ipd', 'nursing', 'pharmacy', 'billing', 'labadmin', 'lab_admin', 'superadmin']
+    enum: ['admin', 'reception', 'doctor', 'lab', 'ipd', 'nursing', 'pharmacy', 'billing', 'labadmin', 'lab_admin', 'superadmin', 'clinic']
   },
   moduleAccess: [{
     type: Number

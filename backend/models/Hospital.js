@@ -9,7 +9,8 @@ const hospitalSchema = new mongoose.Schema({
   isActive: { type: Boolean, default: true },
   currentSessionId: { type: String, default: null },
   maxUsers: { type: Number, default: 10 },
-  allowDataDeletion: { type: Boolean, default: false }
+  allowDataDeletion: { type: Boolean, default: false },
+  allowClinicSetting: { type: Boolean, default: false }
 }, { timestamps: true });
 
 hospitalSchema.pre('save', async function() {

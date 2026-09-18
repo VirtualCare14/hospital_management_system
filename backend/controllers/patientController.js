@@ -421,6 +421,11 @@ const getPatients = async (req, res) => {
         .select('patientId');
       const patientIds = [...new Set(doctorVisits.map(v => v.patientId.toString()))];
       query = { ...query, _id: { $in: patientIds } };
+    } else if (req.user.role === 'clinic') {
+      const clinicVisits = await Visit.find(tenantQuery(req, { createdBy: req.user._id }))
+        .select('patientId');
+      const patientIds = [...new Set(clinicVisits.map(v => v.patientId.toString()))];
+      query = { ...query, _id: { $in: patientIds } };
     }
 
     if (sameDayCareOnly === 'true') {
@@ -638,6 +643,9 @@ const getRegistrations = async (req, res) => {
     if (uhid) query.uhid = { $regex: uhid, $options: 'i' };
     if (registrationNumber) query.registrationNumber = { $regex: registrationNumber, $options: 'i' };
     if (department) query.department = department;
+    if (req.user.role === 'clinic') {
+      query.createdBy = req.user._id;
+    }
 
     // If patientName search, find matching patients first
     if (patientName || search) {
@@ -663,6 +671,9 @@ const getRegistrations = async (req, res) => {
     const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
 
     const tenantQ = req.user.hospitalId ? { hospitalId: req.user.hospitalId } : {};
+    if (req.user.role === 'clinic') {
+      tenantQ.createdBy = req.user._id;
+    }
 
     const [totalToday, totalMonth, totalCount] = await Promise.all([
       Visit.countDocuments({ ...tenantQ, registrationDate: { $gte: today, $lt: tomorrow } }),
@@ -1168,6 +1179,9 @@ const getFollowUpPatients = async (req, res) => {
 
     let visitQuery = tenantQuery(req);
     if (department) visitQuery.department = department;
+    if (req.user.role === 'clinic') {
+      visitQuery.createdBy = req.user._id;
+    }
 
     const visits = await Visit.find(visitQuery)
       .populate('patientId', 'patientName mobile gender aadhaar dob address')

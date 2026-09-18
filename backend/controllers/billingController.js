@@ -22,9 +22,13 @@ const Prescription = require('../models/Prescription');
 
 
 
-const tenantFilter = (req, query = {}) => (
-  req.user.hospitalId ? { ...query, hospitalId: req.user.hospitalId } : query
-);
+const tenantFilter = (req, query = {}) => {
+  let filter = req.user.hospitalId ? { ...query, hospitalId: req.user.hospitalId } : { ...query };
+  if (req.user.role === 'clinic') {
+    filter.createdBy = req.user._id;
+  }
+  return filter;
+};
 
 // Helper to get patient by UHID
 const getPatientByUhid = async (req, uhid) => {

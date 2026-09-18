@@ -26,6 +26,7 @@ const buildHospitalResponse = async (req, hospital) => {
     isActive: hospital.isActive,
     maxUsers: hospital.maxUsers || 10,
     allowDataDeletion: Boolean(hospital.allowDataDeletion),
+    allowClinicSetting: Boolean(hospital.allowClinicSetting),
     userCount,
     loginLink: hospitalLink(req, hospital._id),
     createdAt: hospital.createdAt,
@@ -58,7 +59,7 @@ const listHospitals = async (req, res) => {
 };
 
 const createHospital = async (req, res) => {
-  let { name, loginId, password, maxUsers, code } = req.body;
+  let { name, loginId, password, maxUsers, code, allowDataDeletion, allowClinicSetting } = req.body;
   name = name?.trim();
   loginId = loginId?.toLowerCase().trim();
   code = code?.toLowerCase().trim();
@@ -74,7 +75,16 @@ const createHospital = async (req, res) => {
     const codeExists = await Hospital.findOne({ code });
     if (codeExists) return res.status(400).json({ message: 'Hospital unique access code already exists' });
 
-    const hospital = await Hospital.create({ name, loginId, password, code, isActive: true, maxUsers: parseInt(maxUsers) || 10, allowDataDeletion: false });
+    const hospital = await Hospital.create({
+      name,
+      loginId,
+      password,
+      code,
+      isActive: true,
+      maxUsers: parseInt(maxUsers) || 10,
+      allowDataDeletion: Boolean(allowDataDeletion),
+      allowClinicSetting: Boolean(allowClinicSetting)
+    });
     await User.create({
       hospitalId: hospital._id,
       username: loginId,
@@ -93,7 +103,7 @@ const createHospital = async (req, res) => {
 };
 
 const updateHospital = async (req, res) => {
-  const { name, loginId, password, isActive, maxUsers, allowDataDeletion, code } = req.body;
+  const { name, loginId, password, isActive, maxUsers, allowDataDeletion, allowClinicSetting, code } = req.body;
   const hospital = await Hospital.findById(req.params.id);
   if (!hospital) return res.status(404).json({ message: 'Hospital not found' });
 
@@ -117,6 +127,7 @@ const updateHospital = async (req, res) => {
   }
   if (password) hospital.password = password;
   if (allowDataDeletion !== undefined) hospital.allowDataDeletion = Boolean(allowDataDeletion);
+  if (allowClinicSetting !== undefined) hospital.allowClinicSetting = Boolean(allowClinicSetting);
   if (isActive !== undefined) {
     hospital.isActive = isActive;
     if (!isActive) hospital.currentSessionId = null;

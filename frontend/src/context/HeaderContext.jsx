@@ -65,6 +65,7 @@ const ROUTE_HEADER_MAP = [
   { path: '/admin/ot-settings', title: 'Operation Theatre Settings', subtitle: 'Configure OT suites, equipment, procedure categories, and schedules.' },
   { path: '/admin/same-day-care', title: 'Same Day Care Settings', subtitle: 'Configure daycare wards, procedure packages, and treatment settings.' },
   { path: '/admin/pharmacy-settings', title: 'Pharmacy Settings', subtitle: 'Manage pharmacy inventory settings, categories, and tax rules.' },
+  { path: '/admin/clinic-settings', title: 'Clinic Portal Settings', subtitle: 'Configure credentials, ID, password, and access parameters for the Clinic Portal.' },
   { path: '/admin/delete-data', title: 'System Data Cleanup', subtitle: 'Manage system reset, test data purge, and database housekeeping.' },
   { path: '/admin', title: 'Hospital Admin Dashboard', subtitle: 'System overview, operational metrics, staff activity, and department management.' },
 

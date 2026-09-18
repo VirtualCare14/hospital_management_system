@@ -24,7 +24,10 @@ const {
   getPatientTrackingTimeline,
   getPatientBills,
   searchBills,
-  updateBillDate
+  updateBillDate,
+  getClinicSettingPermission,
+  getClinicSettings,
+  saveClinicSettings
 } = require('../controllers/adminController');
 const authMiddleware = require('../middleware/authMiddleware');
 
@@ -64,6 +67,11 @@ router.delete('/delete-data/billing-invoice/:id', authMiddleware, adminOnly, del
 router.delete('/delete-data/prescription/:id', authMiddleware, adminOnly, deletePrescription);
 router.get('/patient-summary/:id', authMiddleware, adminOnly, getPatientSummary);
 router.get('/patient-tracking/:patientId', authMiddleware, adminOnly, getPatientTrackingTimeline);
+
+// Clinic Settings & Portal Credentials routes
+router.get('/clinic-settings/permission', authMiddleware, adminOnly, getClinicSettingPermission);
+router.get('/clinic-settings', authMiddleware, adminOnly, getClinicSettings);
+router.post('/clinic-settings', authMiddleware, adminOnly, saveClinicSettings);
 
 router.get('/bills/patient/:patientId', authMiddleware, adminOnly, getPatientBills);
 router.get('/bills/search', authMiddleware, adminOnly, searchBills);

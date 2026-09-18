@@ -41,7 +41,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Printer,
-  ExternalLink
+  ExternalLink,
+  Stethoscope
 } from 'lucide-react';
 import { getLabsPortalUrl } from '../utils/moduleRoutes';
 
@@ -89,6 +90,7 @@ const Sidebar = () => {
     { to: '/admin/ot-settings', label: 'OT Settings', icon: Scissors },
     { to: '/admin/same-day-care', label: 'Same Day Care Settings', icon: Bandage },
     { to: '/admin/pharmacy-settings', label: 'Pharmacy Settings', icon: Settings },
+    ...(user?.allowClinicSetting ? [{ to: '/admin/clinic-settings', label: 'Clinic Settings', icon: Stethoscope }] : []),
     { to: '/admin/delete-data', label: 'Delete Data', icon: Trash2 },
   ];
 

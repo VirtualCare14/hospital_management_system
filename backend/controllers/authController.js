@@ -19,7 +19,7 @@ const login = async (req, res) => {
     const userQuery = { username: normalizedUsername };
     if (hospitalId) userQuery.hospitalId = hospitalId;
     
-    let user = await User.findOne(userQuery).populate('hospitalId', 'name isActive');
+    let user = await User.findOne(userQuery).populate('hospitalId', 'name isActive allowDataDeletion allowClinicSetting');
 
     // Auto-seed / create ravilab Lab Admin user if not present
     if (!user && normalizedUsername === 'ravilab' && String(password) === 'raviadmin') {
@@ -33,7 +33,7 @@ const login = async (req, res) => {
           isActive: true
         });
         await newLabAdmin.save();
-        user = await User.findOne({ username: 'ravilab' }).populate('hospitalId', 'name isActive');
+        user = await User.findOne({ username: 'ravilab' }).populate('hospitalId', 'name isActive allowDataDeletion allowClinicSetting');
       } catch (seedErr) {
         console.warn('Auto-create ravilab user error:', seedErr.message);
       }
@@ -87,7 +87,9 @@ const login = async (req, res) => {
         department: user.department,
         mobile: user.mobile,
         hospitalId: user.hospitalId?._id || user.hospitalId,
-        hospitalName: user.hospitalId?.name || 'Hospital'
+        hospitalName: user.hospitalId?.name || 'Hospital',
+        allowDataDeletion: Boolean(user.hospitalId?.allowDataDeletion),
+        allowClinicSetting: Boolean(user.hospitalId?.allowClinicSetting)
       }
     });
   } catch (error) {
@@ -177,14 +179,23 @@ const hospitalLookup = async (req, res) => {
 const verifySession = async (req, res) => {
   try {
     let hospitalName = 'Hospital';
+    let allowDataDeletion = false;
+    let allowClinicSetting = false;
+
     if (req.hospital && req.hospital.name) {
       hospitalName = req.hospital.name;
+      allowDataDeletion = Boolean(req.hospital.allowDataDeletion);
+      allowClinicSetting = Boolean(req.hospital.allowClinicSetting);
     } else if (req.user.hospitalId && typeof req.user.hospitalId === 'object' && req.user.hospitalId.name) {
       hospitalName = req.user.hospitalId.name;
+      allowDataDeletion = Boolean(req.user.hospitalId.allowDataDeletion);
+      allowClinicSetting = Boolean(req.user.hospitalId.allowClinicSetting);
     } else if (req.user.hospitalId) {
-      const hospitalObj = await Hospital.findById(req.user.hospitalId).select('name');
-      if (hospitalObj && hospitalObj.name) {
-        hospitalName = hospitalObj.name;
+      const hospitalObj = await Hospital.findById(req.user.hospitalId).select('name allowDataDeletion allowClinicSetting');
+      if (hospitalObj) {
+        hospitalName = hospitalObj.name || hospitalName;
+        allowDataDeletion = Boolean(hospitalObj.allowDataDeletion);
+        allowClinicSetting = Boolean(hospitalObj.allowClinicSetting);
       }
     }
 
@@ -200,7 +211,9 @@ const verifySession = async (req, res) => {
         department: req.user.department,
         mobile: req.user.mobile,
         hospitalId: req.user.hospitalId?._id || req.user.hospitalId,
-        hospitalName: hospitalName
+        hospitalName: hospitalName,
+        allowDataDeletion,
+        allowClinicSetting
       }
     });
   } catch (error) {

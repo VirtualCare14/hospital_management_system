@@ -2,6 +2,7 @@ const User = require('../models/User');
 const Hospital = require('../models/Hospital');
 const Department = require('../models/Department');
 const HospitalSettings = require('../models/HospitalSettings');
+const ClinicSetting = require('../models/ClinicSetting');
 const Patient = require('../models/Patient');
 const Visit = require('../models/Visit');
 const Billing = require('../models/Billing');
@@ -1574,6 +1575,136 @@ const updateBillDate = async (req, res) => {
   }
 };
 
+// @desc Check if clinic setting is allowed for this hospital
+// @route GET /api/admin/clinic-settings/permission
+// @access Private (Admin only)
+const getClinicSettingPermission = async (req, res) => {
+  try {
+    const hospital = await Hospital.findById(req.user.hospitalId).select('allowClinicSetting');
+    res.status(200).json({ enabled: Boolean(hospital?.allowClinicSetting) });
+  } catch (error) {
+    console.error('Get Clinic Setting Permission Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc Get clinic settings and portal credentials
+// @route GET /api/admin/clinic-settings
+// @access Private (Admin only)
+const getClinicSettings = async (req, res) => {
+  try {
+    const hospital = await Hospital.findById(req.user.hospitalId).select('name allowClinicSetting');
+    if (!hospital?.allowClinicSetting) {
+      return res.status(403).json({
+        message: 'Clinic Settings are not enabled for this hospital by Super Admin',
+        enabled: false
+      });
+    }
+
+    let clinicSetting = await ClinicSetting.findOne({ hospitalId: req.user.hospitalId });
+    if (!clinicSetting) {
+      clinicSetting = {
+        hospitalId: req.user.hospitalId,
+        clinicLoginId: '',
+        clinicPassword: '',
+        clinicName: hospital.name ? `${hospital.name} Clinic` : '',
+        portalUrl: '',
+        isActive: true
+      };
+    }
+
+    res.status(200).json({
+      enabled: true,
+      data: clinicSetting
+    });
+  } catch (error) {
+    console.error('Get Clinic Settings Error:', error);
+    res.status(500).json({ message: 'Server error loading clinic settings' });
+  }
+};
+
+// @desc Save or update clinic settings and portal credentials
+// @route POST /api/admin/clinic-settings
+// @access Private (Admin only)
+const saveClinicSettings = async (req, res) => {
+  try {
+    const hospital = await Hospital.findById(req.user.hospitalId).select('allowClinicSetting');
+    if (!hospital?.allowClinicSetting) {
+      return res.status(403).json({ message: 'Clinic Settings are not enabled for this hospital by Super Admin' });
+    }
+
+    const { clinicLoginId, clinicPassword, clinicName, portalUrl, isActive } = req.body;
+    const normalizedLoginId = (clinicLoginId || '').toLowerCase().trim();
+
+    if (!normalizedLoginId) {
+      return res.status(400).json({ message: 'Clinic Login ID is required' });
+    }
+
+    let setting = await ClinicSetting.findOne({ hospitalId: req.user.hospitalId });
+    if (!setting) {
+      setting = new ClinicSetting({
+        hospitalId: req.user.hospitalId,
+        clinicLoginId: normalizedLoginId,
+        clinicPassword: clinicPassword || '',
+        clinicName: (clinicName || '').trim(),
+        portalUrl: (portalUrl || '').trim(),
+        isActive: isActive !== undefined ? Boolean(isActive) : true,
+        lastUpdatedBy: req.user._id,
+        lastUpdatedByName: req.user.doctorName || req.user.username || 'Admin'
+      });
+    } else {
+      setting.clinicLoginId = normalizedLoginId;
+      if (clinicPassword !== undefined) setting.clinicPassword = clinicPassword;
+      if (clinicName !== undefined) setting.clinicName = (clinicName || '').trim();
+      if (portalUrl !== undefined) setting.portalUrl = (portalUrl || '').trim();
+      if (isActive !== undefined) setting.isActive = Boolean(isActive);
+      setting.lastUpdatedBy = req.user._id;
+      setting.lastUpdatedByName = req.user.doctorName || req.user.username || 'Admin';
+    }
+
+    await setting.save();
+
+    // Synchronize or create corresponding User account for clinic portal login
+    if (normalizedLoginId && clinicPassword) {
+      try {
+        let clinicUser = await User.findOne({
+          hospitalId: req.user.hospitalId,
+          $or: [{ username: normalizedLoginId }, { role: 'clinic' }]
+        });
+
+        if (clinicUser) {
+          clinicUser.username = normalizedLoginId;
+          clinicUser.password = clinicPassword;
+          clinicUser.role = 'clinic';
+          clinicUser.doctorName = setting.clinicName || 'Clinic Doctor / Staff';
+          clinicUser.isActive = setting.isActive;
+          await clinicUser.save();
+        } else {
+          await User.create({
+            hospitalId: req.user.hospitalId,
+            username: normalizedLoginId,
+            password: clinicPassword,
+            role: 'clinic',
+            doctorName: setting.clinicName || 'Clinic Doctor / Staff',
+            moduleAccess: [1, 2, 3],
+            isActive: setting.isActive
+          });
+        }
+      } catch (userSyncErr) {
+        console.warn('Clinic user sync notice:', userSyncErr.message);
+      }
+    }
+
+    res.status(200).json({
+      message: 'Clinic portal credentials saved successfully',
+      data: setting
+    });
+  } catch (error) {
+    console.error('Save Clinic Settings Error:', error);
+    res.status(500).json({ message: error.message || 'Server error saving clinic settings' });
+  }
+};
+
 module.exports = {
   getHospitalSettings,
   createOrUpdateHospitalSettings,
@@ -1602,5 +1733,8 @@ module.exports = {
   getPatientTrackingTimeline,
   getPatientBills,
   searchBills,
-  updateBillDate
+  updateBillDate,
+  getClinicSettingPermission,
+  getClinicSettings,
+  saveClinicSettings
 };

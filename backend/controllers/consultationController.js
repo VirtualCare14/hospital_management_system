@@ -346,6 +346,9 @@ const fetchPatientsForDoctor = async (req, doctorId, filter) => {
 
   const targetDoctorId = req.query.doctorId || (req.user.role === 'doctor' ? doctorId : null);
   const doctorQuery = targetDoctorId ? { doctorId: targetDoctorId } : {};
+  if (req.user.role === 'clinic') {
+    doctorQuery.createdBy = req.user._id;
+  }
 
   let patients = [];
 
@@ -609,7 +612,7 @@ const getCompletedConsultations = async (req, res) => {
   try {
     const { search, page = 1, limit = 20 } = req.query;
     const query = tenantQuery(req, { consultationStatus: 'completed' });
-    if (req.user.role === 'doctor') query.doctorId = req.user._id;
+    if (req.user.role === 'doctor' || req.user.role === 'clinic') query.doctorId = req.user._id;
 
     const consultations = await Consultation.find(query)
       .populate('patientId', 'uhid patientName mobile gender dob department')

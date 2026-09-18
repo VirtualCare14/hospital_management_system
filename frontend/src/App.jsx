@@ -45,6 +45,7 @@ import IpdOtDashboard from './pages/ipd/IpdOtDashboard.jsx';
 import IpdSameDayDashboard from './pages/ipd/IpdSameDayDashboard.jsx';
 import SameDayCareSettings from './pages/admin/SameDayCareSettings.jsx';
 import PharmacySettings from './pages/admin/PharmacySettings.jsx';
+import ClinicSettings from './pages/admin/ClinicSettings.jsx';
 import DeleteDataPage from './pages/admin/DeleteDataPage.jsx';
 import SameDayCareWorkspace from './pages/same-day-care/SameDayCareWorkspace.jsx';
 import SameDayCareForm from './pages/same-day-care/SameDayCareForm.jsx';
@@ -86,6 +87,7 @@ function App() {
             <Route path="/admin/ot-settings" element={<OperationTheatreSettings />} />
             <Route path="/admin/same-day-care" element={<SameDayCareSettings />} />
             <Route path="/admin/pharmacy-settings" element={<PharmacySettings />} />
+            <Route path="/admin/clinic-settings" element={<ClinicSettings />} />
             <Route path="/admin/delete-data" element={<DeleteDataPage />} />
           </Route>
           <Route element={<ProtectedRoute allowedRoles={['admin', 'reception']} requiredModule={1} />}>
