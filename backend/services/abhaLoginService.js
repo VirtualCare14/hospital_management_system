@@ -7,27 +7,40 @@ const abdmCryptoService = require("./abdmCryptoService");
 // ======================================
 // Request Login OTP
 // ======================================
-const requestLoginOtp = async (aadhaar) => {
+const requestLoginOtp = async (params) => {
+
+    const { loginId, loginHint, otpSystem, scope, aadhaar } =
+        typeof params === "string" ? { loginId: params, loginHint: "aadhaar" } : (params || {});
+
+    const resolvedLoginId = loginId || aadhaar;
 
     const token =
         await abdmGatewayService.getAccessToken();
 
-    const encryptedAadhaar =
-        await abdmCryptoService.encryptAadhaar(aadhaar);
+    let encryptedLoginId;
+    if (loginHint === "aadhaar" || !loginHint) {
+        encryptedLoginId = await abdmCryptoService.encryptAadhaar(resolvedLoginId);
+    } else if (loginHint === "abha-number" || loginHint === "abha-address") {
+        encryptedLoginId = await abdmCryptoService.encryptValue(resolvedLoginId);
+    } else {
+        encryptedLoginId = await abdmCryptoService.encryptValue(resolvedLoginId);
+    }
+
+    const payload = {
+        scope: scope || [
+            "abha-login",
+            "aadhaar-verify"
+        ],
+        loginHint: loginHint || "aadhaar",
+        loginId: encryptedLoginId,
+        otpSystem: otpSystem || "aadhaar"
+    };
 
     const response = await axios.post(
 
         `${process.env.ABDM_ABHA_BASE_URL}/abha/api/v3/profile/login/request/otp`,
 
-        {
-            scope: [
-                "abha-login",
-                "aadhaar-verify"
-            ],
-            loginHint: "aadhaar",
-            loginId: encryptedAadhaar,
-            otpSystem: "aadhaar"
-        },
+        payload,
 
         {
             headers: {
@@ -48,7 +61,7 @@ const requestLoginOtp = async (aadhaar) => {
 // ======================================
 // Verify Login OTP
 // ======================================
-const verifyLoginOtp = async ({ txnId, otp }) => {
+const verifyLoginOtp = async ({ txnId, otp, scope }) => {
 
     const token =
         await abdmGatewayService.getAccessToken();
@@ -57,7 +70,7 @@ const verifyLoginOtp = async ({ txnId, otp }) => {
         await abdmCryptoService.encryptOtp(otp);
 
     const payload = {
-        scope: [
+        scope: scope || [
             "abha-login",
             "aadhaar-verify"
         ],

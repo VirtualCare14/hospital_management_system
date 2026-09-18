@@ -469,20 +469,23 @@ exports.verifyOtp = async (req, res) => {
 // ======================================
 exports.requestLoginOtp = async (req, res) => {
     try {
-        const { aadhaar } = req.body;
-        if (!aadhaar) {
+        const { loginId, aadhaar, loginHint, otpSystem, scope } = req.body || {};
+        const effectiveLoginId = loginId || aadhaar;
+
+        if (!effectiveLoginId) {
             return res.status(400).json({
                 success: false,
-                message: "Aadhaar number is required."
+                message: "Login ID is required (Aadhaar or ABHA number/address)."
             });
         }
-        if (!/^\d{12}$/.test(aadhaar)) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid Aadhaar number."
-            });
-        }
-        const response = await loginService.requestLoginOtp(aadhaar);
+
+        const response = await loginService.requestLoginOtp({
+            loginId: effectiveLoginId,
+            loginHint: loginHint || "aadhaar",
+            otpSystem: otpSystem || "aadhaar",
+            scope: scope || ["abha-login", "aadhaar-verify"]
+        });
+
         res.status(200).json({
             success: true,
             data: response
@@ -501,7 +504,7 @@ exports.requestLoginOtp = async (req, res) => {
 // ======================================
 exports.verifyLoginOtp = async (req, res) => {
     try {
-        const { txnId, otp } = req.body;
+        const { txnId, otp, scope } = req.body || {};
 
         if (!txnId) {
             return res.status(400).json({
@@ -526,7 +529,8 @@ exports.verifyLoginOtp = async (req, res) => {
 
         const response = await loginService.verifyLoginOtp({
             txnId,
-            otp
+            otp,
+            scope
         });
 
         // ABDM returns the X-token in the response headers
@@ -1044,7 +1048,8 @@ exports.verifyDeleteOtp = async (req, res) => {
 // ======================================
 exports.getAbhaAddressSuggestions = async (req, res) => {
     try {
-        const response = await accountService.getAbhaAddressSuggestions();
+        const txnId = req.body?.txnId || req.body?.transactionId || req.query?.txnId || req.query?.transactionId || req.headers?.["transaction_id"] || req.headers?.["transaction-id"] || null;
+        const response = await accountService.getAbhaAddressSuggestions(txnId);
 
         return res.status(200).json({
             success: true,

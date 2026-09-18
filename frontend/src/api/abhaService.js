@@ -12,11 +12,17 @@ export const verifyAadhaarOtp = (txnId, otp, mobile) =>
 // ======================================
 // Login
 // ======================================
-export const requestLoginOtp = (aadhaar) =>
-  client.post('/abha/login/request-otp', { aadhaar });
+export const requestLoginOtp = (params) => {
+  const payload = typeof params === 'string' ? { aadhaar: params, loginId: params, loginHint: 'aadhaar' } : params;
+  return client.post('/abha/login/request-otp', payload);
+};
 
-export const verifyLoginOtp = (txnId, otp) =>
-  client.post('/abha/login/verify', { txnId, otp });
+export const verifyLoginOtp = (txnIdOrParams, otp, scope) => {
+  const payload = typeof txnIdOrParams === 'object'
+    ? txnIdOrParams
+    : { txnId: txnIdOrParams, otp, scope };
+  return client.post('/abha/login/verify', payload);
+};
 
 // ======================================
 // Search ABHA

@@ -120,12 +120,12 @@ const getAbhaCard = async (userToken) => {
 // ======================================
 // Get ABHA Address Suggestions
 // ======================================
-const getAbhaAddressSuggestions = async () => {
+const getAbhaAddressSuggestions = async (txnId = null) => {
 
     const token =
         await abdmGatewayService.getAccessToken();
 
-    const transactionId = crypto.randomUUID();
+    const transactionId = txnId || crypto.randomUUID();
 
     console.log("========== ABHA ADDRESS SUGGESTIONS ==========");
     console.log("Endpoint:", `${process.env.ABDM_ABHA_BASE_URL}/abha/api/v3/enrollment/enrol/suggestion`);
@@ -138,11 +138,10 @@ const getAbhaAddressSuggestions = async () => {
 
         {
             headers: {
-                Authorization: `Bearer ${token}`,
-                "Transaction_Id": transactionId,
+                "Authorization": `Bearer ${token}`,
                 "REQUEST-ID": crypto.randomUUID(),
-                TIMESTAMP: new Date().toISOString(),
-                Accept: "application/json"
+                "TIMESTAMP": new Date().toISOString(),
+                "Transaction_Id": transactionId
             },
             timeout: Number(process.env.ABDM_TIMEOUT || 30000)
         }
