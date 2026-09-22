@@ -315,7 +315,7 @@ export default function RegisterPatientView({ onNavigate }) {
 
       toast.success(isExistingPatient ? 'Visit registered successfully!' : 'New patient registered successfully!');
 
-      setRegisteredPatient(res);
+      setRegisteredPatient(res.patient || res);
       setShowReceipt(true);
     } catch (err) {
       console.error('Registration error:', err);
@@ -893,15 +893,6 @@ export default function RegisterPatientView({ onNavigate }) {
           </button>
           
           <div className="flex items-center gap-3 w-full sm:w-auto">
-            {onNavigate && (
-              <button
-                type="button"
-                onClick={() => onNavigate('reception/patient-list')}
-                className="btn-secondary w-full sm:w-auto px-6 py-3 text-xs sm:text-sm font-bold flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <Eye className="h-4 w-4" /> View Patient List
-              </button>
-            )}
             <button
               type="submit"
               disabled={submitting}
@@ -923,6 +914,7 @@ export default function RegisterPatientView({ onNavigate }) {
             setShowReceipt(false);
             handleResetForm();
           }}
+          patient={registeredPatient}
           data={registeredPatient}
         />
       )}

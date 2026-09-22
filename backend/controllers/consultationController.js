@@ -308,7 +308,25 @@ const getConsultationsByPatientId = async (req, res) => {
       .populate('doctorId', 'doctorName username department')
       .sort({ createdAt: -1 });
 
-    res.status(200).json(consultations);
+    const latestConsultation = consultations[0] || null;
+    let latestPrescription = null;
+    if (latestConsultation) {
+      latestPrescription = await Prescription.findOne(tenantQuery(req, {
+        patientId: patientId,
+        consultationId: latestConsultation._id
+      })).sort({ updatedAt: -1, createdAt: -1 });
+    }
+    if (!latestPrescription) {
+      latestPrescription = await Prescription.findOne(tenantQuery(req, {
+        patientId: patientId
+      })).sort({ updatedAt: -1, createdAt: -1 });
+    }
+
+    res.status(200).json({
+      consultations,
+      consultation: latestConsultation,
+      prescription: latestPrescription
+    });
   } catch (error) {
     console.error('Get Consultations Error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -593,11 +611,18 @@ const getDoctorStats = async (req, res) => {
 
     res.status(200).json({
       totalPatients: allList.length,
+      allCount: allList.length,
+      totalCount: allList.length,
       previousPatientsCount: previousList.length,
+      previousCount: previousList.length,
       todaysPatientsCount: todaysList.length,
+      todayCount: todaysList.length,
       upcomingPatientsCount: upcomingList.length,
+      upcomingCount: upcomingList.length,
       consultationCompletedCount: completedList.length,
-      pendingOpdCount: pendingList.length
+      completedCount: completedList.length,
+      pendingOpdCount: pendingList.length,
+      pendingCount: pendingList.length
     });
   } catch (error) {
     console.error('Get Doctor Stats Error:', error);

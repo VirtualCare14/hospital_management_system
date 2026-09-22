@@ -460,7 +460,7 @@ const deleteDepartment = async (req, res) => {
 const getDoctors = async (req, res) => {
   try {
     const { department, includeInactive } = req.query;
-    const query = hospitalFilter(req, { role: { $in: ['doctor', 'nursing'] } });
+    const query = hospitalFilter(req, { role: { $in: ['doctor', 'nursing', 'clinic'] } });
     if (includeInactive !== 'true' || req.user.role !== 'admin') {
       query.isActive = true;
     }
@@ -481,7 +481,7 @@ const getDoctors = async (req, res) => {
 const updateDoctorAvailability = async (req, res) => {
   try {
     const { availableSlots, slotGap } = req.body;
-    const doctor = await User.findOne(hospitalFilter(req, { _id: req.params.id, role: { $in: ['doctor', 'nursing'] } }));
+    const doctor = await User.findOne(hospitalFilter(req, { _id: req.params.id, role: { $in: ['doctor', 'nursing', 'clinic'] } }));
 
     if (!doctor) {
       return res.status(404).json({ message: 'Doctor not found' });
@@ -509,7 +509,7 @@ const updateDoctorAvailability = async (req, res) => {
 // @access  Private
 const getDoctorAvailability = async (req, res) => {
   try {
-    const doctor = await User.findOne(hospitalFilter(req, { _id: req.params.id, role: { $in: ['doctor', 'nursing'] } })).select('availableSlots slotGap doctorName username');
+    const doctor = await User.findOne(hospitalFilter(req, { _id: req.params.id, role: { $in: ['doctor', 'nursing', 'clinic'] } })).select('availableSlots slotGap doctorName username');
 
     if (!doctor) {
       return res.status(404).json({ message: 'Doctor not found' });
@@ -1608,6 +1608,11 @@ const getClinicSettings = async (req, res) => {
         clinicLoginId: '',
         clinicPassword: '',
         clinicName: hospital.name ? `${hospital.name} Clinic` : '',
+        doctorName: '',
+        department: 'Clinic',
+        opdFees: 0,
+        specialization: '',
+        mobile: '',
         portalUrl: '',
         isActive: true
       };
@@ -1633,8 +1638,22 @@ const saveClinicSettings = async (req, res) => {
       return res.status(403).json({ message: 'Clinic Settings are not enabled for this hospital by Super Admin' });
     }
 
-    const { clinicLoginId, clinicPassword, clinicName, portalUrl, isActive } = req.body;
+    const {
+      clinicLoginId,
+      clinicPassword,
+      clinicName,
+      doctorName,
+      department,
+      opdFees,
+      specialization,
+      mobile,
+      portalUrl,
+      isActive
+    } = req.body;
     const normalizedLoginId = (clinicLoginId || '').toLowerCase().trim();
+    const finalDepartment = (department || 'Clinic').trim();
+    const finalDoctorName = (doctorName || clinicName || 'Clinic Doctor').trim();
+    const finalOpdFees = Math.max(0, Number(opdFees) || 0);
 
     if (!normalizedLoginId) {
       return res.status(400).json({ message: 'Clinic Login ID is required' });
@@ -1647,6 +1666,11 @@ const saveClinicSettings = async (req, res) => {
         clinicLoginId: normalizedLoginId,
         clinicPassword: clinicPassword || '',
         clinicName: (clinicName || '').trim(),
+        doctorName: finalDoctorName,
+        department: finalDepartment,
+        opdFees: finalOpdFees,
+        specialization: (specialization || '').trim(),
+        mobile: (mobile || '').trim(),
         portalUrl: (portalUrl || '').trim(),
         isActive: isActive !== undefined ? Boolean(isActive) : true,
         lastUpdatedBy: req.user._id,
@@ -1656,6 +1680,11 @@ const saveClinicSettings = async (req, res) => {
       setting.clinicLoginId = normalizedLoginId;
       if (clinicPassword !== undefined) setting.clinicPassword = clinicPassword;
       if (clinicName !== undefined) setting.clinicName = (clinicName || '').trim();
+      if (doctorName !== undefined) setting.doctorName = finalDoctorName;
+      if (department !== undefined) setting.department = finalDepartment;
+      if (opdFees !== undefined) setting.opdFees = finalOpdFees;
+      if (specialization !== undefined) setting.specialization = (specialization || '').trim();
+      if (mobile !== undefined) setting.mobile = (mobile || '').trim();
       if (portalUrl !== undefined) setting.portalUrl = (portalUrl || '').trim();
       if (isActive !== undefined) setting.isActive = Boolean(isActive);
       setting.lastUpdatedBy = req.user._id;
@@ -1663,6 +1692,24 @@ const saveClinicSettings = async (req, res) => {
     }
 
     await setting.save();
+
+    // Ensure the department (e.g. "Clinic") exists in Department collection
+    try {
+      if (finalDepartment) {
+        const existingDept = await Department.findOne(hospitalFilter(req, {
+          departmentName: { $regex: new RegExp(`^${finalDepartment}$`, 'i') }
+        }));
+        if (!existingDept) {
+          await Department.create({
+            hospitalId: req.user.hospitalId,
+            departmentName: finalDepartment,
+            isActive: true
+          });
+        }
+      }
+    } catch (deptErr) {
+      console.warn('Clinic Department sync notice:', deptErr.message);
+    }
 
     // Synchronize or create corresponding User account for clinic portal login
     if (normalizedLoginId && clinicPassword) {
@@ -1676,7 +1723,11 @@ const saveClinicSettings = async (req, res) => {
           clinicUser.username = normalizedLoginId;
           clinicUser.password = clinicPassword;
           clinicUser.role = 'clinic';
-          clinicUser.doctorName = setting.clinicName || 'Clinic Doctor / Staff';
+          clinicUser.doctorName = finalDoctorName;
+          clinicUser.department = finalDepartment;
+          clinicUser.opdFees = finalOpdFees;
+          if (specialization !== undefined) clinicUser.specialization = (specialization || '').trim();
+          if (mobile !== undefined) clinicUser.mobile = (mobile || '').trim();
           clinicUser.isActive = setting.isActive;
           await clinicUser.save();
         } else {
@@ -1685,7 +1736,11 @@ const saveClinicSettings = async (req, res) => {
             username: normalizedLoginId,
             password: clinicPassword,
             role: 'clinic',
-            doctorName: setting.clinicName || 'Clinic Doctor / Staff',
+            doctorName: finalDoctorName,
+            department: finalDepartment,
+            opdFees: finalOpdFees,
+            specialization: (specialization || '').trim(),
+            mobile: (mobile || '').trim(),
             moduleAccess: [1, 2, 3],
             isActive: setting.isActive
           });
@@ -1696,7 +1751,7 @@ const saveClinicSettings = async (req, res) => {
     }
 
     res.status(200).json({
-      message: 'Clinic portal credentials saved successfully',
+      message: 'Clinic portal credentials and doctor settings saved successfully',
       data: setting
     });
   } catch (error) {

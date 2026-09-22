@@ -18,6 +18,7 @@ import DoctorDashboardView from '../components/prescription/DoctorDashboardView'
 import DoctorPatientsView from '../components/prescription/DoctorPatientsView';
 import CompletedConsultationsView from '../components/prescription/CompletedConsultationsView';
 import EditPrintRxSettingsView from '../components/prescription/EditPrintRxSettingsView';
+import DoctorConsultationView from '../components/prescription/DoctorConsultationView';
 
 // Billing Views
 import BillingDeskView from '../components/billing/BillingDeskView';
@@ -28,9 +29,15 @@ export default function ClinicDashboardPage() {
   const { user, isAuthenticated, loading, logout } = useAuth();
   const router = useRouter();
 
-  // Active navigation tab
+  // Active navigation tab & active consultation patient
   const [activeTab, setActiveTab] = useState('reception-register');
+  const [activeConsultationPatient, setActiveConsultationPatient] = useState(null);
   const [currentTime, setCurrentTime] = useState('');
+
+  const handleStartConsultation = (patient) => {
+    setActiveConsultationPatient(patient);
+    setActiveTab('doctor-consultation');
+  };
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -79,13 +86,26 @@ export default function ClinicDashboardPage() {
 
       // Prescription
       case 'doctor-dashboard':
-        return <DoctorDashboardView onNavigate={setActiveTab} />;
+        return <DoctorDashboardView onNavigate={setActiveTab} onStartConsultation={handleStartConsultation} />;
       case 'doctor-patients':
-        return <DoctorPatientsView onNavigate={setActiveTab} />;
+        return <DoctorPatientsView onNavigate={setActiveTab} onStartConsultation={handleStartConsultation} />;
       case 'doctor-completed':
-        return <CompletedConsultationsView onNavigate={setActiveTab} />;
+        return <CompletedConsultationsView onNavigate={setActiveTab} onStartConsultation={handleStartConsultation} />;
       case 'doctor-edit-print-rx':
         return <EditPrintRxSettingsView onNavigate={setActiveTab} />;
+      case 'doctor-consultation':
+        return activeConsultationPatient ? (
+          <DoctorConsultationView
+            patient={activeConsultationPatient}
+            onBack={() => {
+              setActiveConsultationPatient(null);
+              setActiveTab('doctor-dashboard');
+            }}
+            onNavigate={setActiveTab}
+          />
+        ) : (
+          <DoctorDashboardView onNavigate={setActiveTab} onStartConsultation={handleStartConsultation} />
+        );
 
       // Billing
       case 'billing-desk':
@@ -148,7 +168,7 @@ export default function ClinicDashboardPage() {
         </header>
 
         {/* Dynamic Workspace View */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
+        <main className="flex-1 p-3 sm:p-5 overflow-y-auto w-full">
           {renderActiveView()}
         </main>
       </div>

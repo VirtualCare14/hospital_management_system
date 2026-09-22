@@ -22,6 +22,31 @@ const clinicSettingSchema = new mongoose.Schema({
     trim: true,
     default: ''
   },
+  doctorName: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  department: {
+    type: String,
+    trim: true,
+    default: 'Clinic'
+  },
+  opdFees: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  specialization: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  mobile: {
+    type: String,
+    trim: true,
+    default: ''
+  },
   portalUrl: {
     type: String,
     trim: true,
@@ -42,3 +67,4 @@ const clinicSettingSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 module.exports = mongoose.model('ClinicSetting', clinicSettingSchema);
+

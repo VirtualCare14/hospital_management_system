@@ -1,15 +1,24 @@
 'use client';
 
-import { useRef } from 'react';
-import { Printer, X, Download } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Printer, X, Download, FileText, Receipt } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import toast from 'react-hot-toast';
 import PatientReceipt from './PatientReceipt';
-import { openPdfPrintWindow } from '@/lib/utils/pdfUtils';
+import { openPdfPrintWindow, sanitizeClonedDocumentForPdf } from '@/lib/utils/pdfUtils';
 
-export default function PrintOpdSlipModal({ patient, mode = 'patient_slip', onClose }) {
+export default function PrintOpdSlipModal({ patient, data, mode: initialMode = 'patient_slip', onClose }) {
   const receiptRef = useRef(null);
+  const rawData = patient || data;
+  const patientData = (typeof rawData?.patient === 'object' && rawData.patient !== null)
+    ? rawData.patient
+    : ((typeof rawData?.data?.patient === 'object' && rawData.data.patient !== null)
+        ? rawData.data.patient
+        : ((typeof rawData?.data === 'object' && rawData.data !== null)
+            ? rawData.data
+            : rawData));
+  const [activeMode, setActiveMode] = useState(initialMode === 'all' ? 'patient_slip' : initialMode);
 
   const handlePrint = async () => {
     if (!receiptRef.current) return;
@@ -17,8 +26,13 @@ export default function PrintOpdSlipModal({ patient, mode = 'patient_slip', onCl
       const canvas = await html2canvas(receiptRef.current, {
         scale: 2,
         useCORS: true,
+        allowTaint: true,
+        logging: false,
         backgroundColor: '#ffffff',
-        imageTimeout: 20000
+        imageTimeout: 20000,
+        onclone: (clonedDoc) => {
+          sanitizeClonedDocumentForPdf(clonedDoc);
+        }
       });
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
@@ -26,10 +40,11 @@ export default function PrintOpdSlipModal({ patient, mode = 'patient_slip', onCl
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       pdf.autoPrint();
-      openPdfPrintWindow(pdf, 'OPD Registration Slip');
+      const docTitle = activeMode === 'bill_receipt' ? 'OPD Payment Receipt' : 'OPD Registration Slip';
+      openPdfPrintWindow(pdf, docTitle);
     } catch (error) {
       console.error('Print slip error:', error);
-      toast.error('Failed to generate print slip.');
+      toast.error('Failed to generate print document.');
     }
   };
 
@@ -39,54 +54,85 @@ export default function PrintOpdSlipModal({ patient, mode = 'patient_slip', onCl
       const canvas = await html2canvas(receiptRef.current, {
         scale: 2,
         useCORS: true,
+        allowTaint: true,
+        logging: false,
         backgroundColor: '#ffffff',
-        imageTimeout: 20000
+        imageTimeout: 20000,
+        onclone: (clonedDoc) => {
+          sanitizeClonedDocumentForPdf(clonedDoc);
+        }
       });
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`Slip_${patient?.uhid || 'patient'}.pdf`);
+      const prefix = activeMode === 'bill_receipt' ? 'Receipt' : 'Slip';
+      pdf.save(`${prefix}_${patientData?.uhid || 'patient'}.pdf`);
       toast.success('Downloaded PDF successfully');
     } catch (error) {
-      console.error('Download slip error:', error);
+      console.error('Download error:', error);
       toast.error('Failed to download PDF.');
     }
   };
 
-  if (!patient) return null;
+  if (!patientData) return null;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
       <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden border border-gray-100 animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/80">
-          <div>
-            <h3 className="text-lg font-bold text-gray-900">
-              {mode === 'bill_receipt' ? 'Payment Receipt' : 'Patient Registration Slip'}
-            </h3>
-            <p className="text-xs text-gray-500 font-medium">UHID: {patient.uhid} • {patient.patientName}</p>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between px-6 py-3.5 border-b border-gray-100 bg-gray-50/90 gap-3">
+          <div className="flex items-center gap-3">
+            <div>
+              <h3 className="text-base font-black text-gray-900 leading-tight">
+                {activeMode === 'bill_receipt' ? 'OPD Payment Receipt' : 'Patient Registration Slip'}
+              </h3>
+              <p className="text-xs text-gray-500 font-medium">UHID: {patientData.uhid || '-'} • {patientData.patientName || '-'}</p>
+            </div>
+
+            {/* Mode Switcher Tabs */}
+            <div className="flex items-center gap-1 p-1 bg-gray-200/70 rounded-xl ml-2">
+              <button
+                type="button"
+                onClick={() => setActiveMode('patient_slip')}
+                className={`flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg transition cursor-pointer ${
+                  activeMode === 'patient_slip' ? 'bg-white text-orange-600 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" /> Patient Slip
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveMode('bill_receipt')}
+                className={`flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg transition cursor-pointer ${
+                  activeMode === 'bill_receipt' ? 'bg-white text-orange-600 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <Receipt className="w-3.5 h-3.5" /> Bill Receipt
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+
+          <div className="flex items-center gap-2 self-end sm:self-auto">
             <button
               type="button"
               onClick={handlePrint}
-              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-orange-600 hover:bg-orange-700 rounded-xl transition-colors shadow-sm"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-orange-600 hover:bg-orange-700 rounded-xl transition shadow-xs cursor-pointer"
             >
               <Printer className="w-4 h-4" /> Print
             </button>
             <button
               type="button"
               onClick={handleDownload}
-              className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-gray-700 bg-white hover:bg-gray-100 border border-gray-200 rounded-xl transition-colors"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-gray-700 bg-white hover:bg-gray-100 border border-gray-200 rounded-xl transition cursor-pointer"
             >
-              <Download className="w-4 h-4" /> Save PDF
+              <Download className="w-4 h-4" /> PDF
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-200 rounded-xl transition-colors ml-1"
+              className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-200 rounded-xl transition cursor-pointer ml-1"
             >
               <X className="w-5 h-5" />
             </button>
@@ -95,11 +141,13 @@ export default function PrintOpdSlipModal({ patient, mode = 'patient_slip', onCl
 
         {/* Receipt Container */}
         <div className="flex-1 overflow-y-auto p-6 bg-gray-100/70 flex justify-center">
-          <div className="shadow-lg bg-white rounded-md overflow-hidden">
-            <PatientReceipt ref={receiptRef} patient={patient} mode={mode} />
+          <div className="shadow-lg bg-white rounded-md overflow-hidden max-w-full">
+            <PatientReceipt ref={receiptRef} patient={patientData} mode={activeMode} />
           </div>
         </div>
       </div>
     </div>
   );
 }
+
+

@@ -174,7 +174,7 @@ export default function PatientFollowupsView() {
                 </tr>
               ) : (
                 followUpList.map((item) => {
-                  const docName = item.doctorId?.doctorName || item.doctorId?.username || 'Doctor';
+                  const docName = item.doctorName || item.doctorId?.doctorName || item.doctorId?.username || (typeof item.doctorId === 'string' ? item.doctorId : 'Doctor');
                   return (
                     <tr key={item._id} className="hover:bg-gray-50/60 transition-colors">
                       <td className="py-3.5 px-4">
@@ -184,7 +184,7 @@ export default function PatientFollowupsView() {
                       </td>
                       <td className="py-3.5 px-4">
                         <span className="font-bold text-gray-900 block">Dr. {docName}</span>
-                        <span className="text-[11px] text-gray-500">{item.department || '-'}</span>
+                        <span className="text-[11px] text-gray-500">{item.department || 'Clinic'}</span>
                       </td>
                       <td className="py-3.5 px-4">
                         {item.followUpDate ? (
@@ -197,7 +197,7 @@ export default function PatientFollowupsView() {
                         )}
                       </td>
                       <td className="py-3.5 px-4">
-                        <span className="text-gray-700 line-clamp-2">{item.followUpRemarks || item.patientAdvice || 'Routine checkup'}</span>
+                        <span className="text-gray-700 line-clamp-2">{item.followUpRemarks || item.remarks || item.patientAdvice || 'Routine checkup'}</span>
                       </td>
                       <td className="py-3.5 px-4 text-right">
                         <button

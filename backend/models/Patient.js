@@ -53,6 +53,11 @@ const patientSchema = new mongoose.Schema({
     min: 0,
     max: 100
   },
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false
+  },
   // ABDM / ABHA Integration Fields
   abhaNumber: {
     type: String,

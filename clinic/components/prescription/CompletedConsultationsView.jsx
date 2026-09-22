@@ -2,16 +2,49 @@
 
 import { useState, useEffect } from 'react';
 import {
-  CheckCircle2, Search, Printer, Calendar, RefreshCw,
-  ChevronLeft, ChevronRight, Eye, FileText, User
+  CheckCircle2, Search, Eye, Printer, RefreshCw,
+  ChevronLeft, ChevronRight, FileText, ClipboardEdit, CreditCard
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { apiRequest } from '@/lib/api';
 import { formatUhid } from '@/lib/utils/uhid';
 import { formatDate } from '@/lib/utils/dateFormat';
+import ConsultationModal from './ConsultationModal';
 import PrintRxModal from './PrintRxModal';
 
-export default function CompletedConsultationsView() {
+// Helper to generate pagination page numbers with ellipsis
+const getPaginationRange = (currentPage, totalPages) => {
+  const delta = 1;
+  const range = [];
+  const rangeWithDots = [];
+
+  for (let i = 1; i <= totalPages; i++) {
+    if (
+      i === 1 ||
+      i === totalPages ||
+      (i >= currentPage - delta && i <= currentPage + delta)
+    ) {
+      range.push(i);
+    }
+  }
+
+  let l;
+  for (let i of range) {
+    if (l) {
+      if (i - l === 2) {
+        rangeWithDots.push(l + 1);
+      } else if (i - l !== 1) {
+        rangeWithDots.push('...');
+      }
+    }
+    rangeWithDots.push(i);
+    l = i;
+  }
+
+  return rangeWithDots;
+};
+
+export default function CompletedConsultationsView({ onNavigate, onStartConsultation }) {
   const [consultations, setConsultations] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
@@ -20,6 +53,7 @@ export default function CompletedConsultationsView() {
   const [totalRecords, setTotalRecords] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
 
+  const [selectedConsultation, setSelectedConsultation] = useState(null);
   const [printRxPatient, setPrintRxPatient] = useState(null);
   const [printRxData, setPrintRxData] = useState(null);
 
@@ -27,12 +61,20 @@ export default function CompletedConsultationsView() {
     setLoading(true);
     try {
       const res = await apiRequest(`/consultation/completed?search=${encodeURIComponent(search)}&page=${currentPage}&limit=${pageSize}`);
-      setConsultations(res.consultations || res.data || []);
-      setTotalRecords(res.totalRecords ?? res.total ?? 0);
-      setTotalPages(res.totalPages || 1);
+      if (Array.isArray(res)) {
+        setConsultations(res);
+        setTotalRecords(res.length);
+        setTotalPages(Math.max(1, Math.ceil(res.length / pageSize)));
+      } else {
+        setConsultations(res?.consultations || []);
+        setTotalRecords(res?.totalRecords || 0);
+        setTotalPages(res?.totalPages || 1);
+      }
     } catch (err) {
       console.error('Fetch completed consultations error:', err);
       setConsultations([]);
+      setTotalRecords(0);
+      setTotalPages(1);
     } finally {
       setLoading(false);
     }
@@ -43,60 +85,75 @@ export default function CompletedConsultationsView() {
   }, [search]);
 
   useEffect(() => {
-    const timer = setTimeout(fetchCompleted, 300);
+    const timer = setTimeout(fetchCompleted, 250);
     return () => clearTimeout(timer);
   }, [currentPage, pageSize, search]);
 
-  const handleOpenPrint = async (item) => {
-    const patientObj = item.patientId || item;
+  const handleOpenPrintRx = async (consultation) => {
+    const patientObj = consultation.patientId || {
+      _id: consultation.patientId?._id || consultation.patientId,
+      uhid: consultation.uhid,
+      patientName: consultation.patientName,
+      gender: consultation.gender,
+      mobile: consultation.mobile
+    };
     try {
-      const res = await apiRequest(`/consultation/${patientObj._id || item.patientId}`);
+      const res = await apiRequest(`/consultation/${patientObj._id || consultation._id}`);
       setPrintRxPatient(patientObj);
       setPrintRxData({
-        ...(res?.consultation || item),
-        medicines: res?.prescription?.medicines || item.medicines || []
+        ...(res?.consultation || consultation),
+        medicines: res?.prescription?.medicines || []
       });
     } catch (err) {
       setPrintRxPatient(patientObj);
-      setPrintRxData(item);
+      setPrintRxData(consultation);
     }
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="w-full space-y-6">
       {/* Header */}
-      <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-xs flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-xl font-black text-gray-900 tracking-tight">Completed Consultations & Rx Archive</h2>
-          <p className="text-xs text-gray-500 font-medium mt-0.5">Historical log of concluded consultations, prescription records & clinical reports</p>
+          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">Completed Consultations</h1>
+          <p className="text-sm text-gray-500">View all completed consultations with clinical notes and prescriptions</p>
         </div>
-        <div className="relative w-full sm:w-72">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+        <div className="relative w-full md:w-80 lg:w-96">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input
-            type="text"
+            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 shadow-xs transition-all"
+            placeholder="Search by patient name or UHID"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search patient, UHID..."
-            className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all"
           />
         </div>
       </div>
 
-      {/* Completed Table */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-gray-50/80 text-gray-700 font-bold border-b border-gray-100 uppercase tracking-wider text-[11px]">
-              <tr>
-                <th className="py-3.5 px-4">UHID / Patient</th>
-                <th className="py-3.5 px-4">Doctor</th>
-                <th className="py-3.5 px-4">Consultation Date</th>
-                <th className="py-3.5 px-4">Diagnosis / Remarks</th>
-                <th className="py-3.5 px-4">Follow-up Date</th>
-                <th className="py-3.5 px-4 text-right">Actions</th>
+      {/* Main Table Card */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-xs overflow-hidden p-5">
+        <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="text-emerald-500 h-5 w-5" />
+            <h2 className="font-bold text-gray-800 text-lg">Completed Clinical Cases</h2>
+          </div>
+          <span className="text-xs font-bold text-gray-600 bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200">
+            Total Consultations: <strong className="text-gray-900">{totalRecords}</strong>
+          </span>
+        </div>
+
+        <div className="mt-4 overflow-x-auto rounded-2xl shadow-xs border border-gray-200">
+          <table className="w-full min-w-[800px] table-auto text-left text-sm bg-white">
+            <thead className="sticky top-0 bg-orange-100/70 text-xs font-bold text-orange-900 uppercase tracking-wider shadow-xs">
+              <tr className="border-b border-orange-200">
+                <th className="p-3">UHID</th>
+                <th className="p-3">Patient</th>
+                <th className="p-3">Symptoms</th>
+                <th className="p-3">Diagnosis</th>
+                <th className="p-3">Date</th>
+                <th className="p-3">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 font-medium">
+            <tbody className="bg-white divide-y divide-gray-100 text-xs">
               {loading ? (
                 <tr>
                   <td colSpan={6} className="py-12 text-center text-gray-400">
@@ -106,47 +163,84 @@ export default function CompletedConsultationsView() {
                 </tr>
               ) : consultations.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-gray-500">
-                    No completed consultation records found.
+                  <td colSpan={6} className="p-8 text-center text-sm text-gray-500 font-medium">
+                    No completed consultations found.
                   </td>
                 </tr>
               ) : (
-                consultations.map((item) => {
-                  const p = item.patientId || {};
-                  const doc = item.doctorId || {};
+                consultations.map((consultation) => {
+                  const patient = consultation.patientId || {};
+                  const symptomsText = Array.isArray(consultation.symptoms)
+                    ? consultation.symptoms.map(s => s.symptom || s).filter(Boolean).join(', ')
+                    : '-';
+
                   return (
-                    <tr key={item._id} className="hover:bg-gray-50/60 transition-colors">
-                      <td className="py-3.5 px-4">
-                        <span className="font-extrabold text-orange-600 block">{formatUhid(p.uhid || item.uhid)}</span>
-                        <span className="font-bold text-gray-900">{p.patientName || item.patientName}</span>
-                        <span className="text-[11px] text-gray-500 block">{p.mobile || '-'}</span>
+                    <tr key={consultation._id} className="hover:bg-orange-50/30 transition-colors">
+                      <td className="p-3 font-bold text-orange-600">
+                        {formatUhid(patient.uhid || consultation.uhid)}
                       </td>
-                      <td className="py-3.5 px-4">
-                        <span className="font-bold text-gray-900">Dr. {doc.doctorName || doc.username || 'Doctor'}</span>
+                      <td className="p-3">
+                        <span className="font-bold text-gray-950 block text-xs">
+                          {patient.patientName || consultation.patientName || 'N/A'}
+                        </span>
+                        <span className="text-[11px] text-gray-500">
+                          {patient.mobile || consultation.mobile || '-'}
+                        </span>
                       </td>
-                      <td className="py-3.5 px-4 font-bold text-gray-800">
-                        {formatDate(item.createdAt || item.appointmentDate)}
+                      <td className="p-3 max-w-[200px] truncate text-gray-700 font-medium">
+                        {symptomsText || '-'}
                       </td>
-                      <td className="py-3.5 px-4">
-                        <span className="text-gray-700 line-clamp-2">{item.diagnosisRemark || 'Clinical assessment completed'}</span>
+                      <td className="p-3 max-w-[200px] truncate text-gray-700 font-medium">
+                        {consultation.diagnosisRemark || consultation.diagnosis || '-'}
                       </td>
-                      <td className="py-3.5 px-4">
-                        {item.followUpDate ? (
-                          <span className="font-bold text-orange-600 flex items-center gap-1">
-                            <Calendar className="w-3.5 h-3.5" /> {formatDate(item.followUpDate)}
-                          </span>
-                        ) : (
-                          <span className="text-gray-400 italic">None</span>
-                        )}
+                      <td className="p-3 font-bold text-gray-900">
+                        {formatDate(consultation.createdAt || consultation.consultationDate)}
                       </td>
-                      <td className="py-3.5 px-4 text-right">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenPrint(item)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 text-orange-700 hover:bg-orange-100 rounded-lg text-xs font-bold border border-orange-200 transition-colors cursor-pointer"
-                        >
-                          <Printer className="w-3.5 h-3.5" /> Print Rx
-                        </button>
+                      <td className="p-3">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const pat = {
+                                _id: patient._id || consultation.patientId?._id || consultation._id,
+                                patientName: patient.patientName || consultation.patientName,
+                                uhid: patient.uhid || consultation.uhid,
+                                gender: patient.gender || consultation.gender,
+                                mobile: patient.mobile || consultation.mobile,
+                                demographics: consultation.vitals || patient.demographics
+                              };
+                              if (onStartConsultation) {
+                                onStartConsultation(pat);
+                              } else {
+                                setSelectedConsultation(pat);
+                              }
+                            }}
+                            className="text-xs inline-flex items-center gap-1 px-3 py-1.5 rounded-lg font-bold bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 cursor-pointer transition shadow-2xs"
+                            title="View / Edit Consultation"
+                          >
+                            <ClipboardEdit className="h-3.5 w-3.5 text-indigo-600" /> Edit / View
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleOpenPrintRx(consultation)}
+                            className="text-xs inline-flex items-center gap-1 px-3 py-1.5 rounded-lg font-bold bg-green-50 border border-green-200 text-green-700 hover:bg-green-100 cursor-pointer transition shadow-2xs"
+                            title="Print Digital Rx"
+                          >
+                            <Printer className="h-3.5 w-3.5 text-green-600" /> Print Rx
+                          </button>
+
+                          {onNavigate && (
+                            <button
+                              type="button"
+                              onClick={() => onNavigate('billing-desk')}
+                              className="text-xs inline-flex items-center gap-1 px-3 py-1.5 rounded-lg font-bold bg-orange-50 border border-orange-200 text-orange-700 hover:bg-orange-100 cursor-pointer transition shadow-2xs"
+                              title="Create Bill / Invoice"
+                            >
+                              <CreditCard className="h-3.5 w-3.5 text-orange-600" /> Create Bill
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -156,32 +250,103 @@ export default function CompletedConsultationsView() {
           </table>
         </div>
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-6 py-3.5 border-t border-gray-100 bg-gray-50/50">
-            <span className="text-xs font-bold text-gray-500">
-              Page {currentPage} of {totalPages} ({totalRecords} records)
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                disabled={currentPage <= 1}
-                onClick={() => setCurrentPage(p => p - 1)}
-                className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 disabled:opacity-40"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <button
-                disabled={currentPage >= totalPages}
-                onClick={() => setCurrentPage(p => p + 1)}
-                className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 disabled:opacity-40"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
+        {/* Pagination Controls Bar */}
+        <div className="mt-4 px-4 py-3 bg-white border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-3 select-none">
+          {/* Left: Rows Per Page Selector */}
+          <div className="flex items-center gap-2 text-xs font-bold text-gray-700">
+            <span>Show:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="py-1 px-2.5 text-xs font-bold w-auto border border-orange-200 focus:ring-orange-500 bg-orange-50/30 rounded-lg cursor-pointer"
+            >
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
           </div>
-        )}
+
+          {/* Center: Showing X–Y of Z */}
+          <div className="text-xs font-bold text-gray-700 text-center">
+            {totalRecords === 0 ? (
+              <span>Showing 0 of 0 consultations</span>
+            ) : (
+              <span>
+                Showing <span className="text-gray-900 font-extrabold">{((currentPage - 1) * pageSize + 1).toLocaleString()}</span>–
+                <span className="text-gray-900 font-extrabold">{Math.min(currentPage * pageSize, totalRecords).toLocaleString()}</span> of{' '}
+                <span className="text-orange-600 font-extrabold">{totalRecords.toLocaleString()}</span> consultations
+              </span>
+            )}
+          </div>
+
+          {/* Right: Modern Pagination Controls */}
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold border border-orange-200/80 bg-white text-gray-700 hover:bg-orange-50 hover:text-orange-600 hover:border-orange-300 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:text-gray-700 disabled:hover:border-orange-200/80 transition-all duration-200 shadow-xs cursor-pointer"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              <span className="hidden sm:inline">Previous</span>
+            </button>
+
+            <div className="flex items-center gap-1">
+              {getPaginationRange(currentPage, totalPages).map((p, idx) => {
+                if (p === '...') {
+                  return (
+                    <span key={`dots-${idx}`} className="px-2 py-1 text-xs font-bold text-gray-400 select-none">
+                      ...
+                    </span>
+                  );
+                }
+                const isActive = p === currentPage;
+                return (
+                  <button
+                    key={`page-${p}`}
+                    type="button"
+                    onClick={() => setCurrentPage(p)}
+                    className={`min-w-[32px] h-8 px-2 rounded-lg text-xs font-bold transition-all duration-200 flex items-center justify-center cursor-pointer ${
+                      isActive
+                        ? 'bg-orange-500 text-white shadow-md shadow-orange-500/25 border border-orange-500'
+                        : 'bg-white text-gray-700 border border-orange-200/60 hover:bg-orange-50 hover:text-orange-600 hover:border-orange-300'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold border border-orange-200/80 bg-white text-gray-700 hover:bg-orange-50 hover:text-orange-600 hover:border-orange-300 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:text-gray-700 disabled:hover:border-orange-200/80 transition-all duration-200 shadow-xs cursor-pointer"
+            >
+              <span className="hidden sm:inline">Next</span>
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
       </div>
 
+      {/* Consultation Modal */}
+      {selectedConsultation && (
+        <ConsultationModal
+          patient={selectedConsultation}
+          onClose={() => setSelectedConsultation(null)}
+          onSuccess={() => {
+            fetchCompleted();
+          }}
+        />
+      )}
+
+      {/* Print Rx Modal */}
       {printRxPatient && (
         <PrintRxModal
           patient={printRxPatient}

@@ -20,6 +20,7 @@ const {
 const authMiddleware = require('../middleware/authMiddleware');
 
 router.post('/create', authMiddleware, createPatient);
+router.post('/register', authMiddleware, createPatient);
 router.get('/', authMiddleware, getPatients);
 router.get('/booked-slots', authMiddleware, getBookedSlots);
 router.get('/lookup', authMiddleware, lookupPatient);

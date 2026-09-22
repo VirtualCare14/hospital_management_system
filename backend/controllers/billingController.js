@@ -25,14 +25,53 @@ const Prescription = require('../models/Prescription');
 const tenantFilter = (req, query = {}) => {
   let filter = req.user.hospitalId ? { ...query, hospitalId: req.user.hospitalId } : { ...query };
   if (req.user.role === 'clinic') {
-    filter.createdBy = req.user._id;
+    // If query does not already specify user-scoped fields, do not restrict blindly if patientId or _id is present
+    if (!filter.createdBy && !filter.doctorId && !filter.patientId && !filter._id) {
+      filter.createdBy = req.user._id;
+    }
   }
   return filter;
 };
 
+// Helper to get patient IDs strictly belonging to this clinic
+const getClinicPatientIdsForBilling = async (req) => {
+  if (!req?.user || req.user.role !== 'clinic') return null;
+  const hFilter = req.user.hospitalId ? { hospitalId: req.user.hospitalId } : {};
+  const [visitPatientIds, directPatientIds, consultPatientIds, rxPatientIds] = await Promise.all([
+    Visit.find({
+      ...hFilter,
+      $or: [{ createdBy: req.user._id }, { doctorId: req.user._id }]
+    }).distinct('patientId'),
+    Patient.find({
+      ...hFilter,
+      createdBy: req.user._id
+    }).distinct('_id'),
+    Consultation.find({
+      ...hFilter,
+      doctorId: req.user._id
+    }).distinct('patientId'),
+    Prescription.find({
+      ...hFilter,
+      doctorId: req.user._id
+    }).distinct('patientId')
+  ]);
+  return [...new Set([
+    ...visitPatientIds.map(id => id?.toString()),
+    ...directPatientIds.map(id => id?.toString()),
+    ...consultPatientIds.map(id => id?.toString()),
+    ...rxPatientIds.map(id => id?.toString())
+  ].filter(Boolean))];
+};
+
 // Helper to get patient by UHID
 const getPatientByUhid = async (req, uhid) => {
-  const patient = await Patient.findOne(tenantFilter(req, { uhid }));
+  let query = req.user?.hospitalId ? { uhid, hospitalId: req.user.hospitalId } : { uhid };
+  if (req.user?.role === 'clinic') {
+    const clinicPatientIds = await getClinicPatientIdsForBilling(req);
+    if (!clinicPatientIds || clinicPatientIds.length === 0) return null;
+    query._id = { $in: clinicPatientIds };
+  }
+  const patient = await Patient.findOne(query);
   if (!patient) return null;
   const age = patient.dob ? Math.floor((new Date() - new Date(patient.dob)) / (365.25 * 24 * 60 * 60 * 1000)) : null;
   return { ...patient.toObject(), patientAge: age };
@@ -145,13 +184,18 @@ const getEligiblePatients = async (req, res) => {
     }
 
     let candidatePatientIds = [];
+    const clinicPatientIds = await getClinicPatientIdsForBilling(req);
 
     if (module === 'SameDayCare') {
       const sdtRecords = await SameDayTreatment.find(tenantFilter(req, { status: 'Completed' }), 'patientId').lean();
       candidatePatientIds = [...new Set(sdtRecords.map(r => r.patientId?.toString()).filter(Boolean))];
     } else if (module === 'OPD') {
+      const consultQuery = req.user.role === 'clinic'
+        ? { $or: [{ doctorId: req.user._id }, ...(clinicPatientIds?.length ? [{ patientId: { $in: clinicPatientIds } }] : [])], isBilled: false }
+        : tenantFilter(req, { isBilled: false });
+
       const [consultations, patients] = await Promise.all([
-        Consultation.find(tenantFilter(req, { isBilled: false }), 'patientId').lean(),
+        Consultation.find(consultQuery, 'patientId').lean(),
         Patient.find(patientFilter, '_id').sort({ createdAt: -1 }).limit(100).lean()
       ]);
       const set = new Set([
@@ -173,6 +217,10 @@ const getEligiblePatients = async (req, res) => {
       candidatePatientIds = [...new Set(ots.map(o => o.patientId?.toString()).filter(Boolean))];
     } else {
       // All Connected Modules (Default)
+      const consultQuery = req.user.role === 'clinic'
+        ? { $or: [{ doctorId: req.user._id }, ...(clinicPatientIds?.length ? [{ patientId: { $in: clinicPatientIds } }] : [])], isBilled: false }
+        : tenantFilter(req, { isBilled: false });
+
       const [
         consultations,
         consumables,
@@ -183,7 +231,7 @@ const getEligiblePatients = async (req, res) => {
         admissions,
         recentPatients
       ] = await Promise.all([
-        Consultation.find(tenantFilter(req, { isBilled: false }), 'patientId').lean(),
+        Consultation.find(consultQuery, 'patientId').lean(),
         IpdConsumable.find(tenantFilter(req, { billed: false }), 'patientId').lean(),
         IpdMedicine.find(tenantFilter(req, { billed: false }), 'patientId').lean(),
         IpdLabTest.find(tenantFilter(req, { billed: false }), 'patientId').lean(),
@@ -320,6 +368,17 @@ const checkBillableItems = async (patientId) => {
       const fee = v.netOpdFee !== undefined && v.netOpdFee !== null ? v.netOpdFee : (v.opdFee || v.doctorId?.opdFees || 0);
       return sum + fee;
     }, 0);
+  }
+
+  // Check Consultations (completed / unbilled)
+  const consultations = await Consultation.find({ patientId, isBilled: false }).populate('doctorId', 'opdFees');
+  const pendingConsultations = consultations.filter(c => !billedSourceIds.has(c._id.toString()));
+  if (pendingConsultations.length > 0) {
+    if (!categories.includes('OPD')) categories.push('OPD');
+    if (!categories.includes('Consultation Completed')) categories.push('Consultation Completed');
+    if (pendingVisits.length === 0) {
+      totalPendingAmount += pendingConsultations.reduce((sum, c) => sum + (c.doctorId?.opdFees || 500), 0);
+    }
   }
 
   // Check Same Day Treatments (Completed)
@@ -518,13 +577,30 @@ const checkBillableItems = async (patientId) => {
 const searchPatient = async (req, res) => {
   try {
     const { query } = req.params;
-    const patients = await Patient.find(tenantFilter(req, {
+    let pQuery = req.user.hospitalId ? {
+      hospitalId: req.user.hospitalId,
       $or: [
         { uhid: { $regex: query, $options: 'i' } },
         { patientName: { $regex: query, $options: 'i' } },
         { mobile: { $regex: query, $options: 'i' } }
       ]
-    })).limit(20);
+    } : {
+      $or: [
+        { uhid: { $regex: query, $options: 'i' } },
+        { patientName: { $regex: query, $options: 'i' } },
+        { mobile: { $regex: query, $options: 'i' } }
+      ]
+    };
+
+    if (req.user.role === 'clinic') {
+      const clinicPatientIds = await getClinicPatientIdsForBilling(req);
+      if (!clinicPatientIds || clinicPatientIds.length === 0) {
+        return res.json([]);
+      }
+      pQuery._id = { $in: clinicPatientIds };
+    }
+
+    const patients = await Patient.find(pQuery).limit(20);
     res.json(patients);
   } catch (error) {
     console.error('Search Patient Error:', error);
@@ -717,6 +793,49 @@ const generateBillItems = async (req, res) => {
           sourceId: v._id,
           sourceModel: 'Visit'
         });
+      });
+
+      // Consultations (completed / unbilled)
+      const consultations = await Consultation.find(tenantFilter(req, { patientId: patient._id, isBilled: false }))
+        .populate('doctorId', 'doctorName opdFees')
+        .sort({ createdAt: -1 });
+
+      consultations.forEach(c => {
+        if (billedSourceIds.has(c._id.toString())) return;
+        const hasMatchingVisit = items.some(it => it.sourceModel === 'Visit' && it.category === 'OPD');
+        if (!hasMatchingVisit) {
+          const docFee = c.doctorId?.opdFees || 500;
+          items.push({
+            category: 'OPD',
+            date: fmtDate(c.consultationDateTime || c.createdAt),
+            description: `Doctor Consultation - Dr. ${c.doctorId?.doctorName || 'Doctor'}`,
+            price: docFee,
+            discount: 0,
+            quantity: 1,
+            total: docFee,
+            originalTotal: docFee,
+            sourceId: c._id,
+            sourceModel: 'Consultation'
+          });
+        }
+        if (c.tests && Array.isArray(c.tests) && c.tests.length > 0) {
+          c.tests.forEach((tName, tIdx) => {
+            const testSourceId = `${c._id}_test_${tIdx}`;
+            if (!billedSourceIds.has(testSourceId)) {
+              items.push({
+                category: 'Lab',
+                date: fmtDate(c.consultationDateTime || c.createdAt),
+                description: `Lab Test: ${tName}`,
+                price: 300,
+                quantity: 1,
+                total: 300,
+                originalTotal: 300,
+                sourceId: testSourceId,
+                sourceModel: 'ConsultationTest'
+              });
+            }
+          });
+        }
       });
     }
 
@@ -1120,10 +1239,7 @@ const generateBillItems = async (req, res) => {
       }
 
       // ---- 6b. Prescription Medicines (not yet invoiced) ----
-      // Mirrors pharmacy billing module logic: show prescribed medicines with live inventory prices.
-      // Uses billedPrescriptionMedKeys (per-medicine granularity) so individual medicines that were
-      // already billed are excluded, while unbilled medicines from the same prescription still show.
-      const prescriptions = await Prescription.find(tenantFilter(req, { patientId: patient._id }))
+      const prescriptions = await Prescription.find({ patientId: patient._id })
         .populate('doctorId', 'doctorName')
         .sort({ createdAt: -1 });
 
@@ -1133,14 +1249,10 @@ const generateBillItems = async (req, res) => {
       for (const prescription of prescriptions) {
         if (!prescription.medicines || prescription.medicines.length === 0) continue;
 
-        // If this prescription was billed and we have per-medicine keys, use those (granular).
-        // If billed but NO per-medicine keys (e.g. older bills), skip the whole prescription.
         const prescIdStr = prescription._id.toString();
-        // If an invoice/bill is generated for this prescription, skip it completely
-        if (billedPrescriptionIds.has(prescIdStr)) continue;
 
         for (const med of prescription.medicines) {
-          const medName = (med.medicine || '').trim();
+          const medName = (med.medicine || med.name || med.medicineName || '').trim();
           if (!medName) continue;
 
           const dedupKey = `${prescIdStr}_${medName.toLowerCase()}`;
@@ -1156,17 +1268,23 @@ const generateBillItems = async (req, res) => {
           if (billedMedicineNames.has(medName.toLowerCase())) continue;
 
           const unitQty = calculateMedicineQty(med);
-          const { price, mrpIncGst, mrpExGst, cgst, sgst, totalGstPercent, unitsPerPack } = await getItemPharmacyDetails(req.user.hospitalId, medName, 'Medicine', 0, adminSettings);
+          let { price, mrpIncGst, mrpExGst, cgst, sgst, totalGstPercent, unitsPerPack } = await getItemPharmacyDetails(req.user.hospitalId, medName, 'Medicine', med.price || med.rate || 0, adminSettings);
+          
+          if (!price || price === 0) {
+            price = med.price || med.rate || 50;
+            mrpIncGst = price;
+            mrpExGst = price;
+          }
+
           const packQty = unitsPerPack > 1 ? Number((unitQty / unitsPerPack).toFixed(3)) : unitQty;
           const lineTotal = Number((price * packQty).toFixed(2));
 
-          const doctorLabel = prescription.doctorId?.doctorName || 'Doctor';
           const dateLabel = fmtDate(prescription.prescriptionDateTime || prescription.createdAt);
 
           items.push({
             category: 'Medicine',
             date: dateLabel,
-            description: medName,
+            description: `${medName}${med.dosageForm ? ` (${med.dosageForm})` : ''}${med.duration ? ` - ${med.duration}` : ''}`,
             price,
             mrpIncGst: mrpIncGst || price,
             mrpExGst: mrpExGst || price,
@@ -1287,24 +1405,49 @@ const generateUniqueInvoiceNo = async (hospitalId) => {
 // @access  Private
 const createBill = async (req, res) => {
   try {
-    const { 
+    let { 
       patientId, uhid, patientName, patientMobile, patientGender, patientAge, doctorName,
       billType, items = [], gstPercentage, discountPercentage, status,
       paymentMode, transactionRef, mixedPayments, remarks, advanceAdjusted, amountPaid, dueAmount, paymentStatus,
-      discountRequestStatus
+      discountRequestStatus,
+      // clinic aliases
+      totalAmount, netAmount, paidAmount, notes
     } = req.body;
 
-    if (!patientId || !uhid || !billType) {
-      return res.status(400).json({ message: 'Patient ID, UHID, and bill type are required' });
+    if (!billType) billType = 'OPD';
+    if (!status) status = 'Final';
+    if (amountPaid === undefined && paidAmount !== undefined) amountPaid = paidAmount;
+    if (!remarks && notes) remarks = notes;
+    if (!paymentMode) paymentMode = 'Cash';
+
+    // Auto-resolve patientId if missing but UHID is present
+    let resolvedPatient = null;
+    if ((!patientId || !patientName) && uhid) {
+      resolvedPatient = await Patient.findOne(req.user?.hospitalId ? { uhid, hospitalId: req.user.hospitalId } : { uhid });
+      if (resolvedPatient) {
+        if (!patientId) patientId = resolvedPatient._id;
+        if (!patientName) patientName = resolvedPatient.patientName;
+        if (!patientMobile) patientMobile = resolvedPatient.mobile;
+        if (!patientGender) patientGender = resolvedPatient.gender;
+        if (!patientAge && resolvedPatient.dob) {
+          patientAge = Math.floor((new Date() - new Date(resolvedPatient.dob)) / (365.25 * 24 * 60 * 60 * 1000));
+        }
+      }
+    }
+
+    if (!uhid) {
+      return res.status(400).json({ message: 'UHID is required' });
     }
 
     if (status === 'Final') {
       if (!paymentMode) {
-        return res.status(400).json({ message: 'Payment mode is required to finalize the bill' });
+        paymentMode = 'Cash';
       }
-      const checkDischarge = await checkPatientDischargeStatus(req, patientId, billType);
-      if (!checkDischarge.allowed) {
-        return res.status(400).json({ message: checkDischarge.reason });
+      if (patientId) {
+        const checkDischarge = await checkPatientDischargeStatus(req, patientId, billType);
+        if (!checkDischarge.allowed) {
+          return res.status(400).json({ message: checkDischarge.reason });
+        }
       }
     }
 
@@ -1433,9 +1576,13 @@ const createBill = async (req, res) => {
 
     await bill.save();
 
-    // Sync SameDayTreatment price and LabBill payment status on finalization
+    // Sync SameDayTreatment price, LabBill, Consultation, Visit, Prescription payment status on finalization
     if (status === 'Final') {
       const SameDayTreatment = require('../models/SameDayTreatment');
+      const Consultation = require('../models/Consultation');
+      const Visit = require('../models/Visit');
+      const Prescription = require('../models/Prescription');
+
       for (const item of activeItems) {
         if (item.sourceModel === 'SameDayTreatment' && item.sourceId) {
           try {
@@ -1452,6 +1599,24 @@ const createBill = async (req, res) => {
             });
           } catch (err) {
             console.error('Failed to sync LabBill payment status:', err);
+          }
+        } else if (item.sourceModel === 'Consultation' && item.sourceId) {
+          try {
+            await Consultation.findByIdAndUpdate(item.sourceId, { isBilled: true });
+          } catch (err) {
+            console.error('Failed to sync Consultation isBilled:', err);
+          }
+        } else if (item.sourceModel === 'Visit' && item.sourceId) {
+          try {
+            await Visit.findByIdAndUpdate(item.sourceId, { isBilled: true, paymentStatus: finalPaymentStatus === 'Paid' ? 'Paid' : 'Partially Paid' });
+          } catch (err) {
+            console.error('Failed to sync Visit isBilled:', err);
+          }
+        } else if (item.sourceModel === 'Prescription' && item.sourceId) {
+          try {
+            await Prescription.findByIdAndUpdate(item.sourceId, { isBilled: true });
+          } catch (err) {
+            console.error('Failed to sync Prescription isBilled:', err);
           }
         }
       }
@@ -1704,20 +1869,51 @@ const getBillById = async (req, res) => {
 
 const getAllBills = async (req, res) => {
   try {
-    const { billType, status, fromDate, toDate, searchQuery, invoiceNo, paymentMode, page = 1, limit = 20 } = req.query;
-    let query = tenantFilter(req);
+    const { billType, status, fromDate, toDate, searchQuery, search, invoiceNo, paymentMode, page = 1, limit = 20 } = req.query;
+    
+    let query = {};
+    if (req.user.hospitalId) {
+      query.hospitalId = req.user.hospitalId;
+    }
+
+    if (req.user.role === 'clinic') {
+      const clinicPatientIds = await getClinicPatientIdsForBilling(req);
+      query.$or = [
+        { createdBy: req.user._id },
+        ...(clinicPatientIds?.length ? [{ patientId: { $in: clinicPatientIds } }] : [])
+      ];
+    }
     
     if (billType) query.billType = billType;
-    if (status) query.status = status;
+    if (status) {
+      if (status === 'Pending' || status === 'Unpaid') {
+        query.paymentStatus = { $in: ['Pending', 'Unpaid'] };
+      } else if (status === 'Partial' || status === 'Partially Paid') {
+        query.paymentStatus = { $in: ['Partial', 'Partially Paid'] };
+      } else if (status === 'Draft' || status === 'Final') {
+        query.status = status;
+      } else {
+        query.paymentStatus = status;
+      }
+    }
     if (invoiceNo) query.invoiceNo = { $regex: invoiceNo, $options: 'i' };
     if (paymentMode) query.paymentMode = paymentMode;
 
-    if (searchQuery) {
-      query.$or = [
-        { uhid: { $regex: searchQuery, $options: 'i' } },
-        { patientName: { $regex: searchQuery, $options: 'i' } },
-        { patientMobile: { $regex: searchQuery, $options: 'i' } }
+    const searchTerm = searchQuery || search;
+    if (searchTerm && searchTerm.trim()) {
+      const searchOr = [
+        { uhid: { $regex: searchTerm.trim(), $options: 'i' } },
+        { patientName: { $regex: searchTerm.trim(), $options: 'i' } },
+        { patientMobile: { $regex: searchTerm.trim(), $options: 'i' } },
+        { invoiceNo: { $regex: searchTerm.trim(), $options: 'i' } },
+        { billNo: { $regex: searchTerm.trim(), $options: 'i' } }
       ];
+      if (query.$or) {
+        query.$and = [{ $or: query.$or }, { $or: searchOr }];
+        delete query.$or;
+      } else {
+        query.$or = searchOr;
+      }
     }
 
     if (fromDate || toDate) {
@@ -2208,9 +2404,30 @@ const rejectDiscountRequest = async (req, res) => {
 const getPatientDues = async (req, res) => {
   try {
     const { uhid } = req.params;
-    const patient = await Patient.findOne(tenantFilter(req, { uhid }));
+    let patientQuery = req.user?.hospitalId ? { uhid, hospitalId: req.user.hospitalId } : { uhid };
+    if (req.user?.role === 'clinic') {
+      const clinicPatientIds = await getClinicPatientIdsForBilling(req);
+      if (!clinicPatientIds || clinicPatientIds.length === 0) {
+        return res.status(200).json({
+          patient: null,
+          totalDueAmount: 0,
+          dueBillCount: 0,
+          bills: [],
+          message: 'No patient or dues found in clinic records'
+        });
+      }
+      patientQuery._id = { $in: clinicPatientIds };
+    }
+
+    const patient = await Patient.findOne(patientQuery);
     if (!patient) {
-      return res.status(404).json({ message: 'Patient not found' });
+      return res.status(200).json({
+        patient: null,
+        totalDueAmount: 0,
+        dueBillCount: 0,
+        bills: [],
+        message: 'No patient found in clinic records'
+      });
     }
 
     const bills = await Billing.find(tenantFilter(req, {

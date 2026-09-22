@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Patient = require('../models/Patient');
 const Visit = require('../models/Visit');
 const User = require('../models/User');
@@ -9,6 +10,23 @@ const generateUhid = require('../utils/generateUhid');
 const tenantQuery = (req, extra = {}) => (
   req?.user?.hospitalId ? { ...extra, hospitalId: req.user.hospitalId } : extra
 );
+
+// Helper to get patient IDs strictly belonging to this clinic
+const getClinicPatientIds = async (req) => {
+  if (!req?.user || req.user.role !== 'clinic') return null;
+  const hFilter = req.user.hospitalId ? { hospitalId: req.user.hospitalId } : {};
+  const [visitPatientIds, directPatientIds] = await Promise.all([
+    Visit.find({
+      ...hFilter,
+      $or: [{ createdBy: req.user._id }, { doctorId: req.user._id }]
+    }).distinct('patientId'),
+    Patient.find({
+      ...hFilter,
+      createdBy: req.user._id
+    }).distinct('_id')
+  ]);
+  return [...new Set([...visitPatientIds.map(id => id.toString()), ...directPatientIds.map(id => id.toString())])];
+};
 
 // @desc    Generate unique Registration Number format: REG-YYYYMMDD-XXXX
 const generateRegistrationNumber = async (hospitalId) => {
@@ -56,14 +74,29 @@ const getPatientByAadhaar = async (req, res) => {
       return res.status(400).json({ message: 'Valid Aadhaar number is required' });
     }
 
-    const patient = await Patient.findOne(tenantQuery(req, { aadhaar: aadhaar.trim() }));
+    let query = tenantQuery(req, { aadhaar: aadhaar.trim() });
+    if (req.user.role === 'clinic') {
+      const clinicPatientIds = await getClinicPatientIds(req);
+      if (!clinicPatientIds || clinicPatientIds.length === 0) {
+        return res.status(200).json({ message: 'No patient found in clinic records', found: false });
+      }
+      query._id = { $in: clinicPatientIds };
+    }
+
+    const patient = await Patient.findOne(query);
 
     if (!patient) {
       return res.status(200).json({ message: 'No patient found with this Aadhaar number', found: false });
     }
 
-    // Get the latest visit for this patient
-    const latestVisit = await Visit.findOne(tenantQuery(req, { patientId: patient._id }))
+    // Get the latest visit for this patient (for clinic role, only clinic's latest visit)
+    let visitQuery = { patientId: patient._id };
+    if (req.user.hospitalId) visitQuery.hospitalId = req.user.hospitalId;
+    if (req.user.role === 'clinic') {
+      visitQuery.$or = [{ createdBy: req.user._id }, { doctorId: req.user._id }];
+    }
+
+    const latestVisit = await Visit.findOne(visitQuery)
       .populate('doctorId', 'doctorName username department')
       .sort({ createdAt: -1 });
 
@@ -150,16 +183,34 @@ const createPatient = async (req, res) => {
       }
     }
 
-    // Check if patient with this Aadhaar or Mobile number already exists
+    // Check if patient with this Aadhaar or Mobile number already exists (scoped to clinic if clinic role)
     const cleanAadhaar = aadhaar ? aadhaar.trim() : '';
     const cleanMobile = mobile ? mobile.trim() : '';
 
     let existingPatient = null;
+    let clinicPatientIds = null;
+    if (req.user.role === 'clinic') {
+      clinicPatientIds = await getClinicPatientIds(req);
+    }
+
+    const buildExistingQuery = (baseCond) => {
+      let q = tenantQuery(req, baseCond);
+      if (req.user.role === 'clinic') {
+        if (!clinicPatientIds || clinicPatientIds.length === 0) {
+          return null;
+        }
+        q._id = { $in: clinicPatientIds };
+      }
+      return q;
+    };
+
     if (cleanAadhaar && cleanAadhaar.length >= 4) {
-      existingPatient = await Patient.findOne(tenantQuery(req, { aadhaar: cleanAadhaar }));
+      const q = buildExistingQuery({ aadhaar: cleanAadhaar });
+      if (q) existingPatient = await Patient.findOne(q);
     }
     if (!existingPatient && cleanMobile && cleanMobile.length >= 4) {
-      existingPatient = await Patient.findOne(tenantQuery(req, { mobile: cleanMobile }));
+      const q = buildExistingQuery({ mobile: cleanMobile });
+      if (q) existingPatient = await Patient.findOne(q);
     }
 
     let patient;
@@ -221,7 +272,8 @@ const createPatient = async (req, res) => {
         dob: cleanDob,
         gender: cleanGender,
         aadhaar: cleanAadhaar,
-        category: category || 'General'
+        category: category || 'General',
+        createdBy: req.user._id
       });
 
       await patient.save();
@@ -366,7 +418,8 @@ const createPatient = async (req, res) => {
       doctorId: doctor ? {
         _id: doctor._id,
         doctorName: doctor.doctorName,
-        username: doctor.username
+        username: doctor.username,
+        opdFees: doctor.opdFees
       } : visit.doctorId,
       appointmentDate: visit.appointmentDate,
       slot: visit.slot,
@@ -422,10 +475,8 @@ const getPatients = async (req, res) => {
       const patientIds = [...new Set(doctorVisits.map(v => v.patientId.toString()))];
       query = { ...query, _id: { $in: patientIds } };
     } else if (req.user.role === 'clinic') {
-      const clinicVisits = await Visit.find(tenantQuery(req, { createdBy: req.user._id }))
-        .select('patientId');
-      const patientIds = [...new Set(clinicVisits.map(v => v.patientId.toString()))];
-      query = { ...query, _id: { $in: patientIds } };
+      const clinicPatientIds = await getClinicPatientIds(req);
+      query = { ...query, _id: { $in: clinicPatientIds || [] } };
     }
 
     if (sameDayCareOnly === 'true') {
@@ -474,7 +525,7 @@ const getPatients = async (req, res) => {
     const patientsWithVisits = await Promise.all(
       patients.map(async (pat) => {
         const latestVisit = await Visit.findOne(tenantQuery(req, { patientId: pat._id }))
-          .populate('doctorId', 'doctorName username department')
+          .populate('doctorId', 'doctorName username department opdFees')
           .populate('createdBy', 'username doctorName role')
           .sort({ createdAt: -1 });
 
@@ -482,6 +533,15 @@ const getPatients = async (req, res) => {
         const hasPrescription = latestVisit 
           ? await Prescription.exists(tenantQuery(req, { patientId: pat._id, visitId: latestVisit._id }))
           : false;
+
+        const pDoc = latestVisit?.doctorId;
+        const grossFee = latestVisit?.opdFee !== undefined && latestVisit?.opdFee !== null && latestVisit?.opdFee > 0
+          ? latestVisit.opdFee
+          : (pDoc?.opdFees !== undefined && pDoc?.opdFees !== null ? pDoc.opdFees : 0);
+        const discountAmount = latestVisit?.discountAmount !== undefined && latestVisit?.discountAmount !== null ? latestVisit.discountAmount : 0;
+        const netFee = latestVisit?.netOpdFee !== undefined && latestVisit?.netOpdFee !== null && latestVisit?.netOpdFee > 0
+          ? latestVisit.netOpdFee
+          : (grossFee > 0 ? Math.max(0, grossFee - discountAmount) : (latestVisit?.netOpdFee || 0));
 
         return {
           ...pat.toObject(),
@@ -495,11 +555,11 @@ const getPatients = async (req, res) => {
           consultationStatus: latestVisit?.consultationStatus || 'pending',
           hasPrescription: !!hasPrescription,
           registeredBy: latestVisit?.createdBy ? (latestVisit.createdBy.doctorName || latestVisit.createdBy.username) : 'N/A',
-          opdFee: latestVisit?.opdFee !== undefined ? latestVisit.opdFee : (latestVisit?.doctorId?.opdFees || 0),
+          opdFee: grossFee,
           discountType: latestVisit?.discountType || 'none',
           discountValue: latestVisit?.discountValue || 0,
-          discountAmount: latestVisit?.discountAmount || 0,
-          netOpdFee: latestVisit?.netOpdFee !== undefined ? latestVisit.netOpdFee : (latestVisit?.opdFee || 0),
+          discountAmount: discountAmount,
+          netOpdFee: netFee,
           paymentStatus: latestVisit?.paymentStatus || 'Paid',
           paymentMode: latestVisit?.paymentMode || 'Cash',
           billNumber: latestVisit?.billNumber || null
@@ -644,21 +704,24 @@ const getRegistrations = async (req, res) => {
     if (registrationNumber) query.registrationNumber = { $regex: registrationNumber, $options: 'i' };
     if (department) query.department = department;
     if (req.user.role === 'clinic') {
-      query.createdBy = req.user._id;
+      query.$or = [{ createdBy: req.user._id }, { doctorId: req.user._id }];
     }
 
     // If patientName search, find matching patients first
     if (patientName || search) {
       const searchTerm = patientName || search;
-      const matchingPatients = await Patient.find(
-        tenantQuery(req, {
-          $or: [
-            { patientName: { $regex: searchTerm, $options: 'i' } },
-            { uhid: { $regex: searchTerm, $options: 'i' } },
-            { mobile: { $regex: searchTerm, $options: 'i' } }
-          ]
-        })
-      ).select('_id');
+      let pQuery = tenantQuery(req, {
+        $or: [
+          { patientName: { $regex: searchTerm, $options: 'i' } },
+          { uhid: { $regex: searchTerm, $options: 'i' } },
+          { mobile: { $regex: searchTerm, $options: 'i' } }
+        ]
+      });
+      if (req.user.role === 'clinic') {
+        const clinicPatientIds = await getClinicPatientIds(req);
+        pQuery._id = { $in: clinicPatientIds || [] };
+      }
+      const matchingPatients = await Patient.find(pQuery).select('_id');
       query.patientId = { $in: matchingPatients.map(p => p._id) };
     }
 
@@ -672,7 +735,7 @@ const getRegistrations = async (req, res) => {
 
     const tenantQ = req.user.hospitalId ? { hospitalId: req.user.hospitalId } : {};
     if (req.user.role === 'clinic') {
-      tenantQ.createdBy = req.user._id;
+      tenantQ.$or = [{ createdBy: req.user._id }, { doctorId: req.user._id }];
     }
 
     const [totalToday, totalMonth, totalCount] = await Promise.all([
@@ -685,8 +748,8 @@ const getRegistrations = async (req, res) => {
     const limitVal = Math.max(1, parseInt(limit) || 20);
     const skip = (currentPage - 1) * limitVal;
     const visits = await Visit.find(query)
-      .populate('patientId', 'patientName mobile gender aadhaar')
-      .populate('doctorId', 'doctorName username')
+      .populate('patientId', 'patientName mobile gender aadhaar category address dob')
+      .populate('doctorId', 'doctorName username opdFees department')
       .sort({ registrationDate: -1 })
       .skip(skip)
       .limit(limitVal);
@@ -778,6 +841,15 @@ const getRegistrations = async (req, res) => {
       const pIdStr = v.patientId?._id ? v.patientId._id.toString() : null;
       const dueAmt = (pIdStr && patientDueMap[pIdStr] !== undefined) ? patientDueMap[pIdStr] : (patientDueMap[v.uhid] || 0);
 
+      const pDoc = v.doctorId;
+      const grossFee = v.opdFee !== undefined && v.opdFee !== null && v.opdFee > 0
+        ? v.opdFee
+        : (pDoc?.opdFees !== undefined && pDoc?.opdFees !== null ? pDoc.opdFees : 0);
+      const discountAmount = v.discountAmount !== undefined && v.discountAmount !== null ? v.discountAmount : 0;
+      const netFee = v.netOpdFee !== undefined && v.netOpdFee !== null && v.netOpdFee > 0
+        ? v.netOpdFee
+        : (grossFee > 0 ? Math.max(0, grossFee - discountAmount) : (v.netOpdFee || 0));
+
       return {
         _id: v._id,
         registrationNumber: v.registrationNumber,
@@ -787,15 +859,27 @@ const getRegistrations = async (req, res) => {
         patientName: v.patientId?.patientName || '',
         mobile: v.patientId?.mobile || '',
         gender: v.patientId?.gender || '',
+        category: v.patientId?.category || 'General',
+        address: v.patientId?.address || '',
+        dob: v.patientId?.dob || null,
         aadhaar: v.patientId?.aadhaar || '',
         department: v.department,
-        doctorName: v.doctorId?.doctorName || v.doctorId?.username || '',
+        doctorName: pDoc?.doctorName || pDoc?.username || '',
         appointmentDate: v.appointmentDate,
         slot: v.slot,
         appointmentNumber: v.appointmentNumber,
         consultationStatus: v.consultationStatus,
-        patientId: v.patientId?._id,
-        doctorId: v.doctorId?._id,
+        patientId: v.patientId?._id || v.patientId,
+        doctorId: pDoc || v.doctorId,
+        demographics: v.demographics,
+        opdFee: grossFee,
+        discountType: v.discountType || 'none',
+        discountValue: v.discountValue || 0,
+        discountAmount: discountAmount,
+        netOpdFee: netFee,
+        paymentStatus: v.paymentStatus || 'Paid',
+        paymentMode: v.paymentMode || 'Cash',
+        billNumber: v.billNumber || null,
         followUpDate: effectiveFollowUpDate,
         followUpSource: effectiveFollowUpSource,
         followUpRemarks: effectiveFollowUpRemarks,
@@ -833,7 +917,11 @@ const getRegistrations = async (req, res) => {
 const getVisitHistory = async (req, res) => {
   try {
     const { uhid } = req.params;
-    const visits = await Visit.find(tenantQuery(req, { uhid }))
+    let visitQuery = tenantQuery(req, { uhid });
+    if (req.user.role === 'clinic') {
+      visitQuery.$or = [{ createdBy: req.user._id }, { doctorId: req.user._id }];
+    }
+    const visits = await Visit.find(visitQuery)
       .populate('patientId', 'patientName mobile gender aadhaar dob address')
       .populate('doctorId', 'doctorName username')
       .sort({ registrationDate: -1 });
@@ -897,47 +985,75 @@ const getBookedSlots = async (req, res) => {
 // @access  Private
 const deletePatient = async (req, res) => {
   try {
-    const patientId = req.params.id;
-    const patient = await Patient.findOne(tenantQuery(req, { _id: patientId }));
+    const rawId = req.params.id;
+    let patient = null;
+
+    if (mongoose.Types.ObjectId.isValid(rawId)) {
+      patient = await Patient.findOne(tenantQuery(req, { _id: rawId }));
+      if (!patient) {
+        const visit = await Visit.findOne(tenantQuery(req, { _id: rawId }));
+        if (visit && visit.patientId) {
+          patient = await Patient.findOne(tenantQuery(req, { _id: visit.patientId }));
+        }
+      }
+    }
+
+    if (!patient) {
+      patient = await Patient.findOne(tenantQuery(req, { uhid: rawId }));
+    }
+
     if (!patient) {
       return res.status(404).json({ message: 'Patient not found' });
     }
 
+    const patientId = patient._id;
     const visits = await Visit.find(tenantQuery(req, { patientId }));
     const visitIds = visits.map(v => v._id);
 
-    const deleteQuery = { patientId: { $in: [patientId, ...visitIds.map(String)] } };
+    const deleteQuery = { patientId: { $in: [patientId, ...visitIds] } };
     const tenantDeleteQuery = tenantQuery(req, deleteQuery);
 
-    await require('../models/Consultation').deleteMany(tenantDeleteQuery);
-    await require('../models/Prescription').deleteMany(tenantDeleteQuery);
-    await require('../models/LabRequest').deleteMany(tenantDeleteQuery);
-    await require('../models/LabBill').deleteMany(tenantDeleteQuery);
-    await require('../models/Billing').deleteMany(tenantDeleteQuery);
-    await require('../models/SameDayTreatment').deleteMany(tenantDeleteQuery);
-    await require('../models/SdtItem').deleteMany(tenantDeleteQuery);
-    await require('../models/PharmacyDispense').deleteMany(tenantDeleteQuery);
-    await require('../models/PatientHistory').deleteMany(tenantDeleteQuery);
-    await require('../models/IpdAdmission').deleteMany(tenantDeleteQuery);
-    await require('../models/IpdDischarge').deleteMany(tenantDeleteQuery);
-    await require('../models/IpdConsumable').deleteMany(tenantDeleteQuery);
-    await require('../models/IpdMedicine').deleteMany(tenantDeleteQuery);
-    await require('../models/IpdLabTest').deleteMany(tenantDeleteQuery);
-    await require('../models/IpdReferral').deleteMany(tenantDeleteQuery);
-    await require('../models/IpdActivityTimeline').deleteMany(tenantDeleteQuery);
-    await require('../models/IpdOtRecord').deleteMany(tenantDeleteQuery);
-    await require('../models/OtBooking').deleteMany(tenantDeleteQuery);
-    await require('../models/OtDocument').deleteMany(tenantDeleteQuery);
+    const safeDelete = async (modelPath, query) => {
+      try {
+        const model = require(modelPath);
+        if (model && typeof model.deleteMany === 'function') {
+          await model.deleteMany(query);
+        }
+      } catch (e) {}
+    };
 
-    await require('../models/Bed').updateMany(tenantQuery(req, { patientId }), {
-      $set: {
-        patientId: null,
-        admissionId: null,
-        status: 'Available',
-        reservedAt: null,
-        reservedFor: null
-      }
-    });
+    await safeDelete('../models/Consultation', tenantDeleteQuery);
+    await safeDelete('../models/Prescription', tenantDeleteQuery);
+    await safeDelete('../models/LabRequest', tenantDeleteQuery);
+    await safeDelete('../models/LabBill', tenantDeleteQuery);
+    await safeDelete('../models/Billing', tenantDeleteQuery);
+    await safeDelete('../models/SameDayTreatment', tenantDeleteQuery);
+    await safeDelete('../models/SdtItem', tenantDeleteQuery);
+    await safeDelete('../models/PharmacyDispense', tenantDeleteQuery);
+    await safeDelete('../models/PatientHistory', tenantDeleteQuery);
+    await safeDelete('../models/IpdAdmission', tenantDeleteQuery);
+    await safeDelete('../models/IpdDischarge', tenantDeleteQuery);
+    await safeDelete('../models/IpdConsumable', tenantDeleteQuery);
+    await safeDelete('../models/IpdMedicine', tenantDeleteQuery);
+    await safeDelete('../models/IpdLabTest', tenantDeleteQuery);
+    await safeDelete('../models/IpdReferral', tenantDeleteQuery);
+    await safeDelete('../models/IpdActivityTimeline', tenantDeleteQuery);
+    await safeDelete('../models/IpdOtRecord', tenantDeleteQuery);
+    await safeDelete('../models/OtBooking', tenantDeleteQuery);
+    await safeDelete('../models/OtDocument', tenantDeleteQuery);
+
+    try {
+      const Bed = require('../models/Bed');
+      await Bed.updateMany(tenantQuery(req, { patientId }), {
+        $set: {
+          patientId: null,
+          admissionId: null,
+          status: 'Available',
+          reservedAt: null,
+          reservedFor: null
+        }
+      });
+    } catch (e) {}
 
     await Visit.deleteMany(tenantQuery(req, { patientId }));
     await Patient.deleteOne(tenantQuery(req, { _id: patientId }));
@@ -945,7 +1061,7 @@ const deletePatient = async (req, res) => {
     res.status(200).json({ message: 'Patient and related records deleted successfully' });
   } catch (error) {
     console.error('Delete Patient Error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 };
 
@@ -1032,14 +1148,15 @@ const updatePatientDiscount = async (req, res) => {
   }
 };
 
-// @desc    Look up existing patient by Aadhaar OR Mobile number
+// @desc    Look up existing patient by Aadhaar, Mobile, or Search query
 // @route   GET /api/patients/lookup
 // @access  Private
 const lookupPatient = async (req, res) => {
   try {
-    const { aadhaar, mobile } = req.query;
-    if ((!aadhaar || aadhaar.trim().length < 4) && (!mobile || mobile.trim().length < 4)) {
-      return res.status(400).json({ message: 'Valid Aadhaar or Mobile number is required' });
+    const { aadhaar, mobile, search } = req.query;
+    const term = (search || '').trim();
+    if ((!aadhaar || aadhaar.trim().length < 4) && (!mobile || mobile.trim().length < 4) && (!term || term.length < 3)) {
+      return res.status(400).json({ message: 'Valid Aadhaar, Mobile number, or Search term is required' });
     }
 
     const conditions = [];
@@ -1049,15 +1166,35 @@ const lookupPatient = async (req, res) => {
     if (mobile && mobile.trim().length >= 4) {
       conditions.push({ mobile: mobile.trim() });
     }
-
-    const patient = await Patient.findOne(tenantQuery(req, { $or: conditions })).sort({ createdAt: -1 });
-
-    if (!patient) {
-      return res.status(200).json({ message: 'No patient found', found: false });
+    if (term && term.length >= 3) {
+      conditions.push({ uhid: { $regex: term, $options: 'i' } });
+      conditions.push({ patientName: { $regex: term, $options: 'i' } });
+      conditions.push({ mobile: { $regex: term, $options: 'i' } });
     }
 
-    // Get the latest visit for this patient
-    const latestVisit = await Visit.findOne(tenantQuery(req, { patientId: patient._id }))
+    let query = tenantQuery(req, { $or: conditions });
+    if (req.user.role === 'clinic') {
+      const clinicPatientIds = await getClinicPatientIds(req);
+      if (!clinicPatientIds || clinicPatientIds.length === 0) {
+        return res.status(200).json({ message: 'No patient found in clinic records', found: false });
+      }
+      query._id = { $in: clinicPatientIds };
+    }
+
+    const patient = await Patient.findOne(query).sort({ createdAt: -1 });
+
+    if (!patient) {
+      return res.status(200).json({ message: 'No patient found in clinic records', found: false });
+    }
+
+    // Get the latest visit for this patient (for clinic role, only clinic's latest visit)
+    let visitQuery = { patientId: patient._id };
+    if (req.user.hospitalId) visitQuery.hospitalId = req.user.hospitalId;
+    if (req.user.role === 'clinic') {
+      visitQuery.$or = [{ createdBy: req.user._id }, { doctorId: req.user._id }];
+    }
+
+    const latestVisit = await Visit.findOne(visitQuery)
       .populate('doctorId', 'doctorName username department')
       .sort({ createdAt: -1 });
 
@@ -1288,19 +1425,30 @@ const getFollowUpPatients = async (req, res) => {
 
     let result = Object.values(uniqueMap);
 
+    const normalizeDate = (d) => {
+      if (!d) return '';
+      if (typeof d === 'string') return d.split('T')[0];
+      if (d instanceof Date) return d.toISOString().split('T')[0];
+      try {
+        return new Date(d).toISOString().split('T')[0];
+      } catch (e) {
+        return String(d).split('T')[0];
+      }
+    };
+
     // Calculate stats
-    const todayCount = result.filter(item => item.followUpDate.split('T')[0] === todayStr).length;
-    const upcomingCount = result.filter(item => item.followUpDate.split('T')[0] >= todayStr).length;
+    const todayCount = result.filter(item => normalizeDate(item.followUpDate) === todayStr).length;
+    const upcomingCount = result.filter(item => normalizeDate(item.followUpDate) >= todayStr).length;
     const totalCount = result.length;
 
     // Apply Filter
     if (filter === 'today') {
-      result = result.filter(item => item.followUpDate.split('T')[0] === todayStr);
+      result = result.filter(item => normalizeDate(item.followUpDate) === todayStr);
     } else if (filter === 'upcoming') {
-      result = result.filter(item => item.followUpDate.split('T')[0] >= todayStr);
+      result = result.filter(item => normalizeDate(item.followUpDate) >= todayStr);
     } else if (filter === 'range' && (fromDate || toDate)) {
       result = result.filter(item => {
-        const itemDateStr = item.followUpDate.split('T')[0];
+        const itemDateStr = normalizeDate(item.followUpDate);
         if (fromDate && itemDateStr < fromDate) return false;
         if (toDate && itemDateStr > toDate) return false;
         return true;

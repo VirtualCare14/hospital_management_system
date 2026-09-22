@@ -2,12 +2,12 @@
 
 import { useEffect, useState, forwardRef } from 'react';
 import { apiRequest } from '@/lib/api';
-import { formatDate } from '@/lib/utils/dateFormat';
+import { formatDate, formatDateShort } from '@/lib/utils/dateFormat';
 import { t, translateClinicalText } from '@/lib/utils/prescriptionI18n';
 
 const amountInWords = (num) => {
-  const n = Math.round(num || 0);
-  if (n === 0) return 'Rupees Zero Only';
+  const n = Math.round(Number(num) || 0);
+  if (n <= 0) return 'Rupees Zero Only';
   const a = [
     '', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
     'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'
@@ -78,7 +78,7 @@ const convertImgToBase64 = (url) => {
   });
 };
 
-const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, language, mode = 'all', printOptions: propPrintOptions }, ref) => {
+const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, language, mode = 'patient_slip', printOptions: propPrintOptions }, ref) => {
   const activeLang = language || prescription?.language || 'English';
   const [hospital, setHospital] = useState(hospitalSettings || null);
   const [resolvedLogo, setResolvedLogo] = useState(hospitalSettings?.logoUrl || hospitalSettings?.logo || '');
@@ -119,19 +119,84 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
     return () => { isMounted = false; };
   }, [hospitalSettings]);
 
-  if (!patient) return null;
+  if (!patient && !prescription) return null;
+
+  // Universal unnesting for all wrapper formats
+  const raw = patient || prescription || {};
+  const p = (typeof raw.patient === 'object' && raw.patient !== null)
+    ? raw.patient
+    : ((typeof raw.data?.patient === 'object' && raw.data?.patient !== null)
+        ? raw.data.patient
+        : ((typeof raw.patientId === 'object' && raw.patientId !== null)
+            ? raw.patientId
+            : ((typeof raw.data === 'object' && raw.data !== null)
+                ? raw.data
+                : raw)));
+
+  const v = (typeof raw.visit === 'object' && raw.visit !== null)
+    ? raw.visit
+    : ((typeof raw.data?.visit === 'object' && raw.data?.visit !== null)
+        ? raw.data.visit
+        : ((typeof raw.visitId === 'object' && raw.visitId !== null)
+            ? raw.visitId
+            : raw));
 
   const ageFromDob = (dob) => {
-    if (!dob) return '-';
-    const diff = Date.now() - new Date(dob).getTime();
-    return Math.abs(new Date(diff).getUTCFullYear() - 1970);
+    if (!dob) return '';
+    try {
+      const diff = Date.now() - new Date(dob).getTime();
+      const calculated = Math.abs(new Date(diff).getUTCFullYear() - 1970);
+      return !isNaN(calculated) ? `${calculated} yrs` : '';
+    } catch (e) {
+      return '';
+    }
   };
 
-  const formatRegDate = (dateStr) => {
-    if (!dateStr) return '-';
-    const d = new Date(dateStr);
-    return `${formatDate(d)} ${d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`;
-  };
+  const patientName = p?.patientName || raw?.patientName || p?.name || raw?.name || v?.patientName || '-';
+  const uhid = p?.uhid || raw?.uhid || v?.uhid || '-';
+  const gender = p?.gender || raw?.gender || v?.gender || '-';
+  const dob = p?.dob || raw?.dob || v?.dob || null;
+  const ageDisplay = ageFromDob(dob) || (p?.age ? `${p.age} yrs` : (raw?.age ? `${raw.age} yrs` : '-'));
+  const mobile = p?.mobile || raw?.mobile || v?.mobile || '-';
+  const address = p?.address || raw?.address || v?.address || '';
+  const department = v?.department || v?.appointmentDept || p?.department || prescription?.department || raw?.department || 'Clinic';
+
+  const doc = v?.doctorId || raw?.doctorId || p?.doctorId || prescription?.doctorId;
+  const doctorNameStr = raw?.doctorName || v?.doctorName || (typeof doc === 'object' && doc !== null ? (doc.doctorName || doc.username) : (typeof doc === 'string' && doc.trim().length > 0 && !doc.match(/^[0-9a-fA-F]{24}$/) ? doc : '-')) || '-';
+
+  const apptDateRaw = v?.appointmentDate || v?.registrationDate || v?.createdAt || raw?.appointmentDate || raw?.registrationDate || raw?.createdAt || p?.appointmentDate || p?.createdAt;
+  const slot = v?.slot || raw?.slot || p?.slot || '';
+  const regNumber = v?.registrationNumber || raw?.registrationNumber || v?.appointmentNumber || raw?.appointmentNumber || v?.billNumber || raw?.billNumber || p?.registrationNumber || '-';
+
+  // Fee resolution
+  const grossFeeCandidate = v?.opdFee !== undefined && v?.opdFee !== null && Number(v?.opdFee) > 0
+    ? v.opdFee
+    : (p?.opdFee !== undefined && p?.opdFee !== null && Number(p?.opdFee) > 0
+        ? p.opdFee
+        : (raw?.opdFee !== undefined && raw?.opdFee !== null && Number(raw?.opdFee) > 0
+            ? raw.opdFee
+            : (typeof doc === 'object' && doc?.opdFees !== undefined ? doc.opdFees : 0)));
+  const grossFee = Math.max(0, Number(grossFeeCandidate) || 0);
+
+  const discountType = v?.discountType || p?.discountType || raw?.discountType || 'none';
+  const discountValue = Number(v?.discountValue || p?.discountValue || raw?.discountValue || 0);
+  const discountAmount = Number(v?.discountAmount !== undefined ? v.discountAmount : (p?.discountAmount !== undefined ? p.discountAmount : (raw?.discountAmount !== undefined ? raw.discountAmount : 0)));
+
+  const netFeeCandidate = v?.netOpdFee !== undefined && v?.netOpdFee !== null && Number(v?.netOpdFee) > 0
+    ? v.netOpdFee
+    : (p?.netOpdFee !== undefined && p?.netOpdFee !== null && Number(p?.netOpdFee) > 0
+        ? p.netOpdFee
+        : (raw?.netOpdFee !== undefined && raw?.netOpdFee !== null && Number(raw?.netOpdFee) > 0
+            ? raw.netOpdFee
+            : null));
+  const netFee = netFeeCandidate !== null && netFeeCandidate !== undefined ? Math.max(0, Number(netFeeCandidate) || 0) : Math.max(0, grossFee - discountAmount);
+
+  const paymentMode = v?.paymentMode || p?.paymentMode || raw?.paymentMode || 'Cash';
+  const paymentStatus = v?.paymentStatus || p?.paymentStatus || raw?.paymentStatus || 'Paid';
+  const billNumber = v?.billNumber || p?.billNumber || raw?.billNumber || '';
+
+  const vitals = v.demographics || p.demographics || raw.demographics || prescription?.vitals || {};
+  const hasVitals = vitals.weight || vitals.height || vitals.bloodPressure || vitals.temperature || vitals.pulse || vitals.spo2 || vitals.bmi;
 
   const now = new Date();
   const documentDateTime = now.toLocaleString('en-IN', {
@@ -144,18 +209,91 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
     hour12: true
   });
 
-  const isPatientSlipOnly = mode === 'patient_slip';
   const isBillReceiptOnly = mode === 'bill_receipt';
+  const isPatientSlipOnly = mode === 'patient_slip';
+  const isPrescription = !!prescription;
 
-  const grossFee = patient.opdFee !== undefined ? patient.opdFee : (patient.doctorId?.opdFees || 0);
-  const netFee = patient.netOpdFee !== undefined ? patient.netOpdFee : grossFee;
-  const doctorNameStr = patient.doctorId?.doctorName || patient.doctorId?.username || (typeof patient.doctorId === 'string' ? patient.doctorId : '-');
+  // Header component shared between Slip & Receipt (Medora360 reception design)
+  const renderHospitalHeader = () => (
+    <div style={{
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      borderBottom: '2.5px solid #000',
+      paddingBottom: '14px',
+      marginBottom: '14px'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, paddingRight: '20px' }}>
+        {resolvedLogo && (
+          <div style={{ flexShrink: 0 }}>
+            <img 
+              src={resolvedLogo} 
+              crossOrigin="anonymous" 
+              alt="Logo" 
+              style={{ maxHeight: '75px', maxWidth: '75px', objectFit: 'contain', display: 'block' }} 
+            />
+          </div>
+        )}
+        <div>
+          <h1 style={{ fontSize: '22px', fontWeight: '800', margin: '0', textTransform: 'uppercase', letterSpacing: '0.8px', color: '#111827' }}>
+            {hospital?.hospitalName || 'Hospital Name'}
+          </h1>
+          {hospital?.hospitalHeading && (
+            <p style={{ fontSize: '11px', margin: '3px 0 0 0', color: '#4b5563', fontWeight: '500' }}>{hospital.hospitalHeading}</p>
+          )}
+        </div>
+      </div>
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '4px',
+        textAlign: 'left',
+        fontSize: '11px',
+        color: '#111827',
+        lineHeight: '1.4',
+        maxWidth: '400px',
+        width: '100%',
+        alignItems: 'flex-start'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+          <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+          </svg>
+          <div><strong>Address:</strong> {hospital?.address || 'Hospital Address'}</div>
+        </div>
 
-  const vitals = patient.demographics || prescription?.vitals || {};
-  const hasVitals = vitals.weight || vitals.height || vitals.bloodPressure || vitals.temperature;
-  const documentTitle = isBillReceiptOnly ? 'PAYMENT RECEIPT' : isPatientSlipOnly ? 'PATIENT OPD SLIP' : 'PRESCRIPTION';
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+          <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
+            <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/>
+          </svg>
+          <div><strong>Contact No:</strong> {formatHospitalPhoneNumbers(hospital)}</div>
+        </div>
 
-  if (isBillReceiptOnly) {
+        {(hospital?.emailAddress || hospital?.email) && (
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+            <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
+              <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+            </svg>
+            <div><strong>Email ID:</strong> {hospital.emailAddress || hospital.email}</div>
+          </div>
+        )}
+
+        {hospital?.website && (
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+            <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+            </svg>
+            <div><strong>Website:</strong> {hospital.website}</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  // ========================================================
+  // VIEW 1: BILL RECEIPT / PAYMENT RECEIPT (Medora360 Format)
+  // ========================================================
+  if (isBillReceiptOnly && !prescription) {
     return (
       <div ref={ref} className="a4-receipt" style={{
         width: '100%',
@@ -171,83 +309,45 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
         position: 'relative',
         boxSizing: 'border-box'
       }}>
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          borderBottom: '2.5px solid #000',
-          paddingBottom: '14px',
-          marginBottom: '14px'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, paddingRight: '20px' }}>
-            {resolvedLogo && (
-              <div style={{ flexShrink: 0 }}>
-                <img 
-                  src={resolvedLogo} 
-                  crossOrigin="anonymous" 
-                  alt="Logo" 
-                  style={{ maxHeight: '75px', maxWidth: '75px', objectFit: 'contain', display: 'block' }} 
-                />
-              </div>
-            )}
-            <div>
-              <h1 style={{ fontSize: '20px', fontWeight: '800', margin: '0', textTransform: 'uppercase', letterSpacing: '0.8px', color: '#111827' }}>
-                {hospital?.hospitalName || 'Clinic / Hospital Name'}
-              </h1>
-              {hospital?.hospitalHeading && (
-                <p style={{ fontSize: '11px', margin: '3px 0 0 0', color: '#4b5563', fontWeight: '500' }}>{hospital.hospitalHeading}</p>
-              )}
-            </div>
-          </div>
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '4px',
-            textAlign: 'left',
-            fontSize: '11px',
-            color: '#111827',
-            lineHeight: '1.4',
-            maxWidth: '380px',
-            width: '100%',
-            alignItems: 'flex-start'
-          }}>
-            <div><strong>Address:</strong> {hospital?.address || 'Address'}</div>
-            <div><strong>Contact No:</strong> {formatHospitalPhoneNumbers(hospital)}</div>
-            {(hospital?.emailAddress || hospital?.email) && (
-              <div><strong>Email ID:</strong> {hospital.emailAddress || hospital.email}</div>
-            )}
-          </div>
-        </div>
+        {renderHospitalHeader()}
 
+        {/* Title */}
         <div style={{ textAlign: 'center', marginBottom: '10px', borderBottom: '1px solid #000', paddingBottom: '4px' }}>
           <h2 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0', textTransform: 'uppercase', letterSpacing: '1px' }}>
             Payment Receipt
           </h2>
         </div>
 
+        {/* Patient Details Box */}
         <div style={{ marginBottom: '12px', border: '1px solid #000', borderRadius: '2px', padding: '8px' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
             <tbody>
               <tr>
-                <td style={{ padding: '3px 0', width: '50%' }}><strong>Patient Name:</strong> {patient.patientName}</td>
-                <td style={{ padding: '3px 0', width: '50%' }}><strong>UHID:</strong> {patient.uhid}</td>
+                <td style={{ padding: '3px 0', width: '50%' }}><strong>Patient Name:</strong> {patientName}</td>
+                <td style={{ padding: '3px 0', width: '50%' }}><strong>UHID:</strong> {uhid}</td>
               </tr>
               <tr>
-                <td style={{ padding: '3px 0' }}><strong>Gender / Age:</strong> {patient.gender} {patient.dob ? `(${ageFromDob(patient.dob)} yrs)` : ''}</td>
-                <td style={{ padding: '3px 0' }}><strong>Mobile Number:</strong> {patient.mobile}</td>
+                <td style={{ padding: '3px 0' }}><strong>Gender / Age:</strong> {gender} {ageDisplay ? `(${ageDisplay})` : ''}</td>
+                <td style={{ padding: '3px 0' }}><strong>Mobile Number:</strong> {mobile}</td>
               </tr>
               <tr>
                 <td style={{ padding: '3px 0' }}><strong>Doctor Name:</strong> Dr. {doctorNameStr}</td>
-                <td style={{ padding: '3px 0' }}><strong>Department:</strong> {patient.department || '-'}</td>
+                <td style={{ padding: '3px 0' }}><strong>Department:</strong> {department}</td>
               </tr>
               <tr>
-                <td style={{ padding: '3px 0' }}><strong>Date / Time:</strong> {formatRegDate(patient.createdAt || patient.appointmentDate)}</td>
-                <td style={{ padding: '3px 0' }}><strong>Registered By:</strong> <span style={{ textTransform: 'capitalize' }}>{patient.registeredBy || 'Clinic'}</span></td>
+                <td style={{ padding: '3px 0' }}><strong>Date / Time:</strong> {apptDateRaw ? formatDate(apptDateRaw) : '-'} {slot ? `(${slot})` : ''}</td>
+                <td style={{ padding: '3px 0' }}><strong>Receipt No:</strong> {billNumber || regNumber}</td>
               </tr>
+              {address && (
+                <tr>
+                  <td colSpan={2} style={{ padding: '3px 0' }}><strong>Address:</strong> {address}</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
 
+        {/* Bill Items Table */}
         <div style={{ marginBottom: '15px' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', border: '1px solid #000' }}>
             <thead>
@@ -268,27 +368,27 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
                   ₹{grossFee.toFixed(2)}
                 </td>
                 <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>
-                  {patient.discountType === 'percent'
-                    ? `${patient.discountValue || 0}% (₹${(patient.discountAmount || 0).toFixed(2)})`
-                    : (patient.discountType === 'amount' && (patient.discountAmount || 0) > 0
-                        ? `₹${(patient.discountAmount || 0).toFixed(2)}`
-                        : '₹0.00')}
+                  {discountType === 'percent'
+                    ? `${discountValue}% (₹${discountAmount.toFixed(2)})`
+                    : (discountAmount > 0 ? `₹${discountAmount.toFixed(2)}` : '₹0.00')}
                 </td>
                 <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right', fontWeight: 'bold' }}>
                   ₹{netFee.toFixed(2)}
                 </td>
                 <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center' }}>
-                  {patient.paymentMode || 'Cash'}
+                  {paymentMode}
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
 
+        {/* Amount in Words */}
         <div style={{ marginBottom: '15px', padding: '6px 8px', backgroundColor: '#f9f9f9', border: '1px solid #ccc', fontSize: '11px' }}>
           <strong>Amount in Words:</strong> {amountInWords(netFee)}
         </div>
 
+        {/* Footer */}
         <div style={{ 
           position: 'relative',
           marginTop: '20px',
@@ -306,6 +406,11 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
     );
   }
 
+  // =========================================================
+  // VIEW 2: PATIENT SLIP / OPD CONSULTATION SLIP (Medora360 Format)
+  // =========================================================
+  const documentTitle = isPrescription ? 'PRESCRIPTION' : 'PATIENT OPD SLIP';
+
   return (
     <div ref={ref} className="a4-receipt" style={{
       width: '100%',
@@ -322,55 +427,9 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
       position: 'relative',
       boxSizing: 'border-box'
     }}>
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        borderBottom: '2.5px solid #000',
-        paddingBottom: '14px',
-        marginBottom: '14px'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, paddingRight: '20px' }}>
-          {resolvedLogo && (
-            <div style={{ flexShrink: 0 }}>
-              <img
-                src={resolvedLogo}
-                crossOrigin="anonymous"
-                alt="Clinic Logo"
-                style={{ maxHeight: '75px', maxWidth: '75px', objectFit: 'contain', display: 'block' }}
-              />
-            </div>
-          )}
-          <div style={{ flex: 1 }}>
-            <h1 style={{ fontSize: '20px', fontWeight: '800', margin: '0', textTransform: 'uppercase', letterSpacing: '0.8px', color: '#111827' }}>
-              {hospital?.hospitalName || 'Clinic Name'}
-            </h1>
-            {hospital?.hospitalHeading && (
-              <p style={{ fontSize: '11px', margin: '3px 0 0 0', color: '#4b5563', fontWeight: '500' }}>{hospital.hospitalHeading}</p>
-            )}
-          </div>
-        </div>
+      {renderHospitalHeader()}
 
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '4px',
-          textAlign: 'left',
-          fontSize: '11px',
-          color: '#111827',
-          lineHeight: '1.4',
-          maxWidth: '380px',
-          width: '100%',
-          alignItems: 'flex-start'
-        }}>
-          <div><strong>Address:</strong> {hospital?.address || 'Address'}</div>
-          <div><strong>Contact No:</strong> {formatHospitalPhoneNumbers(hospital)}</div>
-          {(hospital?.emailAddress || hospital?.email) && (
-            <div><strong>Email ID:</strong> {hospital.emailAddress || hospital.email}</div>
-          )}
-        </div>
-      </div>
-
+      {/* Document Title */}
       <h2 style={{ 
         fontSize: '15px', 
         fontWeight: 'bold', 
@@ -384,6 +443,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
         {documentTitle}
       </h2>
 
+      {/* Patient & Appointment Details Box */}
       <div style={{ marginBottom: '15px', padding: '10px', border: '1px solid #000', borderRadius: '2px' }}>
         <p style={{ fontWeight: 'bold', margin: '0 0 8px 0', fontSize: '12px', textDecoration: 'underline' }}>
           {t(activeLang, 'patientInfo')} & Appointment Details
@@ -391,27 +451,27 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
         <div style={{ display: 'flex', flexWrap: 'wrap' }}>
           <div style={{ width: '50%', padding: '3px 10px 3px 0', boxSizing: 'border-box' }}>
             <p style={{ margin: '0', fontSize: '11px' }}>
-              <strong>Patient Name:</strong> {patient.patientName}
+              <strong>Patient Name:</strong> {patientName}
             </p>
           </div>
           <div style={{ width: '50%', padding: '3px 0 3px 10px', boxSizing: 'border-box' }}>
             <p style={{ margin: '0', fontSize: '11px' }}>
-              <strong>UHID:</strong> {patient.uhid}
+              <strong>UHID:</strong> {uhid}
             </p>
           </div>
           <div style={{ width: '50%', padding: '3px 10px 3px 0', boxSizing: 'border-box' }}>
             <p style={{ margin: '0', fontSize: '11px' }}>
-              <strong>Gender / Age:</strong> {patient.gender} {patient.dob ? `(${ageFromDob(patient.dob)} yrs)` : ''}
+              <strong>Gender / Age:</strong> {gender} {ageDisplay ? `(${ageDisplay})` : ''}
             </p>
           </div>
           <div style={{ width: '50%', padding: '3px 0 3px 10px', boxSizing: 'border-box' }}>
             <p style={{ margin: '0', fontSize: '11px' }}>
-              <strong>Mobile Number:</strong> {patient.mobile}
+              <strong>Mobile Number:</strong> {mobile}
             </p>
           </div>
           <div style={{ width: '50%', padding: '3px 10px 3px 0', boxSizing: 'border-box' }}>
             <p style={{ margin: '0', fontSize: '11px' }}>
-              <strong>Department:</strong> {patient.department || '-'}
+              <strong>Department:</strong> {department}
             </p>
           </div>
           <div style={{ width: '50%', padding: '3px 0 3px 10px', boxSizing: 'border-box' }}>
@@ -421,24 +481,25 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
           </div>
           <div style={{ width: '50%', padding: '3px 10px 3px 0', boxSizing: 'border-box' }}>
             <p style={{ margin: '0', fontSize: '11px' }}>
-              <strong>Appointment Date & Time:</strong> {formatDate(patient.appointmentDate)} {patient.slot ? `(${patient.slot})` : ''}
+              <strong>Appointment Date & Time:</strong> {apptDateRaw ? formatDate(apptDateRaw) : '-'} {slot ? `(${slot})` : ''}
             </p>
           </div>
           <div style={{ width: '50%', padding: '3px 0 3px 10px', boxSizing: 'border-box' }}>
             <p style={{ margin: '0', fontSize: '11px' }}>
-              <strong>Registration Number:</strong> {patient.registrationNumber || '-'}
+              <strong>Registration Number:</strong> {regNumber}
             </p>
           </div>
-          {patient.address && (
+          {address && (
             <div style={{ width: '100%', padding: '3px 0 3px 0', boxSizing: 'border-box' }}>
               <p style={{ margin: '0', fontSize: '11px' }}>
-                <strong>Address:</strong> {patient.address}
+                <strong>Address:</strong> {address}
               </p>
             </div>
           )}
         </div>
       </div>
 
+      {/* Vitals Line */}
       {(isPatientSlipOnly || mode === 'all') && hasVitals && printOptions.printVitals !== false && (
         <div style={{ marginBottom: '12px', fontSize: '11px' }}>
           <p style={{ margin: '0', lineHeight: '1.5' }}>
@@ -456,59 +517,8 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
         </div>
       )}
 
-      {!prescription && !isPatientSlipOnly && (
-        <div style={{ marginBottom: '18px', padding: '10px', border: '1px solid #000', borderRadius: '2px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <p style={{ fontWeight: 'bold', margin: '0', fontSize: '12px', textDecoration: 'underline' }}>
-              OPD Fee & Payment Summary
-            </p>
-            {patient.billNumber && (
-              <p style={{ margin: '0', fontSize: '11px', fontWeight: 'bold' }}>
-                Receipt No: {patient.billNumber}
-              </p>
-            )}
-          </div>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', border: '1px solid #000' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#f0f0f0' }}>
-                <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'left' }}>Description</th>
-                <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>Gross Fee</th>
-                <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>Discount</th>
-                <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>Net Amount</th>
-                <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center' }}>Payment Mode</th>
-                <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center' }}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td style={{ padding: '6px 8px', border: '1px solid #000' }}>
-                  OPD Consultation Fee - Dr. {doctorNameStr}
-                </td>
-                <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>
-                  ₹{grossFee.toFixed(2)}
-                </td>
-                <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>
-                  {patient.discountType === 'percent'
-                    ? `${patient.discountValue || 0}% (₹${(patient.discountAmount || 0).toFixed(2)})`
-                    : (patient.discountType === 'amount' && (patient.discountAmount || 0) > 0
-                        ? `₹${(patient.discountAmount || 0).toFixed(2)}`
-                        : '₹0.00')}
-                </td>
-                <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right', fontWeight: 'bold' }}>
-                  ₹{netFee.toFixed(2)}
-                </td>
-                <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center' }}>
-                  {patient.paymentMode || 'Cash'}
-                </td>
-                <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', color: patient.paymentStatus === 'Not Paid' ? '#dc2626' : '#16a34a' }}>
-                  {patient.paymentStatus || 'Paid'}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      )}
 
+      {/* Prescription Details (If Clinical Prescription Mode) */}
       {prescription && (
         <>
           <hr style={{ margin: '14px 0', border: 'none', borderTop: '1px solid #000' }} />
@@ -556,7 +566,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
 
           {prescription.medicines && prescription.medicines.filter(m => m.medicine).length > 0 && (
             <div style={{ marginBottom: '15px' }}>
-              <p style={{ fontWeight: 'bold', margin: '0 0 5px 0', fontSize: '12px', textDecoration: 'underline' }}>
+              <p style={{ fontWeight: 'bold', margin: '0 0 4px 0', fontSize: '11px', textDecoration: 'underline' }}>
                 {t(activeLang, 'medicines')}:
               </p>
               <table style={{ 
@@ -676,6 +686,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
         </>
       )}
 
+      {/* Footer */}
       <div style={{ 
         position: isPatientSlipOnly ? 'absolute' : 'relative',
         bottom: isPatientSlipOnly ? '8mm' : 'auto',

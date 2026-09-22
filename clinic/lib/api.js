@@ -91,7 +91,19 @@ export const clearStoredAuth = () => {
 export async function apiRequest(endpoint, options = {}) {
   const baseUrl = getBaseUrl();
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  const url = `${baseUrl}${cleanEndpoint}`;
+  let url = `${baseUrl}${cleanEndpoint}`;
+  if (options.params && typeof options.params === 'object') {
+    const searchParams = new URLSearchParams();
+    Object.entries(options.params).forEach(([key, val]) => {
+      if (val !== undefined && val !== null && val !== '') {
+        searchParams.append(key, val);
+      }
+    });
+    const queryString = searchParams.toString();
+    if (queryString) {
+      url += (url.includes('?') ? '&' : '?') + queryString;
+    }
+  }
 
   const token = getStoredToken();
   

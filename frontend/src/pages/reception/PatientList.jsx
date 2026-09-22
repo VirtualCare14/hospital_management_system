@@ -304,7 +304,9 @@ const PatientList = () => {
       // Merge specific registration/visit details from reg onto patient object
       const fullDetails = {
         ...data,
-        doctorId: { doctorName: reg.doctorName, username: reg.doctorName },
+        doctorId: typeof reg.doctorId === 'object' && reg.doctorId !== null
+          ? { ...reg.doctorId, doctorName: reg.doctorName || reg.doctorId?.doctorName || reg.doctorId?.username }
+          : { doctorName: reg.doctorName, username: reg.doctorName, opdFees: reg.opdFee || data.opdFee },
         department: reg.department || data.department,
         registrationNumber: reg.registrationNumber || data.registrationNumber,
         appointmentNumber: reg.appointmentNumber || data.appointmentNumber,

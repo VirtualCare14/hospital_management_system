@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import {
   Search, Eye, Printer, Calendar, Users, Filter, ChevronLeft, ChevronRight,
-  UserCheck, RefreshCw, X, FileText, Phone, Stethoscope, Clock
+  UserCheck, RefreshCw, X, FileText, Phone, Stethoscope, Clock, Trash2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { apiRequest } from '@/lib/api';
@@ -35,6 +35,8 @@ export default function PatientListView({ onNavigate }) {
   const [historyModalPatient, setHistoryModalPatient] = useState(null);
   const [patientVisits, setPatientVisits] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [deleteModalPatient, setDeleteModalPatient] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Load Departments
   useEffect(() => {
@@ -99,6 +101,23 @@ export default function PatientListView({ onNavigate }) {
       setPatientVisits([]);
     } finally {
       setLoadingHistory(false);
+    }
+  };
+
+  // Delete Patient
+  const confirmDeletePatient = async () => {
+    if (!deleteModalPatient) return;
+    const targetId = deleteModalPatient.patientId?._id || deleteModalPatient.patientId || deleteModalPatient._id;
+    setDeleting(true);
+    try {
+      await apiRequest(`/patients/${targetId}`, { method: 'DELETE' });
+      toast.success(`Patient ${deleteModalPatient.patientName || ''} deleted successfully`);
+      setDeleteModalPatient(null);
+      fetchRegistrations();
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete patient');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -268,13 +287,23 @@ export default function PatientListView({ onNavigate }) {
                         </span>
                       </td>
                       <td className="py-3.5 px-4">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                          patient.paymentStatus === 'Paid'
-                            ? 'bg-emerald-50 text-emerald-700'
-                            : 'bg-red-50 text-red-700'
-                        }`}>
-                          {patient.paymentStatus || 'Paid'} (₹{patient.netOpdFee || patient.opdFee || 0})
-                        </span>
+                        {(() => {
+                          const isPaid = (patient.paymentStatus || 'Paid').toLowerCase() === 'paid';
+                          const fee = Number(patient.netOpdFee !== undefined && patient.netOpdFee !== null && patient.netOpdFee > 0
+                            ? patient.netOpdFee
+                            : (patient.opdFee !== undefined && patient.opdFee !== null && patient.opdFee > 0
+                                ? patient.opdFee
+                                : (patient.doctorId?.opdFees || 0)));
+                          return (
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                              isPaid
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-red-50 text-red-700 border border-red-200'
+                            }`}>
+                              {patient.paymentStatus || 'Paid'} (₹{fee})
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
@@ -309,6 +338,14 @@ export default function PatientListView({ onNavigate }) {
                             className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer border border-gray-200"
                           >
                             <Eye className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteModalPatient(patient)}
+                            title="Delete Patient"
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer border border-red-200"
+                          >
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       </td>
@@ -394,6 +431,47 @@ export default function PatientListView({ onNavigate }) {
                   </div>
                 ))
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteModalPatient && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-gray-100 animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-6 text-center space-y-4">
+              <div className="w-12 h-12 rounded-full bg-red-50 border border-red-100 flex items-center justify-center mx-auto text-red-600">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-gray-900">Delete Patient</h3>
+                <p className="text-xs text-gray-500 mt-1">
+                  Are you sure you want to delete <strong className="text-gray-900">{deleteModalPatient.patientName}</strong> (<span className="text-orange-600 font-bold">{formatUhid(deleteModalPatient.uhid)}</span>)?
+                </p>
+                <p className="text-[11px] text-red-500 mt-2 font-medium bg-red-50/60 p-2 rounded-lg border border-red-100">
+                  This action cannot be undone. All appointments, prescriptions, and medical records for this patient will be permanently deleted.
+                </p>
+              </div>
+              <div className="flex items-center justify-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setDeleteModalPatient(null)}
+                  disabled={deleting}
+                  className="px-4 py-2 text-xs font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmDeletePatient}
+                  disabled={deleting}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl transition shadow-xs cursor-pointer disabled:opacity-50"
+                >
+                  {deleting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                  {deleting ? 'Deleting...' : 'Delete Permanently'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

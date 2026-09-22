@@ -75,7 +75,7 @@ export default function EditPrintRxSettingsView() {
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="w-full space-y-6">
       {/* Header */}
       <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
