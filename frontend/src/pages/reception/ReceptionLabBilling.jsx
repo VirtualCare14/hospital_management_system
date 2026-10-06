@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useHeader } from '../../context/HeaderContext';
 import client from '../../api/client';
 import toast from 'react-hot-toast';
+import LabBillReceipt from '../../components/LabBillReceipt';
 import {
   CheckCircle,
   AlertCircle,
@@ -361,7 +362,7 @@ export default function ReceptionLabBilling() {
   useEffect(() => {
     client.get('/admin/hospital-settings')
       .then(res => {
-        if (res.data) setHospitalInfo(res.data);
+        if (res.data) setHospitalInfo(res.data.data || res.data);
       })
       .catch(() => {});
 
@@ -1822,149 +1823,13 @@ export default function ReceptionLabBilling() {
         </div>
       )}
 
-      {/* Modal 2: Exact Lab Bill Receipt Modal */}
+      {/* Modal 2: Exact Lab Bill Receipt Modal matching Labs module */}
       {showReceiptModal && createdBillReceiptData && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white border border-slate-200 rounded-xl shadow-2xl max-w-3xl w-full p-6 space-y-6 animate-in fade-in zoom-in-95 my-8">
-            
-            {/* ACTION BAR (Hidden when printing) */}
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3 no-print">
-              <h3 className="text-base font-bold text-slate-800">Lab Bill Receipt</h3>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => window.print()}
-                  className="px-4 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1.5"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>Print Receipt</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setShowReceiptModal(false);
-                  }}
-                  className="px-3.5 py-1.5 border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-bold cursor-pointer"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-
-            {/* PRINTABLE RECEIPT CONTENT CONTAINER */}
-            <div className="print-area bg-white text-slate-900 font-sans p-4 space-y-3 border border-slate-200 rounded-lg">
-              
-              {/* HEADER: Hospital details with logo from Admin module */}
-              <div className="flex items-center justify-between border-b border-slate-300 pb-2">
-                <div className="flex items-center gap-3">
-                  {hospitalInfo?.logoUrl && (
-                    <img
-                      src={hospitalInfo.logoUrl}
-                      alt="Logo"
-                      className="w-12 h-12 object-contain rounded-md"
-                    />
-                  )}
-                  <div>
-                    <h1 className="text-lg font-bold uppercase tracking-tight text-slate-900">
-                      {hospitalInfo?.hospitalName || user?.hospitalName || 'Prayascare Hospital'}
-                    </h1>
-                    <p className="text-[11px] text-slate-500 font-medium">
-                      {hospitalInfo?.address || 'Hospital Road, Diagnostic Care'}
-                    </p>
-                    <p className="text-[10px] text-slate-400">
-                      Phone: {hospitalInfo?.phone || hospitalInfo?.mobileNumbers?.join(', ') || 'N/A'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="text-right">
-                  <span className="inline-block px-2.5 py-0.5 bg-orange-100 text-orange-800 rounded font-bold text-[10px] uppercase tracking-wider mb-1">
-                    LAB BILL RECEIPT
-                  </span>
-                  <p className="text-xs font-bold text-slate-800">Bill #: {createdBillReceiptData.billNo}</p>
-                  <p className="text-[11px] text-slate-500">{createdBillReceiptData.date} {createdBillReceiptData.time}</p>
-                </div>
-              </div>
-
-              {/* PATIENT & CASE DEMOGRAPHICS TABLE */}
-              <div className="grid grid-cols-2 gap-2 text-xs border border-slate-200 rounded p-2.5 bg-slate-50/50">
-                <div>
-                  <span className="text-slate-500">Patient Name: </span>
-                  <strong className="text-slate-900">{createdBillReceiptData.patientName}</strong>
-                </div>
-                <div>
-                  <span className="text-slate-500">Age / Sex: </span>
-                  <strong className="text-slate-900">{createdBillReceiptData.ageSex}</strong>
-                </div>
-                <div>
-                  <span className="text-slate-500">Mobile No: </span>
-                  <strong className="text-slate-900">{createdBillReceiptData.mobileNumber}</strong>
-                </div>
-                <div>
-                  <span className="text-slate-500">Referred By: </span>
-                  <strong className="text-slate-900">{createdBillReceiptData.referredBy}</strong>
-                </div>
-                <div>
-                  <span className="text-slate-500">Date: </span>
-                  <strong className="text-slate-900">{createdBillReceiptData.date}</strong>
-                </div>
-                <div>
-                  <span className="text-slate-500">Received By: </span>
-                  <strong className="text-slate-900">{createdBillReceiptData.receivedBy}</strong>
-                </div>
-              </div>
-
-              {/* INVESTIGATIONS BILL TABLE */}
-              <table className="w-full text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-300 bg-slate-100/70 text-slate-700">
-                    <th className="py-1.5 px-2 text-left w-12 font-semibold">S.No.</th>
-                    <th className="py-1.5 px-2 text-left font-semibold">Investigations</th>
-                    <th className="py-1.5 px-2 text-right w-28 font-semibold">Amount (₹)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {createdBillReceiptData.investigations.map((item, idx) => (
-                    <tr key={idx}>
-                      <td className="py-1.5 px-2 text-slate-500">{item.sno || idx + 1}</td>
-                      <td className="py-1.5 px-2 font-medium text-slate-800">{item.name}</td>
-                      <td className="py-1.5 px-2 text-right font-semibold text-slate-900">
-                        ₹{Number(item.amount).toFixed(2)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              {/* FINANCIAL TOTAL SUMMARY */}
-              <div className="border-t border-slate-300 pt-2 flex flex-col items-end text-xs space-y-1">
-                <div className="w-48 flex justify-between">
-                  <span className="text-slate-600 font-medium">Total:</span>
-                  <span className="font-bold text-slate-900">₹{Number(createdBillReceiptData.totalAmount).toFixed(2)}</span>
-                </div>
-                <div className="w-48 flex justify-between text-slate-900 font-bold border-t border-slate-200 pt-1">
-                  <span>Amount Paid:</span>
-                  <span>₹{Number(createdBillReceiptData.amountPaid).toFixed(2)}</span>
-                </div>
-                {createdBillReceiptData.balanceDue > 0 && (
-                  <div className="w-48 flex justify-between text-red-600 font-bold">
-                    <span>Balance Due:</span>
-                    <span>₹{Number(createdBillReceiptData.balanceDue).toFixed(2)}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* AMOUNT IN WORDS & SIGNATURE */}
-              <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-500">
-                <div>
-                  <strong>Amount in words:</strong> {amountInWords(createdBillReceiptData.amountPaid)}
-                </div>
-                <div className="text-right font-medium">
-                  Authorized Signatory: ________________
-                </div>
-              </div>
-
-            </div>
-          </div>
-        </div>
+        <LabBillReceipt
+          billData={createdBillReceiptData}
+          hospitalSettings={hospitalInfo}
+          onClose={() => setShowReceiptModal(false)}
+        />
       )}
     </div>
   );
