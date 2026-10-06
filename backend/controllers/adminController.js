@@ -460,14 +460,19 @@ const deleteDepartment = async (req, res) => {
 const getDoctors = async (req, res) => {
   try {
     const { department, includeInactive } = req.query;
-    const query = hospitalFilter(req, { role: { $in: ['doctor', 'nursing', 'clinic'] } });
-    if (includeInactive !== 'true' || req.user.role !== 'admin') {
-      query.isActive = true;
+    const query = hospitalFilter(req, {
+      $or: [
+        { role: { $in: ['doctor', 'nursing', 'clinic', 'Doctor'] } },
+        { doctorName: { $exists: true, $ne: '' } }
+      ]
+    });
+    if (includeInactive !== 'true' || req.user?.role !== 'admin') {
+      query.isActive = { $ne: false };
     }
     if (department) {
       query.department = department;
     }
-    const doctors = await User.find(query).select('-password -currentSessionId').sort({ doctorName: 1 });
+    const doctors = await User.find(query).select('-password -currentSessionId').sort({ doctorName: 1, username: 1 });
     res.status(200).json(doctors);
   } catch (error) {
     console.error('Get Doctors Error:', error);
@@ -1760,6 +1765,262 @@ const saveClinicSettings = async (req, res) => {
   }
 };
 
+// @desc    Get comprehensive doctor tracking stats for admin dashboard
+// @route   GET /api/admin/doctor-tracking
+// @access  Private/Admin
+const getDoctorTracking = async (req, res) => {
+  try {
+    const filter = hospitalFilter(req);
+    const doctors = await User.find(hospitalFilter(req, {
+      $or: [
+        { role: { $in: ['doctor', 'nursing', 'clinic', 'Doctor'] } },
+        { doctorName: { $exists: true, $ne: '' } }
+      ]
+    })).select('-password -currentSessionId').sort({ doctorName: 1 });
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(todayStart);
+    todayEnd.setDate(todayEnd.getDate() + 1);
+
+    const doctorIds = doctors.map(d => d._id);
+
+    // Fetch visits, IPD admissions, and consultations for all doctors
+    const [allVisits, todayVisits, activeIpds, dischargedIpds, allConsultations] = await Promise.all([
+      Visit.find({ ...filter, doctorId: { $in: doctorIds } }).select('doctorId consultationStatus registrationDate patientId'),
+      Visit.find({ ...filter, doctorId: { $in: doctorIds }, registrationDate: { $gte: todayStart, $lt: todayEnd } }).select('doctorId consultationStatus'),
+      IpdAdmission.find({ ...filter, doctorInCharge: { $in: doctorIds }, status: 'Admitted' }).select('doctorInCharge patientId ipdNumber'),
+      IpdAdmission.find({ ...filter, doctorInCharge: { $in: doctorIds }, status: 'Discharged' }).select('doctorInCharge'),
+      Consultation.find({ ...filter, doctorId: { $in: doctorIds } }).select('doctorId patientId createdAt')
+    ]);
+
+    const trackingList = doctors.map(doc => {
+      const docIdStr = doc._id.toString();
+      
+      const docVisits = allVisits.filter(v => v.doctorId && v.doctorId.toString() === docIdStr);
+      const docTodayVisits = todayVisits.filter(v => v.doctorId && v.doctorId.toString() === docIdStr);
+      const docActiveIpd = activeIpds.filter(ipd => ipd.doctorInCharge && ipd.doctorInCharge.toString() === docIdStr);
+      const docDischargedIpd = dischargedIpds.filter(ipd => ipd.doctorInCharge && ipd.doctorInCharge.toString() === docIdStr);
+      const docConsultations = allConsultations.filter(c => c.doctorId && c.doctorId.toString() === docIdStr);
+
+      const todayPending = docTodayVisits.filter(v => v.consultationStatus !== 'completed').length;
+      const todayCompleted = docTodayVisits.filter(v => v.consultationStatus === 'completed').length;
+      const totalPending = docVisits.filter(v => v.consultationStatus !== 'completed').length;
+      const totalCompleted = docVisits.filter(v => v.consultationStatus === 'completed').length;
+      
+      const uniquePatients = new Set([
+        ...docVisits.map(v => v.patientId ? v.patientId.toString() : null),
+        ...docActiveIpd.map(i => i.patientId ? i.patientId.toString() : null),
+        ...docConsultations.map(c => c.patientId ? c.patientId.toString() : null)
+      ].filter(Boolean));
+
+      return {
+        _id: doc._id,
+        doctorName: doc.doctorName || doc.username,
+        username: doc.username,
+        role: doc.role,
+        department: doc.department || 'General',
+        specialization: doc.specialization || '',
+        opdFees: doc.opdFees || 0,
+        mobile: doc.mobile || '',
+        availableSlots: doc.availableSlots || [],
+        slotGap: doc.slotGap || 10,
+        isActive: doc.isActive !== false,
+        stats: {
+          todayTotal: docTodayVisits.length,
+          todayPending,
+          todayCompleted,
+          totalVisits: docVisits.length,
+          totalPending,
+          totalCompleted,
+          activeIpdCount: docActiveIpd.length,
+          dischargedIpdCount: docDischargedIpd.length,
+          totalPatientsTreated: uniquePatients.size
+        }
+      };
+    });
+
+    const summaryTotals = {
+      totalDoctors: doctors.length,
+      activeDoctors: doctors.filter(d => d.isActive !== false).length,
+      todayTotalVisits: todayVisits.length,
+      todayPendingVisits: todayVisits.filter(v => v.consultationStatus !== 'completed').length,
+      todayCompletedVisits: todayVisits.filter(v => v.consultationStatus === 'completed').length,
+      totalActiveIpd: activeIpds.length
+    };
+
+    res.status(200).json({
+      doctors: trackingList,
+      summary: summaryTotals
+    });
+  } catch (error) {
+    console.error('Get Doctor Tracking Error:', error);
+    res.status(500).json({ message: 'Server error loading doctor tracking data' });
+  }
+};
+
+// @desc    Get detailed doctor tracking (medicines given & qty, lab requests daily breakdown) with date filters
+// @route   GET /api/admin/doctor-tracking/:doctorId/details
+// @access  Private/Admin
+const getDoctorDetailedTracking = async (req, res) => {
+  try {
+    const { doctorId } = req.params;
+    const { fromDate, toDate, preset } = req.query;
+
+    const doctor = await User.findOne(hospitalFilter(req, { _id: doctorId })).select('-password -currentSessionId');
+    if (!doctor) {
+      return res.status(404).json({ message: 'Doctor not found' });
+    }
+
+    // Build date filter
+    let dateFilter = {};
+    const now = new Date();
+    
+    if (preset === 'today') {
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+      const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      dateFilter = { $gte: start, $lte: end };
+    } else if (preset === '7days') {
+      const start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      dateFilter = { $gte: start, $lte: end };
+    } else if (preset === '1month') {
+      const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      dateFilter = { $gte: start, $lte: end };
+    } else if (fromDate || toDate) {
+      dateFilter = {};
+      if (fromDate) dateFilter.$gte = new Date(fromDate + 'T00:00:00.000Z');
+      if (toDate) dateFilter.$lte = new Date(toDate + 'T23:59:59.999Z');
+    }
+
+    const prescriptionQuery = hospitalFilter(req, { doctorId });
+    if (Object.keys(dateFilter).length > 0) {
+      prescriptionQuery.createdAt = dateFilter;
+    }
+
+    const labRequestQuery = hospitalFilter(req, { doctorId });
+    if (Object.keys(dateFilter).length > 0) {
+      labRequestQuery.bookingDate = dateFilter;
+    }
+
+    const visitQuery = hospitalFilter(req, { doctorId });
+    if (Object.keys(dateFilter).length > 0) {
+      visitQuery.registrationDate = dateFilter;
+    }
+
+    // Query Prescriptions, LabRequests, and Visits concurrently
+    const [prescriptions, labRequests, visits] = await Promise.all([
+      Prescription.find(prescriptionQuery)
+        .populate('patientId', 'patientName uhid mobile gender')
+        .sort({ createdAt: -1 }),
+      LabRequest.find(labRequestQuery)
+        .populate('patientId', 'patientName uhid mobile gender')
+        .sort({ bookingDate: -1, createdAt: -1 }),
+      Visit.find(visitQuery).select('consultationStatus registrationDate patientId')
+    ]);
+
+    // 1. Medicines aggregation: { name, dosageForm, strength, totalQty, prescriptionCount, dosageSummary }
+    const medicineMap = new Map();
+    let totalMedicinesGiven = 0;
+
+    prescriptions.forEach((pres) => {
+      (pres.medicines || []).forEach((med) => {
+        const rawName = (med.medicine || '').trim();
+        if (!rawName) return;
+        const key = rawName.toLowerCase();
+        const qty = Number(med.qty) || 1;
+        totalMedicinesGiven += qty;
+
+        if (!medicineMap.has(key)) {
+          medicineMap.set(key, {
+            medicineName: rawName,
+            dosageForm: med.dosageForm || 'Tablet',
+            strength: med.strength || '',
+            totalQty: 0,
+            prescriptionCount: 0,
+            dosageSummary: med.duration ? `${med.dose || ''} (${med.duration})` : (med.dose || '-')
+          });
+        }
+        const item = medicineMap.get(key);
+        item.totalQty += qty;
+        item.prescriptionCount += 1;
+        if (!item.strength && med.strength) item.strength = med.strength;
+      });
+    });
+
+    const medicineList = Array.from(medicineMap.values()).sort((a, b) => b.totalQty - a.totalQty);
+
+    // 2. Lab requests aggregation:
+    // Daily breakdown: Map date string (YYYY-MM-DD) -> { date, requestCount, testsCount, testsSummary }
+    const dailyLabMap = new Map();
+    let totalTestsGiven = 0;
+
+    labRequests.forEach((reqItem) => {
+      const bDate = reqItem.bookingDate || reqItem.createdAt;
+      const dateKey = bDate ? new Date(bDate).toISOString().slice(0, 10) : 'Unknown';
+      const testsCount = (reqItem.tests || []).length;
+      totalTestsGiven += testsCount;
+
+      if (!dailyLabMap.has(dateKey)) {
+        dailyLabMap.set(dateKey, {
+          date: dateKey,
+          requestCount: 0,
+          testsCount: 0,
+          testsSummary: []
+        });
+      }
+      const dayData = dailyLabMap.get(dateKey);
+      dayData.requestCount += 1;
+      dayData.testsCount += testsCount;
+      (reqItem.tests || []).forEach(t => {
+        if (t && !dayData.testsSummary.includes(t)) {
+          dayData.testsSummary.push(t);
+        }
+      });
+    });
+
+    const dailyLabList = Array.from(dailyLabMap.values()).sort((a, b) => b.date.localeCompare(a.date));
+
+    // Summary of top tests
+    const testFrequencyMap = new Map();
+    labRequests.forEach((reqItem) => {
+      (reqItem.tests || []).forEach(t => {
+        const testName = (t || '').trim();
+        if (!testName) return;
+        testFrequencyMap.set(testName, (testFrequencyMap.get(testName) || 0) + 1);
+      });
+    });
+    const topTests = Array.from(testFrequencyMap.entries())
+      .map(([testName, count]) => ({ testName, count }))
+      .sort((a, b) => b.count - a.count);
+
+    res.status(200).json({
+      doctor,
+      metrics: {
+        totalPrescriptions: prescriptions.length,
+        totalMedicinesUnique: medicineList.length,
+        totalMedicinesQuantity: totalMedicinesGiven,
+        totalLabRequests: labRequests.length,
+        totalTestsPrescribed: totalTestsGiven,
+        totalVisits: visits.length,
+        completedVisits: visits.filter(v => v.consultationStatus === 'completed').length,
+        pendingVisits: visits.filter(v => v.consultationStatus !== 'completed').length
+      },
+      medicines: medicineList,
+      dailyLabRequests: dailyLabList,
+      topTests,
+      recentPrescriptions: prescriptions.slice(0, 15),
+      recentLabRequests: labRequests.slice(0, 20)
+    });
+  } catch (error) {
+    console.error('Get Doctor Detailed Tracking Error:', error);
+    res.status(500).json({ message: 'Server error loading doctor tracking details' });
+  }
+};
+
 module.exports = {
   getHospitalSettings,
   createOrUpdateHospitalSettings,
@@ -1777,6 +2038,8 @@ module.exports = {
   updateDoctorAvailability,
   getDoctorAvailability,
   getHospitalTracking,
+  getDoctorTracking,
+  getDoctorDetailedTracking,
   getDeleteDataPermission,
   deletePatientData,
   searchDeleteItems,

@@ -678,7 +678,7 @@ const getPatientVisits = async (req, res) => {
 // @access  Private
 const getRegistrations = async (req, res) => {
   try {
-    const { fromDate, toDate, uhid, registrationNumber, patientName, department, search, filter, page = 1, limit = 20 } = req.query;
+    const { fromDate, toDate, uhid, registrationNumber, patientName, department, doctorId, search, filter, page = 1, limit = 20 } = req.query;
     let query = tenantQuery(req);
 
     const d = new Date();
@@ -703,6 +703,7 @@ const getRegistrations = async (req, res) => {
     if (uhid) query.uhid = { $regex: uhid, $options: 'i' };
     if (registrationNumber) query.registrationNumber = { $regex: registrationNumber, $options: 'i' };
     if (department) query.department = department;
+    if (doctorId) query.doctorId = doctorId;
     if (req.user.role === 'clinic') {
       query.$or = [{ createdBy: req.user._id }, { doctorId: req.user._id }];
     }
@@ -738,9 +739,16 @@ const getRegistrations = async (req, res) => {
       tenantQ.$or = [{ createdBy: req.user._id }, { doctorId: req.user._id }];
     }
 
+    const statsBaseQuery = { ...tenantQ };
+    if (doctorId) statsBaseQuery.doctorId = doctorId;
+    if (department) statsBaseQuery.department = department;
+    if (uhid) statsBaseQuery.uhid = { $regex: uhid, $options: 'i' };
+    if (registrationNumber) statsBaseQuery.registrationNumber = { $regex: registrationNumber, $options: 'i' };
+    if (query.patientId) statsBaseQuery.patientId = query.patientId;
+
     const [totalToday, totalMonth, totalCount] = await Promise.all([
-      Visit.countDocuments({ ...tenantQ, registrationDate: { $gte: today, $lt: tomorrow } }),
-      Visit.countDocuments({ ...tenantQ, registrationDate: { $gte: monthStart } }),
+      Visit.countDocuments({ ...statsBaseQuery, registrationDate: { $gte: today, $lt: tomorrow } }),
+      Visit.countDocuments({ ...statsBaseQuery, registrationDate: { $gte: monthStart } }),
       Visit.countDocuments(query)
     ]);
 

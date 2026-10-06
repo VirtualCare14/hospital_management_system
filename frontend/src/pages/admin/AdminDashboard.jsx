@@ -21,12 +21,16 @@ import {
   AlertCircle,
   ArrowLeft,
   X,
+  Eye,
+  Filter,
+  FlaskConical,
   Loader2
 } from 'lucide-react';
 import client from '../../api/client';
 import { useHeader } from '../../context/HeaderContext';
 import SkeletonCard from '../../components/Skeleton/SkeletonCard';
 import StatCard from '../../components/StatCard.jsx';
+import PaginationFooter from '../../components/PaginationFooter';
 import toast from 'react-hot-toast';
 
 const ageFromDob = (dob) => {
@@ -286,10 +290,57 @@ const AdminInvoiceEditor = () => {
 };
 
 const AdminDashboard = () => {
-  const [activeTab, setActiveTab] = useState('staff'); // 'staff', 'tracking', 'summary', 'invoices'
+  const [activeTab, setActiveTab] = useState('staff'); // 'staff', 'doctorTracking', 'tracking', 'summary', 'invoices'
   const [users, setUsers] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  // Doctor Tracking State
+  const [doctorTrackingData, setDoctorTrackingData] = useState(null);
+  const [doctorTrackingLoading, setDoctorTrackingLoading] = useState(false);
+  const [doctorSearch, setDoctorSearch] = useState('');
+  const [doctorDeptFilter, setDoctorDeptFilter] = useState('');
+  const [doctorTrackingPage, setDoctorTrackingPage] = useState(1);
+  const [doctorTrackingPageSize, setDoctorTrackingPageSize] = useState(10);
+  const [selectedDoctorModal, setSelectedDoctorModal] = useState(null);
+
+  // Doctor Detailed Modal Tracking State (Medicines & Labs with Date Filter)
+  const [doctorDetailPreset, setDoctorDetailPreset] = useState('today'); // 'today' | '7days' | '1month' | 'custom'
+  const [doctorDetailFromDate, setDoctorDetailFromDate] = useState('');
+  const [doctorDetailToDate, setDoctorDetailToDate] = useState('');
+  const [doctorDetailedData, setDoctorDetailedData] = useState(null);
+  const [doctorDetailLoading, setDoctorDetailLoading] = useState(false);
+  const [medicineFilterQuery, setMedicineFilterQuery] = useState('');
+  const [doctorModalTab, setDoctorModalTab] = useState('medicines'); // 'medicines' | 'labs' | 'schedule'
+
+  const fetchDoctorDetails = useCallback((docId, preset, fromDate, toDate) => {
+    if (!docId) return;
+    setDoctorDetailLoading(true);
+    const params = {};
+    if (preset && preset !== 'custom') {
+      params.preset = preset;
+    } else if (preset === 'custom') {
+      if (fromDate) params.fromDate = fromDate;
+      if (toDate) params.toDate = toDate;
+    }
+    client.get(`/admin/doctor-tracking/${docId}/details`, { params })
+      .then((res) => {
+        setDoctorDetailedData(res.data);
+      })
+      .catch((err) => {
+        console.error('Fetch doctor detailed tracking error:', err);
+        toast.error('Failed to load doctor tracking details');
+      })
+      .finally(() => setDoctorDetailLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (selectedDoctorModal?._id) {
+      fetchDoctorDetails(selectedDoctorModal._id, doctorDetailPreset, doctorDetailFromDate, doctorDetailToDate);
+    } else {
+      setDoctorDetailedData(null);
+    }
+  }, [selectedDoctorModal?._id, doctorDetailPreset, doctorDetailFromDate, doctorDetailToDate, fetchDoctorDetails]);
 
   // Tracking State
   const [trackingData, setTrackingData] = useState(null);
@@ -309,6 +360,30 @@ const AdminDashboard = () => {
   const [patientTrackingData, setPatientTrackingData] = useState(null);
   const [trackingDetailsLoading, setTrackingDetailsLoading] = useState(false);
 
+  // Pagination for Patient Summary Tab
+  const [summaryPage, setSummaryPage] = useState(1);
+  const [summaryPageSize, setSummaryPageSize] = useState(20);
+
+  // Fetch doctor tracking data when tab is opened
+  useEffect(() => {
+    if (activeTab === 'doctorTracking') {
+      setDoctorTrackingLoading(true);
+      client.get('/admin/doctor-tracking')
+        .then((res) => {
+          setDoctorTrackingData(res.data);
+        })
+        .catch((err) => {
+          console.error(err);
+          toast.error('Failed to load doctor tracking data');
+        })
+        .finally(() => setDoctorTrackingLoading(false));
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    setDoctorTrackingPage(1);
+  }, [doctorSearch, doctorDeptFilter, activeTab]);
+
   // Fetch patient list when summary tab is opened
   useEffect(() => {
     if (activeTab === 'summary') {
@@ -324,6 +399,11 @@ const AdminDashboard = () => {
         .finally(() => setPatientsLoading(false));
     }
   }, [activeTab]);
+
+  // Reset pagination when search or tab changes
+  useEffect(() => {
+    setSummaryPage(1);
+  }, [patientSearch, activeTab]);
 
   // Fetch patient tracking timeline when a patient is selected for tracking
   useEffect(() => {
@@ -361,6 +441,19 @@ const AdminDashboard = () => {
         toast.error('Failed to load dashboard data');
       })
       .finally(() => setLoading(false));
+
+    if (activeTab === 'doctorTracking') {
+      setDoctorTrackingLoading(true);
+      client.get('/admin/doctor-tracking')
+        .then((res) => {
+          setDoctorTrackingData(res.data);
+        })
+        .catch((err) => {
+          console.error(err);
+          toast.error('Failed to load doctor tracking data');
+        })
+        .finally(() => setDoctorTrackingLoading(false));
+    }
 
     if (activeTab === 'tracking') {
       setTrackingLoading(true);
@@ -420,10 +513,36 @@ const AdminDashboard = () => {
 
   const doctors = users.filter((user) => user.role === 'doctor');
   
+  // Filtered & Paginated Doctor Tracking
+  const allTrackingDoctors = doctorTrackingData?.doctors || [];
+  const filteredDoctors = allTrackingDoctors.filter((doc) => {
+    const matchesSearch = !doctorSearch ||
+      doc.doctorName?.toLowerCase().includes(doctorSearch.toLowerCase()) ||
+      doc.username?.toLowerCase().includes(doctorSearch.toLowerCase()) ||
+      doc.specialization?.toLowerCase().includes(doctorSearch.toLowerCase()) ||
+      doc.department?.toLowerCase().includes(doctorSearch.toLowerCase());
+    const matchesDept = !doctorDeptFilter || doc.department === doctorDeptFilter;
+    return matchesSearch && matchesDept;
+  });
+
+  const totalDoctorTrackingRecords = filteredDoctors.length;
+  const totalDoctorTrackingPages = Math.ceil(totalDoctorTrackingRecords / doctorTrackingPageSize) || 1;
+  const paginatedDoctors = filteredDoctors.slice(
+    (doctorTrackingPage - 1) * doctorTrackingPageSize,
+    doctorTrackingPage * doctorTrackingPageSize
+  );
+
   const filteredPatients = patients.filter((p) =>
     p.patientName?.toLowerCase().includes(patientSearch.toLowerCase()) ||
     p.uhid?.toLowerCase().includes(patientSearch.toLowerCase()) ||
     p.mobile?.includes(patientSearch)
+  );
+
+  const totalSummaryRecords = filteredPatients.length;
+  const totalSummaryPages = Math.ceil(totalSummaryRecords / summaryPageSize) || 1;
+  const paginatedPatients = filteredPatients.slice(
+    (summaryPage - 1) * summaryPageSize,
+    summaryPage * summaryPageSize
   );
 
   useHeader({ onRefresh: loadDashboardData });
@@ -432,12 +551,18 @@ const AdminDashboard = () => {
     <div className="space-y-6">
       {/* Top Header Controls */}
       <div className="flex justify-end border-b border-orange-100 pb-4">
-        <div className="flex bg-orange-50 p-1.5 rounded-xl border border-orange-100">
+        <div className="flex bg-orange-50 p-1.5 rounded-xl border border-orange-100 flex-wrap gap-1">
           <button
             onClick={() => setActiveTab('staff')}
             className={`px-4 py-2 text-xs font-bold rounded-lg transition duration-200 ${activeTab === 'staff' ? 'bg-orange-500 text-white shadow-sm' : 'text-orange-950 hover:bg-orange-100/50'}`}
           >
             Staff & Departments
+          </button>
+          <button
+            onClick={() => setActiveTab('doctorTracking')}
+            className={`px-4 py-2 text-xs font-bold rounded-lg transition duration-200 ${activeTab === 'doctorTracking' ? 'bg-orange-500 text-white shadow-sm' : 'text-orange-950 hover:bg-orange-100/50'}`}
+          >
+            Doctor Tracking
           </button>
           <button
             onClick={() => setActiveTab('tracking')}
@@ -449,7 +574,7 @@ const AdminDashboard = () => {
             onClick={() => setActiveTab('summary')}
             className={`px-4 py-2 text-xs font-bold rounded-lg transition duration-200 ${activeTab === 'summary' ? 'bg-orange-500 text-white shadow-sm' : 'text-orange-950 hover:bg-orange-100/50'}`}
           >
-            Patient Summary
+            Patient Tracking
           </button>
           <button
             onClick={() => setActiveTab('invoices')}
@@ -528,6 +653,658 @@ const AdminDashboard = () => {
                 </div>
               </div>
             </>
+          )}
+        </div>
+      )}
+
+      {/* TAB: DOCTOR TRACKING */}
+      {activeTab === 'doctorTracking' && (
+        <div className="space-y-6">
+          {doctorTrackingLoading ? (
+            <div className="space-y-6">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <SkeletonCard className="w-full h-36" headerHeight="1.5rem" bodyLines={2} />
+                <SkeletonCard className="w-full h-36" headerHeight="1.5rem" bodyLines={2} />
+                <SkeletonCard className="w-full h-36" headerHeight="1.5rem" bodyLines={2} />
+                <SkeletonCard className="w-full h-36" headerHeight="1.5rem" bodyLines={2} />
+              </div>
+              <SkeletonCard className="w-full h-96" headerHeight="2rem" bodyLines={6} />
+            </div>
+          ) : (
+            <>
+              {/* Stat Cards */}
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="p-5 bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-2xl shadow-md relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-4 translate-x-3 -translate-y-3 opacity-20 transition duration-300 group-hover:scale-110">
+                    <Stethoscope className="h-28 w-28" />
+                  </div>
+                  <p className="text-xs uppercase font-extrabold tracking-wider text-blue-100">Total Doctors</p>
+                  <p className="text-3xl font-black mt-2 text-white">{doctorTrackingData?.summary?.totalDoctors || 0}</p>
+                  <p className="text-xs text-blue-200 mt-2 font-bold">{doctorTrackingData?.summary?.activeDoctors || 0} Active on duty</p>
+                </div>
+
+                <div className="p-5 bg-gradient-to-br from-orange-500 to-amber-600 text-white rounded-2xl shadow-md relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-4 translate-x-3 -translate-y-3 opacity-20 transition duration-300 group-hover:scale-110">
+                    <Calendar className="h-28 w-28" />
+                  </div>
+                  <p className="text-xs uppercase font-extrabold tracking-wider text-orange-100">Today's Assigned OPD</p>
+                  <p className="text-3xl font-black mt-2 text-white">{doctorTrackingData?.summary?.todayTotalVisits || 0}</p>
+                  <p className="text-xs text-orange-200 mt-2 font-bold">Total appointments scheduled today</p>
+                </div>
+
+                <div className="p-5 bg-gradient-to-br from-green-600 to-emerald-700 text-white rounded-2xl shadow-md relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-4 translate-x-3 -translate-y-3 opacity-20 transition duration-300 group-hover:scale-110">
+                    <CheckCircle className="h-28 w-28" />
+                  </div>
+                  <p className="text-xs uppercase font-extrabold tracking-wider text-green-100">Today's OPD Status</p>
+                  <p className="text-3xl font-black mt-2 text-white">{doctorTrackingData?.summary?.todayCompletedVisits || 0}</p>
+                  <p className="text-xs text-green-200 mt-2 font-bold">{doctorTrackingData?.summary?.todayPendingVisits || 0} Consultations pending</p>
+                </div>
+
+                <div className="p-5 bg-gradient-to-br from-purple-600 to-indigo-800 text-white rounded-2xl shadow-md relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-4 translate-x-3 -translate-y-3 opacity-20 transition duration-300 group-hover:scale-110">
+                    <Building2 className="h-28 w-28" />
+                  </div>
+                  <p className="text-xs uppercase font-extrabold tracking-wider text-purple-100">Active IPD Inpatients</p>
+                  <p className="text-3xl font-black mt-2 text-white">{doctorTrackingData?.summary?.totalActiveIpd || 0}</p>
+                  <p className="text-xs text-purple-200 mt-2 font-bold">Currently admitted under doctors</p>
+                </div>
+              </div>
+
+              {/* Search & Department Filter Box */}
+              <div className="card p-5 border border-orange-100 shadow-sm rounded-2xl bg-white">
+                <div className="grid gap-4 md:grid-cols-[1fr_250px]">
+                  <div className="relative">
+                    <Search className="absolute left-3.5 top-3.5 h-4 w-4 text-orange-400" />
+                    <input
+                      type="text"
+                      placeholder="Search doctor by name, username, department or specialization..."
+                      value={doctorSearch}
+                      onChange={(e) => setDoctorSearch(e.target.value)}
+                      className="input pl-10 text-xs font-medium"
+                    />
+                  </div>
+                  <div>
+                    <select
+                      value={doctorDeptFilter}
+                      onChange={(e) => setDoctorDeptFilter(e.target.value)}
+                      className="input py-2 text-xs font-semibold cursor-pointer"
+                    >
+                      <option value="">All Departments</option>
+                      {departments.map((dept) => (
+                        <option key={dept._id} value={dept.departmentName}>
+                          {dept.departmentName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Doctors Tracking Table */}
+              <div className="card overflow-hidden rounded-2xl border border-orange-100 shadow-sm bg-white">
+                <div className="border-b border-orange-100 p-5 bg-gradient-to-r from-orange-50/50 to-white flex items-center justify-between">
+                  <h2 className="font-bold text-gray-800 text-lg flex items-center gap-2">
+                    <Stethoscope className="h-5 w-5 text-orange-600" />
+                    Doctor Performance & Live Tracking ({filteredDoctors.length})
+                  </h2>
+                </div>
+
+                {filteredDoctors.length === 0 ? (
+                  <div className="p-8 text-center text-gray-400 italic">
+                    No doctors found matching your criteria.
+                  </div>
+                ) : (
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-sm">
+                        <thead className="bg-orange-100/50 text-xs uppercase text-orange-950 font-bold">
+                          <tr>
+                            <th className="p-4">Doctor Name</th>
+                            <th className="p-4">Department</th>
+                            <th className="p-4">Status</th>
+                            <th className="p-4">Today's OPD Load</th>
+                            <th className="p-4">All-time OPD</th>
+                            <th className="p-4">IPD Admitted</th>
+                            <th className="p-4">Total Treated</th>
+                            <th className="p-4 text-right">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {paginatedDoctors.map((doc) => (
+                            <tr key={doc._id} className="border-t border-orange-50/60 hover:bg-orange-50/10 transition duration-150">
+                              <td className="p-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="h-9 w-9 rounded-xl bg-orange-100 text-orange-700 flex items-center justify-center font-bold text-sm">
+                                    {(doc.doctorName || doc.username || 'D')[0]?.toUpperCase()}
+                                  </div>
+                                  <div>
+                                    <p className="font-bold text-gray-900 text-sm">
+                                      {doc.role === 'nursing' ? '' : 'Dr. '}{doc.doctorName || doc.username}
+                                    </p>
+                                    <p className="text-[11px] text-gray-500 font-mono">
+                                      @{doc.username} {doc.specialization ? `• ${doc.specialization}` : ''}
+                                    </p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="p-4">
+                                <span className="inline-block px-2.5 py-1 rounded-lg bg-orange-50 border border-orange-100 text-orange-900 text-xs font-bold">
+                                  {doc.department || 'General'}
+                                </span>
+                              </td>
+                              <td className="p-4">
+                                <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                                  doc.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                                }`}>
+                                  {doc.isActive ? 'Active' : 'Disabled'}
+                                </span>
+                              </td>
+                              <td className="p-4">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="px-2 py-0.5 rounded-md text-xs font-bold bg-gray-100 text-gray-800" title="Total Today">
+                                    {doc.stats?.todayTotal || 0} Total
+                                  </span>
+                                  <span className="px-2 py-0.5 rounded-md text-xs font-bold bg-green-100 text-green-700" title="Completed Today">
+                                    ✓ {doc.stats?.todayCompleted || 0}
+                                  </span>
+                                  {doc.stats?.todayPending > 0 && (
+                                    <span className="px-2 py-0.5 rounded-md text-xs font-bold bg-orange-100 text-orange-700" title="Pending Today">
+                                      ⏳ {doc.stats?.todayPending || 0}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="p-4">
+                                <div className="text-xs">
+                                  <p className="font-bold text-gray-800">{doc.stats?.totalVisits || 0} visits</p>
+                                  <p className="text-[10px] text-green-600 font-semibold">{doc.stats?.totalCompleted || 0} completed</p>
+                                </div>
+                              </td>
+                              <td className="p-4">
+                                <span className={`inline-block px-2.5 py-0.5 rounded-lg text-xs font-bold ${
+                                  (doc.stats?.activeIpdCount || 0) > 0 ? 'bg-indigo-100 text-indigo-700 border border-indigo-200' : 'text-gray-400'
+                                }`}>
+                                  {doc.stats?.activeIpdCount || 0} Inpatients
+                                </span>
+                              </td>
+                              <td className="p-4">
+                                <div className="text-xs">
+                                  <p className="font-bold text-gray-900">{doc.stats?.totalPatientsTreated || 0} patients</p>
+                                  <p className="text-[10px] text-gray-500 font-medium">OPD Fee: ₹{doc.opdFees || 0}</p>
+                                </div>
+                              </td>
+                              <td className="p-4 text-right">
+                                <button
+                                  onClick={() => setSelectedDoctorModal(doc)}
+                                  className="px-3 py-1.5 text-xs font-bold rounded-lg bg-orange-500 text-white shadow-sm hover:bg-orange-600 transition cursor-pointer inline-flex items-center gap-1.5"
+                                >
+                                  <Eye className="h-3.5 w-3.5" /> View Details
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {totalDoctorTrackingRecords > 0 && (
+                      <PaginationFooter
+                        currentPage={doctorTrackingPage}
+                        pageSize={doctorTrackingPageSize}
+                        totalRecords={totalDoctorTrackingRecords}
+                        totalPages={totalDoctorTrackingPages}
+                        onPageChange={setDoctorTrackingPage}
+                        onPageSizeChange={(newSize) => {
+                          setDoctorTrackingPageSize(newSize);
+                          setDoctorTrackingPage(1);
+                        }}
+                        loading={doctorTrackingLoading}
+                        pageSizeOptions={[5, 10, 20, 50]}
+                        itemLabel="doctors"
+                      />
+                    )}
+                  </>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* Doctor Details & Schedule Modal */}
+          {selectedDoctorModal && (
+            <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+              <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full overflow-hidden border border-orange-100 max-h-[92vh] flex flex-col animate-in fade-in zoom-in duration-150">
+                {/* Modal Header */}
+                <div className="p-5 border-b border-orange-100 bg-gradient-to-r from-orange-500 via-orange-600 to-amber-600 text-white flex items-center justify-between">
+                  <div className="flex items-center gap-3.5">
+                    <div className="h-12 w-12 rounded-2xl bg-white/20 backdrop-blur-md text-white flex items-center justify-center font-black text-xl shadow-inner">
+                      {(selectedDoctorModal.doctorName || selectedDoctorModal.username || 'D')[0]?.toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-extrabold text-lg sm:text-xl">
+                          {selectedDoctorModal.role === 'nursing' ? '' : 'Dr. '}{selectedDoctorModal.doctorName || selectedDoctorModal.username}
+                        </h3>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                          selectedDoctorModal.isActive ? 'bg-green-400 text-green-950' : 'bg-red-300 text-red-950'
+                        }`}>
+                          {selectedDoctorModal.isActive ? 'Active' : 'Disabled'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-orange-100 font-medium">
+                        {selectedDoctorModal.department} • {selectedDoctorModal.specialization || 'Consultant Specialist'} • @{selectedDoctorModal.username}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setSelectedDoctorModal(null)}
+                    className="p-2 rounded-full hover:bg-white/20 transition text-white cursor-pointer"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                {/* Filter Toolbar (Today, Last 7 Days, Last 1 Month, Custom Date Range) */}
+                <div className="p-4 bg-orange-50/70 border-b border-orange-100 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold text-gray-600 flex items-center gap-1.5">
+                      <Filter className="h-3.5 w-3.5 text-orange-600" /> Filter by Date:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDoctorDetailPreset('today');
+                        setDoctorDetailFromDate('');
+                        setDoctorDetailToDate('');
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition duration-150 cursor-pointer ${
+                        doctorDetailPreset === 'today'
+                          ? 'bg-orange-500 text-white shadow-xs'
+                          : 'bg-white text-gray-700 hover:bg-orange-100 border border-orange-200/70'
+                      }`}
+                    >
+                      Today
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDoctorDetailPreset('7days');
+                        setDoctorDetailFromDate('');
+                        setDoctorDetailToDate('');
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition duration-150 cursor-pointer ${
+                        doctorDetailPreset === '7days'
+                          ? 'bg-orange-500 text-white shadow-xs'
+                          : 'bg-white text-gray-700 hover:bg-orange-100 border border-orange-200/70'
+                      }`}
+                    >
+                      Last 7 Days
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDoctorDetailPreset('1month');
+                        setDoctorDetailFromDate('');
+                        setDoctorDetailToDate('');
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition duration-150 cursor-pointer ${
+                        doctorDetailPreset === '1month'
+                          ? 'bg-orange-500 text-white shadow-xs'
+                          : 'bg-white text-gray-700 hover:bg-orange-100 border border-orange-200/70'
+                      }`}
+                    >
+                      Last 1 Month
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <label className="text-[10px] font-bold uppercase text-gray-500">From</label>
+                      <input
+                        type="date"
+                        value={doctorDetailFromDate}
+                        onChange={(e) => {
+                          setDoctorDetailFromDate(e.target.value);
+                          setDoctorDetailPreset('custom');
+                        }}
+                        className="input py-1 px-2 text-xs bg-white border-orange-200 rounded-lg"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <label className="text-[10px] font-bold uppercase text-gray-500">To</label>
+                      <input
+                        type="date"
+                        value={doctorDetailToDate}
+                        onChange={(e) => {
+                          setDoctorDetailToDate(e.target.value);
+                          setDoctorDetailPreset('custom');
+                        }}
+                        className="input py-1 px-2 text-xs bg-white border-orange-200 rounded-lg"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sub Navigation Tabs */}
+                <div className="flex border-b border-orange-100 bg-white px-5 pt-2 gap-2">
+                  <button
+                    onClick={() => setDoctorModalTab('medicines')}
+                    className={`px-4 py-2.5 text-xs font-bold border-b-2 transition flex items-center gap-2 cursor-pointer ${
+                      doctorModalTab === 'medicines'
+                        ? 'border-orange-500 text-orange-600 bg-orange-50/40 rounded-t-lg'
+                        : 'border-transparent text-gray-600 hover:text-orange-500'
+                    }`}
+                  >
+                    <Pill className="h-4 w-4" />
+                    Medicines Given ({doctorDetailedData?.metrics?.totalMedicinesQuantity || 0} Qty)
+                  </button>
+                  <button
+                    onClick={() => setDoctorModalTab('labs')}
+                    className={`px-4 py-2.5 text-xs font-bold border-b-2 transition flex items-center gap-2 cursor-pointer ${
+                      doctorModalTab === 'labs'
+                        ? 'border-orange-500 text-orange-600 bg-orange-50/40 rounded-t-lg'
+                        : 'border-transparent text-gray-600 hover:text-orange-500'
+                    }`}
+                  >
+                    <FlaskConical className="h-4 w-4" />
+                    Lab Requests ({doctorDetailedData?.metrics?.totalLabRequests || 0} Daily)
+                  </button>
+                  <button
+                    onClick={() => setDoctorModalTab('schedule')}
+                    className={`px-4 py-2.5 text-xs font-bold border-b-2 transition flex items-center gap-2 cursor-pointer ${
+                      doctorModalTab === 'schedule'
+                        ? 'border-orange-500 text-orange-600 bg-orange-50/40 rounded-t-lg'
+                        : 'border-transparent text-gray-600 hover:text-orange-500'
+                    }`}
+                  >
+                    <Clock className="h-4 w-4" />
+                    Schedule & Info
+                  </button>
+                </div>
+
+                {/* Modal Body */}
+                <div className="p-5 overflow-y-auto space-y-5 flex-1">
+                  {doctorDetailLoading ? (
+                    <div className="py-12 flex flex-col items-center justify-center gap-3 text-orange-600">
+                      <Loader2 className="h-8 w-8 animate-spin" />
+                      <p className="text-xs font-bold text-gray-500">Loading doctor performance data...</p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* TAB 1: MEDICINES GIVEN */}
+                      {doctorModalTab === 'medicines' && (
+                        <div className="space-y-4">
+                          {/* Summary metrics for medicines */}
+                          <div className="grid grid-cols-3 gap-3">
+                            <div className="bg-orange-50/60 border border-orange-100 p-3 rounded-2xl text-center">
+                              <p className="text-[10px] font-bold uppercase text-gray-500">Total Prescriptions</p>
+                              <p className="text-2xl font-black text-orange-700 mt-0.5">
+                                {doctorDetailedData?.metrics?.totalPrescriptions || 0}
+                              </p>
+                              <p className="text-[10px] text-orange-600 font-semibold mt-0.5">Written in period</p>
+                            </div>
+                            <div className="bg-blue-50/60 border border-blue-100 p-3 rounded-2xl text-center">
+                              <p className="text-[10px] font-bold uppercase text-gray-500">Unique Medicines</p>
+                              <p className="text-2xl font-black text-blue-700 mt-0.5">
+                                {doctorDetailedData?.medicines?.length || 0}
+                              </p>
+                              <p className="text-[10px] text-blue-600 font-semibold mt-0.5">Distinct drug names</p>
+                            </div>
+                            <div className="bg-green-50/60 border border-green-100 p-3 rounded-2xl text-center">
+                              <p className="text-[10px] font-bold uppercase text-gray-500">Total Quantity Prescribed</p>
+                              <p className="text-2xl font-black text-green-700 mt-0.5">
+                                {doctorDetailedData?.metrics?.totalMedicinesQuantity || 0}
+                              </p>
+                              <p className="text-[10px] text-green-600 font-semibold mt-0.5">Total units / tablets given</p>
+                            </div>
+                          </div>
+
+                          {/* Medicine Search Filter */}
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="relative flex-1 max-w-sm">
+                              <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-gray-400" />
+                              <input
+                                type="text"
+                                placeholder="Search medicine by name..."
+                                value={medicineFilterQuery}
+                                onChange={(e) => setMedicineFilterQuery(e.target.value)}
+                                className="input py-1.5 pl-8 text-xs w-full bg-gray-50/50"
+                              />
+                            </div>
+                            <span className="text-xs font-bold text-gray-500">
+                              {(doctorDetailedData?.medicines || []).filter(m => !medicineFilterQuery || m.medicineName?.toLowerCase().includes(medicineFilterQuery.toLowerCase())).length} Medicines
+                            </span>
+                          </div>
+
+                          {/* Medicines Table */}
+                          <div className="border border-orange-100 rounded-2xl overflow-hidden bg-white shadow-2xs">
+                            {(!doctorDetailedData?.medicines || doctorDetailedData.medicines.length === 0) ? (
+                              <div className="p-8 text-center text-gray-400 text-xs italic">
+                                No medicines prescribed by this doctor in the selected date range.
+                              </div>
+                            ) : (
+                              <div className="overflow-x-auto max-h-[340px]">
+                                <table className="w-full text-left text-xs">
+                                  <thead className="bg-orange-100/50 uppercase text-orange-950 font-bold sticky top-0 z-10">
+                                    <tr>
+                                      <th className="p-3">#</th>
+                                      <th className="p-3">Medicine Name</th>
+                                      <th className="p-3">Dosage Form</th>
+                                      <th className="p-3">Strength</th>
+                                      <th className="p-3 text-center">Prescriptions Count</th>
+                                      <th className="p-3 text-right">Total Quantity (Qty)</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-orange-50">
+                                    {(doctorDetailedData.medicines || [])
+                                      .filter(m => !medicineFilterQuery || m.medicineName?.toLowerCase().includes(medicineFilterQuery.toLowerCase()))
+                                      .map((med, idx) => (
+                                        <tr key={idx} className="hover:bg-orange-50/20 transition">
+                                          <td className="p-3 text-gray-400 font-mono">{idx + 1}</td>
+                                          <td className="p-3">
+                                            <p className="font-bold text-gray-900">{med.medicineName}</p>
+                                          </td>
+                                          <td className="p-3">
+                                            <span className="inline-block px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[10px] font-bold border border-blue-100">
+                                              {med.dosageForm || 'Tablet'}
+                                            </span>
+                                          </td>
+                                          <td className="p-3 text-gray-600 font-medium">
+                                            {med.strength || '-'}
+                                          </td>
+                                          <td className="p-3 text-center font-semibold text-gray-700">
+                                            {med.prescriptionCount} times
+                                          </td>
+                                          <td className="p-3 text-right">
+                                            <span className="inline-block px-3 py-1 rounded-xl bg-green-100 text-green-800 font-black text-xs border border-green-200 shadow-2xs">
+                                              {med.totalQty} Qty
+                                            </span>
+                                          </td>
+                                        </tr>
+                                      ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* TAB 2: LAB REQUESTS & DAILY BREAKDOWN */}
+                      {doctorModalTab === 'labs' && (
+                        <div className="space-y-4">
+                          {/* Summary metrics for lab requests */}
+                          <div className="grid grid-cols-3 gap-3">
+                            <div className="bg-purple-50/60 border border-purple-100 p-3 rounded-2xl text-center">
+                              <p className="text-[10px] font-bold uppercase text-gray-500">Total Lab Requests</p>
+                              <p className="text-2xl font-black text-purple-700 mt-0.5">
+                                {doctorDetailedData?.metrics?.totalLabRequests || 0}
+                              </p>
+                              <p className="text-[10px] text-purple-600 font-semibold mt-0.5">Referred in period</p>
+                            </div>
+                            <div className="bg-amber-50/60 border border-amber-100 p-3 rounded-2xl text-center">
+                              <p className="text-[10px] font-bold uppercase text-gray-500">Total Tests Prescribed</p>
+                              <p className="text-2xl font-black text-amber-700 mt-0.5">
+                                {doctorDetailedData?.metrics?.totalTestsPrescribed || 0}
+                              </p>
+                              <p className="text-[10px] text-amber-600 font-semibold mt-0.5">Individual lab tests</p>
+                            </div>
+                            <div className="bg-teal-50/60 border border-teal-100 p-3 rounded-2xl text-center">
+                              <p className="text-[10px] font-bold uppercase text-gray-500">Days With Lab Orders</p>
+                              <p className="text-2xl font-black text-teal-700 mt-0.5">
+                                {doctorDetailedData?.dailyLabRequests?.length || 0}
+                              </p>
+                              <p className="text-[10px] text-teal-600 font-semibold mt-0.5">Active prescribing days</p>
+                            </div>
+                          </div>
+
+                          {/* Top Prescribed Tests */}
+                          {doctorDetailedData?.topTests && doctorDetailedData.topTests.length > 0 && (
+                            <div className="p-3 bg-gray-50/80 rounded-2xl border border-gray-100">
+                              <p className="text-[10px] font-bold uppercase text-gray-500 mb-2">Most Requested Tests</p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {doctorDetailedData.topTests.slice(0, 8).map((t, idx) => (
+                                  <span key={idx} className="px-2.5 py-1 rounded-lg bg-white border border-gray-200 text-xs font-bold text-gray-800 shadow-2xs">
+                                    {t.testName} <span className="text-orange-600 font-black">({t.count})</span>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Daily Lab Requests Breakdown Table */}
+                          <div>
+                            <h4 className="font-bold text-gray-800 text-xs uppercase tracking-wider mb-2">
+                              Daily Lab Requests Breakdown
+                            </h4>
+                            <div className="border border-orange-100 rounded-2xl overflow-hidden bg-white shadow-2xs">
+                              {(!doctorDetailedData?.dailyLabRequests || doctorDetailedData.dailyLabRequests.length === 0) ? (
+                                <div className="p-8 text-center text-gray-400 text-xs italic">
+                                  No lab requests ordered by this doctor in the selected date range.
+                                </div>
+                              ) : (
+                                <div className="overflow-x-auto max-h-[300px]">
+                                  <table className="w-full text-left text-xs">
+                                    <thead className="bg-orange-100/50 uppercase text-orange-950 font-bold sticky top-0 z-10">
+                                      <tr>
+                                        <th className="p-3">Date</th>
+                                        <th className="p-3 text-center">Lab Requests (Qty)</th>
+                                        <th className="p-3 text-center">Tests Ordered</th>
+                                        <th className="p-3">Tests Breakdown</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-orange-50">
+                                      {doctorDetailedData.dailyLabRequests.map((dayItem, idx) => (
+                                        <tr key={idx} className="hover:bg-orange-50/20 transition">
+                                          <td className="p-3 font-bold text-gray-900 whitespace-nowrap">
+                                            {dayItem.date !== 'Unknown'
+                                              ? new Date(dayItem.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                                              : 'Unknown Date'}
+                                          </td>
+                                          <td className="p-3 text-center">
+                                            <span className="inline-block px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800 font-black text-xs">
+                                              {dayItem.requestCount} requests
+                                            </span>
+                                          </td>
+                                          <td className="p-3 text-center font-bold text-gray-700">
+                                            {dayItem.testsCount} tests
+                                          </td>
+                                          <td className="p-3">
+                                            <div className="flex flex-wrap gap-1 max-w-md">
+                                              {dayItem.testsSummary.map((test, tIdx) => (
+                                                <span key={tIdx} className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 text-[10px] font-semibold">
+                                                  {test}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* TAB 3: SCHEDULE & DOCTOR INFO */}
+                      {doctorModalTab === 'schedule' && (
+                        <div className="space-y-5">
+                          {/* Doctor Info Grid */}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-orange-50/40 p-4 rounded-2xl border border-orange-100/60">
+                            <div>
+                              <p className="text-[10px] font-bold uppercase text-gray-500">Username</p>
+                              <p className="font-bold text-gray-800 text-xs mt-0.5 font-mono">@{selectedDoctorModal.username}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-bold uppercase text-gray-500">OPD Consultation Fee</p>
+                              <p className="font-bold text-green-700 text-xs mt-0.5">₹{selectedDoctorModal.opdFees || 0}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-bold uppercase text-gray-500">Slot Gap</p>
+                              <p className="font-bold text-gray-800 text-xs mt-0.5">{selectedDoctorModal.slotGap || 10} Minutes</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-bold uppercase text-gray-500">Mobile</p>
+                              <p className="font-bold text-gray-800 text-xs mt-0.5">{selectedDoctorModal.mobile || 'N/A'}</p>
+                            </div>
+                          </div>
+
+                          {/* Weekly Schedule Slots */}
+                          <div>
+                            <h4 className="font-bold text-gray-800 text-sm mb-3 flex items-center gap-2">
+                              <Clock className="h-4 w-4 text-orange-500" />
+                              Weekly Schedule & Available Slots
+                            </h4>
+                            {selectedDoctorModal.availableSlots && selectedDoctorModal.availableSlots.length > 0 ? (
+                              <div className="grid gap-2 sm:grid-cols-2">
+                                {selectedDoctorModal.availableSlots.map((slot, idx) => (
+                                  <div
+                                    key={idx}
+                                    className={`p-3 rounded-xl border flex items-center justify-between text-xs ${
+                                      slot.isAvailable !== false ? 'border-green-200 bg-green-50/30' : 'border-gray-200 bg-gray-50 opacity-60'
+                                    }`}
+                                  >
+                                    <span className="font-bold text-gray-800">{slot.day}</span>
+                                    <span className="font-mono text-gray-600 text-[11px]">
+                                      {slot.isAvailable !== false ? `${slot.startTime || '09:00'} - ${slot.endTime || '17:00'}` : 'Unavailable'}
+                                    </span>
+                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase ${
+                                      slot.isAvailable !== false ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'
+                                    }`}>
+                                      {slot.isAvailable !== false ? 'Available' : 'Off'}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-gray-400 italic bg-gray-50 p-4 rounded-xl text-center">
+                                No specific time slots configured. Standard OPD timings apply.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Modal Footer */}
+                <div className="p-4 border-t border-orange-100 bg-gray-50/70 flex items-center justify-between">
+                  <span className="text-xs text-gray-500 font-medium">
+                    Showing statistics for: <strong className="text-orange-600 capitalize">{doctorDetailPreset === '7days' ? 'Last 7 Days' : doctorDetailPreset === '1month' ? 'Last 1 Month' : doctorDetailPreset === 'today' ? 'Today' : 'Custom Range'}</strong>
+                  </span>
+                  <button
+                    onClick={() => setSelectedDoctorModal(null)}
+                    className="px-5 py-2 text-xs font-bold rounded-xl bg-gray-200 hover:bg-gray-300 text-gray-800 transition cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
         </div>
       )}
@@ -809,17 +1586,17 @@ const AdminDashboard = () => {
         </div>
       )}
 
-      {/* TAB 3: PATIENT SUMMARY */}
+      {/* TAB 3: PATIENT TRACKING */}
       {activeTab === 'summary' && (
         <div className="space-y-6">
           {/* Patient Search Input */}
           <div className="card p-5 border border-orange-100 shadow-sm rounded-2xl bg-white relative">
-            <h3 className="font-bold text-gray-800 mb-3 text-lg">Search Patient Summary</h3>
+            <h3 className="font-bold text-gray-800 mb-3 text-lg">Search Patient Tracking</h3>
             <div className="relative">
               <Search className="absolute left-3.5 top-3.5 h-4 w-4 text-orange-400" />
               <input
                 type="text"
-                placeholder="Search patient by Patient Name, UHID or Mobile Number..."
+                placeholder="Search patient by Patient Name, UHID or Mobile Number for tracking..."
                 value={patientSearch}
                 onChange={(e) => setPatientSearch(e.target.value)}
                 className="input pl-10"
@@ -874,39 +1651,57 @@ const AdminDashboard = () => {
                   No patients found.
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-orange-100/50 text-xs uppercase text-orange-950 font-bold">
-                      <tr>
-                        <th className="p-4">UHID</th>
-                        <th className="p-4">Patient Name</th>
-                        <th className="p-4">Mobile</th>
-                        <th className="p-4">Gender</th>
-                        <th className="p-4">Category</th>
-                        <th className="p-4 text-right">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredPatients.map((p) => (
-                        <tr key={p._id} className="border-t border-orange-50/60 hover:bg-orange-50/10 transition duration-150">
-                          <td className="p-4 font-semibold text-orange-600">{p.uhid}</td>
-                          <td className="p-4 font-bold text-gray-900">{p.patientName}</td>
-                          <td className="p-4 text-gray-600">{p.mobile}</td>
-                          <td className="p-4 text-gray-600">{p.gender}</td>
-                          <td className="p-4 text-gray-600">{p.category || 'General'}</td>
-                          <td className="p-4 text-right">
-                            <button
-                              onClick={() => handleSelectPatient(p._id)}
-                              className="px-3 py-1.5 text-xs font-bold rounded-lg bg-orange-500 text-white shadow-sm hover:bg-orange-600 transition"
-                            >
-                              View Summary
-                            </button>
-                          </td>
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-orange-100/50 text-xs uppercase text-orange-950 font-bold">
+                        <tr>
+                          <th className="p-4">UHID</th>
+                          <th className="p-4">Patient Name</th>
+                          <th className="p-4">Mobile</th>
+                          <th className="p-4">Gender</th>
+                          <th className="p-4">Category</th>
+                          <th className="p-4 text-right">Action</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {paginatedPatients.map((p) => (
+                          <tr key={p._id} className="border-t border-orange-50/60 hover:bg-orange-50/10 transition duration-150">
+                            <td className="p-4 font-semibold text-orange-600">{p.uhid}</td>
+                            <td className="p-4 font-bold text-gray-900">{p.patientName}</td>
+                            <td className="p-4 text-gray-600">{p.mobile}</td>
+                            <td className="p-4 text-gray-600">{p.gender}</td>
+                            <td className="p-4 text-gray-600">{p.category || 'General'}</td>
+                            <td className="p-4 text-right">
+                              <button
+                                onClick={() => handleSelectPatient(p._id)}
+                                className="px-3 py-1.5 text-xs font-bold rounded-lg bg-orange-500 text-white shadow-sm hover:bg-orange-600 transition cursor-pointer"
+                              >
+                                View Summary
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {totalSummaryRecords > 0 && (
+                    <PaginationFooter
+                      currentPage={summaryPage}
+                      pageSize={summaryPageSize}
+                      totalRecords={totalSummaryRecords}
+                      totalPages={totalSummaryPages}
+                      onPageChange={setSummaryPage}
+                      onPageSizeChange={(newSize) => {
+                        setSummaryPageSize(newSize);
+                        setSummaryPage(1);
+                      }}
+                      loading={patientsLoading}
+                      pageSizeOptions={[10, 20, 50, 100]}
+                      itemLabel="patients"
+                    />
+                  )}
+                </>
               )}
             </div>
           ) : (

@@ -89,10 +89,40 @@ export const getDefaultPathForUser = (user, requestedModule) => {
   return firstModule ? `/module/${firstModule}` : '/';
 };
 
-export const getLabsPortalUrl = () => {
+export const getLabsPortalUrl = (path = '', queryParams = {}) => {
   let baseUrl = 'https://labs.medora360.com';
   if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_LABS_URL) {
     baseUrl = import.meta.env.VITE_LABS_URL.replace(/\/$/, '');
   }
-  return `${baseUrl}/login`;
+
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const userStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+
+  let targetPath = path || '';
+  if (targetPath && !targetPath.startsWith('/')) {
+    targetPath = `/${targetPath}`;
+  }
+
+  const [basePath, existingQuery] = targetPath.split('?');
+  const params = new URLSearchParams(existingQuery || '');
+
+  if (queryParams && typeof queryParams === 'object') {
+    Object.entries(queryParams).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        params.set(key, String(value));
+      }
+    });
+  }
+
+  if (token) {
+    params.set('token', token);
+  }
+  if (userStr) {
+    params.set('user', userStr);
+  }
+
+  const queryString = params.toString();
+  const cleanPath = basePath || (token ? '/dashboard' : '/login');
+  return `${baseUrl}${cleanPath}${queryString ? `?${queryString}` : ''}`;
 };
+

@@ -33,6 +33,7 @@ const {
   getRecommendedTests,
   getBills,
   receivePayment,
+  updateTestPrice,
   uploadCloudinaryImage,
   deleteCloudinaryImage,
   getDiagnosisTemplateForTest,
@@ -63,6 +64,7 @@ router.get('/diagnosis-templates/test/:testId', authMiddleware, getDiagnosisTemp
 router.post('/diagnosis-templates/test/:testId', authMiddleware, saveDiagnosisTemplateForTest);
 
 router.get('/tests', authMiddleware, listTests);
+router.post('/tests/update-price', authMiddleware, updateTestPrice);
 router.get('/test-categories', authMiddleware, listTestCategories);
 router.post('/test-categories', authMiddleware, saveTestCategory);
 router.delete('/test-categories/:name', authMiddleware, deleteTestCategory);

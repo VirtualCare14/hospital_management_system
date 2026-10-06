@@ -68,11 +68,20 @@ export function AuthProvider({ children }) {
               const parsedUser = JSON.parse(decodeURIComponent(queryUser));
               setStoredUser(parsedUser);
             } catch (e) {
-              // fallback
+              try {
+                const parsedUser = JSON.parse(queryUser);
+                setStoredUser(parsedUser);
+              } catch (e2) {
+                // fallback
+              }
             }
           }
+          urlParams.delete('token');
+          urlParams.delete('user');
+          const remainingQuery = urlParams.toString();
+          const cleanUrl = window.location.pathname + (remainingQuery ? `?${remainingQuery}` : '');
           if (window.history && window.history.replaceState) {
-            window.history.replaceState({}, '', window.location.pathname);
+            window.history.replaceState({}, '', cleanUrl);
           }
         }
       } catch (e) {

@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
-import { Eye, Printer, Search, Trash2, X, Calendar, Hash, Users, FileText, Clock, Filter, ChevronDown, ChevronLeft, ChevronRight, Copy, Pencil, Save, MoreVertical, CalendarCheck, CheckCircle, History } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Eye, Printer, Search, Trash2, X, Calendar, Hash, Users, FileText, Clock, Filter, ChevronDown, ChevronLeft, ChevronRight, Copy, Pencil, Save, MoreVertical, CalendarCheck, CheckCircle, History, FlaskConical } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import toast from 'react-hot-toast';
@@ -9,8 +10,6 @@ import PatientReceipt from '../../components/PatientReceipt';
 import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 import { formatUhid } from '../../utils/uhid';
 import { openPdfPrintWindow } from '../../utils/pdfUtils';
-
-const DEPARTMENTS = ['General', 'Cardiology', 'Orthopedics', 'Pediatrics', 'Neurology', 'Dermatology', 'ENT', 'Ophthalmology', 'Psychiatry'];
 
 // Helper to generate pagination page numbers with ellipsis
 const getPaginationRange = (currentPage, totalPages) => {
@@ -45,8 +44,9 @@ const getPaginationRange = (currentPage, totalPages) => {
 };
 
 const PatientList = () => {
+  const navigate = useNavigate();
   const [registrations, setRegistrations] = useState([]);
-  const [stats, setStats] = useState({ previousCount: 0, todayCount: 0, upcomingCount: 0, completedCount: 0, totalFiltered: 0 });
+  const [stats, setStats] = useState({ totalToday: 0, totalMonth: 0, totalFiltered: 0 });
   const [loading, setLoading] = useState(false);
   const [quickFilter, setQuickFilter] = useState('all'); // all | previous | today | upcoming | completed
 
@@ -55,6 +55,10 @@ const PatientList = () => {
   const [pageSize, setPageSize] = useState(20);
   const [totalRecords, setTotalRecords] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+
+  // Doctors list for filter
+  const [doctorsList, setDoctorsList] = useState([]);
+  const [filterDoctorId, setFilterDoctorId] = useState('');
 
   // Hospital settings (for payment due display permission)
   const [receptionSeePatientDue, setReceptionSeePatientDue] = useState(false);
@@ -69,7 +73,45 @@ const PatientList = () => {
       .catch((err) => {
         console.error('Error fetching hospital settings in PatientList:', err);
       });
+
+    client.get('/admin/doctors')
+      .then(({ data }) => {
+        setDoctorsList(Array.isArray(data) ? data : []);
+      })
+      .catch((err) => {
+        console.error('Error fetching doctors in PatientList:', err);
+      });
   }, []);
+
+  // Combine doctors from API and any distinct doctors present in registrations
+  const allAvailableDoctors = useMemo(() => {
+    const map = new Map();
+    (doctorsList || []).forEach((doc) => {
+      if (doc && doc._id) {
+        map.set(doc._id.toString(), {
+          _id: doc._id.toString(),
+          doctorName: doc.doctorName || doc.username || 'Doctor',
+          department: doc.department || '',
+          role: doc.role
+        });
+      }
+    });
+
+    (registrations || []).forEach((reg) => {
+      const docId = reg.doctorId?._id ? reg.doctorId._id.toString() : (reg.doctorId ? reg.doctorId.toString() : null);
+      const name = reg.doctorName || reg.doctorId?.doctorName || reg.doctorId?.username;
+      if (docId && name && !map.has(docId)) {
+        map.set(docId, {
+          _id: docId,
+          doctorName: name,
+          department: reg.department || '',
+          role: 'doctor'
+        });
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => (a.doctorName || '').localeCompare(b.doctorName || ''));
+  }, [doctorsList, registrations]);
 
   // Active Action Menu
   const [activeMenuId, setActiveMenuId] = useState(null);
@@ -90,11 +132,10 @@ const PatientList = () => {
   const [filterUhid, setFilterUhid] = useState('');
   const [filterRegNo, setFilterRegNo] = useState('');
   const [filterPatientName, setFilterPatientName] = useState('');
-  const [filterDepartment, setFilterDepartment] = useState('');
   const [showFilters, setShowFilters] = useState(false);
 
   const hasActiveFilters = Boolean(
-    fromDate || toDate || filterUhid || filterRegNo || filterPatientName || filterDepartment
+    fromDate || toDate || filterUhid || filterRegNo || filterPatientName || filterDoctorId
   );
 
   // Visit history modal
@@ -143,11 +184,11 @@ const PatientList = () => {
       if (filterUhid) params.uhid = filterUhid;
       if (filterRegNo) params.registrationNumber = filterRegNo;
       if (filterPatientName) params.patientName = filterPatientName;
-      if (filterDepartment) params.department = filterDepartment;
+      if (filterDoctorId) params.doctorId = filterDoctorId;
 
       const { data } = await client.get('/patients/registrations/list', { params });
       setRegistrations(data.registrations || []);
-      setStats(data.stats || { previousCount: 0, todayCount: 0, upcomingCount: 0, completedCount: 0, totalFiltered: 0 });
+      setStats(data.stats || { totalToday: 0, totalMonth: 0, totalFiltered: 0 });
       setTotalRecords(data.totalRecords ?? data.total ?? 0);
       setTotalPages(data.totalPages || 1);
     } catch (error) {
@@ -161,7 +202,7 @@ const PatientList = () => {
   // Reset to page 1 whenever search filters or quickFilter change
   useEffect(() => {
     setCurrentPage(1);
-  }, [quickFilter, fromDate, toDate, filterUhid, filterRegNo, filterPatientName, filterDepartment]);
+  }, [quickFilter, fromDate, toDate, filterUhid, filterRegNo, filterPatientName, filterDoctorId]);
 
   // Fetch registrations on filter, page or page size change
   useEffect(() => {
@@ -169,7 +210,7 @@ const PatientList = () => {
       fetchRegistrations();
     }, 300);
     return () => clearTimeout(timeout);
-  }, [currentPage, pageSize, quickFilter, fromDate, toDate, filterUhid, filterRegNo, filterPatientName, filterDepartment]);
+  }, [currentPage, pageSize, quickFilter, fromDate, toDate, filterUhid, filterRegNo, filterPatientName, filterDoctorId]);
 
   const clearFilters = () => {
     setFromDate('');
@@ -177,7 +218,7 @@ const PatientList = () => {
     setFilterUhid('');
     setFilterRegNo('');
     setFilterPatientName('');
-    setFilterDepartment('');
+    setFilterDoctorId('');
   };
 
   const handleDeletePatient = async (patientId) => {
@@ -551,10 +592,14 @@ const PatientList = () => {
               <input className="input py-1.5 text-xs" placeholder="Search name" value={filterPatientName} onChange={(e) => setFilterPatientName(e.target.value)} />
             </div>
             <div>
-              <label className="text-[10px] font-bold uppercase text-gray-500">Department</label>
-              <select className="input py-1.5 text-xs" value={filterDepartment} onChange={(e) => setFilterDepartment(e.target.value)}>
-                <option value="">All Departments</option>
-                {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
+              <label className="text-[10px] font-bold uppercase text-gray-500">Doctor</label>
+              <select className="input py-1.5 text-xs font-medium" value={filterDoctorId} onChange={(e) => setFilterDoctorId(e.target.value)}>
+                <option value="">All Doctors</option>
+                {allAvailableDoctors.map((doc) => (
+                  <option key={doc._id} value={doc._id}>
+                    {doc.role === 'nursing' ? '' : 'Dr. '}{doc.doctorName || doc.username}{doc.department ? ` (${doc.department})` : ''}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -712,6 +757,28 @@ const PatientList = () => {
                             className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 text-left transition-colors cursor-pointer"
                           >
                             <Printer className="h-3.5 w-3.5 text-green-600" /> Print Documents
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveMenuId(null);
+                              const fName = reg.patientName?.split(' ')[0] || '';
+                              const lName = reg.patientName?.split(' ').slice(1).join(' ') || '';
+                              const params = new URLSearchParams({
+                                patientId: reg.patientId || reg._id,
+                                uhid: reg.uhid || '',
+                                firstName: fName,
+                                lastName: lName,
+                                mobile: reg.phone || reg.contactNumber || '',
+                                gender: reg.gender || '',
+                                age: reg.age ? String(reg.age) : '',
+                                ref: reg.doctorName ? `Dr. ${reg.doctorName}` : ''
+                              });
+                              navigate(`/reception/lab-billing?${params.toString()}`);
+                            }}
+                            className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                          >
+                            <FlaskConical className="h-3.5 w-3.5 text-orange-600" /> Create Lab Bill
                           </button>
                           <div className="border-t border-orange-50 my-1"></div>
                           <button

@@ -325,4 +325,43 @@ input.input[class*="pr-10"], .pr-10 {
   }
 }
 
+/* Lab Billing Compact Controls */
+.lab-input {
+  width: 100%;
+  height: 38px;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
+  color: #1e293b;
+  transition: all 150ms ease-in-out;
+}
+
+.lab-input:focus {
+  outline: none;
+  border-color: #f97316;
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
+}
+
+.lab-input::placeholder {
+  color: #94a3b8;
+}
+
+.lab-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 0.25rem;
+  letter-spacing: 0.01em;
+}
+
+.lab-label-required::after {
+  content: " *";
+  color: #ef4444;
+}
+
+
 

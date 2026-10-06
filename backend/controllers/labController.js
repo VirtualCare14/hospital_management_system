@@ -8,6 +8,7 @@ const LabAssistantProfile = require('../models/LabAssistantProfile');
 const DiagnosisTemplate = require('../models/DiagnosisTemplate');
 const User = require('../models/User');
 const Patient = require('../models/Patient');
+const Visit = require('../models/Visit');
 const PatientHistory = require('../models/PatientHistory');
 const Consultation = require('../models/Consultation');
 const LabBill = require('../models/LabBill');
@@ -941,6 +942,93 @@ const deleteTest = async (req, res) => {
   res.json({ message: 'Lab test deleted' });
 };
 
+const updateTestPrice = async (req, res) => {
+  try {
+    const { testName, title, category, price, testId } = req.body;
+    const newPrice = Number(price);
+    if (isNaN(newPrice) || newPrice < 0) {
+      return res.status(400).json({ message: 'Valid positive price is required' });
+    }
+    const normalizedCategory = String(category || 'LAB').trim().toUpperCase();
+    const normalizedTitle = String(title || testName || '').trim();
+
+    if (!normalizedTitle) {
+      return res.status(400).json({ message: 'Test title or name is required' });
+    }
+
+    let testDoc = null;
+    if (testId && mongoose.Types.ObjectId.isValid(testId)) {
+      testDoc = await LabTest.findOne(testMasterReadQuery(req, { _id: testId }));
+    }
+
+    if (!testDoc) {
+      testDoc = await LabTest.findOne(testMasterReadQuery(req, {
+        $or: [
+          { testKey: normalizeKey(normalizedTitle) },
+          { title: { $regex: `^${escapeRegex(normalizedTitle)}$`, $options: 'i' } },
+          { test: { $regex: `^${escapeRegex(normalizedTitle)}$`, $options: 'i' } }
+        ]
+      }));
+    }
+
+    if (testDoc) {
+      if (req.user.hospitalId && (!testDoc.hospitalId || String(testDoc.hospitalId) !== String(req.user.hospitalId))) {
+        // Copy-on-write for hospital
+        let tenantCopy = await LabTest.findOne({
+          hospitalId: req.user.hospitalId,
+          $or: [
+            { testKey: testDoc.testKey },
+            { title: { $regex: `^${escapeRegex(testDoc.title)}$`, $options: 'i' } }
+          ]
+        });
+
+        if (tenantCopy) {
+          tenantCopy.basePrice = newPrice;
+          tenantCopy.totalAmount = newPrice;
+          await tenantCopy.save();
+          return res.json({ message: 'Price updated successfully in master', test: tenantCopy });
+        } else {
+          const newTest = await LabTest.create({
+            hospitalId: req.user.hospitalId,
+            category: testDoc.category || normalizedCategory,
+            categoryKey: normalizeKey(testDoc.category || normalizedCategory),
+            test: testDoc.test || normalizedTitle,
+            testKey: testDoc.testKey || normalizeKey(normalizedTitle),
+            title: testDoc.title || normalizedTitle,
+            basePrice: newPrice,
+            totalAmount: newPrice,
+            parameters: testDoc.parameters || [],
+            status: 'Active'
+          });
+          return res.json({ message: 'Price updated successfully in master', test: newTest });
+        }
+      } else {
+        testDoc.basePrice = newPrice;
+        testDoc.totalAmount = newPrice;
+        await testDoc.save();
+        return res.json({ message: 'Price updated successfully in master', test: testDoc });
+      }
+    } else {
+      // Create new test entry in test master
+      const newTest = await LabTest.create({
+        hospitalId: req.user.hospitalId,
+        category: normalizedCategory,
+        categoryKey: normalizeKey(normalizedCategory),
+        test: normalizedTitle,
+        testKey: normalizeKey(normalizedTitle),
+        title: normalizedTitle,
+        basePrice: newPrice,
+        totalAmount: newPrice,
+        status: 'Active'
+      });
+      return res.json({ message: 'Price updated successfully in master', test: newTest });
+    }
+  } catch (err) {
+    console.error('Update test price error:', err);
+    res.status(500).json({ message: 'Failed to update test price', error: err.message });
+  }
+};
+
 const listProfiles = async (req, res) => {
   res.json(await LabProfile.find(tenantQuery(req)).sort({ createdAt: -1 }));
 };
@@ -1538,11 +1626,69 @@ const createDirectLabRequest = async (req, res) => {
       expandedTestList = testList;
     }
 
-    const patient = await Patient.findById(patientId);
-    if (!patient) {
-      return res.status(404).json({ message: 'Patient record not found' });
+    // Robust Patient Resolution
+    let patient = null;
+    const rawPatientId = patientId || req.body.patientId || req.body.id;
+
+    if (rawPatientId && mongoose.Types.ObjectId.isValid(rawPatientId)) {
+      patient = await Patient.findById(rawPatientId);
+      if (!patient) {
+        // Check if rawPatientId is a Visit ID
+        const visit = await Visit.findById(rawPatientId);
+        if (visit && visit.patientId) {
+          patient = await Patient.findById(visit.patientId);
+        }
+      }
     }
 
+    if (!patient && rawPatientId) {
+      patient = await Patient.findOne({
+        $or: [
+          { uhid: String(rawPatientId).trim() },
+          { mobile: String(rawPatientId).trim() }
+        ]
+      });
+    }
+
+    // Lookup by mobile, aadhaar, or uhid if passed in body
+    if (!patient) {
+      const pMobile = (req.body.patientMobile || req.body.mobile || '').trim();
+      const pUhid = (req.body.uhid || '').trim();
+      const pAadhaar = (req.body.aadhaar || '').trim();
+
+      if (pUhid || pMobile || pAadhaar) {
+        patient = await Patient.findOne({
+          $or: [
+            ...(pUhid ? [{ uhid: pUhid }] : []),
+            ...(pMobile ? [{ mobile: pMobile }] : []),
+            ...(pAadhaar ? [{ aadhaar: pAadhaar }] : [])
+          ]
+        });
+      }
+
+      // If still not found and patient name is provided, auto-create a patient record
+      if (!patient && (req.body.patientName || req.body.firstName)) {
+        const pName = (req.body.patientName || `${req.body.firstName || ''} ${req.body.lastName || ''}`).trim();
+        const count = await Patient.countDocuments();
+        const genUhid = `UHID-${String(count + 1).padStart(5, '0')}`;
+        patient = await Patient.create({
+          hospitalId: req.user.hospitalId,
+          uhid: genUhid,
+          patientName: pName,
+          gender: req.body.gender || 'Male',
+          dob: req.body.dob || new Date('1995-01-01'),
+          mobile: pMobile || '9999999999',
+          email: req.body.email || '',
+          address: req.body.address || 'Not specified'
+        });
+      }
+    }
+
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient record not found. Please verify patient registration.' });
+    }
+
+    const resolvedPatientId = patient._id;
     const resolvedDoctorId = doctorId || req.user._id;
 
     let labReq;
@@ -1558,7 +1704,7 @@ const createDirectLabRequest = async (req, res) => {
       // Create LabRequest document
       labReq = new LabRequest({
         hospitalId: req.user.hospitalId || patient.hospitalId,
-        patientId,
+        patientId: resolvedPatientId,
         doctorId: resolvedDoctorId,
         tests: expandedTestList,
         collectionType: collectionType === 'Home Sample Collection' ? 'Home Sample Collection' : 'Lab Visit',
@@ -1593,7 +1739,7 @@ const createDirectLabRequest = async (req, res) => {
         hospitalId: req.user.hospitalId || patient.hospitalId,
         labRequestId: labReq._id,
         labId: labReq.labId,
-        patientId,
+        patientId: resolvedPatientId,
         doctorId: resolvedDoctorId,
         createdBy: req.user._id,
         baseAmount: baseTotal,
@@ -2067,5 +2213,6 @@ module.exports = {
   createDirectLabRequest,
   getRecommendedTests,
   getBills,
-  receivePayment
+  receivePayment,
+  updateTestPrice
 };

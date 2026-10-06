@@ -13,6 +13,8 @@ const {
   updateDoctorAvailability,
   getDoctorAvailability,
   getHospitalTracking,
+  getDoctorTracking,
+  getDoctorDetailedTracking,
   getDeleteDataPermission,
   deletePatientData,
   searchDeleteItems,
@@ -59,6 +61,8 @@ router.put('/doctors/:id/availability', authMiddleware, adminOnly, updateDoctorA
 
 // Tracking and patient summary routes for admin dashboard
 router.get('/hospital-tracking', authMiddleware, adminOnly, getHospitalTracking);
+router.get('/doctor-tracking', authMiddleware, adminOnly, getDoctorTracking);
+router.get('/doctor-tracking/:doctorId/details', authMiddleware, adminOnly, getDoctorDetailedTracking);
 router.get('/delete-data/permission', authMiddleware, adminOnly, getDeleteDataPermission);
 router.post('/delete-data/patient', authMiddleware, adminOnly, deletePatientData);
 router.get('/delete-data/search', authMiddleware, adminOnly, searchDeleteItems);

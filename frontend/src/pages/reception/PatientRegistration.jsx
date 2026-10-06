@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import {
   Printer, Save, Search, UserCheck, Clock, User, Phone, CreditCard,
   Calendar, MapPin, Building2, Stethoscope, IndianRupee, Tag, Wallet,
-  CheckCircle2, Activity, ChevronDown, ChevronUp, Check, Users, Coins, Eye, History, X
+  CheckCircle2, Activity, ChevronDown, ChevronUp, Check, Users, Coins, Eye, History, X, FlaskConical
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -37,6 +38,7 @@ const Field = ({ label, required = false, icon: Icon, children, className = '', 
 );
 
 const PatientRegistration = () => {
+  const navigate = useNavigate();
   const [departments, setDepartments] = useState([]);
   const [doctors, setDoctors] = useState([]);
   const [departmentsLoading, setDepartmentsLoading] = useState(true);
@@ -903,6 +905,28 @@ const PatientRegistration = () => {
                 onClick={() => handlePrint('bill_receipt')}
               >
                 <Printer className="h-4 w-4" /> Print Bill Receipt
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  closeReceipt();
+                  const fName = registeredPatient.firstName || registeredPatient.patientName?.split(' ')[0] || '';
+                  const lName = registeredPatient.lastName || registeredPatient.patientName?.split(' ').slice(1).join(' ') || '';
+                  const params = new URLSearchParams({
+                    patientId: registeredPatient._id || registeredPatient.patientId || '',
+                    uhid: registeredPatient.uhid || '',
+                    firstName: fName,
+                    lastName: lName,
+                    mobile: registeredPatient.mobile || registeredPatient.phone || '',
+                    gender: registeredPatient.gender || '',
+                    age: registeredPatient.age ? String(registeredPatient.age) : '',
+                    ref: registeredPatient.doctorName ? `Dr. ${registeredPatient.doctorName}` : ''
+                  });
+                  navigate(`/reception/lab-billing?${params.toString()}`);
+                }}
+                className="btn cursor-pointer flex items-center gap-1.5 text-xs font-bold bg-orange-500 hover:bg-orange-600 text-white px-3.5 py-2 rounded-lg shadow-xs"
+              >
+                <FlaskConical className="h-4 w-4" /> Create Lab Bill
               </button>
               <button
                 type="button"
