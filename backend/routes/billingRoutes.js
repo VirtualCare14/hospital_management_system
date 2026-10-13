@@ -6,7 +6,8 @@ const {
   searchPatient, getEligiblePatients,
   createAdvance, getPatientAdvances, cancelBill, getDashboardStats,
   getDiscountRequests, approveDiscountRequest, rejectDiscountRequest,
-  getPatientDues, getDuesList, recordDuePayment, addDueItem, removeDueItem
+  getPatientDues, getDuesList, recordDuePayment, addDueItem, removeDueItem,
+  validateCashlessSplit
 } = require('../controllers/billingController');
 const authMiddleware = require('../middleware/authMiddleware');
 
@@ -32,6 +33,7 @@ router.get('/billing/generate/:uhid', authMiddleware, generateBillItems);
 router.get('/billing/patient/:uhid', authMiddleware, getPatientBills);
 router.get('/billing/advance/:uhid', authMiddleware, getPatientAdvances);
 router.post('/billing/advance', authMiddleware, createAdvance);
+router.post('/billing/validate-cashless-split', authMiddleware, validateCashlessSplit);
 router.get('/billing/discount-requests', authMiddleware, adminOnly, getDiscountRequests);
 router.put('/billing/discount-requests/:id/approve', authMiddleware, adminOnly, approveDiscountRequest);
 router.put('/billing/discount-requests/:id/reject', authMiddleware, adminOnly, rejectDiscountRequest);

@@ -19,6 +19,8 @@ const Visit = require('../models/Visit');
 const PharmacyInventory = require('../models/PharmacyInventory');
 const IpdAdminSettings = require('../models/IpdAdminSettings');
 const Prescription = require('../models/Prescription');
+const PreAuthorization = require('../models/PreAuthorization');
+const TpaClaim = require('../models/TpaClaim');
 
 
 
@@ -748,6 +750,7 @@ const generateBillItems = async (req, res) => {
     const doctorName = latestAdmission?.doctorInCharge?.doctorName || latestConsultation?.doctorId?.doctorName || latestVisit?.doctorId?.doctorName || 'Not Assigned';
     const registrationDate = patient.createdAt;
     const admissionDetails = latestAdmission ? {
+      _id: latestAdmission._id,
       admissionDate: latestAdmission.admissionDate,
       dischargeDate: latestAdmission.dischargeDate,
       status: latestAdmission.status,
@@ -761,7 +764,7 @@ const generateBillItems = async (req, res) => {
     let items = [];
 
     // 1. OPD Charges
-    if (!billType || billType === 'All' || billType === 'OPD' || billType === 'SameDayTreatment') {
+    if (!billType || billType === 'All' || billType === 'OPD' || billType === 'IPD' || billType === 'SameDayTreatment') {
       const visits = await Visit.find(tenantFilter(req, { patientId: patient._id, visitType: 'OPD' }))
         .populate('doctorId', 'doctorName opdFees')
         .sort({ createdAt: -1 });
@@ -969,9 +972,9 @@ const generateBillItems = async (req, res) => {
     }
 
     // 3. Laboratory Charges
-    if (!billType || billType === 'All' || billType === 'Lab') {
+    if (!billType || billType === 'All' || billType === 'Lab' || billType === 'IPD') {
       // Lab tests from IPD
-      const ipdLabTests = await IpdLabTest.find({ patientId: patient._id }).populate('admissionId', 'ipdNumber').sort({ createdAt: -1 });
+      const ipdLabTests = await IpdLabTest.find(tenantFilter(req, { patientId: patient._id })).populate('admissionId', 'ipdNumber').sort({ createdAt: -1 });
       ipdLabTests.forEach(t => {
         if (billedSourceIds.has(t._id.toString())) return;
         items.push({
@@ -1036,112 +1039,104 @@ const generateBillItems = async (req, res) => {
       });
 
       for (const admission of admissions) {
-        if (billedSourceIds.has(admission._id.toString())) continue;
-        
-        // Bed charges
-        if (admission.bedHistory && admission.bedHistory.length > 0) {
-          admission.bedHistory.forEach((hist) => {
-            if (!hist.bedId) return;
-            const startDate = new Date(hist.startDate);
-            const endDate = hist.endDate ? new Date(hist.endDate) : new Date();
-            const days = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) || 1;
-            const charge = (hist.pricePerDay || 0) * days;
+        // 4a. Bed charges (checked individually by admission._id)
+        if (!billedSourceIds.has(admission._id.toString())) {
+          if (admission.bedHistory && admission.bedHistory.length > 0) {
+            admission.bedHistory.forEach((hist) => {
+              if (!hist.bedId) return;
+              const startDate = new Date(hist.startDate);
+              const endDate = hist.endDate ? new Date(hist.endDate) : new Date();
+              const days = Math.max(1, Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)));
+              const price = hist.pricePerDay || 0;
+              const charge = price * days;
+              items.push({
+                category: 'BedCharge',
+                date: fmtDate(startDate),
+                description: `Bed Assignment: ${hist.roomId?.roomType || 'Room'} (Bed: ${hist.bedId?.bedNumber || 'N/A'}) - ${days} day(s) @ ₹${price}/day`,
+                price: price,
+                quantity: days,
+                total: charge,
+                sourceId: admission._id,
+                sourceModel: 'IpdAdmission'
+              });
+            });
+          } else if (admission.bedId?.pricePerDay) {
+            const daysAdmitted = Math.max(1, Math.ceil((new Date(admission.dischargeDate || new Date()) - new Date(admission.admissionDate)) / (1000 * 60 * 60 * 24)));
+            const price = admission.bedId.pricePerDay || 0;
+            const roomCharge = price * daysAdmitted;
             items.push({
               category: 'BedCharge',
-              date: fmtDate(startDate),
-              description: `Bed Assignment: ${hist.roomId?.roomType || 'N/A'} (Bed: ${hist.bedId?.bedNumber || 'N/A'}) - ${days} day(s) @ ₹${hist.pricePerDay || 0}/day`,
-              price: hist.pricePerDay || 0,
-              quantity: days,
-              total: charge,
+              date: fmtDate(admission.admissionDate),
+              description: `Bed Assignment: ${admission.roomId?.roomType || 'Room'} (Bed: ${admission.bedId?.bedNumber || 'N/A'}) - ${daysAdmitted} day(s) @ ₹${price}/day`,
+              price: price,
+              quantity: daysAdmitted,
+              total: roomCharge,
               sourceId: admission._id,
               sourceModel: 'IpdAdmission'
             });
-          });
-        } else if (admission.bedId?.pricePerDay) {
-          const daysAdmitted = Math.ceil((new Date(admission.dischargeDate || new Date()) - new Date(admission.admissionDate)) / (1000 * 60 * 60 * 24)) || 1;
-          const roomCharge = admission.bedId.pricePerDay * daysAdmitted;
-          items.push({
-            category: 'BedCharge',
-            date: fmtDate(admission.admissionDate),
-            description: `Bed Assignment: ${admission.roomId?.roomType || 'N/A'} (Bed: ${admission.bedId?.bedNumber || 'N/A'}) - ${daysAdmitted} day(s) @ ₹${admission.bedId.pricePerDay}/day`,
-            price: admission.bedId.pricePerDay,
-            quantity: daysAdmitted,
-            total: roomCharge,
-            sourceId: admission._id,
-            sourceModel: 'IpdAdmission'
-          });
+          }
         }
 
-        // IPD Consumables
-        const consumables = await IpdConsumable.find({ admissionId: admission._id });
+        // 4b. IPD Consumables (each item individually checked against billedSourceIds)
+        const consumables = await IpdConsumable.find(tenantFilter(req, { admissionId: admission._id })).sort({ createdAt: -1 });
         for (const c of consumables) {
           if (billedSourceIds.has(c._id.toString())) continue;
-          const { price, unitsPerPack } = await getItemPharmacyDetails(req.user.hospitalId, c.serviceName, 'Consumable', c.price, adminSettings);
-          const unitQty = c.quantity || 1;
-          const packQty = unitsPerPack > 1 ? Number((unitQty / unitsPerPack).toFixed(3)) : unitQty;
-          const lineTotal = Number((price * packQty).toFixed(2));
+          const itemPrice = c.price !== undefined && c.price !== null ? Number(c.price) : 0;
+          const itemQty = c.quantity || 1;
+          const itemGst = c.gst || 0;
+          const baseTotal = itemPrice * itemQty;
+          const lineTotal = c.totalAmount !== undefined && c.totalAmount !== null ? Number(c.totalAmount) : Number((baseTotal + (baseTotal * itemGst / 100)).toFixed(2));
           items.push({
             category: 'Consumable',
             date: c.date || fmtDate(c.createdAt),
-            description: `${c.serviceName}${c.gst ? ` (GST: ${c.gst}%)` : ''}`,
-            price,
-            quantity: packQty,
+            description: `${c.serviceName}${itemGst ? ` (GST: ${itemGst}%)` : ''}`,
+            price: itemPrice,
+            quantity: itemQty,
+            gstPercentage: itemGst,
             total: lineTotal,
             sourceId: c._id,
             sourceModel: 'IpdConsumable'
           });
         }
 
-        // IPD Medicines
-        const medicines = await IpdMedicine.find({ admissionId: admission._id });
+        // 4c. IPD Medicines (each item individually checked against billedSourceIds)
+        const medicines = await IpdMedicine.find(tenantFilter(req, { admissionId: admission._id })).sort({ createdAt: -1 });
         for (const m of medicines) {
           if (billedSourceIds.has(m._id.toString())) continue;
-          const nameKey = m.medicineName.toLowerCase().trim();
-          const { price, unitsPerPack } = await getItemPharmacyDetails(req.user.hospitalId, m.medicineName, 'Medicine', m.unitPrice, adminSettings);
-          
+          const nameKey = (m.medicineName || '').toLowerCase().trim();
+          const itemUnitPrice = m.unitPrice !== undefined && m.unitPrice !== null ? Number(m.unitPrice) : (m.baseUnitPrice || 0);
+          const itemQty = m.quantity || 1;
+          const itemGst = m.gst || 0;
+          const lineTotal = m.totalAmount !== undefined && m.totalAmount !== null ? Number(m.totalAmount) : Number((itemUnitPrice * itemQty).toFixed(2));
+
           let isPaid = false;
           let paidTimeStr = '';
-          
+
           if (paidMedicinesQty[nameKey] && paidMedicinesQty[nameKey].quantity > 0) {
-            const mQty = m.quantity;
+            const mQty = itemQty;
             const paidQty = paidMedicinesQty[nameKey].quantity;
-            
+
             if (paidQty >= mQty) {
               isPaid = true;
               paidMedicinesQty[nameKey].quantity -= mQty;
             } else {
               isPaid = true;
               paidMedicinesQty[nameKey].quantity = 0;
-              m.quantity = mQty - paidQty;
             }
-            
+
             const pTime = paidMedicinesQty[nameKey].paymentTimes[0] || new Date();
             paidTimeStr = new Date(pTime).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
           }
 
-          const unitQty = m.quantity || 1;
-          const packQty = unitsPerPack > 1 ? Number((unitQty / unitsPerPack).toFixed(3)) : unitQty;
-          const lineTotal = Number((price * packQty).toFixed(2));
-
-          if (isPaid && m.quantity === 0) {
+          if (isPaid) {
             items.push({
               category: 'Medicine',
               date: m.date || fmtDate(m.createdAt),
               description: `${m.medicineName} (Paid at Pharmacy on ${paidTimeStr})`,
               price: 0,
-              quantity: packQty,
+              quantity: itemQty,
+              gstPercentage: itemGst,
               total: 0,
-              sourceId: m._id,
-              sourceModel: 'IpdMedicine'
-            });
-          } else if (isPaid && m.quantity > 0) {
-            items.push({
-              category: 'Medicine',
-              date: m.date || fmtDate(m.createdAt),
-              description: `${m.medicineName} (${m.quantity} unpaid, others paid at Pharmacy on ${paidTimeStr})`,
-              price,
-              quantity: packQty,
-              total: lineTotal,
               sourceId: m._id,
               sourceModel: 'IpdMedicine'
             });
@@ -1149,9 +1144,10 @@ const generateBillItems = async (req, res) => {
             items.push({
               category: 'Medicine',
               date: m.date || fmtDate(m.createdAt),
-              description: m.medicineName,
-              price,
-              quantity: packQty,
+              description: `${m.medicineName}${itemGst ? ` (GST: ${itemGst}%)` : ''}`,
+              price: itemUnitPrice,
+              quantity: itemQty,
+              gstPercentage: itemGst,
               total: lineTotal,
               sourceId: m._id,
               sourceModel: 'IpdMedicine'
@@ -1162,7 +1158,7 @@ const generateBillItems = async (req, res) => {
     }
 
     // 5. OT Charges
-    if (!billType || billType === 'All' || billType === 'OT') {
+    if (!billType || billType === 'All' || billType === 'OT' || billType === 'IPD') {
       const otRecords = await IpdOtRecord.find(tenantFilter(req, { patientId: patient._id }));
       otRecords.forEach(rec => {
         if (rec.otCharges && rec.otCharges.length > 0) {
@@ -1189,7 +1185,7 @@ const generateBillItems = async (req, res) => {
     // Shows: (a) prescription medicines with live pharmacy inventory price (mirrors pharmacy module logic)
     //        (b) any existing unpaid pharmacy bills for medicines not yet dispensed
     // Deduplication: tracks medicine names already covered by a pharmacy bill to avoid double billing
-    if (!billType || billType === 'All' || billType === 'Pharmacy') {
+    if (!billType || billType === 'All' || billType === 'Pharmacy' || billType === 'IPD') {
 
       // ---- 6a. Unpaid / Partially-paid Pharmacy Bills ----
       // Track medicine names that already have a pharmacy bill so we don't double-bill from prescriptions
@@ -1239,7 +1235,7 @@ const generateBillItems = async (req, res) => {
       }
 
       // ---- 6b. Prescription Medicines (not yet invoiced) ----
-      const prescriptions = await Prescription.find({ patientId: patient._id })
+      const prescriptions = await Prescription.find(tenantFilter(req, { patientId: patient._id }))
         .populate('doctorId', 'doctorName')
         .sort({ createdAt: -1 });
 
@@ -1506,12 +1502,178 @@ const createBill = async (req, res) => {
 
     const finalAmountPaid = status === 'Final' ? parseFloat(amountPaid || 0) : 0;
     const finalAdvanceAdjusted = parseFloat(advanceAdjusted || 0);
+    const rawInsuranceAllocation = req.body.insuranceAllocation !== undefined
+      ? parseFloat(req.body.insuranceAllocation)
+      : (req.body.tpaReceivable !== undefined ? parseFloat(req.body.tpaReceivable) : 0);
+    const rawClaimAmount = parseFloat(req.body.insuranceClaimAmount || 0);
+    const rawApprovedAmount = parseFloat(req.body.insuranceApprovedAmount || 0);
+    const rawNonPayable = Math.max(0, parseFloat(req.body.tpaNonPayable || 0));
+    const rawCopay = Math.max(0, parseFloat(req.body.tpaCopay || 0));
+    const rawDeductible = Math.max(0, parseFloat(req.body.tpaDeductible || 0));
+
+    // Rule 7: Prevent negative balances in financial inputs
+    if (finalAmountPaid < 0 || finalAdvanceAdjusted < 0 || rawInsuranceAllocation < 0) {
+      return res.status(400).json({ message: 'Negative financial amounts are strictly prohibited.' });
+    }
+
     const netPayableCalculated = Math.max(0, grandTotal - finalAdvanceAdjusted);
-    const finalDueAmount = status === 'Final' ? Number(Math.max(0, netPayableCalculated - finalAmountPaid).toFixed(2)) : grandTotal;
+
+    // Verify advanceAdjusted against active ledger records
+    if (finalAdvanceAdjusted > 0) {
+      const AdvancePayment = require('../models/AdvancePayment');
+      const activeAdvances = await AdvancePayment.find({
+        hospitalId: req.user.hospitalId,
+        patientId,
+        isAdjusted: false
+      });
+      const totalAvail = activeAdvances.reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
+      if (finalAdvanceAdjusted > totalAvail + 0.05) {
+        return res.status(400).json({
+          message: `Advance applied (₹${finalAdvanceAdjusted}) exceeds available unadjusted advance payments in ledger (₹${totalAvail}).`
+        });
+      }
+      if (finalAdvanceAdjusted > grandTotal + 0.05) {
+        return res.status(400).json({
+          message: `Advance applied (₹${finalAdvanceAdjusted}) cannot exceed Total Hospital Bill (₹${grandTotal}).`
+        });
+      }
+    }
+
+    let finalInsuranceAllocation = 0;
+    let finalTpaReceivable = 0;
+    let effectiveAuthCap = 0;
+
+    // Server-side validation for Insurance / Cashless payment mode or insurance allocation
+    if (status === 'Final' && (paymentMode === 'Insurance' || rawInsuranceAllocation > 0)) {
+      if (!transactionRef || !transactionRef.trim()) {
+        return res.status(400).json({ message: 'Claim / Pre-Authorization reference (transactionRef) is required for Insurance payment mode.' });
+      }
+
+      const trimmedRef = transactionRef.trim();
+      const preauth = await PreAuthorization.findOne({
+        hospitalId: req.user.hospitalId,
+        $or: [
+          { claimNumber: trimmedRef },
+          ...(mongoose.Types.ObjectId.isValid(trimmedRef) ? [{ _id: trimmedRef }] : [])
+        ]
+      });
+
+      if (preauth) {
+        let effectivePreauth = preauth;
+        if (preauth.preauthStatus === 'Settled') {
+          const TpaClaim = require('../models/TpaClaim');
+          const separateClaim = await TpaClaim.findOne({
+            hospitalId: req.user.hospitalId,
+            patientId,
+            status: { $in: ['Approved', 'Final Authorized'] },
+            finalAuthorizedAmount: { $gt: 0 }
+          });
+          const separatePreAuth = await PreAuthorization.findOne({
+            hospitalId: req.user.hospitalId,
+            patientId,
+            _id: { $ne: preauth._id },
+            preauthStatus: { $in: ['Approved', 'Final Authorized'] }
+          });
+
+          if (!separateClaim && !separatePreAuth) {
+            return res.status(400).json({
+              message: `Cannot finalize invoice under claim "${preauth.claimNumber}": Claim status is Settled. Closed or settled claims cannot allocate coverage to new invoices.`
+            });
+          }
+
+          if (separateClaim) {
+            effectivePreauth = separateClaim;
+          } else if (separatePreAuth) {
+            effectivePreauth = separatePreAuth;
+          }
+        }
+
+        const effectiveStatus = effectivePreauth.preauthStatus || effectivePreauth.status;
+        if (!['Approved', 'Final Authorized'].includes(effectiveStatus)) {
+          return res.status(400).json({
+            message: `Cannot finalize invoice under claim "${preauth.claimNumber}": Claim status is "${effectiveStatus}". Cashless settlement requires "Approved" or "Final Authorized" status.`
+          });
+        }
+
+        effectiveAuthCap = Number(effectivePreauth.finalAuthorizedAmount) > 0
+          ? Number(effectivePreauth.finalAuthorizedAmount)
+          : (Number(effectivePreauth.totalApprovedAmount) > 0
+              ? Number(effectivePreauth.totalApprovedAmount)
+              : Number(effectivePreauth.initialApprovedAmount) || 0);
+
+        // Deductions reduce maximum TPA coverage
+        const basePatientDeductions = rawNonPayable + rawCopay + rawDeductible;
+        const maxTpaCoverable = Math.max(0, Number((netPayableCalculated - basePatientDeductions).toFixed(2)));
+
+        const targetAllocation = rawInsuranceAllocation > 0
+          ? rawInsuranceAllocation
+          : Math.min(effectiveAuthCap, maxTpaCoverable, netPayableCalculated);
+
+        if (effectiveAuthCap > 0 && targetAllocation > effectiveAuthCap + 0.05) {
+          return res.status(400).json({
+            message: `TPA Allocation (₹${targetAllocation}) exceeds the authorized claim limit (₹${effectiveAuthCap}).`
+          });
+        }
+
+        if (targetAllocation > netPayableCalculated + 0.05) {
+          return res.status(400).json({
+            message: `TPA Allocation (₹${targetAllocation}) cannot exceed the eligible hospital bill after advance adjustment (₹${netPayableCalculated}).`
+          });
+        }
+
+        if (targetAllocation > maxTpaCoverable + 0.05) {
+          return res.status(400).json({
+            message: `TPA Allocation (₹${targetAllocation}) exceeds the maximum eligible coverage limit after mandatory patient deductions (₹${maxTpaCoverable}).`
+          });
+        }
+
+        const existingPaidBill = await Billing.findOne({
+          hospitalId: req.user.hospitalId,
+          patientId,
+          status: 'Final',
+          paymentMode: 'Insurance',
+          transactionRef: effectivePreauth.claimNumber,
+          dueAmount: 0,
+          paymentStatus: 'Paid'
+        });
+        if (existingPaidBill) {
+          return res.status(400).json({
+            message: `An invoice (${existingPaidBill.invoiceNo || existingPaidBill.billNo}) has already been settled and paid under claim "${effectivePreauth.claimNumber}". Duplicate cashless settlement prevented.`
+          });
+        }
+
+        finalInsuranceAllocation = targetAllocation;
+        finalTpaReceivable = targetAllocation;
+      }
+    }
+
+    // Rule 6: Financial overrun prevention
+    if (status === 'Final' && (finalAdvanceAdjusted + finalAmountPaid + finalInsuranceAllocation) > grandTotal + 0.05) {
+      return res.status(400).json({
+        message: `Financial overrun: Advance Applied (₹${finalAdvanceAdjusted}) + Patient Amount Paid (₹${finalAmountPaid}) + TPA Allocation (₹${finalInsuranceAllocation}) exceeds Total Hospital Bill (₹${grandTotal.toFixed(2)}).`
+      });
+    }
+
+    // Calculate Remaining Patient Due
+    // Formula: Remaining Patient Due = Net Bill - Advance Applied - Eligible TPA Allocation - Patient Payments Applied
+    const finalPatientDue = status === 'Final'
+      ? Number(Math.max(0, grandTotal - finalAdvanceAdjusted - finalInsuranceAllocation - finalAmountPaid).toFixed(2))
+      : grandTotal;
+    const finalDueAmount = finalPatientDue;
+
+    // Reconciliation check before finalization: Advance Applied + Patient Paid + TPA Allocation + Patient Due === Net Bill
+    if (status === 'Final') {
+      const totalReconciled = Number((finalAdvanceAdjusted + finalAmountPaid + finalInsuranceAllocation + finalPatientDue).toFixed(2));
+      if (Math.abs(totalReconciled - Number(grandTotal.toFixed(2))) > 0.05) {
+        return res.status(400).json({
+          message: `Financial balance mismatch: Advance Applied (₹${finalAdvanceAdjusted}) + Patient Paid (₹${finalAmountPaid}) + TPA Allocation (₹${finalInsuranceAllocation}) + Remaining Patient Due (₹${finalPatientDue}) does not equal Net Hospital Bill (₹${grandTotal.toFixed(2)}).`
+        });
+      }
+    }
 
     let finalPaymentStatus = 'Unpaid';
     if (status === 'Final') {
-      if (finalDueAmount <= 0) {
+      if (finalPatientDue <= 0) {
         finalPaymentStatus = 'Paid';
       } else if (finalAmountPaid > 0) {
         finalPaymentStatus = 'Partially Paid';
@@ -1523,14 +1685,14 @@ const createBill = async (req, res) => {
     const initialPayments = (status === 'Final' && finalAmountPaid > 0) ? [{
       paymentNo: 'PMT-1',
       amount: finalAmountPaid,
-      paymentMode: paymentMode || 'Cash',
+      paymentMode: paymentMode === 'Insurance' ? 'Cash' : (paymentMode || 'Cash'),
       transactionRef: transactionRef || '',
       paidAt: new Date(),
       receivedBy: req.user._id,
       receivedByName: req.user.username || 'Billing Staff',
-      dueBeforePayment: netPayableCalculated,
-      dueAfterPayment: finalDueAmount,
-      remarks: remarks || 'Initial payment received during invoice generation'
+      dueBeforePayment: Number((grandTotal - finalAdvanceAdjusted - finalInsuranceAllocation).toFixed(2)),
+      dueAfterPayment: finalPatientDue,
+      remarks: remarks || 'Initial patient payment received during invoice generation'
     }] : [];
 
     // Set up audit trail
@@ -1539,7 +1701,9 @@ const createBill = async (req, res) => {
       performedBy: req.user._id,
       performedByName: req.user.username || 'Staff',
       timestamp: new Date(),
-      remarks: status === 'Final' ? `Invoice finalized (${finalPaymentStatus}). Invoice No: ${invoiceNo}. Paid: ₹${finalAmountPaid}, Due: ₹${finalDueAmount}` : 'Draft invoice saved'
+      remarks: status === 'Final'
+        ? `Invoice finalized (${finalPaymentStatus}). Invoice No: ${invoiceNo}. Paid: ₹${finalAmountPaid}, Due: ₹${finalDueAmount}, TPA: ₹${finalInsuranceAllocation}, Adv: ₹${finalAdvanceAdjusted}`
+        : 'Draft invoice saved'
     }];
 
     const bill = new Billing({
@@ -1563,6 +1727,14 @@ const createBill = async (req, res) => {
       mixedPayments: mixedPayments || [],
       remarks: remarks || '',
       advanceAdjusted: finalAdvanceAdjusted,
+      insuranceAllocation: finalInsuranceAllocation,
+      tpaReceivable: finalTpaReceivable,
+      insuranceClaimAmount: rawClaimAmount,
+      insuranceApprovedAmount: rawApprovedAmount > 0 ? rawApprovedAmount : (effectiveAuthCap || 0),
+      tpaNonPayable: rawNonPayable,
+      tpaCopay: rawCopay,
+      tpaDeductible: rawDeductible,
+      patientDue: finalPatientDue,
       amountPaid: finalAmountPaid,
       dueAmount: finalDueAmount,
       paymentStatus: finalPaymentStatus,
@@ -1724,6 +1896,14 @@ const updateBill = async (req, res) => {
     if (advanceAdjusted !== undefined) bill.advanceAdjusted = parseFloat(advanceAdjusted);
     if (amountPaid !== undefined) bill.amountPaid = parseFloat(amountPaid);
     if (dueAmount !== undefined) bill.dueAmount = parseFloat(dueAmount);
+    if (req.body.patientDue !== undefined) bill.patientDue = parseFloat(req.body.patientDue);
+    if (req.body.insuranceAllocation !== undefined) bill.insuranceAllocation = parseFloat(req.body.insuranceAllocation);
+    if (req.body.tpaReceivable !== undefined) bill.tpaReceivable = parseFloat(req.body.tpaReceivable);
+    if (req.body.insuranceClaimAmount !== undefined) bill.insuranceClaimAmount = parseFloat(req.body.insuranceClaimAmount);
+    if (req.body.insuranceApprovedAmount !== undefined) bill.insuranceApprovedAmount = parseFloat(req.body.insuranceApprovedAmount);
+    if (req.body.tpaNonPayable !== undefined) bill.tpaNonPayable = parseFloat(req.body.tpaNonPayable);
+    if (req.body.tpaCopay !== undefined) bill.tpaCopay = parseFloat(req.body.tpaCopay);
+    if (req.body.tpaDeductible !== undefined) bill.tpaDeductible = parseFloat(req.body.tpaDeductible);
     if (paymentStatus !== undefined) bill.paymentStatus = paymentStatus;
     if (doctorName !== undefined) bill.doctorName = doctorName;
 
@@ -2736,11 +2916,334 @@ const removeDueItem = async (req, res) => {
   }
 };
 
+// @desc    Validate TPA Cashless Split before posting to ledger
+// @route   POST /api/billing/validate-cashless-split
+// @access  Private
+const validateCashlessSplit = async (req, res) => {
+  try {
+    const {
+      patientId,
+      uhid,
+      claimNumber,
+      preAuthorizationId,
+      netPayable = 0,
+      tpaAuthorizedAmount = 0,
+      nonPayable = 0,
+      copay = 0,
+      deductible = 0,
+      patientPayable = 0,
+      tpaReceivable = 0
+    } = req.body;
+
+    const hospitalId = req.user?.hospitalId;
+    if (!hospitalId) {
+      return res.status(400).json({ valid: false, message: 'Hospital context is required.' });
+    }
+
+    if (!patientId && !uhid) {
+      return res.status(400).json({ valid: false, message: 'Patient reference is required.' });
+    }
+
+    let resolvedPatientId = patientId;
+    if (!resolvedPatientId && uhid) {
+      const p = await Patient.findOne({ hospitalId, uhid });
+      if (p) resolvedPatientId = p._id;
+    }
+
+    // Look up PreAuthorization or TpaClaim
+    let preauth = null;
+    const mongoose = require('mongoose');
+    const TpaClaim = require('../models/TpaClaim');
+
+    if (preAuthorizationId && mongoose.Types.ObjectId.isValid(preAuthorizationId)) {
+      preauth = await PreAuthorization.findOne({ _id: preAuthorizationId, hospitalId })
+        .populate('insuranceCompanyId', 'name code')
+        .populate('tpaId', 'name code')
+        .populate('patientInsuranceId', 'policyNumber');
+
+      if (!preauth) {
+        const claimDoc = await TpaClaim.findOne({ _id: preAuthorizationId, hospitalId })
+          .populate('insuranceCompanyId', 'name code')
+          .populate('tpaId', 'name code')
+          .populate('patientInsuranceId', 'policyNumber');
+        if (claimDoc) {
+          preauth = {
+            _id: claimDoc._id,
+            patientId: claimDoc.patientId,
+            claimNumber: claimDoc.claimNumber,
+            preauthStatus: claimDoc.status,
+            finalAuthorizedAmount: claimDoc.finalAuthorizedAmount,
+            totalApprovedAmount: claimDoc.claimedAmount || claimDoc.finalAuthorizedAmount || 0,
+            initialApprovedAmount: claimDoc.claimedAmount || claimDoc.finalAuthorizedAmount || 0,
+            nonPayableAmount: claimDoc.nonPayableAmount,
+            copayAmount: claimDoc.copayAmount,
+            deductibleAmount: claimDoc.deductibleAmount,
+            insuranceCompanyId: claimDoc.insuranceCompanyId,
+            tpaId: claimDoc.tpaId,
+            patientInsuranceId: claimDoc.patientInsuranceId
+          };
+        }
+      }
+    }
+
+    if (!preauth && claimNumber && claimNumber.trim()) {
+      preauth = await PreAuthorization.findOne({ hospitalId, claimNumber: claimNumber.trim() })
+        .populate('insuranceCompanyId', 'name code')
+        .populate('tpaId', 'name code')
+        .populate('patientInsuranceId', 'policyNumber');
+
+      if (!preauth) {
+        const claimDoc = await TpaClaim.findOne({ hospitalId, claimNumber: claimNumber.trim() })
+          .populate('insuranceCompanyId', 'name code')
+          .populate('tpaId', 'name code')
+          .populate('patientInsuranceId', 'policyNumber');
+        if (claimDoc) {
+          preauth = {
+            _id: claimDoc._id,
+            patientId: claimDoc.patientId,
+            claimNumber: claimDoc.claimNumber,
+            preauthStatus: claimDoc.status,
+            finalAuthorizedAmount: claimDoc.finalAuthorizedAmount,
+            totalApprovedAmount: claimDoc.claimedAmount || claimDoc.finalAuthorizedAmount || 0,
+            initialApprovedAmount: claimDoc.claimedAmount || claimDoc.finalAuthorizedAmount || 0,
+            nonPayableAmount: claimDoc.nonPayableAmount,
+            copayAmount: claimDoc.copayAmount,
+            deductibleAmount: claimDoc.deductibleAmount,
+            insuranceCompanyId: claimDoc.insuranceCompanyId,
+            tpaId: claimDoc.tpaId,
+            patientInsuranceId: claimDoc.patientInsuranceId
+          };
+        }
+      }
+    }
+
+    if (!preauth && resolvedPatientId) {
+      preauth = await PreAuthorization.findOne({ hospitalId, patientId: resolvedPatientId })
+        .sort({ updatedAt: -1 })
+        .populate('insuranceCompanyId', 'name code')
+        .populate('tpaId', 'name code')
+        .populate('patientInsuranceId', 'policyNumber');
+    }
+
+    if (!preauth) {
+      return res.status(404).json({
+        valid: false,
+        message: 'No active Cashless Pre-Authorization record found for this patient.'
+      });
+    }
+
+    // Status gate
+    let effectivePreauth = preauth;
+    const status = preauth.preauthStatus;
+    if (status === 'Settled') {
+      // Check if a separate valid final claim record meets existing business rules for this patient
+      const separateClaim = await TpaClaim.findOne({
+        hospitalId,
+        patientId: preauth.patientId,
+        status: { $in: ['Approved', 'Final Authorized'] },
+        finalAuthorizedAmount: { $gt: 0 }
+      })
+        .populate('insuranceCompanyId', 'name code')
+        .populate('tpaId', 'name code')
+        .populate('patientInsuranceId', 'policyNumber');
+
+      const separatePreAuth = await PreAuthorization.findOne({
+        hospitalId,
+        patientId: preauth.patientId,
+        _id: { $ne: preauth._id },
+        preauthStatus: { $in: ['Approved', 'Final Authorized'] }
+      })
+        .populate('insuranceCompanyId', 'name code')
+        .populate('tpaId', 'name code')
+        .populate('patientInsuranceId', 'policyNumber');
+
+      if (!separateClaim && !separatePreAuth) {
+        return res.status(400).json({
+          valid: false,
+          message: 'Claim status is "Settled". This claim is already closed and settled. Cashless split cannot be applied to new billing.'
+        });
+      }
+
+      if (separateClaim) {
+        effectivePreauth = {
+          _id: separateClaim._id,
+          patientId: separateClaim.patientId,
+          claimNumber: separateClaim.claimNumber,
+          preauthStatus: separateClaim.status,
+          finalAuthorizedAmount: separateClaim.finalAuthorizedAmount,
+          totalApprovedAmount: separateClaim.claimedAmount || separateClaim.finalAuthorizedAmount || 0,
+          initialApprovedAmount: separateClaim.claimedAmount || separateClaim.finalAuthorizedAmount || 0,
+          nonPayableAmount: separateClaim.nonPayableAmount,
+          copayAmount: separateClaim.copayAmount,
+          deductibleAmount: separateClaim.deductibleAmount,
+          insuranceCompanyId: separateClaim.insuranceCompanyId,
+          tpaId: separateClaim.tpaId,
+          patientInsuranceId: separateClaim.patientInsuranceId
+        };
+      } else if (separatePreAuth) {
+        effectivePreauth = separatePreAuth;
+      }
+    }
+
+    const effectiveStatus = effectivePreauth.preauthStatus || effectivePreauth.status;
+    if (!['Approved', 'Final Authorized'].includes(effectiveStatus)) {
+      return res.status(400).json({
+        valid: false,
+        message: `Cannot apply cashless split: Claim status is "${effectiveStatus}". Cashless settlement requires an "Approved" or "Final Authorized" claim letter.`
+      });
+    }
+
+    // Determine authorization ceiling
+    const numFinalAuth = Number(effectivePreauth.finalAuthorizedAmount) || 0;
+    const numTotalApp = Number(effectivePreauth.totalApprovedAmount) || 0;
+    const numInitApp = Number(effectivePreauth.initialApprovedAmount) || 0;
+    const authCeiling = numFinalAuth > 0 ? numFinalAuth : (numTotalApp > 0 ? numTotalApp : numInitApp);
+
+    const rawAdvanceApplied = Number(req.body.advanceApplied || req.body.advanceAdjusted || 0);
+    const rawPatientPayable = Number(patientPayable || 0);
+    const rawTpaReceivable = Number(tpaReceivable || 0);
+
+    // Rule 7: Prevent negative balances
+    if (rawPatientPayable < 0 || rawTpaReceivable < 0 || rawAdvanceApplied < 0) {
+      return res.status(400).json({
+        valid: false,
+        message: 'Negative financial balances or allocations are prohibited.'
+      });
+    }
+
+    const numTotalHospitalBill = Math.max(0, Number(req.body.totalHospitalBill || req.body.grandTotal || netPayable) || 0);
+    const numAdvanceApplied = Math.max(0, rawAdvanceApplied);
+    const numNetPayable = Math.max(0, Number(netPayable) || 0);
+    const numNonPayable = Math.max(0, Number(nonPayable) || 0);
+    const numCopay = Math.max(0, Number(copay) || 0);
+    const numDeductible = Math.max(0, Number(deductible) || 0);
+    const numTpaReceivable = Math.max(0, rawTpaReceivable);
+    const numPatientPayable = Math.max(0, rawPatientPayable);
+
+    // Rule 1: Retrieve actual advance payments from existing billing/ledger records
+    const AdvancePayment = require('../models/AdvancePayment');
+    const activeAdvances = await AdvancePayment.find({
+      hospitalId,
+      patientId: effectivePreauth.patientId,
+      isAdjusted: false
+    });
+    const totalAdvanceAvailable = activeAdvances.reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
+
+    // Advance applied cannot exceed available advance payments in ledger
+    if (numAdvanceApplied > totalAdvanceAvailable + 0.05) {
+      return res.status(400).json({
+        valid: false,
+        message: `Advance applied (₹${numAdvanceApplied}) exceeds available unadjusted advance payments in ledger (₹${totalAdvanceAvailable}).`
+      });
+    }
+
+    // Advance applied cannot exceed total hospital bill
+    if (numTotalHospitalBill > 0 && numAdvanceApplied > numTotalHospitalBill + 0.05) {
+      return res.status(400).json({
+        valid: false,
+        message: `Advance applied (₹${numAdvanceApplied}) cannot exceed Total Hospital Bill (₹${numTotalHospitalBill}).`
+      });
+    }
+
+    // Effective bill after advance
+    const effectiveNetBill = numTotalHospitalBill > 0
+      ? Math.max(0, Number((numTotalHospitalBill - numAdvanceApplied).toFixed(2)))
+      : numNetPayable;
+
+    // TPA receivable cannot exceed net hospital bill after advance
+    if (numTpaReceivable > effectiveNetBill + 0.05) {
+      return res.status(400).json({
+        valid: false,
+        message: `TPA Receivable (₹${numTpaReceivable}) cannot exceed the eligible hospital bill after advance adjustment (₹${effectiveNetBill}).`
+      });
+    }
+
+    // Rule 9: Preserve non-payable, co-pay, and deductible rules - TPA cannot cover patient deductions
+    const basePatientPortion = numNonPayable + numCopay + numDeductible;
+    const maxTpaCoverable = Math.max(0, Number((effectiveNetBill - basePatientPortion).toFixed(2)));
+    if (numTpaReceivable > maxTpaCoverable + 0.05) {
+      return res.status(400).json({
+        valid: false,
+        message: `TPA Receivable (₹${numTpaReceivable}) exceeds the eligible coverage limit after mandatory patient deductions (₹${maxTpaCoverable}).`
+      });
+    }
+
+    // TPA receivable cannot exceed authorized ceiling
+    if (authCeiling > 0 && numTpaReceivable > authCeiling + 0.05) {
+      return res.status(400).json({
+        valid: false,
+        message: `TPA Receivable (₹${numTpaReceivable}) exceeds the TPA authorized ceiling (₹${authCeiling}).`
+      });
+    }
+
+    // Rule 6: Never let advance applied plus patient payments plus TPA allocation exceed the net/total bill
+    if (numTotalHospitalBill > 0 && (numAdvanceApplied + numPatientPayable + numTpaReceivable) > numTotalHospitalBill + 0.05) {
+      return res.status(400).json({
+        valid: false,
+        message: `Financial overrun: Advance Applied (₹${numAdvanceApplied}) + Patient Payable (₹${numPatientPayable}) + TPA Receivable (₹${numTpaReceivable}) exceeds Total Hospital Bill (₹${numTotalHospitalBill}).`
+      });
+    }
+
+    // Balance consistency check: patientPayable + tpaReceivable must equal effectiveNetBill
+    if (Math.abs((numPatientPayable + numTpaReceivable) - effectiveNetBill) > 0.05 &&
+        (numTotalHospitalBill > 0 && Math.abs((numAdvanceApplied + numPatientPayable + numTpaReceivable) - numTotalHospitalBill) > 0.05)) {
+      return res.status(400).json({
+        valid: false,
+        message: `Split mismatch: Patient Payable (₹${numPatientPayable}) + TPA Receivable (₹${numTpaReceivable}) must equal Net Bill (₹${effectiveNetBill}).`
+      });
+    }
+
+    // Duplicate protection
+    const existingPaidBill = await Billing.findOne({
+      hospitalId,
+      patientId: effectivePreauth.patientId,
+      status: 'Final',
+      paymentMode: 'Insurance',
+      transactionRef: effectivePreauth.claimNumber,
+      paymentStatus: 'Paid'
+    });
+
+    if (existingPaidBill) {
+      return res.status(400).json({
+        valid: false,
+        message: `A finalized and fully paid invoice (${existingPaidBill.invoiceNo || existingPaidBill.billNo}) already exists for claim ${effectivePreauth.claimNumber}. Cannot apply duplicate cashless settlement.`
+      });
+    }
+
+    return res.status(200).json({
+      valid: true,
+      message: 'Cashless split validated successfully.',
+      data: {
+        claimNumber: effectivePreauth.claimNumber,
+        preauthStatus: effectivePreauth.preauthStatus,
+        insuranceName: effectivePreauth.insuranceCompanyId?.name || '',
+        tpaName: effectivePreauth.tpaId?.name || '',
+        policyNumber: effectivePreauth.patientInsuranceId?.policyNumber || '',
+        totalHospitalBill: numTotalHospitalBill,
+        advancePaymentsReceived: totalAdvanceAvailable,
+        advanceApplied: numAdvanceApplied,
+        claimAmount: Number(effectivePreauth.claimedAmount || effectivePreauth.initialRequestedAmount || authCeiling) || 0,
+        authCeiling,
+        nonPayable: numNonPayable,
+        copay: numCopay,
+        deductible: numDeductible,
+        netPayable: effectiveNetBill,
+        patientPayable: numPatientPayable,
+        tpaReceivable: numTpaReceivable
+      }
+    });
+  } catch (error) {
+    console.error('Validate Cashless Split Error:', error);
+    res.status(500).json({ valid: false, message: error.message || 'Server error validating cashless split.' });
+  }
+};
+
 module.exports = {
   generateBillItems, createBill, updateBill,
   getPatientBills, getBillById, getAllBills,
   searchPatient, getEligiblePatients,
   createAdvance, getPatientAdvances, cancelBill, getDashboardStats,
   getDiscountRequests, approveDiscountRequest, rejectDiscountRequest,
-  getPatientDues, getDuesList, recordDuePayment, addDueItem, removeDueItem
+  getPatientDues, getDuesList, recordDuePayment, addDueItem, removeDueItem,
+  validateCashlessSplit
 };
