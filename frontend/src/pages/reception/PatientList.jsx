@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, Printer, Search, Trash2, X, Calendar, Hash, Users, FileText, Clock, Filter, ChevronDown, ChevronLeft, ChevronRight, Copy, Pencil, Save, MoreVertical, CalendarCheck, CheckCircle, History, FlaskConical, Activity } from 'lucide-react';
+import { Eye, Printer, Search, Trash2, X, Calendar, Hash, Users, FileText, Clock, Filter, ChevronDown, ChevronLeft, ChevronRight, Copy, Pencil, Save, MoreVertical, CalendarCheck, CheckCircle, History, FlaskConical, Activity, ShieldCheck } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import toast from 'react-hot-toast';
@@ -811,6 +811,15 @@ const PatientList = () => {
                             className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 text-left transition-colors"
                           >
                             <Clock className="h-3.5 w-3.5 text-gray-500" /> History
+                          </button>
+                          <button
+                            onClick={() => {
+                              setActiveMenuId(null);
+                              navigate(`/reception/patients/${reg.patientId || reg._id}`);
+                            }}
+                            className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 text-left transition-colors"
+                          >
+                            <ShieldCheck className="h-3.5 w-3.5 text-orange-600" /> Insurance & Profile
                           </button>
                           <button
                             onClick={() => {

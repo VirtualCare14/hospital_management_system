@@ -25,7 +25,8 @@ import {
   Scissors,
   DoorOpen,
   CheckCircle,
-  MoreVertical
+  MoreVertical,
+  ShieldCheck
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useHeader } from '../../context/HeaderContext';
@@ -538,6 +539,17 @@ const IpdPatientList = () => {
                               className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 text-left transition-colors cursor-pointer"
                             >
                               <Syringe className="h-3.5 w-3.5 text-purple-600" /> IPD Services
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveMenuId(null);
+                                navigate(`/ipd/patient/${admission._id}?tab=insurance`);
+                              }}
+                              className="w-full px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                            >
+                              <ShieldCheck className="h-3.5 w-3.5 text-orange-600" /> Insurance & Pre-Auth
                             </button>
 
                             <button

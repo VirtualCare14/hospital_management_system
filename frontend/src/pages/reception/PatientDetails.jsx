@@ -4,6 +4,8 @@ import { FileText, Stethoscope, Trash2, ShieldCheck, Link as LinkIcon, Send, Ref
 import toast from 'react-hot-toast';
 import client from '../../api/client';
 
+import PatientInsuranceSection from '../../components/patient/PatientInsuranceSection';
+
 const PatientDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -27,8 +29,27 @@ const PatientDetails = () => {
   };
 
   useEffect(() => {
-    client.get(`/patients/${id}`).then(({ data }) => setPatient(data));
-    client.get(`/consultation/${id}`).then(({ data }) => setConsultations(data));
+    client.get(`/patients/${id}`)
+      .then(({ data }) => setPatient(data))
+      .catch((err) => console.error('Error fetching patient:', err));
+
+    client.get(`/consultation/${id}`)
+      .then(({ data }) => {
+        if (Array.isArray(data)) {
+          setConsultations(data);
+        } else if (data && Array.isArray(data.consultations)) {
+          setConsultations(data.consultations);
+        } else if (data && data.consultation) {
+          setConsultations([data.consultation]);
+        } else {
+          setConsultations([]);
+        }
+      })
+      .catch((err) => {
+        console.warn('Consultations fetch error:', err.message);
+        setConsultations([]);
+      });
+
     fetchAbdmData();
   }, [id]);
 
@@ -140,6 +161,9 @@ const PatientDetails = () => {
         </div>
       </div>
 
+      {/* Patient Insurance & Cashless Policies Section */}
+      <PatientInsuranceSection patientId={patient._id} patientName={patient.patientName} />
+
       {/* ABDM M2 Milestone 2 Panel */}
       <div className="card p-5">
         <div className="flex items-center justify-between">
@@ -235,13 +259,15 @@ const PatientDetails = () => {
       <div className="card p-5">
         <h2 className="font-bold text-gray-800">Consultation History</h2>
         <div className="mt-3 space-y-3">
-          {consultations.map((item) => (
+          {Array.isArray(consultations) && consultations.map((item) => (
             <div key={item._id} className="rounded-xl border border-orange-100 p-4">
               <p className="font-semibold">{item.diagnosisRemark || 'No diagnosis remark'}</p>
               <p className="text-sm text-gray-500">{item.symptoms?.map((s) => `${s.symptom}${s.durationDays ? ` - ${s.durationDays} ${s.durationUnit}` : ''}`).join(', ')}</p>
             </div>
           ))}
-          {consultations.length === 0 && <p className="text-sm text-gray-500">No consultations yet.</p>}
+          {(!Array.isArray(consultations) || consultations.length === 0) && (
+            <p className="text-sm text-gray-500">No consultations yet.</p>
+          )}
         </div>
       </div>
     </div>

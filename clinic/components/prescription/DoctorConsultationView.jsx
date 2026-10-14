@@ -5,7 +5,7 @@ import {
   Stethoscope, Plus, Trash2, Save, X, Activity, Pill,
   FileText, Calendar, Clock, AlertCircle, RefreshCw, Printer,
   Eye, Copy, History, FlaskConical, ClipboardList, PanelRightClose,
-  PanelRightOpen, CheckCircle2, ChevronUp, ChevronDown, Download
+  PanelRightOpen, CheckCircle2, ChevronUp, ChevronDown, Download, MessageCircle
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import html2canvas from 'html2canvas';
@@ -16,6 +16,11 @@ import { formatDate } from '@/lib/utils/dateFormat';
 import { openPdfPrintWindow, sanitizeClonedDocumentForPdf } from '@/lib/utils/pdfUtils';
 import PatientReceipt from '../common/PatientReceipt';
 import PrintLanguageModal from '../common/PrintLanguageModal';
+import {
+  buildPrescriptionWhatsAppUrl,
+  navigateWhatsAppShareWindow,
+  openWhatsAppShareWindow
+} from '../../../../shared/prescriptionWhatsApp.js';
 
 const durationUnits = ['Days', 'Weeks', 'Months', 'Years', 'Hours'];
 
@@ -371,7 +376,7 @@ export default function DoctorConsultationView({ patient, onBack, onSuccess, onN
   };
 
   // Submit Consultation & Prescription
-  const handleSaveAndPrint = async (activeLang = 'English') => {
+  const handleSaveAndPrint = async (activeLang = 'English', whatsappShare = null) => {
     const validSymptoms = symptoms.filter(s => s.symptom && s.symptom.trim());
     const validMedicines = medicines.filter(m => m.medicine && m.medicine.trim());
 
@@ -422,6 +427,14 @@ export default function DoctorConsultationView({ patient, onBack, onSuccess, onN
 
       toast.success('Consultation & Prescription saved successfully!');
 
+      if (whatsappShare) {
+        navigateWhatsAppShareWindow(whatsappShare.url);
+        toast.success('WhatsApp opened. Review the prescription and tap Send.');
+        if (onSuccess) onSuccess(patient, { ...consPayload, medicines: validMedicines });
+        if (onBack) onBack();
+        return;
+      }
+
       if (receiptRef.current) {
         const toastId = toast.loading(`Generating Printable Prescription (${activeLang})...`);
         setTimeout(async () => {
@@ -466,6 +479,42 @@ export default function DoctorConsultationView({ patient, onBack, onSuccess, onN
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSaveAndShareWhatsApp = () => {
+    const validMedicines = medicines.filter(m => m.medicine && m.medicine.trim());
+    if (validMedicines.length === 0) {
+      toast.error('Add at least one medicine before sharing a prescription');
+      return;
+    }
+
+    let whatsappUrl;
+    try {
+      whatsappUrl = buildPrescriptionWhatsAppUrl({
+        phone: patient?.mobile,
+        patientName: patient?.patientName,
+        doctorName: patient?.doctorId?.doctorName || patient?.doctorId?.username || 'Doctor',
+        prescription: {
+          diagnosisRemark,
+          patientAdvice,
+          medicines: validMedicines,
+          followUpDate,
+          followUpRemarks,
+          createdAt: new Date().toISOString()
+        }
+      });
+    } catch (err) {
+      toast.error(err.message);
+      return;
+    }
+
+    const whatsappWindow = openWhatsAppShareWindow();
+    if (!whatsappWindow) {
+      toast.error('Allow pop-ups to open WhatsApp and share the prescription.');
+      return;
+    }
+
+    handleSaveAndPrint(language, { window: whatsappWindow, url: whatsappUrl });
   };
 
   const receiptPatientData = {
@@ -1140,6 +1189,15 @@ export default function DoctorConsultationView({ patient, onBack, onSuccess, onN
                   className="btn bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-black py-2.5 px-5 flex items-center gap-2 cursor-pointer shadow-md rounded-xl disabled:opacity-50"
                 >
                   <Printer className="h-4 w-4" /> {saving ? 'Saving...' : 'Save & Print Prescription'}
+                </button>
+
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={handleSaveAndShareWhatsApp}
+                  className="btn bg-green-600 hover:bg-green-700 text-white text-sm font-black py-2.5 px-5 flex items-center gap-2 cursor-pointer shadow-md rounded-xl disabled:opacity-50"
+                >
+                  <MessageCircle className="h-4 w-4" /> Save & Share via WhatsApp
                 </button>
 
                 <button

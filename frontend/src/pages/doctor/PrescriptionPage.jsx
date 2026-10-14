@@ -6,7 +6,8 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { 
   Plus, Save, Printer, Download, Trash2, ShieldAlert, FileText, Eye, Check,
-  History, ChevronDown, ChevronUp, Copy, Stethoscope, Pill, Calendar, Clock, ArrowRight, Activity
+  History, ChevronDown, ChevronUp, Copy, Stethoscope, Pill, Calendar, Clock, ArrowRight, Activity,
+  MessageCircle
 } from 'lucide-react';
 import client from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -17,6 +18,11 @@ import { sanitizeClonedDocumentForPdf, openPdfPrintWindow } from '../../utils/pd
 import { translateClinicalText } from '../../utils/prescriptionI18n';
 import PatientReceipt from '../../components/PatientReceipt';
 import PrintLanguageModal from '../../components/PrintLanguageModal';
+import {
+  buildPrescriptionWhatsAppUrl,
+  navigateWhatsAppShareWindow,
+  openWhatsAppShareWindow
+} from '../../../../shared/prescriptionWhatsApp.js';
 
 const calculateQty = (med) => {
   const m = med.morning ? 1 : 0;
@@ -218,6 +224,7 @@ const PrescriptionPage = () => {
       tests: consultation?.tests || [],
       followUpDate: consultation?.followUpDate,
       followUpRemarks: consultation?.followUpRemarks,
+      patientAdvice: consultation?.patientAdvice || '',
       createdAt: new Date().toISOString()
     };
   };
@@ -253,6 +260,33 @@ const PrescriptionPage = () => {
       return null;
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveAndShareWhatsApp = async () => {
+    let whatsappWindow;
+    try {
+      const prescription = buildPrescriptionDataForPrint();
+      const whatsappUrl = buildPrescriptionWhatsAppUrl({
+        phone: patient?.mobile,
+        patientName: patient?.patientName,
+        doctorName: prescription.doctorName,
+        prescription
+      });
+
+      whatsappWindow = openWhatsAppShareWindow();
+      if (!whatsappWindow) {
+        toast.error('Allow pop-ups to open WhatsApp and share the prescription.');
+        return;
+      }
+
+      const savedPrescription = await handleSavePrescription(false);
+      if (!savedPrescription) return;
+
+      navigateWhatsAppShareWindow(whatsappUrl);
+      toast.success('Prescription saved. Review the WhatsApp message and tap Send.');
+    } catch (err) {
+      toast.error(err.message || 'Could not open WhatsApp for this patient');
     }
   };
 
@@ -771,6 +805,15 @@ const PrescriptionPage = () => {
             Save & Print Receipt (PDF)
           </button>
         </div>
+        <button
+          type="button"
+          className="btn w-full bg-green-600 hover:bg-green-700 text-white font-extrabold py-3 text-sm shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+          onClick={handleSaveAndShareWhatsApp}
+          disabled={saving || patient.isDischarged}
+        >
+          <MessageCircle className="h-4 w-4" />
+          Save & Share via WhatsApp
+        </button>
 
         {/* Print Language Selector Modal */}
         <PrintLanguageModal
