@@ -1,14 +1,78 @@
 'use client';
 
 import { useRef } from 'react';
-import { Printer, X, Download } from 'lucide-react';
+import { Printer, X, Download, MessageCircle } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import toast from 'react-hot-toast';
 import { openPdfPrintWindow, sanitizeClonedDocumentForPdf } from '@/lib/utils/pdfUtils';
+import {
+  buildPrescriptionWhatsAppUrl,
+  navigateWhatsAppShareWindow,
+  openWhatsAppShareWindow
+} from '../../../shared/prescriptionWhatsApp.js';
 
 export default function PrintRxModal({ patient, prescription, onClose }) {
   const receiptRef = useRef(null);
+
+  const handleShareWhatsApp = () => {
+    if (!prescription) {
+      toast.error('No prescription found to share');
+      return;
+    }
+
+    const validMedicines = (prescription.medicines || []).filter(
+      (m) => m && m.medicine && typeof m.medicine === 'string' && m.medicine.trim()
+    );
+
+    if (validMedicines.length === 0) {
+      toast.error('Add at least one medicine before sharing a prescription');
+      return;
+    }
+
+    let phone = patient?.mobile;
+    if (!phone || !String(phone).trim()) {
+      phone = window.prompt('Patient mobile number is missing. Enter 10-digit WhatsApp phone number:');
+      if (!phone || !phone.trim()) return;
+    }
+
+    const docName =
+      prescription.doctorId?.doctorName ||
+      prescription.doctorId?.username ||
+      prescription.doctorName ||
+      'Doctor';
+    const cleanDocName = docName.startsWith('Dr.') ? docName : `Dr. ${docName}`;
+
+    let whatsappUrl;
+    try {
+      whatsappUrl = buildPrescriptionWhatsAppUrl({
+        phone: String(phone).trim(),
+        patientName: patient?.patientName,
+        doctorName: cleanDocName,
+        prescription: {
+          diagnosisRemark: prescription.diagnosisRemark || '',
+          patientAdvice: prescription.patientAdvice || '',
+          medicines: validMedicines,
+          followUpDate: prescription.followUpDate,
+          followUpRemarks: prescription.followUpRemarks,
+          prescriptionDate: prescription.prescriptionDateTime || prescription.createdAt,
+          createdAt: prescription.createdAt
+        }
+      });
+    } catch (error) {
+      toast.error(error.message || 'Could not prepare WhatsApp message');
+      return;
+    }
+
+    const whatsappWindow = openWhatsAppShareWindow();
+    if (!whatsappWindow) {
+      toast.error('Allow pop-ups to open WhatsApp and share the prescription.');
+      return;
+    }
+
+    navigateWhatsAppShareWindow(whatsappUrl);
+    toast.success('Review the WhatsApp message and tap Send.');
+  };
 
   const handlePrint = async () => {
     if (!receiptRef.current) return;
@@ -86,6 +150,14 @@ export default function PrintRxModal({ patient, prescription, onClose }) {
               className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-orange-600 hover:bg-orange-700 rounded-xl transition-colors shadow-sm cursor-pointer"
             >
               <Printer className="w-4 h-4" /> Print Rx
+            </button>
+            <button
+              type="button"
+              onClick={handleShareWhatsApp}
+              className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-xl transition-colors shadow-sm cursor-pointer"
+              title="Save & Share via WhatsApp"
+            >
+              <MessageCircle className="w-4 h-4" /> Save & Share via WhatsApp
             </button>
             <button
               type="button"

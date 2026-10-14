@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Calendar, FileText, Printer, X, Plus, Clock, Globe, FlaskConical, Eye, CheckCircle2, AlertCircle, Sparkles, Building2, Check, Download, ShieldCheck, Microscope } from 'lucide-react';
+import { ArrowLeft, Calendar, FileText, Printer, X, Plus, Clock, Globe, FlaskConical, Eye, CheckCircle2, AlertCircle, Sparkles, Building2, Check, Download, ShieldCheck, Microscope, MessageCircle } from 'lucide-react';
 import client from '../../api/client';
 import { formatDate } from '../../utils/dateFormat';
 import toast from 'react-hot-toast';
@@ -9,6 +9,12 @@ import jsPDF from 'jspdf';
 import PatientReceipt from '../../components/PatientReceipt';
 import PrintLanguageModal from '../../components/PrintLanguageModal';
 import { sanitizeClonedDocumentForPdf, openPdfPrintWindow } from '../../utils/pdfUtils';
+import { useAuth } from '../../context/AuthContext';
+import {
+  buildPrescriptionWhatsAppUrl,
+  navigateWhatsAppShareWindow,
+  openWhatsAppShareWindow
+} from '../../../../shared/prescriptionWhatsApp.js';
 
 const ageFromDob = (dob) => {
   if (!dob) return '-';
@@ -19,6 +25,7 @@ const ageFromDob = (dob) => {
 const CompletedConsultationDetails = () => {
   const { consultationId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const receiptRef = useRef(null);
   const [consultation, setConsultation] = useState(null);
   const [patient, setPatient] = useState(null);
@@ -65,6 +72,72 @@ const CompletedConsultationDetails = () => {
     }
     setTargetRxForPrint(rxToPrint);
     setShowLangModal(true);
+  };
+
+  const handleShareWhatsApp = (rxObj) => {
+    const rxToShare = rxObj || prescription || (allPrescriptions && allPrescriptions[0]);
+    if (!rxToShare) {
+      toast.error('No prescription found to share via WhatsApp');
+      return;
+    }
+
+    const validMedicines = (rxToShare.medicines || []).filter(
+      (m) => m && m.medicine && typeof m.medicine === 'string' && m.medicine.trim()
+    );
+
+    if (validMedicines.length === 0) {
+      toast.error('Add at least one medicine before sharing a prescription');
+      return;
+    }
+
+    let phone = patient?.mobile;
+    if (!phone || !String(phone).trim()) {
+      phone = window.prompt('Patient mobile number is not on file. Please enter WhatsApp number (with country code or 10 digits):');
+      if (!phone || !phone.trim()) return;
+    }
+
+    const docName =
+      rxToShare.doctorId?.doctorName ||
+      rxToShare.doctorId?.username ||
+      consultation?.doctorId?.doctorName ||
+      consultation?.doctorId?.username ||
+      consultation?.visitId?.createdBy?.doctorName ||
+      consultation?.visitId?.createdBy?.username ||
+      user?.doctorName ||
+      user?.username ||
+      'Doctor';
+
+    const cleanDocName = docName.startsWith('Dr.') ? docName : `Dr. ${docName}`;
+
+    let whatsappUrl;
+    try {
+      whatsappUrl = buildPrescriptionWhatsAppUrl({
+        phone: String(phone).trim(),
+        patientName: patient?.patientName,
+        doctorName: cleanDocName,
+        prescription: {
+          diagnosisRemark: consultation?.diagnosisRemark || rxToShare.diagnosisRemark || '',
+          patientAdvice: consultation?.patientAdvice || rxToShare.patientAdvice || '',
+          medicines: validMedicines,
+          followUpDate: consultation?.followUpDate || rxToShare.followUpDate,
+          followUpRemarks: consultation?.followUpRemarks || rxToShare.followUpRemarks,
+          prescriptionDate: rxToShare.prescriptionDateTime || rxToShare.createdAt || consultation?.consultationCompletedDate || consultation?.createdAt,
+          createdAt: rxToShare.createdAt || consultation?.createdAt
+        }
+      });
+    } catch (error) {
+      toast.error(error.message || 'Could not prepare WhatsApp message');
+      return;
+    }
+
+    const whatsappWindow = openWhatsAppShareWindow();
+    if (!whatsappWindow) {
+      toast.error('Allow pop-ups to open WhatsApp and share the prescription.');
+      return;
+    }
+
+    navigateWhatsAppShareWindow(whatsappUrl);
+    toast.success('Review the WhatsApp message and tap Send.');
   };
 
   const handleOpenLabReport = (labReq) => {
@@ -202,13 +275,25 @@ const CompletedConsultationDetails = () => {
           </div>
         </div>
         <div className="flex gap-2 flex-wrap">
-          {prescription && (
-            <button 
-              onClick={() => handleOpenPrintModal(prescription)} 
-              className="btn bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
-            >
-              <Printer className="h-4 w-4" /> Print Prescription
-            </button>
+          {(prescription || (allPrescriptions && allPrescriptions.length > 0)) && (
+            <>
+              <button 
+                type="button"
+                onClick={() => handleOpenPrintModal(prescription || allPrescriptions[0])} 
+                className="btn bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <Printer className="h-4 w-4" /> Print Prescription
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleShareWhatsApp(prescription || allPrescriptions[0])}
+                className="btn bg-green-600 hover:bg-green-700 text-white font-bold text-sm inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
+                title="Send prescription via WhatsApp"
+              >
+                <MessageCircle className="h-4 w-4" /> Save & Share via WhatsApp
+              </button>
+            </>
           )}
           <Link to={`/doctor/prescription/${patient._id}?addMore=true`} className="btn bg-green-600 hover:bg-green-700 text-white font-bold text-sm inline-flex items-center gap-1.5 shadow-xs">
             <Plus className="h-4 w-4" /> Add Prescription
@@ -407,14 +492,25 @@ const CompletedConsultationDetails = () => {
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => handleOpenPrintModal(rx)}
-                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0"
-                    >
-                      <Printer className="h-3.5 w-3.5" />
-                      <span>Print Prescription</span>
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => handleShareWhatsApp(rx)}
+                        className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
+                        title="Send this prescription via WhatsApp"
+                      >
+                        <MessageCircle className="h-3.5 w-3.5" />
+                        <span>Save & Share via WhatsApp</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenPrintModal(rx)}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0 transition-colors"
+                      >
+                        <Printer className="h-3.5 w-3.5" />
+                        <span>Print Prescription</span>
+                      </button>
+                    </div>
                   </div>
 
                   {/* Medicines Table */}
