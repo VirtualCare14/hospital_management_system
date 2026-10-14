@@ -5,13 +5,14 @@ import {
   X, Trash2, RefreshCw, FileText, Eye, Phone,
   Building2, CreditCard, Percent, DollarSign, Receipt, FileDown,
   ArrowLeft, Stethoscope, Pill, TestTube, BedDouble, Package, Plus, Trash, EyeOff, LayoutDashboard, History, Coins, Ban,
-  MoreVertical, Pencil, Users, CheckCircle2, Clock, AlertTriangle, TrendingUp, TrendingDown, FileCheck, BadgeIndianRupee, Calendar, Filter, MapPin, UserCheck
+  MoreVertical, Pencil, Users, CheckCircle2, Clock, AlertTriangle, TrendingUp, TrendingDown, FileCheck, BadgeIndianRupee, Calendar, Filter, MapPin, UserCheck,
+  Shield, ShieldCheck, ShieldAlert, Info
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 import html2canvas from 'html2canvas';
 import { useAuth } from '../../context/AuthContext';
-import { useSearchParams, useLocation } from 'react-router-dom';
+import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import client from '../../api/client';
 import { useHeader } from '../../context/HeaderContext';
 import { formatUhid } from '../../utils/uhid';
@@ -42,6 +43,7 @@ const CATEGORY_COLORS = {
 const PAYMENT_MODES = ['Cash', 'UPI', 'Card', 'Net Banking', 'Cheque', 'Insurance', 'Mixed Payment'];
 
 const BillingPage = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
   const [searchParams, setSearchParams] = useSearchParams();
@@ -326,6 +328,17 @@ const BillingPage = () => {
   const [upiSplit, setUpiSplit] = useState(0);
   const [cardSplit, setCardSplit] = useState(0);
 
+  // TPA & Insurance Pre-Authorization Financial Integration
+  const [patientPreAuthList, setPatientPreAuthList] = useState([]);
+  const [patientInsuranceList, setPatientInsuranceList] = useState([]);
+  const [loadingTpaInfo, setLoadingTpaInfo] = useState(false);
+  const [selectedPreAuthId, setSelectedPreAuthId] = useState('');
+  const [tpaNonPayable, setTpaNonPayable] = useState('0');
+  const [tpaCopay, setTpaCopay] = useState('0');
+  const [tpaDeductible, setTpaDeductible] = useState('0');
+  const [isCashlessSplitActive, setIsCashlessSplitActive] = useState(false);
+  const [customInsuranceAllocation, setCustomInsuranceAllocation] = useState('');
+
   // Active records
   const [currentBill, setCurrentBill] = useState(null);
   const [pastBills, setPastBills] = useState([]);
@@ -338,6 +351,11 @@ const BillingPage = () => {
   const [advanceRemarksInput, setAdvanceRemarksInput] = useState('');
   const [savingAdvance, setSavingAdvance] = useState(false);
   const [selectedAdvancePatient, setSelectedAdvancePatient] = useState(null);
+
+  // Insurance & Cashless Modal Panel
+  const [showInsuranceModal, setShowInsuranceModal] = useState(false);
+  const [validatingCashless, setValidatingCashless] = useState(false);
+  const [showSplitConfirm, setShowSplitConfirm] = useState(false);
 
   // Dashboard Stats
   const [stats, setStats] = useState({
@@ -641,6 +659,17 @@ const BillingPage = () => {
     setCustomGst('0');
     setCustomQty('1');
 
+    // Reset TPA Cashless state
+    setPatientPreAuthList([]);
+    setPatientInsuranceList([]);
+    setSelectedPreAuthId('');
+    setTpaNonPayable('0');
+    setTpaCopay('0');
+    setTpaDeductible('0');
+    setIsCashlessSplitActive(false);
+    setCustomInsuranceAllocation('');
+    setShowSplitConfirm(false);
+
     const effectiveBillType = isSameDayCare ? 'SameDayTreatment' : 'All';
     try {
       const { data } = await client.get(`/billing/generate/${patient.uhid}?billType=${effectiveBillType}`);
@@ -656,7 +685,9 @@ const BillingPage = () => {
 
       // Pull active unadjusted advances
       setPatientAdvances(data.activeAdvances || []);
-      setTotalAdvanceAvailable(data.totalAdvance || 0);
+      const availAdv = Number(data.totalAdvance) || 0;
+      setTotalAdvanceAvailable(availAdv);
+      setAdvanceToAdjust(availAdv);
 
       // Pull hospital configurations
       if (data.settings) {
@@ -673,6 +704,74 @@ const BillingPage = () => {
         setPastBills(billsRes.data || []);
       } catch {
         setPastBills([]);
+      }
+
+      // Load patient Pre-Authorizations & Insurance for Cashless TPA Integration
+      try {
+        const patientIdVal = data.patient?._id || patient._id;
+        const admissionIdVal = data.patient?.admissionDetails?._id || patient.admissionDetails?._id;
+        if (patientIdVal) {
+          const preAuthEndpoint = admissionIdVal
+            ? `/tpa/pre-auth?patientId=${patientIdVal}&ipdAdmissionId=${admissionIdVal}`
+            : `/tpa/pre-auth?patientId=${patientIdVal}`;
+          const [preAuthRes, insRes, claimsRes] = await Promise.all([
+            client.get(preAuthEndpoint),
+            client.get(`/tpa/patient-insurance?patientId=${patientIdVal}`),
+            client.get(`/tpa/claims?patientId=${patientIdVal}`).catch(() => ({ data: [] }))
+          ]);
+          let preAuthData = Array.isArray(preAuthRes.data) ? preAuthRes.data : (preAuthRes.data?.records || []);
+
+          // Fallback if admission-filtered query returns empty but unassigned or matching preauths exist
+          if (preAuthData.length === 0 && admissionIdVal) {
+            const fallbackRes = await client.get(`/tpa/pre-auth?patientId=${patientIdVal}`);
+            const allPreAuths = Array.isArray(fallbackRes.data) ? fallbackRes.data : (fallbackRes.data?.records || []);
+            const matched = allPreAuths.filter(pa => {
+              const paAdmId = pa.ipdAdmissionId?._id || pa.ipdAdmissionId;
+              return !paAdmId || String(paAdmId) === String(admissionIdVal);
+            });
+            if (matched.length > 0) preAuthData = matched;
+          }
+
+          // Check if any separate final claims exist in TpaClaims
+          const rawClaims = Array.isArray(claimsRes.data) ? claimsRes.data : (claimsRes.data?.records || []);
+          const validClaims = rawClaims
+            .filter(c => !preAuthData.some(pa => String(pa._id) === String(c.preAuthorizationId?._id || c.preAuthorizationId) && pa.claimNumber === c.claimNumber))
+            .map(c => ({
+              _id: c._id,
+              claimNumber: c.claimNumber,
+              preauthStatus: c.status,
+              finalAuthorizedAmount: c.finalAuthorizedAmount || 0,
+              totalApprovedAmount: c.claimedAmount || c.finalAuthorizedAmount || 0,
+              initialApprovedAmount: c.claimedAmount || c.finalAuthorizedAmount || 0,
+              nonPayableAmount: c.nonPayableAmount || 0,
+              copayAmount: c.copayAmount || 0,
+              deductibleAmount: c.deductibleAmount || 0,
+              insuranceCompanyId: c.insuranceCompanyId,
+              tpaId: c.tpaId,
+              patientInsuranceId: c.patientInsuranceId,
+              ipdAdmissionId: c.ipdAdmissionId,
+              isClaimRecord: true
+            }));
+
+          const combinedRecords = [...preAuthData, ...validClaims];
+          setPatientPreAuthList(combinedRecords);
+          const insData = Array.isArray(insRes.data) ? insRes.data : (insRes.data?.records || []);
+          setPatientInsuranceList(insData);
+
+          if (combinedRecords.length > 0) {
+            const preferred = combinedRecords.find(p => p.preauthStatus === 'Final Authorized')
+              || combinedRecords.find(p => p.preauthStatus === 'Approved')
+              || combinedRecords[0];
+            if (preferred) {
+              setSelectedPreAuthId(preferred._id);
+              setTpaNonPayable(preferred.nonPayableAmount ? String(preferred.nonPayableAmount) : '0');
+              setTpaCopay(preferred.copayAmount ? String(preferred.copayAmount) : '0');
+              setTpaDeductible(preferred.deductibleAmount ? String(preferred.deductibleAmount) : '0');
+            }
+          }
+        }
+      } catch (tpaErr) {
+        console.error('Failed to load TPA / Pre-Auth records:', tpaErr);
       }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to load billable items');
@@ -863,15 +962,234 @@ const BillingPage = () => {
   const discountAmount = itemDiscountTotal + percentDiscountAmount;
   const grandTotal = discountedSubtotal + gstAmount;
   const subtotal = baseSubtotal;
+  const grossHospitalBill = Number((baseSubtotal + itemDiscountTotal).toFixed(2));
 
-  // Net payable amount after adjusting patient advance
-  const maxAllowedAdjustment = Math.min(totalAdvanceAvailable, grandTotal);
-  const netPayable = Math.max(0, grandTotal - parseFloat(advanceToAdjust || 0));
+  // -------------------------------------------------------------------------
+  // ADVANCE PAYMENT ADJUSTMENTS & FINANCIAL FOUNDATION
+  // -------------------------------------------------------------------------
+  // Actual advance payments already received from patient ledger
+  const advanceReceived = Number(totalAdvanceAvailable || 0);
 
-  // Partial Payment Calculations
-  const effectiveAmountPaid = customPaidAmount !== '' ? Math.max(0, Math.min(netPayable, parseFloat(customPaidAmount || 0))) : netPayable;
-  const effectiveDueAmount = Number(Math.max(0, netPayable - effectiveAmountPaid).toFixed(2));
-  const effectivePaymentStatus = effectiveDueAmount <= 0 ? 'Paid' : (effectiveAmountPaid > 0 ? 'Partially Paid' : 'Unpaid');
+  // Maximum advance that can be applied to this bill
+  const maxAllowedAdjustment = Math.min(advanceReceived, grandTotal);
+
+  // Advance amount actually applied to this bill (never exceeds available advance or grand total)
+  const advanceApplied = Math.min(advanceReceived, grandTotal, Math.max(0, parseFloat(advanceToAdjust || 0)));
+
+  // Net hospital bill remaining after adjusting patient advance
+  const netBillAfterAdvance = Math.max(0, Number((grandTotal - advanceApplied).toFixed(2)));
+  const netPayable = netBillAfterAdvance;
+
+  // =========================================================================
+  // TPA & CASHLESS FINANCIAL INTEGRATION CALCULATIONS
+  // =========================================================================
+  const activePreAuth = patientPreAuthList.find(p => p._id === selectedPreAuthId) || patientPreAuthList[0] || null;
+
+  // 0. Insurance / TPA Claim Amount (Initial claim / requested amount)
+  const tpaClaimAmount = activePreAuth
+    ? (Number(activePreAuth.claimedAmount) > 0
+        ? Number(activePreAuth.claimedAmount)
+        : (Number(activePreAuth.initialRequestedAmount) > 0
+            ? Number(activePreAuth.initialRequestedAmount)
+            : (Number(activePreAuth.requestedAmount) > 0
+                ? Number(activePreAuth.requestedAmount)
+                : 0)))
+    : 0;
+
+  // 1. Pre-Authorized Amount (Sanctioned credit ceiling from pre-auth approval letter)
+  const preAuthApprovedAmount = activePreAuth
+    ? (Number(activePreAuth.totalApprovedAmount) > 0
+        ? Number(activePreAuth.totalApprovedAmount)
+        : (Number(activePreAuth.initialApprovedAmount) || 0))
+    : 0;
+
+  // 2. Status checks: Settled is a closed financial record; cannot be used for new billing splits
+  const isRecordSettled = activePreAuth?.preauthStatus === 'Settled';
+  const isRecordApprovedOrFinal = activePreAuth && ['Final Authorized', 'Approved'].includes(activePreAuth.preauthStatus);
+  const isPreAuthValidForSettlement = Boolean(isRecordApprovedOrFinal && !isRecordSettled);
+
+  // Check if a separate valid final claim record exists in patientPreAuthList that meets business rules
+  const separateValidClaim = patientPreAuthList.find(p => 
+    String(p._id) !== String(activePreAuth?._id) &&
+    ['Approved', 'Final Authorized'].includes(p.preauthStatus) &&
+    (Number(p.finalAuthorizedAmount) > 0 || Number(p.totalApprovedAmount) > 0)
+  );
+  const hasSeparateValidClaim = Boolean(separateValidClaim);
+
+  // 3. Actual Final Claim Authorization Amount
+  // Only valid if not settled AND status is 'Final Authorized' (or Approved claim) with an explicit final authorized letter amount
+  const isFinalAuthorized = !isRecordSettled && (activePreAuth?.preauthStatus === 'Final Authorized' || (activePreAuth?.isClaimRecord && activePreAuth?.preauthStatus === 'Approved'));
+  const hasRawFinalAuth = Number(activePreAuth?.finalAuthorizedAmount) > 0;
+  const finalClaimAuthAmount = (isFinalAuthorized && hasRawFinalAuth) ? Number(activePreAuth.finalAuthorizedAmount) : null;
+
+  // 4. Authorized ceiling for coverage calculations:
+  // If final authorization exists, respect finalClaimAuthAmount; if only pre-auth Approved, respect preAuthApprovedAmount
+  const tpaAuthorizedCeiling = isPreAuthValidForSettlement
+    ? (finalClaimAuthAmount !== null ? finalClaimAuthAmount : preAuthApprovedAmount)
+    : 0;
+
+  // Review & Apply Split is disabled if record is settled (unless separate valid claim exists), or invalid status, or net bill <= 0
+  const isReviewAndApplySplitDisabled = (!isPreAuthValidForSettlement && !hasSeparateValidClaim) || (isRecordSettled && !hasSeparateValidClaim) || netPayable <= 0;
+
+  // Manual & Patient responsibility components
+  const numNonPayable = Math.max(0, parseFloat(tpaNonPayable) || 0);
+  const numCopay = Math.max(0, parseFloat(tpaCopay) || 0);
+  const numDeductible = Math.max(0, parseFloat(tpaDeductible) || 0);
+
+  // Patient Mandatory Out-of-Pocket base = NonPayable (manual) + Copay + Deductible
+  const basePatientPortion = numNonPayable + numCopay + numDeductible;
+
+  // TPA can only cover up to (netPayable - basePatientPortion), strictly capped at netPayable and authorized ceiling
+  const maxTpaCoverable = Math.max(0, Number((netPayable - basePatientPortion).toFixed(2)));
+  const eligibleTpaCoverage = (isPreAuthValidForSettlement || hasSeparateValidClaim) && !isRecordSettled
+    ? Number(Math.max(0, Math.min(tpaAuthorizedCeiling, maxTpaCoverable, netPayable)).toFixed(2))
+    : 0;
+
+  // Manual or adjusted allocation amount entered by user, strictly capped by eligible approved coverage
+  const manualInsuranceAllocationNum = customInsuranceAllocation !== ''
+    ? Math.max(0, parseFloat(customInsuranceAllocation) || 0)
+    : eligibleTpaCoverage;
+
+  // Proposed allocation amount (strictly capped by verified eligible approved coverage)
+  const proposedTpaAllocation = (isPreAuthValidForSettlement || hasSeparateValidClaim) && !isRecordSettled
+    ? Number(Math.min(manualInsuranceAllocationNum, eligibleTpaCoverage).toFixed(2))
+    : 0;
+
+  // Active TPA allocation applied to this invoice
+  const isTpaAllocated = Boolean(
+    (isCashlessSplitActive || paymentMode === 'Insurance') &&
+    (isPreAuthValidForSettlement || hasSeparateValidClaim) &&
+    !isRecordSettled
+  );
+
+  // Only valid eligible approved coverage may reduce the final patient due as confirmed coverage
+  const tpaAllocation = isTpaAllocated ? proposedTpaAllocation : 0;
+  const calculatedTpaReceivable = isTpaAllocated ? tpaAllocation : proposedTpaAllocation;
+  const remainingTpaReceivable = tpaAllocation;
+
+  // Maximum patient payment allowable at counter (cannot exceed patient portion)
+  const patientBalanceBeforeCounterPay = Number(Math.max(0, grandTotal - advanceApplied - tpaAllocation).toFixed(2));
+
+  // Patient Amount Already Paid at cashier counter
+  const patientAmountPaid = customPaidAmount !== ''
+    ? Math.max(0, Math.min(patientBalanceBeforeCounterPay, parseFloat(customPaidAmount || 0)))
+    : 0;
+
+  // Remaining Amount Patient Must Pay after counter collection
+  // Formula: Remaining Patient Due = max(0, Net Hospital Bill - Advance Applied - Eligible Insurance Amount - Patient Payments Already Applied)
+  const remainingPatientDue = Number(Math.max(0, grandTotal - advanceApplied - tpaAllocation - patientAmountPaid).toFixed(2));
+  const calculatedPatientPayable = patientBalanceBeforeCounterPay;
+  const remainingAmountPatientMustPay = remainingPatientDue;
+
+  // Effective amounts for bill finalization
+  const effectiveAmountPaid = patientAmountPaid;
+  const effectiveDueAmount = remainingPatientDue;
+  const effectivePaymentStatus = remainingPatientDue <= 0 ? 'Paid' : (patientAmountPaid > 0 ? 'Partially Paid' : 'Unpaid');
+
+  // Excess uncovered bill amount (when net bill after advance exceeds patient deductions + TPA ceiling)
+  const excessUncoveredAmount = Number(Math.max(0, netPayable - basePatientPortion - tpaAuthorizedCeiling).toFixed(2));
+
+  const handleOpenInsuranceModal = () => {
+    if (!selectedPatient) {
+      toast.error('Please select a patient first');
+      return;
+    }
+    setShowSplitConfirm(false);
+    setShowInsuranceModal(true);
+  };
+
+  // Handler to apply TPA cashless split to ledger & payment desk with server validation
+  const handleApplyCashlessSplit = async () => {
+    let targetPreAuth = activePreAuth;
+    if (!targetPreAuth) {
+      toast.error('No active Pre-Authorization selected for cashless billing.');
+      return;
+    }
+    if (isRecordSettled) {
+      if (hasSeparateValidClaim) {
+        targetPreAuth = separateValidClaim;
+      } else {
+        toast.error('Cannot apply cashless split: Linked claim/pre-authorization is already Settled & Closed.');
+        return;
+      }
+    } else if (!isPreAuthValidForSettlement) {
+      if (hasSeparateValidClaim) {
+        targetPreAuth = separateValidClaim;
+      } else {
+        toast.error(`Cannot apply cashless split: Claim status is "${activePreAuth.preauthStatus}". Only "Approved" or "Final Authorized" claims can be settled.`);
+        return;
+      }
+    }
+    if (netPayable <= 0 && grandTotal <= 0) {
+      toast.error('Hospital bill total must be greater than ₹0 to apply a cashless split.');
+      return;
+    }
+
+    if (customInsuranceAllocation !== '' && parseFloat(customInsuranceAllocation) > eligibleTpaCoverage + 0.01) {
+      toast.error(`Insurance allocation (₹${parseFloat(customInsuranceAllocation).toFixed(2)}) cannot exceed eligible approved coverage (₹${eligibleTpaCoverage.toFixed(2)}). Manual entries cannot invent unapproved coverage.`);
+      return;
+    }
+
+    const allocationToApply = proposedTpaAllocation;
+    const patientPortionToApply = Number(Math.max(0, grandTotal - advanceApplied - allocationToApply).toFixed(2));
+
+    setValidatingCashless(true);
+    try {
+      const { data } = await client.post('/billing/validate-cashless-split', {
+        patientId: selectedPatient?._id,
+        uhid: selectedPatient?.uhid,
+        claimNumber: targetPreAuth.claimNumber,
+        preAuthorizationId: targetPreAuth._id,
+        totalHospitalBill: grandTotal,
+        advanceApplied: advanceApplied,
+        netPayable: netBillAfterAdvance,
+        tpaAuthorizedAmount: tpaAuthorizedCeiling,
+        nonPayable: numNonPayable,
+        copay: numCopay,
+        deductible: numDeductible,
+        patientPayable: patientPortionToApply,
+        tpaReceivable: allocationToApply
+      });
+
+      if (!data.valid) {
+        toast.error(data.message || 'Validation failed on server');
+        return;
+      }
+
+      setPaymentMode('Insurance');
+      if (targetPreAuth.claimNumber) {
+        setTransactionRef(targetPreAuth.claimNumber);
+      }
+      // Counter payment resets to actual cashier collection (default empty/0 until collected)
+      setCustomPaidAmount('');
+      
+      // Auto-populate structured remarks if empty or standard
+      const tpaRemark = `Cashless Settlement | Claim: ${targetPreAuth.claimNumber || 'N/A'} | Total Bill: ₹${grandTotal.toFixed(2)} | Advance Applied: ₹${advanceApplied.toFixed(2)} | Insurance Allocated: ₹${allocationToApply.toFixed(2)} | Patient Balance Due: ₹${patientPortionToApply.toFixed(2)}`;
+      if (!remarks || remarks.includes('Cashless Settlement')) {
+        setRemarks(tpaRemark);
+      }
+
+      setIsCashlessSplitActive(true);
+      setShowSplitConfirm(false);
+      setShowInsuranceModal(false);
+      toast.success(`Insurance allocation of ₹${allocationToApply.toFixed(2)} applied! Patient Due: ₹${patientPortionToApply.toFixed(2)}`);
+    } catch (err) {
+      console.error('Validate cashless split error:', err);
+      toast.error(err.response?.data?.message || 'Failed to validate cashless split with backend.');
+    } finally {
+      setValidatingCashless(false);
+    }
+  };
+
+  const handleRemoveInsurance = () => {
+    setIsCashlessSplitActive(false);
+    setCustomInsuranceAllocation('');
+    setPaymentMode('Cash');
+    setTransactionRef('');
+    setShowInsuranceModal(false);
+    setShowSplitConfirm(false);
+    toast.success('Switched to normal Cash / Self-Pay billing. Insurance allocation reset to ₹0.00');
+  };
 
   // Validation before finalizing
   const handleSaveBill = async (finalize = false) => {
@@ -923,9 +1241,17 @@ const BillingPage = () => {
           { method: 'UPI', amount: parseFloat(upiSplit || 0) },
           { method: 'Card', amount: parseFloat(cardSplit || 0) }
         ] : [],
-        advanceAdjusted: parseFloat(advanceToAdjust || 0),
-        amountPaid: finalize ? effectiveAmountPaid : 0,
-        dueAmount: finalize ? effectiveDueAmount : grandTotal,
+        advanceAdjusted: advanceApplied,
+        insuranceAllocation: tpaAllocation,
+        tpaReceivable: tpaAllocation,
+        insuranceClaimAmount: tpaClaimAmount,
+        insuranceApprovedAmount: finalClaimAuthAmount !== null ? finalClaimAuthAmount : (isPreAuthValidForSettlement ? preAuthApprovedAmount : 0),
+        tpaNonPayable: numNonPayable,
+        tpaCopay: numCopay,
+        tpaDeductible: numDeductible,
+        patientDue: remainingPatientDue,
+        amountPaid: finalize ? patientAmountPaid : 0,
+        dueAmount: finalize ? remainingPatientDue : grandTotal,
         paymentStatus: finalize ? effectivePaymentStatus : 'Unpaid'
       };
 
@@ -1234,6 +1560,13 @@ const BillingPage = () => {
     setSelectedItemIndexes([]);
     setPastBills([]);
     setCurrentBill(null);
+    setPatientPreAuthList([]);
+    setPatientInsuranceList([]);
+    setSelectedPreAuthId('');
+    setTpaNonPayable('0');
+    setTpaCopay('0');
+    setTpaDeductible('0');
+    setIsCashlessSplitActive(false);
   };
 
   // ===================== RENDER VIEWS =====================
@@ -1537,6 +1870,15 @@ const BillingPage = () => {
                       title="Record advance payment for this patient"
                     >
                       <CreditCard className="h-4 w-4" /> + Add Advance Payment
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleOpenInsuranceModal}
+                      className="w-full bg-blue-50/80 hover:bg-blue-600 text-blue-700 hover:text-white border border-blue-200/80 hover:border-blue-600 font-extrabold text-xs py-2.5 px-4 rounded-xl shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap"
+                      title="Add insurance or cashless pre-auth split for this admission"
+                    >
+                      <ShieldCheck className="h-4 w-4" /> Add Insurance / Cashless
                     </button>
                   </div>
                 </div>
@@ -1958,42 +2300,193 @@ const BillingPage = () => {
                           </div>
                         )}
 
-                        {/* Grand Total */}
-                        <div className="border-t border-orange-100 pt-2 flex justify-between items-center text-sm font-bold text-gray-900">
-                          <span>Grand Total:</span>
-                          <span className="font-extrabold text-gray-900 text-base">₹{grandTotal.toFixed(2)}</span>
-                        </div>
-
-                        {/* Patient Advance Adjustment Ledger */}
-                        {totalAdvanceAvailable > 0 && (
-                          <div className="bg-green-50/30 border border-green-200/50 p-3 rounded-xl space-y-2 mt-3">
-                            <div className="flex justify-between text-[11px] font-bold text-green-800">
-                              <span>Available Patient Advance:</span>
-                              <span>₹{totalAdvanceAvailable.toFixed(2)}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] text-gray-500 shrink-0">Adjust Amount:</span>
-                              <input
-                                type="number"
-                                min="0"
-                                max={maxAllowedAdjustment}
-                                step="1"
-                                className="input text-xs py-1 px-2 font-bold font-mono text-green-700 bg-white"
-                                placeholder="0.00"
-                                value={advanceToAdjust}
-                                onChange={(e) => setAdvanceToAdjust(Math.min(maxAllowedAdjustment, Math.max(0, parseFloat(e.target.value) || 0)))}
-                              />
-                            </div>
-                            <p className="text-[9px] text-gray-400">Advance adjustment reduces payable amount, but does not display as charge on Standard Tax Invoice.</p>
+                        {/* 1. Simple Billing Summary */}
+                        <div className="border-t border-orange-100 pt-3 space-y-3">
+                          {/* Total Hospital Bill */}
+                          <div className="flex justify-between items-center text-sm font-bold text-gray-900">
+                            <span>Total Hospital Bill:</span>
+                            <span className="font-extrabold text-gray-900 text-base">₹{grandTotal.toFixed(2)}</span>
                           </div>
-                        )}
 
-                        {/* Net Payable Amount */}
-                        <div className="border-t-2 border-dashed border-orange-200 pt-3 flex justify-between items-center text-base font-black">
-                          <span className="text-orange-950">Net Payable Amount:</span>
-                          <span className="text-orange-600 text-lg">₹{netPayable.toFixed(2)}</span>
+                          {/* Less: Advance Payment Applied */}
+                          <div className="bg-emerald-50/50 border border-emerald-200/80 p-2.5 rounded-xl space-y-1.5">
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="font-semibold text-emerald-900">Less: Advance Payment Applied</span>
+                              <span className="font-bold font-mono text-emerald-800">
+                                - ₹{advanceApplied.toFixed(2)}
+                              </span>
+                            </div>
+                            {advanceReceived > 0 && (
+                              <div className="flex items-center justify-between gap-2 text-[11px] pt-1 border-t border-emerald-200/60">
+                                <span className="text-[10px] text-emerald-700">Available: ₹{advanceReceived.toFixed(2)}</span>
+                                <div className="relative w-28">
+                                  <span className="absolute left-2 top-1 text-gray-400 text-[10px] font-bold">₹</span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max={maxAllowedAdjustment}
+                                    step="0.01"
+                                    className="input text-xs py-0.5 pl-5 pr-1 font-mono font-bold w-full text-right text-emerald-700 bg-white border border-emerald-300 rounded-lg focus:ring-1 focus:ring-emerald-500"
+                                    placeholder="0.00"
+                                    value={advanceToAdjust}
+                                    onChange={(e) => setAdvanceToAdjust(Math.min(maxAllowedAdjustment, Math.max(0, parseFloat(e.target.value) || 0)))}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Less: Insurance / TPA Amount Applied */}
+                          <div className={`p-2.5 rounded-xl border flex justify-between items-center text-xs ${
+                            tpaAllocation > 0 ? 'bg-blue-50/60 border-blue-200 text-blue-900' : 'bg-gray-50 border-gray-200 text-gray-600'
+                          }`}>
+                            <div>
+                              <span className="font-semibold block">Less: Insurance / TPA Amount Applied</span>
+                              {tpaAllocation > 0 && activePreAuth?.claimNumber && (
+                                <span className="text-[10px] text-blue-700 font-mono">
+                                  Claim #{activePreAuth.claimNumber}
+                                </span>
+                              )}
+                            </div>
+                            <span className={`font-mono font-bold text-xs ${tpaAllocation > 0 ? 'text-blue-800 font-extrabold' : 'text-gray-400'}`}>
+                              - ₹{tpaAllocation.toFixed(2)}
+                            </span>
+                          </div>
+
+                          {/* Patient Counter Collection Input (if applicable) */}
+                          <div className="bg-amber-50/50 border border-amber-200/70 p-2.5 rounded-xl space-y-1">
+                            <div className="flex items-center justify-between gap-2 text-xs">
+                              <div>
+                                <span className="font-bold text-amber-950 block">Patient Counter Payment:</span>
+                                <span className="text-[9px] text-amber-700">Amount collected at desk now</span>
+                              </div>
+                              <div className="relative w-28">
+                                <span className="absolute left-2 top-1 text-gray-400 text-[10px] font-bold">₹</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max={patientBalanceBeforeCounterPay}
+                                  step="0.01"
+                                  className="input text-xs py-0.5 pl-5 pr-1 font-mono font-bold w-full text-right text-amber-800 bg-white border border-amber-300 rounded-lg focus:ring-1 focus:ring-amber-500"
+                                  placeholder="0.00"
+                                  value={customPaidAmount}
+                                  onChange={(e) => setCustomPaidAmount(e.target.value)}
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* FINAL AMOUNT PATIENT MUST PAY */}
+                          <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-400 p-3.5 rounded-xl shadow-xs flex justify-between items-center mt-2">
+                            <div>
+                              <span className="text-xs font-black uppercase tracking-wider text-amber-950 block">
+                                Final Amount Patient Must Pay
+                              </span>
+                              <span className="text-[9px] text-amber-800 font-medium">
+                                Net Bill − Adv − Insurance − Paid
+                              </span>
+                            </div>
+                            <span className="font-mono font-black text-amber-950 text-xl">
+                              ₹{remainingPatientDue.toFixed(2)}
+                            </span>
+                          </div>
+
+                          {/* Quick Actions */}
+                          <div className="grid grid-cols-2 gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedAdvancePatient(selectedPatient);
+                                setShowAdvanceModal(true);
+                              }}
+                              className="btn-secondary py-2 px-3 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                            >
+                              <Plus className="h-3.5 w-3.5 text-emerald-600" /> Advance
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleOpenInsuranceModal}
+                              className={`py-2 px-3 text-xs font-bold rounded-lg border flex items-center justify-center gap-1.5 cursor-pointer transition ${
+                                tpaAllocation > 0 ? 'bg-blue-50 border-blue-300 text-blue-700 font-extrabold' : 'btn-secondary text-gray-700'
+                              }`}
+                            >
+                              <Shield className="h-3.5 w-3.5 text-blue-600" /> {tpaAllocation > 0 ? 'Edit Insurance' : 'Add Insurance'}
+                            </button>
+                          </div>
                         </div>
                       </div>
+                    </div>
+
+                    {/* Concise Payment & Insurance Status Card */}
+                    <div className="card p-4 space-y-3 border border-slate-200 bg-white">
+                      <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+                        <div className="flex items-center gap-2">
+                          <div className={`p-1.5 rounded-lg ${tpaAllocation > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>
+                            <Shield className="h-4 w-4" />
+                          </div>
+                          <div>
+                            <h4 className="font-extrabold text-gray-900 text-xs">Payment & Insurance Status</h4>
+                            <p className="text-[10px] text-gray-500 font-medium">
+                              {tpaAllocation > 0 ? 'Cashless Split Active' : 'Cash / Self-Pay Billing'}
+                            </p>
+                          </div>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                          tpaAllocation > 0 ? 'bg-blue-100 text-blue-800 border border-blue-200' : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          {tpaAllocation > 0 ? 'Insurance Active' : 'Self-Pay'}
+                        </span>
+                      </div>
+
+                      {tpaAllocation > 0 ? (
+                        <div className="space-y-2 text-xs">
+                          <div className="bg-blue-50/60 p-2.5 rounded-xl border border-blue-100 space-y-1">
+                            <div className="flex justify-between items-center text-[11px]">
+                              <span className="text-gray-500 font-medium">Insurer / TPA:</span>
+                              <span className="font-bold text-gray-900">{activePreAuth?.insuranceCompanyId?.name || 'Insurance'}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-[11px]">
+                              <span className="text-gray-500 font-medium">Claim Reference:</span>
+                              <span className="font-mono font-bold text-blue-700">{activePreAuth?.claimNumber || 'N/A'}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-[11px] pt-1 border-t border-blue-100">
+                              <span className="text-blue-900 font-semibold">TPA Amount Applied:</span>
+                              <span className="font-mono font-extrabold text-blue-800 text-xs">₹{tpaAllocation.toFixed(2)}</span>
+                            </div>
+                          </div>
+                          <div className="flex gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={handleOpenInsuranceModal}
+                              className="flex-1 btn-secondary text-xs py-1.5 font-bold cursor-pointer text-center"
+                            >
+                              Edit Allocation
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleRemoveInsurance}
+                              className="text-xs py-1.5 px-3 font-semibold text-rose-700 hover:bg-rose-50 rounded-lg border border-rose-200 transition cursor-pointer"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-2 text-xs">
+                          <p className="text-[11px] text-gray-500 leading-relaxed">
+                            {patientPreAuthList.length > 0 
+                              ? `Patient has ${patientPreAuthList.length} linked claim(s) available for cashless settlement.`
+                              : 'Standard cash / self-pay billing. No insurance deduction is applied to the bill balance.'}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={handleOpenInsuranceModal}
+                            className="w-full btn-secondary text-xs py-2 font-bold flex items-center justify-center gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-50 cursor-pointer"
+                          >
+                            <Plus className="h-3.5 w-3.5" /> {patientPreAuthList.length > 0 ? 'Apply Existing Insurance Claim' : 'Add / Link Insurance'}
+                          </button>
+                        </div>
+                      )}
                     </div>
 
 
@@ -3423,6 +3916,69 @@ const BillingPage = () => {
                 </select>
               </div>
 
+              {/* Contextual Banner for Insurance / Cashless payment mode */}
+              {paymentMode === 'Insurance' && (
+                <div className="bg-blue-50/80 border border-blue-200 p-3 rounded-xl space-y-2 animate-fadeIn text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold text-blue-900 flex items-center gap-1.5">
+                      <Shield className="h-4 w-4 text-blue-600" /> TPA Cashless Settlement Breakdown
+                    </span>
+                    {activePreAuth?.preauthStatus && (
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-blue-100 text-blue-800 border border-blue-200">
+                        {activePreAuth.preauthStatus}
+                      </span>
+                    )}
+                  </div>
+
+                  {activePreAuth ? (
+                    <div className="space-y-1.5 text-[11px] text-gray-700">
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Payer / TPA:</span>
+                        <span className="font-bold">{activePreAuth.insuranceCompanyId?.name} {activePreAuth.tpaId?.name ? `(${activePreAuth.tpaId?.name})` : ''}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Claim / Auth Ref:</span>
+                        <span className="font-mono font-bold text-blue-700">{activePreAuth.claimNumber || 'N/A'}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 pt-1.5 border-t border-blue-200/60">
+                        <div className="bg-amber-100/60 p-1.5 rounded-lg border border-amber-200">
+                          <span className="text-[9px] uppercase font-bold text-amber-900 block">Patient Payable</span>
+                          <span className="font-extrabold text-amber-900 text-xs">₹{calculatedPatientPayable.toFixed(2)}</span>
+                        </div>
+                        <div className="bg-blue-100/60 p-1.5 rounded-lg border border-blue-200">
+                          <span className="text-[9px] uppercase font-bold text-blue-900 block">TPA Receivable</span>
+                          <span className="font-extrabold text-blue-900 text-xs">₹{calculatedTpaReceivable.toFixed(2)}</span>
+                        </div>
+                      </div>
+                      <div className="flex gap-1.5 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setCustomPaidAmount(String(calculatedPatientPayable))}
+                          className="flex-1 text-[10px] font-bold py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-md transition cursor-pointer"
+                        >
+                          Collect Patient Share (₹{calculatedPatientPayable.toFixed(2)})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (activePreAuth.claimNumber && !transactionRef) {
+                              setTransactionRef(activePreAuth.claimNumber);
+                            }
+                          }}
+                          className="text-[10px] font-bold py-1 px-2 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-md transition cursor-pointer"
+                        >
+                          Fill Claim Ref
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-gray-500 italic">
+                      No linked pre-authorization record selected. Enter insurance authorization / claim number in the reference field below.
+                    </p>
+                  )}
+                </div>
+              )}
+
               {/* Partial Payment Amount Received Input Box */}
               <div className="bg-gradient-to-br from-orange-50/60 to-amber-50/40 p-3.5 rounded-xl border border-orange-200 space-y-2.5">
                 <div className="flex items-center justify-between">
@@ -3430,7 +3986,7 @@ const BillingPage = () => {
                     Amount Received Now (₹)
                   </label>
                   <span className="text-[10px] font-bold text-gray-500">
-                    Net Payable: ₹{netPayable.toFixed(2)}
+                    Patient Portion: ₹{patientBalanceBeforeCounterPay.toFixed(2)}
                   </span>
                 </div>
                 
@@ -3439,18 +3995,18 @@ const BillingPage = () => {
                     type="number"
                     step="0.01"
                     min="0"
-                    max={netPayable}
+                    max={patientBalanceBeforeCounterPay}
                     className="input py-2 text-sm font-extrabold text-gray-900 bg-white border-orange-300 focus:border-orange-500 flex-1"
-                    placeholder={netPayable.toFixed(2)}
+                    placeholder={patientBalanceBeforeCounterPay.toFixed(2)}
                     value={customPaidAmount}
                     onChange={(e) => setCustomPaidAmount(e.target.value)}
                   />
                   <button
                     type="button"
-                    onClick={() => setCustomPaidAmount(String(netPayable))}
+                    onClick={() => setCustomPaidAmount(String(patientBalanceBeforeCounterPay))}
                     className="px-3 py-2 bg-orange-500 text-white font-extrabold text-xs rounded-lg shadow-xs hover:bg-orange-600 transition cursor-pointer"
                   >
-                    Full Pay
+                    Full Patient Share
                   </button>
                   <button
                     type="button"
@@ -3461,21 +4017,43 @@ const BillingPage = () => {
                   </button>
                 </div>
 
-                {/* Live Balance Summary */}
-                <div className="grid grid-cols-3 gap-2 pt-2 text-center text-xs border-t border-orange-100/80">
-                  <div className="bg-white p-2 rounded-lg border border-orange-100">
-                    <span className="text-[9px] text-gray-400 font-bold uppercase block">Net Payable</span>
-                    <span className="font-bold text-gray-900 text-xs">₹{netPayable.toFixed(2)}</span>
+                {/* Live Balance 4-Pillar Summary */}
+                <div className="grid grid-cols-4 gap-2 pt-2 text-center text-xs border-t border-orange-100/80">
+                  <div className="bg-emerald-50/70 p-2 rounded-lg border border-emerald-200">
+                    <span className="text-[9px] text-emerald-800 font-bold uppercase block">Advance</span>
+                    <span className="font-extrabold text-emerald-900 text-xs">₹{advanceApplied.toFixed(2)}</span>
                   </div>
-                  <div className="bg-emerald-50 p-2 rounded-lg border border-emerald-200">
-                    <span className="text-[9px] text-emerald-700 font-bold uppercase block">Paid Now</span>
-                    <span className="font-extrabold text-emerald-700 text-xs">₹{effectiveAmountPaid.toFixed(2)}</span>
+                  <div className="bg-blue-50/70 p-2 rounded-lg border border-blue-200">
+                    <span className="text-[9px] text-blue-800 font-bold uppercase block">TPA Cover</span>
+                    <span className="font-extrabold text-blue-900 text-xs">₹{tpaAllocation.toFixed(2)}</span>
                   </div>
-                  <div className={`p-2 rounded-lg border ${effectiveDueAmount > 0 ? 'bg-red-50 border-red-200 text-red-700' : 'bg-gray-50 border-gray-200 text-gray-700'}`}>
-                    <span className="text-[9px] uppercase font-extrabold block">Due Left</span>
-                    <span className="font-extrabold text-xs">₹{effectiveDueAmount.toFixed(2)}</span>
+                  <div className="bg-amber-50/70 p-2 rounded-lg border border-amber-200">
+                    <span className="text-[9px] text-amber-800 font-bold uppercase block">Paid Now</span>
+                    <span className="font-extrabold text-amber-900 text-xs">₹{patientAmountPaid.toFixed(2)}</span>
+                  </div>
+                  <div className={`p-2 rounded-lg border ${remainingPatientDue > 0 ? 'bg-red-50 border-red-200 text-red-700' : 'bg-gray-50 border-gray-200 text-gray-700'}`}>
+                    <span className="text-[9px] uppercase font-extrabold block">Patient Due</span>
+                    <span className="font-extrabold text-xs">₹{remainingPatientDue.toFixed(2)}</span>
                   </div>
                 </div>
+
+                {/* Live Reconciliation Formula Banner */}
+                <div className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-center font-mono text-[10px] text-slate-700">
+                  <span className="font-bold text-gray-500 uppercase mr-1">Reconciliation:</span>
+                  <span className="text-emerald-700 font-bold">₹{advanceApplied.toFixed(2)}</span> (Adv) + 
+                  <span className="text-amber-700 font-bold ml-1">₹{patientAmountPaid.toFixed(2)}</span> (Paid) + 
+                  <span className="text-blue-700 font-bold ml-1">₹{tpaAllocation.toFixed(2)}</span> (TPA) + 
+                  <span className="text-red-700 font-bold ml-1">₹{remainingPatientDue.toFixed(2)}</span> (Due) = 
+                  <span className="text-gray-900 font-extrabold ml-1">₹{grandTotal.toFixed(2)}</span> (Net Bill)
+                </div>
+
+                {/* Terminal Settled Claim Notice if applicable */}
+                {isRecordSettled && !hasSeparateValidClaim && (
+                  <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-[10px] flex items-center gap-1.5">
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                    <span>Linked claim is <strong>Settled & Closed</strong>. TPA Allocation remains ₹0.00. Standard patient billing applies.</span>
+                  </div>
+                )}
               </div>
 
               {/* Transaction reference if applicable */}
@@ -3713,6 +4291,314 @@ const BillingPage = () => {
                 {savingAdvance ? 'Recording...' : 'Submit Payment'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ============= MODAL: INSURANCE & CASHLESS CALCULATION PANEL ============= */}
+      {/* ========================================================================= */}
+      {showInsuranceModal && selectedPatient && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 space-y-4 border border-blue-100 max-h-[92vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-blue-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-blue-100 text-blue-700 rounded-xl">
+                  <ShieldCheck className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-gray-900">
+                    Insurance & Cashless Settlement Desk
+                  </h3>
+                  <p className="text-[11px] text-gray-500 font-medium">
+                    Review TPA coverage, calculate deductions, and apply cashless split to ledger
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowInsuranceModal(false)}
+                className="p-1.5 hover:bg-gray-100 rounded-xl text-gray-400 hover:text-gray-600 cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Patient & IPD Admission Context Banner */}
+            <div className="bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-slate-50 p-3.5 rounded-xl border border-blue-100 grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-[11px]">
+              <div>
+                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">Patient Name</span>
+                <span className="font-extrabold text-gray-900 block truncate">{selectedPatient.patientName}</span>
+                <span className="font-mono text-blue-700 text-[10px] font-bold">{formatUhid(selectedPatient.uhid)}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">IPD / Care Admission</span>
+                <span className="font-mono font-extrabold text-indigo-900 block">
+                  {selectedPatient.admissionDetails?.ipdNumber || activePreAuth?.ipdAdmissionId?.ipdNumber || 'OPD / Outpatient'}
+                </span>
+                <span className="text-[10px] text-gray-500">
+                  {selectedPatient.admissionDetails?.roomType ? `${selectedPatient.admissionDetails.roomType} (Bed: ${selectedPatient.admissionDetails.bedNumber})` : 'General Admission'}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">Doctor in Charge</span>
+                <span className="font-bold text-gray-800 block truncate">
+                  {selectedPatient.doctorName || selectedPatient.admissionDetails?.doctorInCharge || 'General Staff'}
+                </span>
+                <span className="text-[10px] text-gray-500">{selectedPatient.gender || 'Patient'} • Age: {selectedPatient.patientAge || 'N/A'}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">Net Bill Total</span>
+                <span className="font-mono font-black text-gray-900 text-sm block">₹{netPayable.toFixed(2)}</span>
+                <span className="text-[10px] text-emerald-700 font-semibold">Eligible Hospital Charges</span>
+              </div>
+            </div>
+
+            {/* Case 1: No Cashless Claim / Insurance Linked */}
+            {patientPreAuthList.length === 0 ? (
+              <div className="p-6 bg-slate-50/80 rounded-2xl border border-slate-200 text-center space-y-4">
+                <div className="mx-auto w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100 shadow-2xs">
+                  <ShieldCheck className="h-6 w-6" />
+                </div>
+                <div className="max-w-md mx-auto space-y-1">
+                  <h4 className="text-sm font-extrabold text-gray-900">No Cashless Insurance Linked</h4>
+                  <p className="text-xs text-gray-500 leading-relaxed">
+                    {patientInsuranceList.length > 0
+                      ? `Policy on file (${patientInsuranceList[0].insuranceCompanyId?.name || 'Insurance'} #${patientInsuranceList[0].policyNumber}), but no approved cashless pre-authorization claim is linked to this bill.`
+                      : 'No insurance policy or cashless claim is linked to this patient. You can link insurance or proceed with normal cash billing.'}
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowInsuranceModal(false);
+                      navigate('/tpa/pre-auth');
+                    }}
+                    className="btn-secondary py-2.5 px-4 text-xs font-bold w-full sm:w-auto cursor-pointer"
+                  >
+                    Link Insurance & Claim
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRemoveInsurance}
+                    className="btn py-2.5 px-5 text-xs font-extrabold bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto cursor-pointer shadow-xs"
+                  >
+                    Continue as Cash / Self-Pay Billing
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* 1. Claim Selector & Status Row */}
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-extrabold text-gray-700">Pre-Auth / Claim:</span>
+                    {patientPreAuthList.length > 1 ? (
+                      <select
+                        className="input py-1 px-2 text-xs font-bold"
+                        value={selectedPreAuthId}
+                        onChange={(e) => setSelectedPreAuthId(e.target.value)}
+                      >
+                        {patientPreAuthList.map((pa, idx) => (
+                          <option key={pa._id} value={pa._id}>
+                            Claim #{pa.claimNumber || `PreAuth-${idx + 1}`} ({pa.preauthStatus})
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="font-mono text-xs font-black text-blue-700">
+                        #{activePreAuth?.claimNumber || 'PreAuth-1'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-gray-600 font-medium">
+                      {activePreAuth?.insuranceCompanyId?.name || 'TPA Partner'}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider border ${
+                      activePreAuth?.preauthStatus === 'Final Authorized' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' :
+                      activePreAuth?.preauthStatus === 'Approved' ? 'bg-green-100 text-green-800 border-green-300' :
+                      activePreAuth?.preauthStatus === 'Settled' ? 'bg-teal-100 text-teal-800 border-teal-300' :
+                      'bg-amber-100 text-amber-800 border-amber-300'
+                    }`}>
+                      {activePreAuth?.preauthStatus}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Status Notice if Settled or not approved */}
+                {activePreAuth?.preauthStatus === 'Settled' && !hasSeparateValidClaim && (
+                  <div className="p-2.5 bg-amber-50 rounded-lg border border-amber-300 text-xs text-amber-900 flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                    <span>This claim is in <strong>Settled & Closed</strong> status. Settled claims cannot be allocated to new bills.</span>
+                  </div>
+                )}
+                {!isPreAuthValidForSettlement && !hasSeparateValidClaim && activePreAuth?.preauthStatus !== 'Settled' && (
+                  <div className="p-2.5 bg-amber-50 rounded-lg border border-amber-200 text-xs text-amber-800 flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                    <span>Claim status is <strong>{activePreAuth?.preauthStatus}</strong>. Cashless allocation requires an Approved or Final Authorized claim letter.</span>
+                  </div>
+                )}
+
+                {/* 2. Simple 4-Metric Grid: Total Bill, Advance Applied, Requested Claim, Approved Coverage */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                  <div className="p-3 bg-white rounded-xl border border-gray-200">
+                    <span className="text-[10px] text-gray-500 font-extrabold uppercase block">Total Hospital Bill</span>
+                    <span className="font-mono font-black text-gray-900 text-base block mt-0.5">₹{grandTotal.toFixed(2)}</span>
+                    <span className="text-[9px] text-gray-400">Net bill payable</span>
+                  </div>
+
+                  <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-200">
+                    <span className="text-[10px] text-emerald-800 font-extrabold uppercase block">Advance Applied</span>
+                    <span className="font-mono font-black text-emerald-900 text-base block mt-0.5">₹{advanceApplied.toFixed(2)}</span>
+                    <span className="text-[9px] text-emerald-700">Deducted from bill</span>
+                  </div>
+
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                    <span className="text-[10px] text-slate-600 font-extrabold uppercase block">Claim Requested</span>
+                    <span className="font-mono font-black text-slate-800 text-base block mt-0.5">
+                      {tpaClaimAmount > 0 ? `₹${tpaClaimAmount.toFixed(2)}` : (preAuthApprovedAmount > 0 ? `₹${preAuthApprovedAmount.toFixed(2)}` : '₹0.00')}
+                    </span>
+                    <span className="text-[9px] text-slate-500">Submitted to TPA</span>
+                  </div>
+
+                  <div className={`p-3 rounded-xl border ${
+                    finalClaimAuthAmount !== null ? 'bg-blue-50/70 border-blue-200' : 'bg-amber-50/60 border-amber-200'
+                  }`}>
+                    <span className={`text-[10px] font-extrabold uppercase block ${
+                      finalClaimAuthAmount !== null ? 'text-blue-700' : 'text-amber-800'
+                    }`}>
+                      Approved Coverage
+                    </span>
+                    <span className={`text-base font-black block mt-0.5 ${
+                      finalClaimAuthAmount !== null ? 'font-mono text-blue-900' : 'text-amber-700 italic'
+                    }`}>
+                      {finalClaimAuthAmount !== null
+                        ? `₹${finalClaimAuthAmount.toFixed(2)}`
+                        : (preAuthApprovedAmount > 0 && activePreAuth?.preauthStatus === 'Approved'
+                            ? `₹${preAuthApprovedAmount.toFixed(2)}`
+                            : 'Not Available')}
+                    </span>
+                    <span className={`text-[9px] block ${
+                      finalClaimAuthAmount !== null ? 'text-blue-600' : 'text-amber-600'
+                    }`}>
+                      Eligible Cap: ₹{eligibleTpaCoverage.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 3. Insurance Amount Allocation Input */}
+                <div className="p-3.5 bg-blue-50/50 rounded-xl border border-blue-200 space-y-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <label className="text-xs font-black text-blue-900 block">
+                        Insurance / TPA Amount to Allocate to This Bill
+                      </label>
+                      <p className="text-[10px] text-gray-500">
+                        Adjust allocation (strictly bounded by confirmed approved limit of ₹{eligibleTpaCoverage.toFixed(2)})
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="relative w-36">
+                        <span className="absolute left-2.5 top-1.5 text-gray-400 font-bold text-xs">₹</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max={eligibleTpaCoverage}
+                          step="0.01"
+                          disabled={eligibleTpaCoverage <= 0 || isReviewAndApplySplitDisabled}
+                          className="input py-1.5 pl-6 pr-2 text-xs font-mono font-bold text-right text-blue-900 bg-white"
+                          placeholder={eligibleTpaCoverage.toFixed(2)}
+                          value={customInsuranceAllocation}
+                          onChange={(e) => setCustomInsuranceAllocation(e.target.value)}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        disabled={eligibleTpaCoverage <= 0 || isReviewAndApplySplitDisabled}
+                        onClick={() => setCustomInsuranceAllocation(String(eligibleTpaCoverage))}
+                        className="btn-secondary py-1 px-2.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100 shrink-0 cursor-pointer"
+                      >
+                        Max Approved
+                      </button>
+                    </div>
+                  </div>
+
+                  {customInsuranceAllocation !== '' && parseFloat(customInsuranceAllocation) > eligibleTpaCoverage && (
+                    <div className="p-2 bg-amber-50 rounded-lg border border-amber-200 text-[11px] text-amber-800 font-bold flex items-center gap-1.5">
+                      <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                      <span>
+                        Allocated amount cannot exceed verified approved coverage (₹{eligibleTpaCoverage.toFixed(2)}). Manual entries cannot invent unapproved coverage.
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* 4. Live Formula & Updated Patient Balance Preview */}
+                <div className="p-3 bg-gradient-to-r from-blue-50/70 via-indigo-50/50 to-amber-50/70 rounded-xl border border-blue-200 space-y-1.5">
+                  <div className="flex items-center justify-between text-[10px] font-extrabold uppercase text-slate-700">
+                    <span>Live Patient Balance Calculation</span>
+                    <span className="bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-mono font-bold">Auto-Reconciled</span>
+                  </div>
+                  <div className="font-mono text-xs font-bold text-slate-800 flex items-center justify-between flex-wrap gap-1 p-2 bg-white/90 rounded-lg border border-slate-200">
+                    <div className="flex items-center gap-1">
+                      <span>Total Bill: ₹{grandTotal.toFixed(2)}</span>
+                      <span className="text-gray-400">−</span>
+                      <span className="text-emerald-700">Adv: ₹{advanceApplied.toFixed(2)}</span>
+                      <span className="text-gray-400">−</span>
+                      <span className="text-blue-700">Ins: ₹{proposedTpaAllocation.toFixed(2)}</span>
+                    </div>
+                    <div className="text-sm font-black text-amber-900">
+                      = Patient Due: ₹{Math.max(0, grandTotal - advanceApplied - proposedTpaAllocation).toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer Buttons */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-2 border-t border-slate-200">
+                  <button
+                    type="button"
+                    onClick={handleRemoveInsurance}
+                    className="btn-secondary py-2 px-3 text-xs font-bold text-gray-700 hover:text-red-700 w-full sm:w-auto cursor-pointer"
+                  >
+                    Switch to Cash / Self-Pay
+                  </button>
+
+                  <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setShowInsuranceModal(false)}
+                      className="btn-secondary py-2 px-4 text-xs font-bold cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleApplyCashlessSplit}
+                      disabled={validatingCashless || isReviewAndApplySplitDisabled}
+                      className={`btn py-2 px-5 text-xs font-extrabold flex items-center justify-center gap-1.5 ${
+                        validatingCashless || isReviewAndApplySplitDisabled
+                          ? 'bg-gray-200 text-gray-400 border-gray-300 cursor-not-allowed pointer-events-none'
+                          : 'bg-blue-600 hover:bg-blue-700 text-white cursor-pointer shadow-xs hover:shadow-md'
+                      }`}
+                    >
+                      {validatingCashless ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" /> Validating Split...
+                        </>
+                      ) : (
+                        <>
+                          <FileCheck className="h-4 w-4" /> Apply Insurance to Bill
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -4026,37 +4912,52 @@ const BillingPage = () => {
                         </tr>
                       )}
                       <tr className="text-[12px] font-black uppercase">
-                        <td colSpan={footerColSpan} className="text-right border-r-0">Grand Total:</td>
+                        <td colSpan={footerColSpan} className="text-right border-r-0">Net Hospital Bill:</td>
                         <td className="text-right border-l-0">₹{(printBillObj.grandTotal || 0).toFixed(2)}</td>
                       </tr>
 
                       {printBillObj.advanceAdjusted > 0 && (
-                        <tr className="text-green-700 font-bold">
-                          <td colSpan={footerColSpan} className="text-right border-r-0">Advance Adjusted:</td>
-                          <td className="text-right border-l-0">- ₹{(printBillObj.advanceAdjusted || 0).toFixed(2)}</td>
+                        <tr className="text-emerald-800 font-bold">
+                          <td colSpan={footerColSpan} className="text-right border-r-0">Less: Advance Payment Applied:</td>
+                          <td className="text-right border-l-0 text-emerald-800">- ₹{(printBillObj.advanceAdjusted || 0).toFixed(2)}</td>
                         </tr>
                       )}
-                      
-                      <tr className="font-extrabold text-[12px] border-t border-black">
-                        <td colSpan={footerColSpan} className="text-right border-r-0">Net Payable Amount:</td>
-                        <td className="text-right border-l-0">
-                          ₹{Math.max(0, (printBillObj.grandTotal || 0) - (printBillObj.advanceAdjusted || 0)).toFixed(2)}
+
+                      {(printBillObj.insuranceAllocation > 0 || (printBillObj.paymentMode === 'Insurance' && (printBillObj.tpaReceivable || 0) > 0)) && (
+                        <tr className="text-blue-800 font-bold">
+                          <td colSpan={footerColSpan} className="text-right border-r-0">
+                            Less: Insurance / TPA Amount Applied{printBillObj.transactionRef ? ` (${printBillObj.transactionRef})` : ''}:
+                          </td>
+                          <td className="text-right border-l-0 text-blue-800 font-bold">
+                            - ₹{(printBillObj.insuranceAllocation || printBillObj.tpaReceivable || 0).toFixed(2)}
+                          </td>
+                        </tr>
+                      )}
+
+                      {(printBillObj.amountPaid || 0) > 0 && (
+                        <tr className="font-extrabold text-emerald-900">
+                          <td colSpan={footerColSpan} className="text-right border-r-0">Less: Patient Payments Applied:</td>
+                          <td className="text-right border-l-0">- ₹{(printBillObj.amountPaid || 0).toFixed(2)}</td>
+                        </tr>
+                      )}
+
+                      <tr className="font-black text-amber-900 text-[13px] border-t-2 border-black">
+                        <td colSpan={footerColSpan} className="text-right border-r-0">Patient Amount Due:</td>
+                        <td className="text-right border-l-0 font-black">
+                          ₹{(printBillObj.patientDue !== undefined ? printBillObj.patientDue : (printBillObj.dueAmount || 0)).toFixed(2)}
                         </td>
                       </tr>
 
-                      <tr className="font-extrabold text-emerald-800">
-                        <td colSpan={footerColSpan} className="text-right border-r-0">Amount Paid / Received:</td>
-                        <td className="text-right border-l-0">₹{(printBillObj.amountPaid || 0).toFixed(2)}</td>
-                      </tr>
-
-                      {(printBillObj.dueAmount || 0) > 0 && (
-                        <tr className="font-black text-red-700 text-[12px]">
-                          <td colSpan={footerColSpan} className="text-right border-r-0">Balance Due Outstanding:</td>
-                          <td className="text-right border-l-0 font-black">₹{(printBillObj.dueAmount || 0).toFixed(2)}</td>
+                      {(printBillObj.tpaReceivable > 0 || printBillObj.insuranceAllocation > 0) && (
+                        <tr className="text-blue-900 font-semibold text-[10px]">
+                          <td colSpan={footerColSpan} className="text-right border-r-0">Remaining TPA Receivable from Insurer:</td>
+                          <td className="text-right border-l-0 font-mono font-bold">
+                            ₹{(printBillObj.tpaReceivable || printBillObj.insuranceAllocation || 0).toFixed(2)}
+                          </td>
                         </tr>
                       )}
 
-                      <tr className="font-extrabold uppercase text-[10px]">
+                      <tr className="font-extrabold uppercase text-[10px] border-t border-black">
                         <td colSpan={footerColSpan} className="text-right border-r-0">Payment Status:</td>
                         <td className={`text-right border-l-0 font-black ${
                           printBillObj.paymentStatus === 'Paid' ? 'text-green-700' : (printBillObj.paymentStatus === 'Partially Paid' ? 'text-amber-700' : 'text-red-700')
@@ -4066,6 +4967,25 @@ const BillingPage = () => {
                       </tr>
                     </tfoot>
                   </table>
+
+                  {/* Payment & Settlement Reconciliation Box */}
+                  <div className="mt-3 p-3 bg-gray-50 border border-gray-300 rounded text-xs space-y-1">
+                    <div className="font-extrabold uppercase text-[10px] text-gray-700 flex justify-between items-center">
+                      <span>Billing & Settlement Reconciliation</span>
+                      <span className="text-[9px] font-mono text-emerald-800 bg-emerald-100 px-1 py-0.2 rounded font-bold">Reconciled to Net Bill</span>
+                    </div>
+                    <div className="font-mono text-[10px] text-gray-800 flex flex-wrap items-center gap-1.5 pt-1 border-t border-gray-200">
+                      <span>Net Hospital Bill: <strong>₹{(printBillObj.grandTotal || 0).toFixed(2)}</strong></span>
+                      <span>−</span>
+                      <span>Advance Applied: <strong>₹{(printBillObj.advanceAdjusted || 0).toFixed(2)}</strong></span>
+                      <span>−</span>
+                      <span>Insurance Applied: <strong>₹{(printBillObj.insuranceAllocation || printBillObj.tpaReceivable || 0).toFixed(2)}</strong></span>
+                      <span>−</span>
+                      <span>Patient Paid: <strong>₹{(printBillObj.amountPaid || 0).toFixed(2)}</strong></span>
+                      <span>=</span>
+                      <span className="font-black text-amber-900">Patient Amount Due: ₹{(printBillObj.patientDue !== undefined ? printBillObj.patientDue : (printBillObj.dueAmount || 0)).toFixed(2)}</span>
+                    </div>
+                  </div>
 
                   {/* Complete Advance Payments Table shown only in Bill Summary */}
                   {printLayoutTab === 'summary' && allPatientAdvances.length > 0 && (

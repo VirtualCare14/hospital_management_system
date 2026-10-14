@@ -38,13 +38,15 @@ import {
   Scissors,
   Edit3,
   DoorOpen,
-  ClipboardList
+  ClipboardList,
+  ShieldCheck
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import client from '../../api/client';
 import { formatUhid } from '../../utils/uhid';
 import { formatDateIST, formatTimeIST } from '../../utils/dateFormat';
 import IpdMedicationChartContent from './IpdMedicationChartContent.jsx';
+import IpdInsuranceSection from '../../components/ipd/IpdInsuranceSection.jsx';
 
 const getStatusBadgeText = (status) => {
   switch (status) {
@@ -103,6 +105,7 @@ const getStatusBadgeClass = (status) => {
 
 const TABS = [
   { id: 'patient-info', label: 'Patient Info', icon: User },
+  { id: 'insurance', label: 'Insurance & Cashless', icon: ShieldCheck },
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
   { id: 'services', label: 'Services', icon: Syringe },
   { id: 'pharmacy-requests', label: 'Pharmacy Requests', icon: Pill },
@@ -807,6 +810,17 @@ const IpdPatientDetails = () => {
               <div><span className="block text-[10px] font-bold uppercase text-gray-400">Mobile Number</span><div className="flex items-center gap-1 font-bold text-gray-800"><Phone className="h-3.5 w-3.5 text-gray-400" />{admission.guardianMobile || 'N/A'}</div></div>
             </div>
           </div>
+
+          <div className="col-span-1 md:col-span-2">
+            <IpdInsuranceSection admission={admission} />
+          </div>
+        </div>
+      )}
+
+      {/* TAB: Insurance & Cashless */}
+      {activeTab === 'insurance' && (
+        <div className="space-y-6">
+          <IpdInsuranceSection admission={admission} />
         </div>
       )}
 
