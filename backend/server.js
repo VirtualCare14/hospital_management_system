@@ -6,8 +6,7 @@ const connectDB = require('./config/db');
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 
 // Load environment variables
-dotenv.config({ path: path.join(__dirname, '.env') });
-dotenv.config({ path: path.join(__dirname, 'env') });
+dotenv.config({ path: path.join(__dirname, '.env'), override: true });
 
 // Connect to Database
 connectDB();
@@ -80,6 +79,10 @@ app.use('/api/same-day-care', require('./routes/sameDayCareRoutes'));
 app.use('/api/demo-request', require('./routes/demoRequestRoutes'));
 app.use('/api', require('./routes/billingRoutes'));
 app.use('/api/abha', require('./routes/abhaRoutes'));
+app.use('/api/tpa', require('./routes/tpaMasterRoutes'));
+app.use('/api/tpa/patient-insurance', require('./routes/patientInsuranceRoutes'));
+app.use('/api/tpa/pre-auth', require('./routes/preAuthorizationRoutes'));
+app.use('/api/tpa/claims', require('./routes/tpaClaimRoutes'));
 
 // Basic health check route
 app.get('/', (req, res) => {

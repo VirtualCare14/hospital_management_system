@@ -784,8 +784,29 @@ const getBillingSummary = async (req, res) => {
     );
     const labCharges = labTests.reduce((sum, t) => sum + (t.testPrice || 0), 0);
 
-    const subTotal = roomCharges + consumableSubtotal + medicineCharges + labCharges;
-    const grandTotal = roomCharges + consumableCharges + medicineCharges + labCharges;
+    const otRecords = await IpdOtRecord.find(
+      tenantFilter(req, { admissionId: req.params.admissionId })
+    );
+    let otCharges = 0;
+    const otChargeDetails = [];
+    otRecords.forEach(rec => {
+      if (rec.otCharges && rec.otCharges.length > 0) {
+        rec.otCharges.forEach(charge => {
+          if (!charge.isActive) return;
+          const amt = charge.chargeAmount || 0;
+          otCharges += amt;
+          otChargeDetails.push({
+            chargeName: charge.chargeName,
+            chargeAmount: amt,
+            proceduresPerformed: rec.proceduresPerformed || 'OT Surgery',
+            date: charge.addedAt || rec.dateOfSurgery || rec.createdAt
+          });
+        });
+      }
+    });
+
+    const subTotal = roomCharges + consumableSubtotal + medicineCharges + labCharges + otCharges;
+    const grandTotal = roomCharges + consumableCharges + medicineCharges + labCharges + otCharges;
 
     res.status(200).json({
       roomCharges: Math.round(roomCharges * 100) / 100,
@@ -795,6 +816,7 @@ const getBillingSummary = async (req, res) => {
       consumableGST: Math.round(consumableGST * 100) / 100,
       medicineCharges: Math.round(medicineCharges * 100) / 100,
       labCharges: Math.round(labCharges * 100) / 100,
+      otCharges: Math.round(otCharges * 100) / 100,
       subTotal: Math.round(subTotal * 100) / 100,
       grandTotal: Math.round(grandTotal * 100) / 100,
       daysAdmitted,
@@ -802,6 +824,7 @@ const getBillingSummary = async (req, res) => {
       consumableCount: consumables.length,
       medicineCount: medicines.length,
       labTestCount: labTests.length,
+      otRecordCount: otChargeDetails.length,
       // Details for display
       consumableDetails: consumables.map(c => ({
         serviceName: c.serviceName,
@@ -824,7 +847,8 @@ const getBillingSummary = async (req, res) => {
         testPrice: t.testPrice,
         reportStatus: t.reportStatus,
         date: t.date
-      }))
+      })),
+      otChargeDetails
     });
   } catch (error) {
     console.error('Get Billing Summary Error:', error);

@@ -42,7 +42,10 @@ import {
   PanelLeftOpen,
   Printer,
   ExternalLink,
-  Stethoscope
+  Stethoscope,
+  ShieldCheck,
+  FileCheck,
+  ClipboardCheck
 } from 'lucide-react';
 import { getLabsPortalUrl } from '../utils/moduleRoutes';
 
@@ -88,6 +91,9 @@ const Sidebar = () => {
     { to: '/admin/room-settings', label: 'IPD Settings', icon: Bed },
     { to: '/admin/consumable-services', label: 'Consumable Services', icon: Package },
     { to: '/admin/ot-settings', label: 'OT Settings', icon: Scissors },
+    { to: '/tpa/pre-auth', label: 'Pre-Authorizations', icon: FileCheck },
+    { to: '/tpa/claims', label: 'TPA Claims', icon: ClipboardCheck },
+    { to: '/admin/tpa-settings', label: 'TPA Master Settings', icon: ShieldCheck },
     { to: '/admin/same-day-care', label: 'Same Day Care Settings', icon: Bandage },
     { to: '/admin/pharmacy-settings', label: 'Pharmacy Settings', icon: Settings },
     ...(user?.allowClinicSetting ? [{ to: '/admin/clinic-settings', label: 'Clinic Settings', icon: Stethoscope }] : []),
@@ -100,6 +106,8 @@ const Sidebar = () => {
     { to: '/reception/follow-ups', label: 'Patient Follow-Ups Tracking', icon: CalendarCheck },
     { to: '/reception/abha', label: 'ABHA Services', icon: Fingerprint },
     { to: '/reception/lab-billing', label: 'New Bill (Lab)', icon: FlaskConical },
+    { to: '/tpa/pre-auth', label: 'Pre-Authorizations', icon: FileCheck },
+    { to: '/tpa/claims', label: 'TPA Claims', icon: ClipboardCheck },
   ];
 
   const doctorLinks = [
@@ -313,6 +321,24 @@ const Sidebar = () => {
               >
                 <Users className="h-5 w-5 shrink-0" />
                 {isExpanded && <span className="truncate">Patient List</span>}
+              </NavLink>
+              <NavLink
+                to="/tpa/pre-auth"
+                onClick={handleOptionClick}
+                title="Pre-Authorizations"
+                className={({ isActive }) => getLinkClass(isActive)}
+              >
+                <FileCheck className="h-5 w-5 shrink-0" />
+                {isExpanded && <span className="truncate">Pre-Authorizations</span>}
+              </NavLink>
+              <NavLink
+                to="/tpa/claims"
+                onClick={handleOptionClick}
+                title="TPA Claims"
+                className={({ isActive }) => getLinkClass(isActive)}
+              >
+                <ClipboardCheck className="h-5 w-5 shrink-0" />
+                {isExpanded && <span className="truncate">TPA Claims</span>}
               </NavLink>
               <NavLink
                 to="/ipd/ot-management"
@@ -553,6 +579,51 @@ const Sidebar = () => {
               >
                 <BadgeIndianRupee className="h-5 w-5 shrink-0 text-orange-500" />
                 {isExpanded && <span className="truncate">Due Amount Recovery</span>}
+              </NavLink>
+              <NavLink
+                to="/tpa/pre-auth"
+                onClick={handleOptionClick}
+                title="TPA Pre-Authorizations"
+                className={({ isActive }) => getLinkClass(isActive)}
+              >
+                <FileCheck className="h-5 w-5 shrink-0 text-orange-500" />
+                {isExpanded && <span className="truncate">TPA Pre-Authorizations</span>}
+              </NavLink>
+              <NavLink
+                to="/tpa/claims"
+                onClick={handleOptionClick}
+                title="TPA Claims"
+                className={({ isActive }) => getLinkClass(isActive)}
+              >
+                <ClipboardCheck className="h-5 w-5 shrink-0 text-orange-500" />
+                {isExpanded && <span className="truncate">TPA Claims</span>}
+              </NavLink>
+            </div>
+          </div>
+        )}
+
+        {/* Dedicated TPA Desk Section (if user has TPA desk role) */}
+        {(user.role === 'tpa' || user.role === 'tpa_desk') && (
+          <div>
+            {renderSectionHeader('TPA & Cashless Desk')}
+            <div className="space-y-1">
+              <NavLink
+                to="/tpa/pre-auth"
+                onClick={handleOptionClick}
+                title="Pre-Authorizations"
+                className={({ isActive }) => getLinkClass(isActive)}
+              >
+                <FileCheck className="h-5 w-5 shrink-0 text-orange-500" />
+                {isExpanded && <span className="truncate">Pre-Authorizations</span>}
+              </NavLink>
+              <NavLink
+                to="/tpa/claims"
+                onClick={handleOptionClick}
+                title="TPA Claims"
+                className={({ isActive }) => getLinkClass(isActive)}
+              >
+                <ClipboardCheck className="h-5 w-5 shrink-0 text-orange-500" />
+                {isExpanded && <span className="truncate">TPA Claims</span>}
               </NavLink>
             </div>
           </div>

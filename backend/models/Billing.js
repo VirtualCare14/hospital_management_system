@@ -90,6 +90,40 @@ const billingSchema = new mongoose.Schema({
     default: 0
   },
   
+  // Insurance / TPA Settlement Breakdown
+  insuranceAllocation: {
+    type: Number,
+    default: 0
+  },
+  tpaReceivable: {
+    type: Number,
+    default: 0
+  },
+  insuranceClaimAmount: {
+    type: Number,
+    default: 0
+  },
+  insuranceApprovedAmount: {
+    type: Number,
+    default: 0
+  },
+  tpaNonPayable: {
+    type: Number,
+    default: 0
+  },
+  tpaCopay: {
+    type: Number,
+    default: 0
+  },
+  tpaDeductible: {
+    type: Number,
+    default: 0
+  },
+  patientDue: {
+    type: Number,
+    default: 0
+  },
+  
   // Payment installment & due recovery history
   payments: [{
     paymentNo: { type: String, default: '' },

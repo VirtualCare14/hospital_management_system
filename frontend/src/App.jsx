@@ -42,6 +42,9 @@ import IpdOtForm from './pages/ipd/IpdOtForm.jsx';
 import IpdOtFlow from './pages/ipd/IpdOtFlow.jsx';
 import IpdDischargeForm from './pages/ipd/IpdDischargeForm.jsx';
 import OperationTheatreSettings from './pages/admin/OperationTheatreSettings.jsx';
+import TpaMasterSettings from './pages/admin/TpaMasterSettings.jsx';
+import PreAuthManagement from './pages/tpa/PreAuthManagement.jsx';
+import ClaimsManagement from './pages/tpa/ClaimsManagement.jsx';
 import IpdOtDashboard from './pages/ipd/IpdOtDashboard.jsx';
 import IpdSameDayDashboard from './pages/ipd/IpdSameDayDashboard.jsx';
 import SameDayCareSettings from './pages/admin/SameDayCareSettings.jsx';
@@ -86,10 +89,15 @@ function App() {
             <Route path="/admin/room-settings" element={<IpdAdminWorkspace />} />
             <Route path="/admin/consumable-services" element={<ConsumableServiceSettings />} />
             <Route path="/admin/ot-settings" element={<OperationTheatreSettings />} />
+            <Route path="/admin/tpa-settings" element={<TpaMasterSettings />} />
             <Route path="/admin/same-day-care" element={<SameDayCareSettings />} />
             <Route path="/admin/pharmacy-settings" element={<PharmacySettings />} />
             <Route path="/admin/clinic-settings" element={<ClinicSettings />} />
             <Route path="/admin/delete-data" element={<DeleteDataPage />} />
+          </Route>
+          <Route element={<ProtectedRoute allowedRoles={['admin', 'tpa', 'reception', 'billing', 'ipd', 'doctor', 'nursing']} />}>
+            <Route path="/tpa/pre-auth" element={<PreAuthManagement />} />
+            <Route path="/tpa/claims" element={<ClaimsManagement />} />
           </Route>
           <Route element={<ProtectedRoute allowedRoles={['admin', 'reception']} requiredModule={1} />}>
             <Route path="/reception/register" element={<PatientRegistration />} />
