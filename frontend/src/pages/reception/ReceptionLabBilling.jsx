@@ -281,7 +281,7 @@ export default function ReceptionLabBilling() {
 
   // Case details state
   const [caseData, setCaseData] = useState({
-    referredBy: 'ID: 1, Self',
+    referredBy: 'Self',
     collectionCentre: 'Main Hospital Lab',
     sampleAgent: 'Self (Patient Walk-in)'
   });
@@ -317,27 +317,22 @@ export default function ReceptionLabBilling() {
   // Case Details sub-states
   const [showReferrerDropdown, setShowReferrerDropdown] = useState(false);
   const [referrerSearchQuery, setReferrerSearchQuery] = useState('');
-  const [referrers, setReferrers] = useState(() => {
-    return [
-      { id: '1', codeId: '1', name: 'Self' },
-      { id: '2', codeId: '2', name: 'Dr. A. K. Sharma (Cardiologist)' },
-      { id: '3', codeId: '3', name: 'Dr. Priya Mehta (General Physician)' },
-      { id: '4', codeId: '4', name: 'Dr. Rajesh Gupta (Pathologist)' },
-      { id: '5', codeId: '5', name: 'City Hospital & Diagnostic Clinic' }
-    ];
-  });
+  const [referrers, setReferrers] = useState([
+    { id: 'self', name: 'Self' }
+  ]);
   const [collectionCentres, setCollectionCentres] = useState([
     'Main Hospital Lab',
-    'North Branch Centre',
-    'South Satellite Lab',
-    'Home Collection Unit'
+    'Home Collection'
   ]);
   const [collectionAgents, setCollectionAgents] = useState([
-    'Self (Patient Walk-in)',
-    'Rahul Kumar (Phlebotomist)',
-    'Suresh Singh (Home Agent)',
-    'Anjali Verma (Lab Assistant)'
+    'Self (Patient Walk-in)'
   ]);
+
+  const filteredReferrers = useMemo(() => {
+    const q = referrerSearchQuery.toLowerCase().trim();
+    if (!q) return referrers;
+    return referrers.filter(r => r.name.toLowerCase().includes(q));
+  }, [referrers, referrerSearchQuery]);
 
   // Service Selector sub-states
   const [openBoxes, setOpenBoxes] = useState(['LAB']);
@@ -366,17 +361,42 @@ export default function ReceptionLabBilling() {
       })
       .catch(() => {});
 
-    client.get('/users')
+    // Fetch doctors present in this hospital
+    client.get('/admin/doctors')
       .then(res => {
-        const users = res.data?.users || res.data || [];
-        const docs = users.filter(u => u.role === 'doctor' || u.role === 'nursing');
-        if (docs.length > 0) {
-          const docReferrers = docs.map((d, i) => ({
+        const docs = Array.isArray(res.data) ? res.data : (res.data?.doctors || res.data?.data || []);
+        const docReferrers = docs.map(d => {
+          const rawName = (d.doctorName || d.name || d.username || 'Doctor').trim();
+          const nameWithPrefix = rawName.toLowerCase().startsWith('dr') ? rawName : `Dr. ${rawName}`;
+          return {
             id: `doc_${d._id}`,
-            codeId: String(i + 2),
-            name: `Dr. ${d.doctorName || d.username} ${d.department ? `(${d.department})` : ''}`
-          }));
-          setReferrers(prev => [{ id: '1', codeId: '1', name: 'Self' }, ...docReferrers]);
+            name: nameWithPrefix,
+            doctorName: rawName,
+            department: d.department
+          };
+        });
+        
+        setReferrers([{ id: 'self', name: 'Self' }, ...docReferrers]);
+      })
+      .catch(err => {
+        console.error('Failed to load hospital doctors:', err);
+      });
+
+    // Optionally fetch staff for collection agents if accessible
+    client.get('/admin/users')
+      .then(res => {
+        const users = res.data?.users || (Array.isArray(res.data) ? res.data : []);
+        const staff = users.filter(u => u.role === 'lab' || u.role === 'lab_technician' || u.role === 'staff' || u.role === 'phlebotomist');
+        
+        const agentList = ['Self (Patient Walk-in)'];
+        staff.forEach(s => {
+          const sName = s.name || s.doctorName || s.username;
+          if (sName && !agentList.includes(sName)) {
+            agentList.push(sName);
+          }
+        });
+        if (agentList.length > 1) {
+          setCollectionAgents(agentList);
         }
       })
       .catch(() => {});
@@ -453,37 +473,113 @@ export default function ReceptionLabBilling() {
 
   const isPhoneValid = /^\d{10}$/.test(patientData.mobileNumber?.trim() || '');
 
-  // Phone search
+  // Phone search & Autofill
   const handlePhoneSearch = async (overrideMobile) => {
-    const mobile = (typeof overrideMobile === 'string' ? overrideMobile : patientData.mobileNumber)?.trim();
+    const rawMobile = (typeof overrideMobile === 'string' ? overrideMobile : patientData.mobileNumber)?.trim();
+    const mobile = rawMobile ? rawMobile.replace(/\D/g, '') : '';
     if (!mobile || mobile.length < 5) return;
     setSearchingPhone(true);
     try {
-      const res = await client.get(`/patients/registrations/list?uhid=${encodeURIComponent(mobile)}&limit=1`);
-      const found = res.data?.registrations?.[0] || res.data?.[0];
+      // 1. Primary lookup via /patients/lookup
+      const { data } = await client.get('/patients/lookup', { params: { mobile } });
+      const found = data?.found ? data.patient : null;
+
       if (found) {
-        const rawName = found.patientName || `${found.firstName || ''} ${found.lastName || ''}`.trim();
-        const parts = rawName.split(' ');
+        const rawName = (found.patientName || '').trim();
+        let title = 'Mr.';
+        let cleanName = rawName;
+        const titleMatch = rawName.match(/^(Mr\.|Mrs\.|Ms\.|Dr\.|Master)\s+/i);
+        if (titleMatch) {
+          title = titleMatch[1];
+          cleanName = rawName.slice(titleMatch[0].length).trim();
+        } else if (found.gender === 'Female') {
+          title = 'Mrs.';
+        }
+        const parts = cleanName.split(' ').filter(Boolean);
+        const firstName = parts[0] || '';
+        const lastName = parts.slice(1).join(' ') || '';
+
+        // Calculate age
+        let ageStr = '';
+        if (found.age !== undefined && found.age !== null && found.age !== '') {
+          ageStr = String(found.age);
+        } else if (found.dob) {
+          const bYear = new Date(found.dob).getFullYear();
+          const cAge = new Date().getFullYear() - bYear;
+          if (cAge >= 0 && cAge <= 150) ageStr = String(cAge);
+        }
+
         setPatientData(prev => ({
           ...prev,
-          patientId: found.patientId || found._id,
+          patientId: found._id || found.patientId,
           uhid: found.uhid || '',
-          title: found.title || 'Mr.',
-          firstName: parts[0] || '',
-          lastName: parts.slice(1).join(' ') || '',
-          gender: found.gender || 'Male',
-          ageYears: found.age ? String(found.age) : '30',
+          lookedUpPatientName: rawName,
+          title: title,
+          firstName: firstName,
+          lastName: lastName,
+          gender: found.gender || prev.gender || 'Male',
+          ageYears: ageStr || prev.ageYears || '',
           email: found.email || prev.email,
-          address: found.address || prev.address,
+          address: found.address && found.address !== 'Not specified' ? found.address : prev.address,
           aadhaar: found.aadhaar || prev.aadhaar
         }));
+
         if (found.email) setShowFields(prev => ({ ...prev, email: true }));
-        if (found.address) setShowFields(prev => ({ ...prev, address: true }));
+        if (found.address && found.address !== 'Not specified') setShowFields(prev => ({ ...prev, address: true }));
         if (found.aadhaar) setShowFields(prev => ({ ...prev, aadhaar: true }));
+
         toast.success(`Found patient: ${rawName} (${found.uhid || 'UHID'})`);
+        return;
       }
-    } catch {
-      // not found, continue manual entry
+
+      // 2. Fallback lookup via /patients/registrations/list?search=...
+      const listRes = await client.get('/patients/registrations/list', { params: { search: mobile, limit: 1 } });
+      const regFound = listRes.data?.registrations?.[0];
+      if (regFound) {
+        const rawName = (regFound.patientName || '').trim();
+        let title = 'Mr.';
+        let cleanName = rawName;
+        const titleMatch = rawName.match(/^(Mr\.|Mrs\.|Ms\.|Dr\.|Master)\s+/i);
+        if (titleMatch) {
+          title = titleMatch[1];
+          cleanName = rawName.slice(titleMatch[0].length).trim();
+        } else if (regFound.gender === 'Female') {
+          title = 'Mrs.';
+        }
+        const parts = cleanName.split(' ').filter(Boolean);
+
+        let ageStr = '';
+        if (regFound.age) {
+          ageStr = String(regFound.age);
+        } else if (regFound.dob) {
+          const bYear = new Date(regFound.dob).getFullYear();
+          const cAge = new Date().getFullYear() - bYear;
+          if (cAge >= 0 && cAge <= 150) ageStr = String(cAge);
+        }
+
+        setPatientData(prev => ({
+          ...prev,
+          patientId: regFound.patientId || regFound._id,
+          uhid: regFound.uhid || '',
+          lookedUpPatientName: rawName,
+          title: title,
+          firstName: parts[0] || '',
+          lastName: parts.slice(1).join(' ') || '',
+          gender: regFound.gender || prev.gender || 'Male',
+          ageYears: ageStr || prev.ageYears || '',
+          email: regFound.email || prev.email,
+          address: regFound.address && regFound.address !== 'Not specified' ? regFound.address : prev.address,
+          aadhaar: regFound.aadhaar || prev.aadhaar
+        }));
+
+        if (regFound.email) setShowFields(prev => ({ ...prev, email: true }));
+        if (regFound.address && regFound.address !== 'Not specified') setShowFields(prev => ({ ...prev, address: true }));
+        if (regFound.aadhaar) setShowFields(prev => ({ ...prev, aadhaar: true }));
+
+        toast.success(`Found patient: ${rawName} (${regFound.uhid || 'UHID'})`);
+      }
+    } catch (err) {
+      console.warn('Patient lookup fallback error:', err);
     } finally {
       setSearchingPhone(false);
     }
@@ -492,10 +588,26 @@ export default function ReceptionLabBilling() {
   const handlePatientChange = (e) => {
     const { name, value, type, checked } = e.target;
     const finalVal = type === 'checkbox' ? checked : value;
-    setPatientData(prev => ({
-      ...prev,
-      [name]: finalVal
-    }));
+    
+    setPatientData(prev => {
+      const updated = {
+        ...prev,
+        [name]: finalVal
+      };
+
+      // If user is editing firstName or lastName, check if it matches the looked up patient
+      if ((name === 'firstName' || name === 'lastName') && prev.lookedUpPatientName) {
+        const normalize = (s) => (s || '').toLowerCase().replace(/^(mr|mrs|ms|dr|master|miss)\.?\s+/i, '').replace(/[^a-z0-9]/g, '');
+        const currentFullName = `${updated.firstName || ''} ${updated.lastName || ''}`.trim();
+        if (normalize(currentFullName) !== normalize(prev.lookedUpPatientName)) {
+          updated.patientId = null;
+          updated.uhid = '';
+        }
+      }
+
+      return updated;
+    });
+
     if (name === 'mobileNumber' && typeof finalVal === 'string') {
       const cleanDigits = finalVal.replace(/\D/g, '');
       if (cleanDigits.length === 10) {
@@ -636,6 +748,9 @@ export default function ReceptionLabBilling() {
           const birthYear = new Date().getFullYear() - (Number(patientData.ageYears) || 30);
           const calculatedDob = `${birthYear}-01-01`;
 
+          const selectedDocObj = referrers.find(r => r.name === caseData.referredBy && r.id?.startsWith('doc_'))?.rawDoctor;
+          const dept = selectedCategory === 'LAB' ? 'Laboratory' : (selectedCategory ? `${selectedCategory.toUpperCase()} / Lab` : 'Laboratory');
+
           const patientPayload = {
             patientName: `${patientData.firstName.trim()} ${patientData.lastName.trim()}`.trim(),
             gender: patientData.gender || 'Male',
@@ -644,6 +759,11 @@ export default function ReceptionLabBilling() {
             email: patientData.email || '',
             address: patientData.address?.trim() || 'Not specified',
             aadhaar: patientData.aadhaar || '',
+            department: dept,
+            doctorId: selectedDocObj?._id || undefined,
+            visitType: 'Lab',
+            slot: 'Lab Walk-in',
+            isLab: true,
             isEmergency: false
           };
 
@@ -659,23 +779,28 @@ export default function ReceptionLabBilling() {
       }
 
       // 2. Submit Direct Lab Request / Bill
+      const selectedDocObj = referrers.find(r => r.name === caseData.referredBy && r.id?.startsWith('doc_'))?.rawDoctor;
       const testNames = selectedServices.map(s => s.title);
       const billPayload = {
         patientId: resolvedPatientId,
+        doctorId: selectedDocObj?._id || undefined,
         patientName: `${patientData.title} ${patientData.firstName} ${patientData.lastName}`.trim(),
         firstName: patientData.firstName?.trim(),
         lastName: patientData.lastName?.trim(),
         patientMobile: patientData.mobileNumber?.trim(),
         mobile: patientData.mobileNumber?.trim(),
         gender: patientData.gender || 'Male',
+        ageYears: patientData.ageYears,
         uhid: patientData.uhid || '',
         address: patientData.address || 'Not specified',
         email: patientData.email || '',
         aadhaar: patientData.aadhaar || '',
+        department: 'Laboratory',
+        visitType: 'Lab',
         tests: testNames,
         collectionType: caseData.collectionCentre,
         bookingDate: new Date(),
-        remarks: `${paymentData.remarks ? paymentData.remarks + ' | ' : ''}Referred by: ${caseData.referredBy}`,
+        remarks: `${paymentData.remarks ? paymentData.remarks + ' | ' : ''}Referred by: ${caseData.referredBy || 'Self'}`,
         paymentMode: paymentData.paymentMode,
         discountPercent: Number(paymentData.discountPercent) || 0,
         amountReceived: Number(amountReceivedNum) || 0
@@ -745,6 +870,11 @@ export default function ReceptionLabBilling() {
       history: ''
     });
     setSelectedServices([]);
+    setCaseData({
+      referredBy: 'Self',
+      collectionCentre: 'Main Hospital Lab',
+      sampleAgent: 'Self (Patient Walk-in)'
+    });
     setSuccessMessage(null);
     setErrorMessage(null);
     setCreatedBillReceiptData(null);
@@ -797,11 +927,6 @@ export default function ReceptionLabBilling() {
     const dynamic = allTests.filter(t => t.category === catId && t.isPackage);
     return [...defaults, ...dynamic];
   };
-
-  const filteredReferrers = referrers.filter(r => {
-    const fullText = `ID: ${r.codeId}, ${r.name}`.toLowerCase();
-    return fullText.includes(referrerSearchQuery.toLowerCase());
-  });
 
   return (
     <div className="space-y-5 pb-12 max-w-7xl mx-auto">
@@ -1226,7 +1351,7 @@ export default function ReceptionLabBilling() {
                 onClick={() => setShowReferrerDropdown(!showReferrerDropdown)}
                 className="w-full h-9 px-3 bg-white border border-orange-400 rounded-md text-xs font-medium text-slate-800 flex items-center justify-between hover:border-orange-600 focus:ring-1 focus:ring-orange-500 cursor-pointer shadow-xs"
               >
-                <span className="truncate">{caseData.referredBy || 'ID: 1, Self'}</span>
+                <span className="truncate font-medium">{caseData.referredBy || 'Self'}</span>
                 <span className="text-slate-400 text-[10px]">▼</span>
               </button>
 
@@ -1241,35 +1366,48 @@ export default function ReceptionLabBilling() {
                       autoFocus
                       value={referrerSearchQuery}
                       onChange={(e) => setReferrerSearchQuery(e.target.value)}
-                      placeholder="Search referrer name or ID..."
-                      className="w-full h-8 px-2.5 bg-white border border-orange-400 rounded-md text-xs text-slate-800 outline-none"
+                      placeholder="Search referrer doctor or type name..."
+                      className="w-full h-8 px-2.5 bg-white border border-slate-300 focus:border-orange-500 rounded-md text-xs text-slate-800 outline-none"
                     />
                   </div>
 
                   <div className="max-h-48 overflow-y-auto divide-y divide-slate-100 text-xs">
-                    {filteredReferrers.length === 0 ? (
-                      <div className="p-3 text-slate-400 text-center">No referrer found</div>
-                    ) : (
-                      filteredReferrers.map((r) => {
-                        const itemText = `ID: ${r.codeId}, ${r.name}`;
-                        const isSelected = caseData.referredBy === itemText;
+                    {filteredReferrers.map((r) => {
+                      const itemText = r.name;
+                      const isSelected = caseData.referredBy === itemText;
 
-                        return (
-                          <button
-                            key={r.id}
-                            type="button"
-                            onClick={() => {
-                              setCaseData(prev => ({ ...prev, referredBy: itemText }));
-                              setShowReferrerDropdown(false);
-                            }}
-                            className={`w-full text-left px-3 py-2 transition-colors cursor-pointer ${
-                              isSelected ? 'bg-orange-500 text-white font-bold' : 'hover:bg-orange-50 text-slate-800'
-                            }`}
-                          >
-                            {itemText}
-                          </button>
-                        );
-                      })
+                      return (
+                        <button
+                          key={r.id}
+                          type="button"
+                          onClick={() => {
+                            setCaseData(prev => ({ ...prev, referredBy: itemText }));
+                            setShowReferrerDropdown(false);
+                            setReferrerSearchQuery('');
+                          }}
+                          className={`w-full text-left px-3 py-2 transition-colors cursor-pointer ${
+                            isSelected ? 'bg-orange-500 text-white font-bold' : 'hover:bg-orange-50 text-slate-800'
+                          }`}
+                        >
+                          {itemText}
+                        </button>
+                      );
+                    })}
+
+                    {referrerSearchQuery.trim() && !referrers.some(r => r.name.toLowerCase() === referrerSearchQuery.toLowerCase().trim()) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const customName = referrerSearchQuery.trim();
+                          setReferrers(prev => [...prev, { id: `custom_${Date.now()}`, name: customName }]);
+                          setCaseData(prev => ({ ...prev, referredBy: customName }));
+                          setShowReferrerDropdown(false);
+                          setReferrerSearchQuery('');
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs text-orange-600 font-semibold hover:bg-orange-50 cursor-pointer border-t border-dashed border-orange-200"
+                      >
+                        + Use "{referrerSearchQuery.trim()}" as referrer
+                      </button>
                     )}
                   </div>
                 </div>

@@ -214,8 +214,8 @@ export default function EditPrintRxSettingsView() {
             </span>
           </div>
 
-          <div className="bg-gray-100 border border-gray-300 rounded-2xl p-4 overflow-x-auto max-h-[720px] overflow-y-auto shadow-inner">
-            <div ref={receiptRef}>
+          <div className="bg-gray-100 border border-gray-200 rounded-2xl p-4 overflow-x-auto max-h-[720px] overflow-y-auto shadow-inner flex justify-center">
+            <div className="bg-white shadow-xl rounded-none border-none overflow-hidden w-full max-w-[210mm]" ref={receiptRef}>
               <PatientReceipt
                 patient={samplePatient}
                 prescription={samplePrescription}

@@ -53,7 +53,8 @@ const createOrUpdateHospitalSettings = asyncHandler(async (req, res) => {
       discountPercentage, discountFixedAmount, patientSpecificDiscounts,
       sdtPricingInBilling, accessDiscount, receptionSeePatientDue, dueModificationEnabled,
       medicationGracePeriod, medicationMissedThreshold,
-      letterheadImageUrl, letterheadImagePublicId, letterheadHeaderHeight, letterheadFooterHeight
+      letterheadImageUrl, letterheadImagePublicId, letterheadHeaderHeight, letterheadFooterHeight,
+      useSystemLetterhead
     } = req.body;
     
     // Process phoneNumbers structured list if provided
@@ -100,6 +101,7 @@ const createOrUpdateHospitalSettings = asyncHandler(async (req, res) => {
       letterheadImagePublicId: letterheadImagePublicId !== undefined ? letterheadImagePublicId : (settings ? settings.letterheadImagePublicId : ''),
       letterheadHeaderHeight: letterheadHeaderHeight !== undefined ? Number(letterheadHeaderHeight) : (settings ? settings.letterheadHeaderHeight : 4.60),
       letterheadFooterHeight: letterheadFooterHeight !== undefined ? Number(letterheadFooterHeight) : (settings ? settings.letterheadFooterHeight : 3.40),
+      useSystemLetterhead: useSystemLetterhead !== undefined ? Boolean(useSystemLetterhead) : (settings ? (settings.useSystemLetterhead !== undefined ? settings.useSystemLetterhead : true) : true),
       alternateMobileNumber: alternateMobileNumber || '',
       emailAddress: emailAddress || '',
       website: website || '',
@@ -247,9 +249,62 @@ const deleteLogo = asyncHandler(async (req, res) => {
   }
 });
 
+// @desc    Upload letterhead to Cloudinary (high-resolution rectangle banner format)
+// @route   POST /api/admin/hospital-settings/upload-letterhead
+// @access  Private/Admin
+const uploadLetterhead = asyncHandler(async (req, res) => {
+  try {
+    const { imageData, folder = 'hms/hospital-letterheads' } = req.body;
+    
+    if (!imageData) {
+      return res.status(400).json({ message: 'Letterhead image data is required' });
+    }
+    
+    // Upload to Cloudinary with rectangular format support
+    const uploaded = await cloudinary.uploader.upload(imageData, {
+      folder,
+      resource_type: 'image',
+      transformation: {
+        width: 2400,
+        crop: 'limit'
+      }
+    });
+    
+    res.status(200).json({
+      url: uploaded.secure_url,
+      publicId: uploaded.public_id
+    });
+  } catch (error) {
+    console.error('Letterhead Upload Error:', error);
+    res.status(500).json({ message: error.message || 'Letterhead upload failed' });
+  }
+});
+
+// @desc    Delete letterhead from Cloudinary
+// @route   DELETE /api/admin/hospital-settings/delete-letterhead
+// @access  Private/Admin
+const deleteLetterhead = asyncHandler(async (req, res) => {
+  try {
+    const { publicId } = req.body;
+    
+    if (!publicId) {
+      return res.status(400).json({ message: 'Public ID is required' });
+    }
+    
+    await cloudinary.uploader.destroy(publicId, { resource_type: 'image' });
+    
+    res.status(200).json({ message: 'Letterhead deleted successfully' });
+  } catch (error) {
+    console.error('Letterhead Delete Error:', error);
+    res.status(500).json({ message: error.message || 'Letterhead deletion failed' });
+  }
+});
+
 module.exports = {
   getHospitalSettings,
   createOrUpdateHospitalSettings,
   uploadLogo,
-  deleteLogo
+  deleteLogo,
+  uploadLetterhead,
+  deleteLetterhead
 };

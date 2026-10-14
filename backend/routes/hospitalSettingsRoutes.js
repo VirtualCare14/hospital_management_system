@@ -4,7 +4,9 @@ const {
   getHospitalSettings,
   createOrUpdateHospitalSettings,
   uploadLogo,
-  deleteLogo
+  deleteLogo,
+  uploadLetterhead,
+  deleteLetterhead
 } = require('../controllers/hospitalSettingsController');
 const authMiddleware = require('../middleware/authMiddleware');
 
@@ -30,5 +32,11 @@ router.post('/upload-logo', authMiddleware, adminOnly, uploadLogo);
 
 // DELETE /api/admin/hospital-settings/delete-logo - Delete logo from Cloudinary
 router.delete('/delete-logo', authMiddleware, adminOnly, deleteLogo);
+
+// POST /api/admin/hospital-settings/upload-letterhead - Upload letterhead image
+router.post('/upload-letterhead', authMiddleware, adminOnly, uploadLetterhead);
+
+// DELETE /api/admin/hospital-settings/delete-letterhead - Delete letterhead image
+router.delete('/delete-letterhead', authMiddleware, adminOnly, deleteLetterhead);
 
 module.exports = router;

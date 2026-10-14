@@ -799,7 +799,7 @@ const PrescriptionPage = () => {
       {showPreview && (
         <div className="card p-4 bg-gray-50 border border-gray-200 shadow-inner space-y-2 no-print">
           <h3 className="text-xs font-extrabold text-gray-700 uppercase tracking-wider">A4 Printable Receipt Preview</h3>
-          <div className="bg-white p-3 border border-gray-300 rounded shadow-xs overflow-x-auto">
+          <div className="bg-white p-0 border-none rounded-none shadow-sm overflow-x-auto">
             <div>
               <PatientReceipt patient={patient} prescription={buildPrescriptionDataForPrint()} printOptions={printOptions} />
             </div>

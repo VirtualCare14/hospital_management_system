@@ -566,9 +566,7 @@ const ConsultationPage = () => {
       const pdf = new jsPDF('p', 'mm', 'a4');
       const width = pdf.internal.pageSize.getWidth();
       const height = (canvas.height * width) / canvas.width;
-      const padding = 5;
-
-      pdf.addImage(imgData, 'PNG', padding, padding, width - (padding * 2), height);
+      pdf.addImage(imgData, 'PNG', 0, 0, width, height);
       pdf.autoPrint();
       openPdfPrintWindow(pdf, 'Prescription / Consultation Receipt');
       toast.dismiss(toastId);
@@ -864,9 +862,7 @@ const ConsultationPage = () => {
           const pdf = new jsPDF('p', 'mm', 'a4');
           const width = pdf.internal.pageSize.getWidth();
           const height = (canvas.height * width) / canvas.width;
-          const padding = 5;
-
-          pdf.addImage(imgData, 'PNG', padding, padding, width - (padding * 2), height);
+          pdf.addImage(imgData, 'PNG', 0, 0, width, height);
           pdf.autoPrint();
           openPdfPrintWindow(pdf, 'Prescription / Consultation Receipt');
           toast.dismiss(toastId);
@@ -2152,7 +2148,7 @@ const ConsultationPage = () => {
 
             {/* Modal Body: Printable Receipt Preview */}
             <div className="p-4 sm:p-6 overflow-y-auto bg-slate-200/90 flex-1 flex justify-center items-start print:bg-transparent print:p-0 print:overflow-visible">
-              <div className="bg-white shadow-2xl rounded-sm w-full max-w-[210mm] border border-gray-300 overflow-hidden print:shadow-none print:border-none print:rounded-none print:w-full print:max-w-none print:overflow-visible print:p-0">
+              <div className="bg-white shadow-2xl rounded-none w-full max-w-[210mm] border-none overflow-hidden print:shadow-none print:border-none print:rounded-none print:w-full print:max-w-none print:overflow-visible print:p-0">
                 <PatientReceipt 
                   patient={buildPatientDataForReceipt()}
                   prescription={buildPrescriptionDataForPrint()}

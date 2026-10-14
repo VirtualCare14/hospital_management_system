@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, Printer, Search, Trash2, X, Calendar, Hash, Users, FileText, Clock, Filter, ChevronDown, ChevronLeft, ChevronRight, Copy, Pencil, Save, MoreVertical, CalendarCheck, CheckCircle, History, FlaskConical } from 'lucide-react';
+import { Eye, Printer, Search, Trash2, X, Calendar, Hash, Users, FileText, Clock, Filter, ChevronDown, ChevronLeft, ChevronRight, Copy, Pencil, Save, MoreVertical, CalendarCheck, CheckCircle, History, FlaskConical, Activity } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import toast from 'react-hot-toast';
@@ -60,14 +60,22 @@ const PatientList = () => {
   const [doctorsList, setDoctorsList] = useState([]);
   const [filterDoctorId, setFilterDoctorId] = useState('');
 
-  // Hospital settings (for payment due display permission)
+  // Hospital settings (for payment due display permission and letterhead configuration)
+  const [hospitalSettings, setHospitalSettings] = useState(null);
   const [receptionSeePatientDue, setReceptionSeePatientDue] = useState(false);
+  const [letterheadOption, setLetterheadOption] = useState('system'); // 'system' | 'image'
 
   useEffect(() => {
     client.get('/admin/hospital-settings')
       .then(({ data }) => {
         if (data?.exists && data?.data) {
+          setHospitalSettings(data.data);
           setReceptionSeePatientDue(Boolean(data.data.receptionSeePatientDue));
+          if (data.data.useSystemLetterhead === false && data.data.letterheadImageUrl) {
+            setLetterheadOption('image');
+          } else {
+            setLetterheadOption('system');
+          }
         }
       })
       .catch((err) => {
@@ -149,10 +157,14 @@ const PatientList = () => {
     patientName: '',
     mobile: '',
     aadhaar: '',
-    dob: '',
+    age: '',
     gender: 'Male',
     address: '',
-    category: 'General'
+    category: 'General',
+    weight: '',
+    height: '',
+    bloodPressure: '',
+    temperature: ''
   });
   const [savingEdit, setSavingEdit] = useState(false);
   const [loadingEdit, setLoadingEdit] = useState(false);
@@ -252,24 +264,54 @@ const PatientList = () => {
     setLoadingEdit(true);
     try {
       const { data } = await client.get(`/patients/${reg.patientId}`);
+      const vitals = data.demographics || reg.demographics || {};
+      let calculatedAge = '';
+      if (data.age !== undefined && data.age !== null && data.age !== '') {
+        calculatedAge = String(data.age);
+      } else if (data.dob) {
+        const bYear = new Date(data.dob).getFullYear();
+        const cAge = new Date().getFullYear() - bYear;
+        if (cAge >= 0 && cAge <= 150) calculatedAge = String(cAge);
+      } else if (reg.dob) {
+        const bYear = new Date(reg.dob).getFullYear();
+        const cAge = new Date().getFullYear() - bYear;
+        if (cAge >= 0 && cAge <= 150) calculatedAge = String(cAge);
+      }
+
       setEditForm({
         patientName: data.patientName || reg.patientName || '',
         mobile: data.mobile || reg.mobile || '',
         aadhaar: data.aadhaar || reg.aadhaar || '',
-        dob: data.dob ? new Date(data.dob).toISOString().split('T')[0] : '',
+        age: calculatedAge,
         gender: data.gender || reg.gender || 'Male',
         address: data.address || '',
-        category: data.category || 'General'
+        category: data.category || 'General',
+        weight: vitals.weight !== undefined && vitals.weight !== null ? String(vitals.weight) : '',
+        height: vitals.height !== undefined && vitals.height !== null ? String(vitals.height) : '',
+        bloodPressure: vitals.bloodPressure || '',
+        temperature: vitals.temperature !== undefined && vitals.temperature !== null ? String(vitals.temperature) : ''
       });
     } catch (err) {
+      const vitals = reg.demographics || {};
+      let calculatedAge = '';
+      if (reg.dob) {
+        const bYear = new Date(reg.dob).getFullYear();
+        const cAge = new Date().getFullYear() - bYear;
+        if (cAge >= 0 && cAge <= 150) calculatedAge = String(cAge);
+      }
+
       setEditForm({
         patientName: reg.patientName || '',
         mobile: reg.mobile || '',
         aadhaar: reg.aadhaar || '',
-        dob: '',
+        age: calculatedAge,
         gender: reg.gender || 'Male',
         address: '',
-        category: 'General'
+        category: 'General',
+        weight: vitals.weight !== undefined && vitals.weight !== null ? String(vitals.weight) : '',
+        height: vitals.height !== undefined && vitals.height !== null ? String(vitals.height) : '',
+        bloodPressure: vitals.bloodPressure || '',
+        temperature: vitals.temperature !== undefined && vitals.temperature !== null ? String(vitals.temperature) : ''
       });
     } finally {
       setLoadingEdit(false);
@@ -283,8 +325,13 @@ const PatientList = () => {
     }
     setSavingEdit(true);
     try {
+      const parsedAge = parseInt(editForm.age, 10);
+      const calculatedDob = !isNaN(parsedAge) ? `${new Date().getFullYear() - parsedAge}-01-01` : undefined;
+
       await client.put(`/patients/${editModal.patientId}`, {
         ...editForm,
+        age: !isNaN(parsedAge) ? parsedAge : undefined,
+        dob: calculatedDob,
         visitId: editModal._id
       });
       toast.success('Patient details updated successfully!');
@@ -293,7 +340,14 @@ const PatientList = () => {
         patientName: editForm.patientName,
         mobile: editForm.mobile,
         aadhaar: editForm.aadhaar,
-        gender: editForm.gender
+        gender: editForm.gender,
+        dob: calculatedDob || editModal.dob,
+        demographics: {
+          weight: editForm.weight !== '' ? Number(editForm.weight) : undefined,
+          height: editForm.height !== '' ? Number(editForm.height) : undefined,
+          bloodPressure: editForm.bloodPressure ? editForm.bloodPressure.trim() : undefined,
+          temperature: editForm.temperature !== '' ? Number(editForm.temperature) : undefined
+        }
       };
       await fetchRegistrations();
       setEditModal(null);
@@ -437,7 +491,8 @@ const PatientList = () => {
   useHeader({ onRefresh: fetchRegistrations });
 
   return (
-    <div className="space-y-5">
+    <>
+      <div className={`space-y-5 ${showReceipt ? 'no-print print:hidden' : ''}`}>
       {/* Statistics Cards with Interactive Quick Filters */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
         {/* Today's Patients Box */}
@@ -691,8 +746,16 @@ const PatientList = () => {
                         <span className="text-gray-400 text-xs italic font-medium">No Follow Up</span>
                       )}
                     </td>
-                    <td className="p-3 text-xs">{reg.department}</td>
-                    <td className="p-3 text-xs">Dr. {reg.doctorName}</td>
+                    <td className="p-3 text-xs">
+                      {reg.visitType === 'Lab' || reg.slot === 'Lab Walk-in' || (reg.department && reg.department.toLowerCase().includes('lab'))
+                        ? 'Laboratory'
+                        : (reg.department || 'General')}
+                    </td>
+                    <td className="p-3 text-xs">
+                      {reg.doctorName
+                        ? (reg.doctorName.toLowerCase().startsWith('dr') ? reg.doctorName : `Dr. ${reg.doctorName}`)
+                        : (reg.visitType === 'Lab' || reg.department === 'Laboratory' || (reg.department && reg.department.toLowerCase().includes('lab')) ? 'Self / Lab' : 'Self')}
+                    </td>
                     {receptionSeePatientDue && (
                       <td className="p-3 text-xs">
                         {reg.dueAmount > 0 ? (
@@ -941,12 +1004,15 @@ const PatientList = () => {
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold uppercase text-gray-500">Date of Birth</label>
+                    <label className="text-[10px] font-bold uppercase text-gray-500">Age (Years) *</label>
                     <input
-                      type="date"
+                      type="number"
                       className="input text-xs py-2"
-                      value={editForm.dob}
-                      onChange={(e) => setEditForm({ ...editForm, dob: e.target.value })}
+                      placeholder="Age (e.g. 25)"
+                      min="0"
+                      max="150"
+                      value={editForm.age}
+                      onChange={(e) => setEditForm({ ...editForm, age: e.target.value })}
                     />
                   </div>
                   <div>
@@ -983,6 +1049,58 @@ const PatientList = () => {
                       onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
                       placeholder="Patient address"
                     />
+                  </div>
+
+                  <div className="sm:col-span-2 pt-2 border-t border-orange-100">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <Activity className="h-4 w-4 text-orange-600" />
+                      <span className="text-xs font-bold text-gray-800">Patient Vitals (Optional)</span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 bg-orange-50/50 p-3 rounded-2xl border border-orange-100">
+                      <div>
+                        <label className="text-[10px] font-bold uppercase text-gray-500">Weight (kg)</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          className="input text-xs py-1.5 bg-white"
+                          value={editForm.weight}
+                          onChange={(e) => setEditForm({ ...editForm, weight: e.target.value })}
+                          placeholder="kg"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold uppercase text-gray-500">Height (cm)</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          className="input text-xs py-1.5 bg-white"
+                          value={editForm.height}
+                          onChange={(e) => setEditForm({ ...editForm, height: e.target.value })}
+                          placeholder="cm"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold uppercase text-gray-500">BP (mmHg)</label>
+                        <input
+                          type="text"
+                          className="input text-xs py-1.5 bg-white"
+                          value={editForm.bloodPressure}
+                          onChange={(e) => setEditForm({ ...editForm, bloodPressure: e.target.value })}
+                          placeholder="120/80"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold uppercase text-gray-500">Temp (°F)</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          className="input text-xs py-1.5 bg-white"
+                          value={editForm.temperature}
+                          onChange={(e) => setEditForm({ ...editForm, temperature: e.target.value })}
+                          placeholder="98.6"
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -1227,11 +1345,13 @@ const PatientList = () => {
         </div>
       )}
 
+      </div>
+
       {/* Receipt & Patient Slip Print Modal */}
       {showReceipt && patientDetails && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-          <div className="card w-full max-w-4xl max-h-[90vh] flex flex-col bg-white overflow-hidden shadow-2xl rounded-2xl">
-            <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-orange-50 to-white">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 print:p-0 print:m-0 print:static print:bg-transparent print:backdrop-blur-none">
+          <div className="card w-full max-w-4xl max-h-[90vh] flex flex-col bg-white overflow-hidden shadow-2xl rounded-2xl print:shadow-none print:border-none print:rounded-none print:max-w-none print:w-full print:max-h-none print:overflow-visible print:bg-transparent print:p-0 print:m-0">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-orange-50 to-white no-print print:hidden">
               <div>
                 <h3 className="font-extrabold text-gray-900 text-lg">Print Patient Documents</h3>
                 <p className="text-xs text-gray-500 font-medium">
@@ -1264,39 +1384,83 @@ const PatientList = () => {
               </div>
             </div>
 
-            {/* Document Preview Mode Tabs */}
-            <div className="flex items-center justify-between bg-gray-50 px-4 py-2 border-b border-gray-200">
-              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Document Preview Mode</span>
-              <div className="flex gap-1">
-                <button
-                  type="button"
-                  onClick={() => setPrintMode('patient_slip')}
-                  className={`text-xs font-bold px-3 py-1 rounded-md transition-all cursor-pointer ${
-                    printMode === 'patient_slip' ? 'bg-white text-indigo-700 shadow-xs border border-indigo-200' : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  Patient Slip Preview
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPrintMode('bill_receipt')}
-                  className={`text-xs font-bold px-3 py-1 rounded-md transition-all cursor-pointer ${
-                    printMode === 'bill_receipt' ? 'bg-white text-indigo-700 shadow-xs border border-indigo-200' : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  Bill Receipt Preview
-                </button>
+            {/* Document Preview Mode & Top Letterhead Controls */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gray-50 px-4 py-2 border-b border-gray-200 no-print print:hidden">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Document Mode:</span>
+                <div className="flex gap-1.5 bg-gray-200/80 p-0.5 rounded-md">
+                  <button
+                    type="button"
+                    onClick={() => setPrintMode('patient_slip')}
+                    className={`text-xs font-bold px-3 py-1 rounded transition-all cursor-pointer ${
+                      printMode === 'patient_slip' ? 'bg-white text-indigo-700 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    Patient Slip Preview
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPrintMode('bill_receipt')}
+                    className={`text-xs font-bold px-3 py-1 rounded transition-all cursor-pointer ${
+                      printMode === 'bill_receipt' ? 'bg-white text-indigo-700 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    Bill Receipt Preview
+                  </button>
+                </div>
               </div>
+
+              {printMode === 'patient_slip' && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Top Letterhead:</span>
+                  <div className="flex gap-1.5 bg-gray-200/80 p-0.5 rounded-md">
+                    <button
+                      type="button"
+                      onClick={() => setLetterheadOption('system')}
+                      className={`text-xs font-bold px-2.5 py-1 rounded transition-all cursor-pointer flex items-center gap-1.5 ${
+                        letterheadOption === 'system' ? 'bg-white text-orange-600 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                      title="Clean system-generated header with hospital name, logo, and contact info"
+                    >
+                      ⚙️ System Generated
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLetterheadOption('image')}
+                      className={`text-xs font-bold px-2.5 py-1 rounded transition-all cursor-pointer flex items-center gap-1.5 ${
+                        letterheadOption === 'image' ? 'bg-white text-orange-600 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                      title="Custom uploaded rectangular letterhead photo"
+                    >
+                      🖼️ Photo Letterhead
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
+            {printMode === 'patient_slip' && letterheadOption === 'image' && !hospitalSettings?.letterheadImageUrl && (
+              <div className="px-4 py-2 bg-amber-50 border-b border-amber-200 text-amber-800 text-xs flex items-center gap-2 no-print print:hidden">
+                <span>⚠️ No custom letterhead photo uploaded in Hospital Settings. Showing system-generated header as fallback. You can upload one in Admin &gt; Hospital Settings.</span>
+              </div>
+            )}
+
             {/* Scrollable Document Container */}
-            <div className="flex-1 overflow-auto p-4 bg-gray-100">
-              <PatientReceipt ref={receiptRef} patient={patientDetails} mode={printMode} />
+            <div className="flex-1 overflow-auto p-4 bg-gray-100 flex justify-center print:p-0 print:m-0 print:bg-transparent print:overflow-visible">
+              <div className="bg-white shadow-xl rounded-none border-none overflow-hidden w-full max-w-[210mm] print:shadow-none print:border-none print:rounded-none print:w-full print:max-w-[210mm]">
+                <PatientReceipt 
+                  ref={receiptRef} 
+                  patient={patientDetails} 
+                  mode={printMode} 
+                  letterheadMode={letterheadOption} 
+                  hospitalSettings={hospitalSettings} 
+                />
+              </div>
             </div>
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 };
 

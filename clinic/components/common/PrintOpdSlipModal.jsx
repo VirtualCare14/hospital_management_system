@@ -19,6 +19,23 @@ export default function PrintOpdSlipModal({ patient, data, mode: initialMode = '
             ? rawData.data
             : rawData));
   const [activeMode, setActiveMode] = useState(initialMode === 'all' ? 'patient_slip' : initialMode);
+  const [hospitalSettings, setHospitalSettings] = useState(null);
+  const [letterheadOption, setLetterheadOption] = useState('system');
+
+  useEffect(() => {
+    apiRequest('/admin/hospital-settings')
+      .then((res) => {
+        if (res?.exists && res?.data) {
+          setHospitalSettings(res.data);
+          if (res.data.useSystemLetterhead === false && res.data.letterheadImageUrl) {
+            setLetterheadOption('image');
+          } else {
+            setLetterheadOption('system');
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const handlePrint = async () => {
     if (!receiptRef.current) return;
@@ -79,10 +96,10 @@ export default function PrintOpdSlipModal({ patient, data, mode: initialMode = '
   if (!patientData) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden border border-gray-100 animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto print:p-0 print:m-0 print:static print:bg-transparent print:backdrop-blur-none">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden border border-gray-100 animate-in fade-in zoom-in-95 duration-200 print:shadow-none print:border-none print:rounded-none print:max-w-none print:w-full print:max-h-none print:overflow-visible print:bg-transparent print:p-0 print:m-0">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between px-6 py-3.5 border-b border-gray-100 bg-gray-50/90 gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between px-6 py-3.5 border-b border-gray-100 bg-gray-50/90 gap-3 no-print print:hidden">
           <div className="flex items-center gap-3">
             <div>
               <h3 className="text-base font-black text-gray-900 leading-tight">
@@ -92,25 +109,52 @@ export default function PrintOpdSlipModal({ patient, data, mode: initialMode = '
             </div>
 
             {/* Mode Switcher Tabs */}
-            <div className="flex items-center gap-1 p-1 bg-gray-200/70 rounded-xl ml-2">
-              <button
-                type="button"
-                onClick={() => setActiveMode('patient_slip')}
-                className={`flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg transition cursor-pointer ${
-                  activeMode === 'patient_slip' ? 'bg-white text-orange-600 shadow-xs' : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                <FileText className="w-3.5 h-3.5" /> Patient Slip
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveMode('bill_receipt')}
-                className={`flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg transition cursor-pointer ${
-                  activeMode === 'bill_receipt' ? 'bg-white text-orange-600 shadow-xs' : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                <Receipt className="w-3.5 h-3.5" /> Bill Receipt
-              </button>
+            <div className="flex flex-wrap items-center gap-2 ml-2">
+              <div className="flex items-center gap-1 p-1 bg-gray-200/70 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setActiveMode('patient_slip')}
+                  className={`flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg transition cursor-pointer ${
+                    activeMode === 'patient_slip' ? 'bg-white text-orange-600 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5" /> Patient Slip
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveMode('bill_receipt')}
+                  className={`flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg transition cursor-pointer ${
+                    activeMode === 'bill_receipt' ? 'bg-white text-orange-600 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <Receipt className="w-3.5 h-3.5" /> Bill Receipt
+                </button>
+              </div>
+
+              {activeMode === 'patient_slip' && (
+                <div className="flex items-center gap-1 p-1 bg-gray-200/70 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setLetterheadOption('system')}
+                    className={`px-2.5 py-1 text-xs font-bold rounded-lg transition cursor-pointer flex items-center gap-1 ${
+                      letterheadOption === 'system' ? 'bg-white text-orange-600 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                    title="System-generated hospital header"
+                  >
+                    ⚙️ System
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLetterheadOption('image')}
+                    className={`px-2.5 py-1 text-xs font-bold rounded-lg transition cursor-pointer flex items-center gap-1 ${
+                      letterheadOption === 'image' ? 'bg-white text-orange-600 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                    title="Uploaded photo letterhead"
+                  >
+                    🖼️ Photo
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -140,9 +184,15 @@ export default function PrintOpdSlipModal({ patient, data, mode: initialMode = '
         </div>
 
         {/* Receipt Container */}
-        <div className="flex-1 overflow-y-auto p-6 bg-gray-100/70 flex justify-center">
-          <div className="shadow-lg bg-white rounded-md overflow-hidden max-w-full">
-            <PatientReceipt ref={receiptRef} patient={patientData} mode={activeMode} />
+        <div className="flex-1 overflow-y-auto p-6 bg-gray-100/70 flex justify-center print:p-0 print:m-0 print:bg-transparent print:overflow-visible">
+          <div className="shadow-lg bg-white rounded-none border-none overflow-hidden max-w-full print:shadow-none print:border-none print:rounded-none print:w-full print:max-w-[210mm]">
+            <PatientReceipt 
+              ref={receiptRef} 
+              patient={patientData} 
+              mode={activeMode} 
+              letterheadMode={letterheadOption} 
+              hospitalSettings={hospitalSettings} 
+            />
           </div>
         </div>
       </div>

@@ -151,8 +151,7 @@ const PatientConsultationTrack = () => {
           const width = pdf.internal.pageSize.getWidth();
           const height = (canvas.height * width) / canvas.width;
           
-          const padding = 5;
-          pdf.addImage(imgData, 'PNG', padding, padding, width - (padding * 2), height);
+          pdf.addImage(imgData, 'PNG', 0, 0, width, height);
           
           pdf.autoPrint();
           openPdfPrintWindow(pdf, 'Patient Consultation Receipt');

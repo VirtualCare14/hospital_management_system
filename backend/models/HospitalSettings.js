@@ -52,6 +52,10 @@ const hospitalSettingsSchema = new mongoose.Schema({
     type: Number,
     default: 3.40
   },
+  useSystemLetterhead: {
+    type: Boolean,
+    default: true
+  },
   hospitalId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Hospital',

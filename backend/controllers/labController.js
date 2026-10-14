@@ -21,7 +21,8 @@ const {
   ensureSystemCategoryForHospital,
   ensureDiagnosisTestForHospital
 } = require('../seeds/seedDiagnosisCategory');
-const { standardTests } = require('../seeds/seedStandardLabTemplates');
+const generateUhid = require('../utils/generateUhid');
+const { isSamePatientName, normalizePatientName } = require('../utils/patientUtils');
 const { v2: cloudinary } = require('cloudinary');
 
 cloudinary.config({
@@ -1629,59 +1630,69 @@ const createDirectLabRequest = async (req, res) => {
     // Robust Patient Resolution
     let patient = null;
     const rawPatientId = patientId || req.body.patientId || req.body.id;
+    const expectedName = (req.body.patientName || `${req.body.firstName || ''} ${req.body.lastName || ''}`).trim();
+    const pMobile = (req.body.patientMobile || req.body.mobile || '').trim();
+    const pUhid = (req.body.uhid || '').trim();
+    const pAadhaar = (req.body.aadhaar || '').trim();
 
     if (rawPatientId && mongoose.Types.ObjectId.isValid(rawPatientId)) {
-      patient = await Patient.findById(rawPatientId);
-      if (!patient) {
+      const directPatient = await Patient.findById(rawPatientId);
+      if (directPatient && (!expectedName || isSamePatientName(directPatient.patientName, expectedName))) {
+        patient = directPatient;
+      } else if (!directPatient) {
         // Check if rawPatientId is a Visit ID
         const visit = await Visit.findById(rawPatientId);
         if (visit && visit.patientId) {
-          patient = await Patient.findById(visit.patientId);
+          const visitPatient = await Patient.findById(visit.patientId);
+          if (visitPatient && (!expectedName || isSamePatientName(visitPatient.patientName, expectedName))) {
+            patient = visitPatient;
+          }
         }
       }
     }
 
-    if (!patient && rawPatientId) {
-      patient = await Patient.findOne({
-        $or: [
-          { uhid: String(rawPatientId).trim() },
-          { mobile: String(rawPatientId).trim() }
-        ]
-      });
+    if (!patient && pUhid) {
+      const uhidPatient = await Patient.findOne({ uhid: pUhid });
+      if (uhidPatient && (!expectedName || isSamePatientName(uhidPatient.patientName, expectedName))) {
+        patient = uhidPatient;
+      }
     }
 
-    // Lookup by mobile, aadhaar, or uhid if passed in body
-    if (!patient) {
-      const pMobile = (req.body.patientMobile || req.body.mobile || '').trim();
-      const pUhid = (req.body.uhid || '').trim();
-      const pAadhaar = (req.body.aadhaar || '').trim();
+    if (!patient && pMobile && pMobile.length >= 4) {
+      const mobileQuery = { mobile: pMobile };
+      if (req.user?.hospitalId) mobileQuery.hospitalId = req.user.hospitalId;
+      const candidates = await Patient.find(mobileQuery).sort({ createdAt: -1 });
+      if (candidates.length > 0) {
+        if (expectedName) {
+          patient = candidates.find(c => isSamePatientName(c.patientName, expectedName)) || null;
+        } else {
+          patient = candidates[0];
+        }
+      }
+    }
 
-      if (pUhid || pMobile || pAadhaar) {
-        patient = await Patient.findOne({
-          $or: [
-            ...(pUhid ? [{ uhid: pUhid }] : []),
-            ...(pMobile ? [{ mobile: pMobile }] : []),
-            ...(pAadhaar ? [{ aadhaar: pAadhaar }] : [])
-          ]
-        });
+    // If still not found and patient name is provided, auto-create a brand new patient record with a newly generated UHID
+    if (!patient && expectedName) {
+      const genUhid = await generateUhid(pAadhaar);
+      let cleanDob = req.body.dob ? new Date(req.body.dob) : null;
+      if (!cleanDob || isNaN(cleanDob.getTime())) {
+        const ageNum = parseInt(req.body.age || req.body.ageYears, 10) || 30;
+        const birthYear = new Date().getFullYear() - ageNum;
+        cleanDob = new Date(`${birthYear}-01-01`);
       }
 
-      // If still not found and patient name is provided, auto-create a patient record
-      if (!patient && (req.body.patientName || req.body.firstName)) {
-        const pName = (req.body.patientName || `${req.body.firstName || ''} ${req.body.lastName || ''}`).trim();
-        const count = await Patient.countDocuments();
-        const genUhid = `UHID-${String(count + 1).padStart(5, '0')}`;
-        patient = await Patient.create({
-          hospitalId: req.user.hospitalId,
-          uhid: genUhid,
-          patientName: pName,
-          gender: req.body.gender || 'Male',
-          dob: req.body.dob || new Date('1995-01-01'),
-          mobile: pMobile || '9999999999',
-          email: req.body.email || '',
-          address: req.body.address || 'Not specified'
-        });
-      }
+      patient = await Patient.create({
+        hospitalId: req.user?.hospitalId,
+        uhid: genUhid,
+        patientName: expectedName,
+        gender: req.body.gender || 'Male',
+        dob: cleanDob,
+        mobile: pMobile || '9999999999',
+        email: req.body.email || '',
+        address: req.body.address || 'Not specified',
+        aadhaar: pAadhaar || '',
+        createdBy: req.user?._id
+      });
     }
 
     if (!patient) {
@@ -1831,6 +1842,62 @@ const createDirectLabRequest = async (req, res) => {
       }
     } catch (billErr) {
       console.warn('Bill creation notice:', billErr);
+    }
+
+    // Synchronize Visit record for Patient List in Reception module
+    try {
+      const today = new Date();
+      const todayStr = today.toISOString().split('T')[0];
+      const datePart = todayStr.replace(/-/g, '');
+      const prefix = `REG-${datePart}-`;
+      const lastVisit = await Visit.findOne({
+        ...(req.user?.hospitalId ? { hospitalId: req.user.hospitalId } : {}),
+        registrationNumber: { $regex: `^${prefix}` }
+      }).sort({ registrationNumber: -1 });
+
+      let seq = 1;
+      if (lastVisit && lastVisit.registrationNumber) {
+        const lastSeq = parseInt(lastVisit.registrationNumber.split('-').pop(), 10);
+        if (!isNaN(lastSeq)) seq = lastSeq + 1;
+      }
+      const regNumber = `${prefix}${String(seq).padStart(4, '0')}`;
+
+      const visitCount = await Visit.countDocuments({
+        patientId: patient._id,
+        ...(req.user?.hospitalId ? { hospitalId: req.user.hospitalId } : {})
+      });
+
+      const labVisit = new Visit({
+        hospitalId: req.user?.hospitalId || patient.hospitalId,
+        patientId: patient._id,
+        uhid: patient.uhid,
+        registrationNumber: regNumber,
+        registrationDate: new Date(),
+        visitType: 'Lab',
+        department: 'Laboratory',
+        doctorId: resolvedDoctorId,
+        appointmentDate: todayStr,
+        slot: 'Lab Walk-in',
+        appointmentNumber: 1,
+        appointmentDateSeq: todayStr,
+        appointmentDept: 'Laboratory',
+        appointmentDoctorId: resolvedDoctorId,
+        consultationStatus: 'completed',
+        visitNumber: visitCount + 1,
+        createdBy: req.user?._id,
+        opdFee: 0,
+        grossOpdFee: 0,
+        discountAmount: 0,
+        discountType: 'none',
+        discountValue: 0,
+        netOpdFee: 0,
+        paymentStatus: 'Paid',
+        paymentMode: mappedPaymentMethod || 'Cash'
+      });
+
+      await labVisit.save();
+    } catch (visitErr) {
+      console.warn('Lab visit creation notice:', visitErr.message);
     }
 
     res.status(201).json({

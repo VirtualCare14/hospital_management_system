@@ -53,6 +53,7 @@ const PatientRegistration = () => {
   const department = watch('department');
   const doctorId = watch('doctorId');
   const appointmentDate = watch('appointmentDate');
+  const patientNameValue = watch('patientName') || '';
   const mobileValue = watch('mobile') || '';
   const aadhaarValue = watch('aadhaar') || '';
 
@@ -172,7 +173,13 @@ const PatientRegistration = () => {
         if (data.patient.patientName) setValue('patientName', data.patient.patientName);
         if (data.patient.mobile) setValue('mobile', data.patient.mobile);
         if (data.patient.aadhaar) setValue('aadhaar', data.patient.aadhaar);
-        if (data.patient.dob) setValue('dob', new Date(data.patient.dob).toISOString().split('T')[0]);
+        if (data.patient.age !== undefined && data.patient.age !== null && data.patient.age !== '') {
+          setValue('age', data.patient.age);
+        } else if (data.patient.dob) {
+          const birthYear = new Date(data.patient.dob).getFullYear();
+          const calcAge = new Date().getFullYear() - birthYear;
+          setValue('age', (calcAge >= 0 && calcAge <= 150) ? calcAge : '');
+        }
         if (data.patient.gender) setValue('gender', data.patient.gender);
         if (data.patient.address) setValue('address', data.patient.address);
 
@@ -195,6 +202,27 @@ const PatientRegistration = () => {
       setLookingUp(false);
     }
   };
+
+  useEffect(() => {
+    const cleanMobile = (mobileValue || '').replace(/\D/g, '');
+    if (cleanMobile.length === 10 && !isExistingPatient) {
+      performLookup({ mobile: cleanMobile });
+    }
+  }, [mobileValue, isExistingPatient]);
+
+  // If receptionist changes the name to a different patient/family member, reset existing patient link
+  useEffect(() => {
+    if (isExistingPatient && existingPatientData?.patientName && patientNameValue) {
+      const normalize = (s) => (s || '').toLowerCase().replace(/^(mr|mrs|ms|dr|master|miss)\.?\s+/i, '').replace(/[^a-z0-9]/g, '');
+      const curNorm = normalize(patientNameValue);
+      const exNorm = normalize(existingPatientData.patientName);
+      if (curNorm && exNorm && curNorm !== exNorm) {
+        setIsExistingPatient(false);
+        setExistingPatientData(null);
+        setPatientDuesData(null);
+      }
+    }
+  }, [patientNameValue, isExistingPatient, existingPatientData]);
 
   const handleMobileBlur = (e) => {
     const mobile = e.target.value?.trim();
@@ -240,9 +268,14 @@ const PatientRegistration = () => {
       const grossFee = parseFloat(data.opdFee) || 0;
       const discType = data.discountType || 'none';
       const discVal = parseFloat(data.discountValue) || 0;
+      const parsedAge = parseInt(data.age, 10) || 0;
+      const birthYear = new Date().getFullYear() - parsedAge;
+      const calculatedDob = `${birthYear}-01-01`;
 
       const payload = {
         ...data,
+        age: parsedAge,
+        dob: calculatedDob,
         opdFee: grossFee,
         discountType: discType,
         discountValue: discVal,
@@ -287,6 +320,25 @@ const PatientRegistration = () => {
   }, []);
 
   const [printMode, setPrintMode] = useState('patient_slip');
+  const [hospitalSettings, setHospitalSettings] = useState(null);
+  const [letterheadOption, setLetterheadOption] = useState('system'); // 'system' | 'image'
+
+  useEffect(() => {
+    client.get('/admin/hospital-settings')
+      .then(({ data }) => {
+        if (data?.exists && data?.data) {
+          setHospitalSettings(data.data);
+          if (data.data.useSystemLetterhead === false && data.data.letterheadImageUrl) {
+            setLetterheadOption('image');
+          } else {
+            setLetterheadOption('system');
+          }
+        }
+      })
+      .catch((err) => {
+        console.error('Error fetching hospital settings in PatientRegistration:', err);
+      });
+  }, []);
 
   const handlePrint = async (targetMode) => {
     setPrintMode(targetMode);
@@ -321,7 +373,7 @@ const PatientRegistration = () => {
 
   return (
     <div className="space-y-6 w-full">
-      <form onSubmit={handleSubmit(onSubmit)} className="card p-6 space-y-6 bg-white shadow-md rounded-2xl border border-gray-200 w-full">
+      <form onSubmit={handleSubmit(onSubmit)} className={`card p-6 space-y-6 bg-white shadow-md rounded-2xl border border-gray-200 w-full ${showReceipt ? 'no-print print:hidden' : ''}`}>
         {isExistingPatient && (
           <div className="flex justify-end border-b border-gray-200 pb-3">
             <span className="inline-flex items-center gap-1.5 text-xs font-extrabold text-green-700 bg-green-50 border border-green-300 px-3.5 py-1.5 rounded-full">
@@ -617,7 +669,7 @@ const PatientRegistration = () => {
                 )}
               </Field>
 
-              {/* Gender & DOB Row */}
+              {/* Gender & Age Row */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Gender" required icon={Users} error={errors.gender?.message}>
                   <select className="input h-11 pl-9 pr-2 text-xs sm:text-sm font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs" {...register('gender', { required: 'Gender is required' })}>
@@ -628,11 +680,18 @@ const PatientRegistration = () => {
                   </select>
                 </Field>
 
-                <Field label="Date of Birth" required icon={Calendar} error={errors.dob?.message}>
+                <Field label="Age (Years)" required icon={Calendar} error={errors.age?.message}>
                   <input
-                    className="input h-11 pl-9 pr-1 text-xs sm:text-sm font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs"
-                    type="date"
-                    {...register('dob', { required: 'Date of birth is required' })}
+                    className="input h-11 pl-9 pr-1 text-xs sm:text-sm font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                    type="number"
+                    placeholder="Enter age (e.g. 25)"
+                    min="0"
+                    max="150"
+                    {...register('age', {
+                      required: 'Age is required',
+                      min: { value: 0, message: 'Age cannot be negative' },
+                      max: { value: 150, message: 'Please enter a valid age' }
+                    })}
                   />
                 </Field>
               </div>
@@ -882,7 +941,7 @@ const PatientRegistration = () => {
 
       {/* Receipt & Patient Slip Preview and Print Options Modal */}
       {showReceipt && registeredPatient && (
-        <div className="card p-5 space-y-4 border-2 border-indigo-100 bg-white rounded-2xl shadow-xl">
+        <div className="card p-5 space-y-4 border-2 border-indigo-100 bg-white rounded-2xl shadow-xl print:p-0 print:m-0 print:border-none print:shadow-none print:rounded-none print:bg-transparent">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-3">
             <div>
               <h2 className="font-extrabold text-gray-900 text-lg">Patient Registered Successfully</h2>
@@ -938,32 +997,76 @@ const PatientRegistration = () => {
             </div>
           </div>
 
-          <div className="flex items-center justify-between bg-gray-50 px-4 py-2 border border-gray-200 rounded-lg">
-            <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Document Preview Mode</span>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setPrintMode('patient_slip')}
-                className={`text-xs font-bold px-3 py-1.5 rounded-md transition-all cursor-pointer ${
-                  printMode === 'patient_slip' ? 'bg-white text-indigo-700 shadow-xs border border-indigo-200' : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                Patient Slip Preview
-              </button>
-              <button
-                type="button"
-                onClick={() => setPrintMode('bill_receipt')}
-                className={`text-xs font-bold px-3 py-1.5 rounded-md transition-all cursor-pointer ${
-                  printMode === 'bill_receipt' ? 'bg-white text-indigo-700 shadow-xs border border-indigo-200' : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                Bill Receipt Preview
-              </button>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gray-50 px-4 py-2.5 border border-gray-200 rounded-lg">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Document Mode:</span>
+              <div className="flex gap-1.5 bg-gray-200/80 p-0.5 rounded-md">
+                <button
+                  type="button"
+                  onClick={() => setPrintMode('patient_slip')}
+                  className={`text-xs font-bold px-3 py-1 rounded transition-all cursor-pointer ${
+                    printMode === 'patient_slip' ? 'bg-white text-indigo-700 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Patient Slip Preview
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPrintMode('bill_receipt')}
+                  className={`text-xs font-bold px-3 py-1 rounded transition-all cursor-pointer ${
+                    printMode === 'bill_receipt' ? 'bg-white text-indigo-700 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Bill Receipt Preview
+                </button>
+              </div>
             </div>
+
+            {printMode === 'patient_slip' && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Top Letterhead:</span>
+                <div className="flex gap-1.5 bg-gray-200/80 p-0.5 rounded-md">
+                  <button
+                    type="button"
+                    onClick={() => setLetterheadOption('system')}
+                    className={`text-xs font-bold px-2.5 py-1 rounded transition-all cursor-pointer flex items-center gap-1.5 ${
+                      letterheadOption === 'system' ? 'bg-white text-orange-600 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                    title="Clean system-generated header with hospital name, logo, and contact info"
+                  >
+                    ⚙️ System Generated
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLetterheadOption('image')}
+                    className={`text-xs font-bold px-2.5 py-1 rounded transition-all cursor-pointer flex items-center gap-1.5 ${
+                      letterheadOption === 'image' ? 'bg-white text-orange-600 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                    title="Custom uploaded rectangular letterhead photo"
+                  >
+                    🖼️ Photo Letterhead
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="overflow-auto border border-gray-200 rounded-xl bg-gray-100 p-3" style={{ maxHeight: '650px' }}>
-            <PatientReceipt ref={receiptRef} patient={registeredPatient} mode={printMode} />
+          {printMode === 'patient_slip' && letterheadOption === 'image' && !hospitalSettings?.letterheadImageUrl && (
+            <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs flex items-center gap-2">
+              <span>⚠️ No letterhead photo uploaded in Hospital Settings. Showing system-generated header as fallback. You can upload one in Admin &gt; Hospital Settings.</span>
+            </div>
+          )}
+
+          <div className="overflow-auto border border-gray-200 rounded-xl bg-gray-100 p-3 flex justify-center print:p-0 print:m-0 print:border-none print:bg-transparent" style={{ maxHeight: '650px' }}>
+            <div className="bg-white shadow-xl rounded-none border-none overflow-hidden w-full max-w-[210mm] print:shadow-none print:border-none print:rounded-none print:w-full print:max-w-[210mm]">
+              <PatientReceipt 
+                ref={receiptRef} 
+                patient={registeredPatient} 
+                mode={printMode} 
+                letterheadMode={letterheadOption} 
+                hospitalSettings={hospitalSettings} 
+              />
+            </div>
           </div>
         </div>
       )}

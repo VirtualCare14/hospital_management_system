@@ -96,10 +96,10 @@ const Sidebar = () => {
 
   const receptionLinks = [
     { to: '/reception/register', label: 'Register Patient', icon: ClipboardList },
+    { to: '/reception/lab-billing', label: 'New Bill (Lab)', icon: FlaskConical },
     { to: '/reception/patients', label: 'Patient List', icon: Users },
     { to: '/reception/follow-ups', label: 'Patient Follow-Ups Tracking', icon: CalendarCheck },
     { to: '/reception/abha', label: 'ABHA Services', icon: Fingerprint },
-    { to: '/reception/lab-billing', label: 'New Bill (Lab)', icon: FlaskConical },
   ];
 
   const doctorLinks = [

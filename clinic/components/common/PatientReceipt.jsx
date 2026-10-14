@@ -78,10 +78,11 @@ const convertImgToBase64 = (url) => {
   });
 };
 
-const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, language, mode = 'patient_slip', printOptions: propPrintOptions }, ref) => {
+const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, language, mode = 'patient_slip', letterheadMode = 'auto', printOptions: propPrintOptions }, ref) => {
   const activeLang = language || prescription?.language || 'English';
   const [hospital, setHospital] = useState(hospitalSettings || null);
   const [resolvedLogo, setResolvedLogo] = useState(hospitalSettings?.logoUrl || hospitalSettings?.logo || '');
+  const [resolvedLetterhead, setResolvedLetterhead] = useState(hospitalSettings?.letterheadImageUrl || '');
 
   const printOptions = propPrintOptions || prescription?.printOptions || patient?.printOptions || {
     printVitals: true,
@@ -111,6 +112,14 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
           const base64 = await convertImgToBase64(rawLogo);
           if (isMounted && base64) {
             setResolvedLogo(base64);
+          }
+        }
+        const rawLetterhead = data.letterheadImageUrl || '';
+        if (rawLetterhead) {
+          setResolvedLetterhead(rawLetterhead);
+          const base64Lh = await convertImgToBase64(rawLetterhead);
+          if (isMounted && base64Lh) {
+            setResolvedLetterhead(base64Lh);
           }
         }
       }
@@ -213,82 +222,118 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
   const isPatientSlipOnly = mode === 'patient_slip';
   const isPrescription = !!prescription;
 
+  // Check if uploaded photo letterhead should be shown
+  const showUploadedLetterhead =
+    letterheadMode === 'image'
+      ? Boolean(resolvedLetterhead || hospital?.letterheadImageUrl)
+      : letterheadMode === 'system'
+        ? false
+        : (!hospital?.useSystemLetterhead && Boolean(resolvedLetterhead || hospital?.letterheadImageUrl));
+
   // Header component shared between Slip & Receipt (Medora360 reception design)
-  const renderHospitalHeader = () => (
-    <div style={{
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      borderBottom: '2.5px solid #000',
-      paddingBottom: '14px',
-      marginBottom: '14px'
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, paddingRight: '20px' }}>
-        {resolvedLogo && (
-          <div style={{ flexShrink: 0 }}>
-            <img 
-              src={resolvedLogo} 
-              crossOrigin="anonymous" 
-              alt="Logo" 
-              style={{ maxHeight: '75px', maxWidth: '75px', objectFit: 'contain', display: 'block' }} 
-            />
+  const renderHospitalHeader = () => {
+    if (showUploadedLetterhead) {
+      return (
+        <div style={{
+          width: 'calc(100% + 16mm)',
+          marginLeft: '-8mm',
+          marginRight: '-8mm',
+          marginTop: '0',
+          height: `${hospital?.letterheadHeaderHeight || 4.6}cm`,
+          overflow: 'hidden',
+          marginBottom: '8px',
+          border: 'none',
+          borderBottom: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          <img
+            src={resolvedLetterhead || hospital?.letterheadImageUrl}
+            crossOrigin="anonymous"
+            alt="Hospital Letterhead"
+            style={{ width: '100%', height: '100%', objectFit: 'fill', display: 'block', border: 'none', outline: 'none' }}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        borderBottom: '2.5px solid #000',
+        paddingBottom: '14px',
+        marginBottom: '14px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, paddingRight: '20px' }}>
+          {resolvedLogo && (
+            <div style={{ flexShrink: 0 }}>
+              <img 
+                src={resolvedLogo} 
+                crossOrigin="anonymous" 
+                alt="Logo" 
+                style={{ maxHeight: '75px', maxWidth: '75px', objectFit: 'contain', display: 'block' }} 
+              />
+            </div>
+          )}
+          <div>
+            <h1 style={{ fontSize: '22px', fontWeight: '800', margin: '0', textTransform: 'uppercase', letterSpacing: '0.8px', color: '#111827' }}>
+              {hospital?.hospitalName || 'Hospital Name'}
+            </h1>
+            {hospital?.hospitalHeading && (
+              <p style={{ fontSize: '11px', margin: '3px 0 0 0', color: '#4b5563', fontWeight: '500' }}>{hospital.hospitalHeading}</p>
+            )}
           </div>
-        )}
-        <div>
-          <h1 style={{ fontSize: '22px', fontWeight: '800', margin: '0', textTransform: 'uppercase', letterSpacing: '0.8px', color: '#111827' }}>
-            {hospital?.hospitalName || 'Hospital Name'}
-          </h1>
-          {hospital?.hospitalHeading && (
-            <p style={{ fontSize: '11px', margin: '3px 0 0 0', color: '#4b5563', fontWeight: '500' }}>{hospital.hospitalHeading}</p>
+        </div>
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '4px',
+          textAlign: 'left',
+          fontSize: '11px',
+          color: '#111827',
+          lineHeight: '1.4',
+          maxWidth: '400px',
+          width: '100%',
+          alignItems: 'flex-start'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+            <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+            </svg>
+            <div><strong>Address:</strong> {hospital?.address || 'Hospital Address'}</div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+            <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
+              <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/>
+            </svg>
+            <div><strong>Contact No:</strong> {formatHospitalPhoneNumbers(hospital)}</div>
+          </div>
+
+          {(hospital?.emailAddress || hospital?.email) && (
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+              <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
+                <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+              </svg>
+              <div><strong>Email ID:</strong> {hospital.emailAddress || hospital.email}</div>
+            </div>
+          )}
+
+          {hospital?.website && (
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+              <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+              </svg>
+              <div><strong>Website:</strong> {hospital.website}</div>
+            </div>
           )}
         </div>
       </div>
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '4px',
-        textAlign: 'left',
-        fontSize: '11px',
-        color: '#111827',
-        lineHeight: '1.4',
-        maxWidth: '400px',
-        width: '100%',
-        alignItems: 'flex-start'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-          <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-          </svg>
-          <div><strong>Address:</strong> {hospital?.address || 'Hospital Address'}</div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-          <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
-            <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/>
-          </svg>
-          <div><strong>Contact No:</strong> {formatHospitalPhoneNumbers(hospital)}</div>
-        </div>
-
-        {(hospital?.emailAddress || hospital?.email) && (
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-            <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
-              <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
-            </svg>
-            <div><strong>Email ID:</strong> {hospital.emailAddress || hospital.email}</div>
-          </div>
-        )}
-
-        {hospital?.website && (
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-            <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
-            </svg>
-            <div><strong>Website:</strong> {hospital.website}</div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+    );
+  };
 
   // ========================================================
   // VIEW 1: BILL RECEIPT / PAYMENT RECEIPT (Medora360 Format)
@@ -299,7 +344,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
         width: '100%',
         maxWidth: '210mm',
         minHeight: 'auto',
-        padding: '6mm 8mm 8mm 8mm',
+        padding: showUploadedLetterhead ? '0 8mm 8mm 8mm' : '6mm 8mm 8mm 8mm',
         margin: '0 auto',
         backgroundColor: '#ffffff',
         color: '#000000',
@@ -312,35 +357,35 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
         {renderHospitalHeader()}
 
         {/* Title */}
-        <div style={{ textAlign: 'center', marginBottom: '10px', borderBottom: '1px solid #000', paddingBottom: '4px' }}>
-          <h2 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0', textTransform: 'uppercase', letterSpacing: '1px' }}>
+        <div style={{ textAlign: 'center', marginBottom: '8px', borderBottom: '1px solid #000', paddingBottom: '3px' }}>
+          <h2 style={{ fontSize: '13px', fontWeight: 'bold', margin: '0', textTransform: 'uppercase', letterSpacing: '1px' }}>
             Payment Receipt
           </h2>
         </div>
 
         {/* Patient Details Box */}
-        <div style={{ marginBottom: '12px', border: '1px solid #000', borderRadius: '2px', padding: '8px' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+        <div style={{ marginBottom: '8px', border: '1px solid #000', borderRadius: '2px', padding: '5px 8px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10.5px' }}>
             <tbody>
               <tr>
-                <td style={{ padding: '3px 0', width: '50%' }}><strong>Patient Name:</strong> {patientName}</td>
-                <td style={{ padding: '3px 0', width: '50%' }}><strong>UHID:</strong> {uhid}</td>
+                <td style={{ padding: '1.5px 0', width: '50%', lineHeight: '1.3' }}><strong>Patient Name:</strong> {patientName}</td>
+                <td style={{ padding: '1.5px 0', width: '50%', lineHeight: '1.3' }}><strong>UHID:</strong> {uhid}</td>
               </tr>
               <tr>
-                <td style={{ padding: '3px 0' }}><strong>Gender / Age:</strong> {gender} {ageDisplay ? `(${ageDisplay})` : ''}</td>
-                <td style={{ padding: '3px 0' }}><strong>Mobile Number:</strong> {mobile}</td>
+                <td style={{ padding: '1.5px 0', lineHeight: '1.3' }}><strong>Gender / Age:</strong> {gender} {ageDisplay ? `(${ageDisplay})` : ''}</td>
+                <td style={{ padding: '1.5px 0', lineHeight: '1.3' }}><strong>Mobile Number:</strong> {mobile}</td>
               </tr>
               <tr>
-                <td style={{ padding: '3px 0' }}><strong>Doctor Name:</strong> Dr. {doctorNameStr}</td>
-                <td style={{ padding: '3px 0' }}><strong>Department:</strong> {department}</td>
+                <td style={{ padding: '1.5px 0', lineHeight: '1.3' }}><strong>Doctor Name:</strong> Dr. {doctorNameStr}</td>
+                <td style={{ padding: '1.5px 0', lineHeight: '1.3' }}><strong>Department:</strong> {department}</td>
               </tr>
               <tr>
-                <td style={{ padding: '3px 0' }}><strong>Date / Time:</strong> {apptDateRaw ? formatDate(apptDateRaw) : '-'} {slot ? `(${slot})` : ''}</td>
-                <td style={{ padding: '3px 0' }}><strong>Receipt No:</strong> {billNumber || regNumber}</td>
+                <td style={{ padding: '1.5px 0', lineHeight: '1.3' }}><strong>Date / Time:</strong> {apptDateRaw ? formatDate(apptDateRaw) : '-'} {slot ? `(${slot})` : ''}</td>
+                <td style={{ padding: '1.5px 0', lineHeight: '1.3' }}><strong>Receipt No:</strong> {billNumber || regNumber}</td>
               </tr>
               {address && (
                 <tr>
-                  <td colSpan={2} style={{ padding: '3px 0' }}><strong>Address:</strong> {address}</td>
+                  <td colSpan={2} style={{ padding: '1.5px 0', lineHeight: '1.3' }}><strong>Address:</strong> {address}</td>
                 </tr>
               )}
             </tbody>
@@ -348,34 +393,34 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
         </div>
 
         {/* Bill Items Table */}
-        <div style={{ marginBottom: '15px' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', border: '1px solid #000' }}>
+        <div style={{ marginBottom: '8px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10.5px', border: '1px solid #000' }}>
             <thead>
               <tr style={{ backgroundColor: '#f0f0f0' }}>
-                <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'left' }}>Description</th>
-                <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>Gross Fee</th>
-                <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>Discount</th>
-                <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>Net Amount</th>
-                <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center' }}>Payment Mode</th>
+                <th style={{ padding: '4px 6px', border: '1px solid #000', textAlign: 'left' }}>Description</th>
+                <th style={{ padding: '4px 6px', border: '1px solid #000', textAlign: 'right' }}>Gross Fee</th>
+                <th style={{ padding: '4px 6px', border: '1px solid #000', textAlign: 'right' }}>Discount</th>
+                <th style={{ padding: '4px 6px', border: '1px solid #000', textAlign: 'right' }}>Net Amount</th>
+                <th style={{ padding: '4px 6px', border: '1px solid #000', textAlign: 'center' }}>Payment Mode</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td style={{ padding: '6px 8px', border: '1px solid #000' }}>
+                <td style={{ padding: '4px 6px', border: '1px solid #000' }}>
                   OPD Consultation Fee - Dr. {doctorNameStr}
                 </td>
-                <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>
+                <td style={{ padding: '4px 6px', border: '1px solid #000', textAlign: 'right' }}>
                   ₹{grossFee.toFixed(2)}
                 </td>
-                <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>
+                <td style={{ padding: '4px 6px', border: '1px solid #000', textAlign: 'right' }}>
                   {discountType === 'percent'
                     ? `${discountValue}% (₹${discountAmount.toFixed(2)})`
                     : (discountAmount > 0 ? `₹${discountAmount.toFixed(2)}` : '₹0.00')}
                 </td>
-                <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right', fontWeight: 'bold' }}>
+                <td style={{ padding: '4px 6px', border: '1px solid #000', textAlign: 'right', fontWeight: 'bold' }}>
                   ₹{netFee.toFixed(2)}
                 </td>
-                <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center' }}>
+                <td style={{ padding: '4px 6px', border: '1px solid #000', textAlign: 'center' }}>
                   {paymentMode}
                 </td>
               </tr>
@@ -384,7 +429,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
         </div>
 
         {/* Amount in Words */}
-        <div style={{ marginBottom: '15px', padding: '6px 8px', backgroundColor: '#f9f9f9', border: '1px solid #ccc', fontSize: '11px' }}>
+        <div style={{ marginBottom: '8px', padding: '4px 6px', backgroundColor: '#f9f9f9', border: '1px solid #ccc', fontSize: '10.5px' }}>
           <strong>Amount in Words:</strong> {amountInWords(netFee)}
         </div>
 
@@ -416,14 +461,14 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
       width: '100%',
       maxWidth: '210mm',
       minHeight: isPatientSlipOnly ? '280mm' : 'auto',
-      padding: '5px 8mm 8mm 8mm',
-      margin: '5px auto 0 auto',
-      marginTop: '5px',
+      padding: showUploadedLetterhead ? '0 8mm 8mm 8mm' : '5px 8mm 8mm 8mm',
+      margin: '0 auto',
+      marginTop: '0',
       backgroundColor: '#ffffff',
       color: '#000000',
       fontFamily: 'Arial, Helvetica, sans-serif',
       fontSize: '11px',
-      lineHeight: '1.5',
+      lineHeight: '1.4',
       position: 'relative',
       boxSizing: 'border-box'
     }}>
@@ -431,67 +476,67 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
 
       {/* Document Title */}
       <h2 style={{ 
-        fontSize: '15px', 
+        fontSize: '13px', 
         fontWeight: 'bold', 
-        margin: '0 0 15px 0', 
+        margin: '0 0 6px 0', 
         textAlign: 'center',
         textTransform: 'uppercase',
-        letterSpacing: '2px',
+        letterSpacing: '1.5px',
         borderBottom: '1px solid #000',
-        paddingBottom: '4px'
+        paddingBottom: '3px'
       }}>
         {documentTitle}
       </h2>
 
       {/* Patient & Appointment Details Box */}
-      <div style={{ marginBottom: '15px', padding: '10px', border: '1px solid #000', borderRadius: '2px' }}>
-        <p style={{ fontWeight: 'bold', margin: '0 0 8px 0', fontSize: '12px', textDecoration: 'underline' }}>
+      <div style={{ marginBottom: '8px', padding: '6px 8px', border: '1px solid #000', borderRadius: '2px' }}>
+        <p style={{ fontWeight: 'bold', margin: '0 0 4px 0', fontSize: '11px', textDecoration: 'underline' }}>
           {t(activeLang, 'patientInfo')} & Appointment Details
         </p>
-        <div style={{ display: 'flex', flexWrap: 'wrap' }}>
-          <div style={{ width: '50%', padding: '3px 10px 3px 0', boxSizing: 'border-box' }}>
-            <p style={{ margin: '0', fontSize: '11px' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', rowGap: '2px' }}>
+          <div style={{ width: '50%', padding: '1.5px 8px 1.5px 0', boxSizing: 'border-box' }}>
+            <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
               <strong>Patient Name:</strong> {patientName}
             </p>
           </div>
-          <div style={{ width: '50%', padding: '3px 0 3px 10px', boxSizing: 'border-box' }}>
-            <p style={{ margin: '0', fontSize: '11px' }}>
+          <div style={{ width: '50%', padding: '1.5px 0 1.5px 8px', boxSizing: 'border-box' }}>
+            <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
               <strong>UHID:</strong> {uhid}
             </p>
           </div>
-          <div style={{ width: '50%', padding: '3px 10px 3px 0', boxSizing: 'border-box' }}>
-            <p style={{ margin: '0', fontSize: '11px' }}>
+          <div style={{ width: '50%', padding: '1.5px 8px 1.5px 0', boxSizing: 'border-box' }}>
+            <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
               <strong>Gender / Age:</strong> {gender} {ageDisplay ? `(${ageDisplay})` : ''}
             </p>
           </div>
-          <div style={{ width: '50%', padding: '3px 0 3px 10px', boxSizing: 'border-box' }}>
-            <p style={{ margin: '0', fontSize: '11px' }}>
+          <div style={{ width: '50%', padding: '1.5px 0 1.5px 8px', boxSizing: 'border-box' }}>
+            <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
               <strong>Mobile Number:</strong> {mobile}
             </p>
           </div>
-          <div style={{ width: '50%', padding: '3px 10px 3px 0', boxSizing: 'border-box' }}>
-            <p style={{ margin: '0', fontSize: '11px' }}>
+          <div style={{ width: '50%', padding: '1.5px 8px 1.5px 0', boxSizing: 'border-box' }}>
+            <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
               <strong>Department:</strong> {department}
             </p>
           </div>
-          <div style={{ width: '50%', padding: '3px 0 3px 10px', boxSizing: 'border-box' }}>
-            <p style={{ margin: '0', fontSize: '11px' }}>
+          <div style={{ width: '50%', padding: '1.5px 0 1.5px 8px', boxSizing: 'border-box' }}>
+            <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
               <strong>Doctor Name:</strong> Dr. {doctorNameStr}
             </p>
           </div>
-          <div style={{ width: '50%', padding: '3px 10px 3px 0', boxSizing: 'border-box' }}>
-            <p style={{ margin: '0', fontSize: '11px' }}>
+          <div style={{ width: '50%', padding: '1.5px 8px 1.5px 0', boxSizing: 'border-box' }}>
+            <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
               <strong>Appointment Date & Time:</strong> {apptDateRaw ? formatDate(apptDateRaw) : '-'} {slot ? `(${slot})` : ''}
             </p>
           </div>
-          <div style={{ width: '50%', padding: '3px 0 3px 10px', boxSizing: 'border-box' }}>
-            <p style={{ margin: '0', fontSize: '11px' }}>
+          <div style={{ width: '50%', padding: '1.5px 0 1.5px 8px', boxSizing: 'border-box' }}>
+            <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
               <strong>Registration Number:</strong> {regNumber}
             </p>
           </div>
           {address && (
-            <div style={{ width: '100%', padding: '3px 0 3px 0', boxSizing: 'border-box' }}>
-              <p style={{ margin: '0', fontSize: '11px' }}>
+            <div style={{ width: '100%', padding: '1.5px 0 1.5px 0', boxSizing: 'border-box' }}>
+              <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
                 <strong>Address:</strong> {address}
               </p>
             </div>

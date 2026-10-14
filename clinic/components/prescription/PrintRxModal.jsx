@@ -69,10 +69,10 @@ export default function PrintRxModal({ patient, prescription, onClose }) {
   if (!patient) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[95vh] flex flex-col overflow-hidden border border-gray-100 animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto print:p-0 print:m-0 print:static print:bg-transparent print:backdrop-blur-none">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[95vh] flex flex-col overflow-hidden border border-gray-100 animate-in fade-in zoom-in-95 duration-200 print:shadow-none print:border-none print:rounded-none print:max-w-none print:w-full print:max-h-none print:overflow-visible print:bg-transparent print:p-0 print:m-0">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/80">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/80 no-print print:hidden">
           <div>
             <h3 className="text-lg font-bold text-gray-900">
               Doctor Prescription (Rx)
@@ -105,8 +105,8 @@ export default function PrintRxModal({ patient, prescription, onClose }) {
         </div>
 
         {/* Receipt Container */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-slate-200/90 flex justify-center">
-          <div className="shadow-2xl bg-white rounded-sm overflow-hidden" style={{ width: '210mm', minHeight: '297mm' }}>
+        <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-slate-200/90 flex justify-center print:p-0 print:m-0 print:bg-transparent print:overflow-visible">
+          <div className="shadow-2xl bg-white rounded-none border-none overflow-hidden print:shadow-none print:border-none print:rounded-none" style={{ width: '210mm', minHeight: '297mm' }}>
             <PatientReceipt
               ref={receiptRef}
               patient={patient}

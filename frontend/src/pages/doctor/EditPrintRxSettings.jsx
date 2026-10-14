@@ -225,8 +225,8 @@ const EditPrintRxSettings = () => {
             </span>
           </div>
 
-          <div className="card p-4 bg-gray-100 border border-gray-300 rounded-2xl overflow-x-auto max-h-[750px] overflow-y-auto shadow-inner">
-            <div ref={receiptRef}>
+          <div className="p-4 bg-gray-100 border border-gray-200 rounded-2xl overflow-x-auto max-h-[750px] overflow-y-auto shadow-inner flex justify-center">
+            <div className="bg-white shadow-xl rounded-none border-none overflow-hidden w-full max-w-[210mm]" ref={receiptRef}>
               <PatientReceipt
                 patient={samplePatient}
                 prescription={samplePrescription}

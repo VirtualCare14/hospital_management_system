@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
+import api from '../lib/api';
 import { 
   Building2, 
   UserCheck, 
@@ -42,9 +43,7 @@ export default function CaseDetails({ caseData, setCaseData, selectedCategory, s
     }
     return [
       'Main Hospital Lab',
-      'North Branch Centre',
-      'South Satellite Lab',
-      'Home Collection Unit'
+      'Home Collection'
     ];
   });
 
@@ -71,10 +70,7 @@ export default function CaseDetails({ caseData, setCaseData, selectedCategory, s
       }
     }
     return [
-      'Self (Patient Walk-in)',
-      'Rahul Kumar (Phlebotomist)',
-      'Suresh Singh (Home Agent)',
-      'Anjali Verma (Lab Assistant)'
+      'Self (Patient Walk-in)'
     ];
   });
 
@@ -87,13 +83,48 @@ export default function CaseDetails({ caseData, setCaseData, selectedCategory, s
       }
     }
     return [
-      { id: '1', codeId: '1', name: 'Self' },
-      { id: '2', codeId: '2', name: 'Dr. A. K. Sharma (Cardiologist)' },
-      { id: '3', codeId: '3', name: 'Dr. Priya Mehta (General Physician)' },
-      { id: '4', codeId: '4', name: 'Dr. Rajesh Gupta (Pathologist)' },
-      { id: '5', codeId: '5', name: 'City Hospital & Diagnostic Clinic' }
+      { id: '1', codeId: '1', name: 'Self' }
     ];
   });
+
+  useEffect(() => {
+    api.get('/users')
+      .then(res => {
+        const users = res.data?.users || res.data || (Array.isArray(res) ? res : []);
+        if (Array.isArray(users) && users.length > 0) {
+          const docs = users.filter(u => u.role === 'doctor' || u.role === 'nursing');
+          const staff = users.filter(u => u.role === 'lab' || u.role === 'lab_technician' || u.role === 'staff' || u.role === 'phlebotomist');
+
+          if (docs.length > 0) {
+            const docReferrers = docs.map((d, i) => {
+              const rawName = (d.doctorName || d.name || d.username || 'Doctor').trim();
+              const nameWithPrefix = rawName.toLowerCase().startsWith('dr') ? rawName : `Dr. ${rawName}`;
+              return {
+                id: `doc_${d._id}`,
+                codeId: String(i + 2),
+                name: nameWithPrefix
+              };
+            });
+            setReferrers(prev => {
+              const base = prev.filter(r => r.name === 'Self');
+              return [...base, ...docReferrers];
+            });
+          }
+
+          const agentList = ['Self (Patient Walk-in)'];
+          staff.forEach(s => {
+            const sName = s.name || s.doctorName || s.username;
+            if (sName && !agentList.includes(sName)) {
+              agentList.push(sName);
+            }
+          });
+          if (agentList.length > 1) {
+            setCollectionAgents(agentList);
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const categories = [
     { id: 'LAB', label: 'LAB', icon: FlaskConical },

@@ -240,21 +240,27 @@ input.input[class*="pr-10"], .pr-10 {
     margin: 0 !important;
     padding: 0 !important;
     background: #ffffff !important;
-    width: 100% !important;
+    width: 210mm !important;
     height: auto !important;
-    min-height: 0 !important;
+    min-height: 100% !important;
     overflow: visible !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
-  /* Hide app navigation, headers, sidebars, modals backdrop, buttons, tabs, tools */
+  /* 1. Global hide: Everything inside body is hidden by default in print */
+  body * {
+    visibility: hidden !important;
+  }
+
+  /* 2. Completely remove navigation, headers, sidebars, buttons, tools, alerts from print flow */
   header,
   nav,
   aside,
   footer,
   button,
   .btn,
+  .btn-secondary,
   .no-print,
   .print\:hidden,
   [role="navigation"],
@@ -266,23 +272,39 @@ input.input[class*="pr-10"], .pr-10 {
     display: none !important;
   }
 
-  /* Reset layout wrappers to allow printable content to render cleanly */
+  /* 3. Strip all modal backgrounds, backdrops, cards, boxes, and wrappers */
   #root,
   .min-h-screen,
   main,
   form,
-  fieldset {
+  fieldset,
+  .fixed,
+  .modal-backdrop,
+  [role="dialog"],
+  [class*="backdrop-blur"],
+  [class*="animate-in"] {
+    position: static !important;
+    display: block !important;
+    width: 100% !important;
     height: auto !important;
     min-height: 0 !important;
-    overflow: visible !important;
-    background: transparent !important;
-    border: none !important;
+    max-width: none !important;
+    max-height: none !important;
     margin: 0 !important;
     padding: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
     box-shadow: none !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    transform: none !important;
+    animation: none !important;
+    filter: none !important;
+    overflow: visible !important;
   }
 
-  /* Hide non-printable form cards when in consultation / prescription pages */
+  /* 4. Hide non-printable form cards when in consultation / prescription / admin pages */
   .consultation-form-section:not(.printable-section),
   .card:not(.printable-card):not(.a4-receipt),
   .history-sidebar,
@@ -290,7 +312,23 @@ input.input[class*="pr-10"], .pr-10 {
     display: none !important;
   }
 
-  /* Always show printable receipt containers */
+  /* 5. Make all printable document areas and their descendants fully visible */
+  .a4-receipt,
+  .a4-receipt *,
+  #invoice-print-area,
+  #invoice-print-area *,
+  .printable-area,
+  .printable-area *,
+  #doctor-rx-print-container,
+  #doctor-rx-print-container *,
+  #ipd-discharge-print-container,
+  #ipd-discharge-print-container *,
+  .lab-receipt-print-area,
+  .lab-receipt-print-area * {
+    visibility: visible !important;
+  }
+
+  /* 6. Position printable receipts flush at top-left across the full 210mm A4 width */
   .a4-receipt,
   #invoice-print-area,
   .printable-area,
@@ -299,31 +337,30 @@ input.input[class*="pr-10"], .pr-10 {
   .lab-receipt-print-area {
     display: block !important;
     visibility: visible !important;
-    position: relative !important;
+    position: absolute !important;
     left: 0 !important;
     top: 0 !important;
-    width: 100% !important;
+    width: 210mm !important;
     max-width: 210mm !important;
+    min-width: 210mm !important;
     min-height: 0 !important;
-    padding: 5px 8mm 6mm 8mm !important;
-    margin: 5px auto 0 auto !important;
-    margin-top: 5px !important;
+    padding: 0 8mm 6mm 8mm !important;
+    margin: 0 !important;
+    margin-top: 0 !important;
     box-shadow: none !important;
     border: none !important;
+    border-radius: 0 !important;
     background: #ffffff !important;
     color: #000000 !important;
     box-sizing: border-box !important;
+    z-index: 999999 !important;
     page-break-after: auto !important;
     page-break-inside: auto !important;
   }
 
-  .a4-receipt *,
-  #invoice-print-area *,
-  .printable-area *,
-  #doctor-rx-print-container *,
-  #ipd-discharge-print-container *,
-  .lab-receipt-print-area * {
-    visibility: visible !important;
+  .a4-receipt img {
+    border: none !important;
+    outline: none !important;
   }
 }
 

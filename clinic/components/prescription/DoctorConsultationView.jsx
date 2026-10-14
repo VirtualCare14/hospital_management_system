@@ -1358,9 +1358,9 @@ export default function DoctorConsultationView({ patient, onBack, onSuccess, onN
 
       {/* Prescription Preview Modal */}
       {showPreviewModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[95vh] flex flex-col overflow-hidden border border-gray-100 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between px-6 py-3.5 border-b border-gray-100 bg-gray-50/90">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto print:p-0 print:m-0 print:static print:bg-transparent print:backdrop-blur-none">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[95vh] flex flex-col overflow-hidden border border-gray-100 animate-in fade-in zoom-in-95 duration-200 print:shadow-none print:border-none print:rounded-none print:max-w-none print:w-full print:max-h-none print:overflow-visible print:bg-transparent print:p-0 print:m-0">
+            <div className="flex items-center justify-between px-6 py-3.5 border-b border-gray-100 bg-gray-50/90 no-print print:hidden">
               <div className="flex items-center gap-2">
                 <Printer className="w-5 h-5 text-orange-600" />
                 <h3 className="text-base font-black text-gray-900">Prescription Preview</h3>
@@ -1385,8 +1385,8 @@ export default function DoctorConsultationView({ patient, onBack, onSuccess, onN
                 </button>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-slate-200/90 flex justify-center">
-              <div className="shadow-2xl bg-white rounded-sm overflow-hidden" style={{ width: '210mm', minHeight: '297mm' }}>
+            <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-slate-200/90 flex justify-center print:p-0 print:m-0 print:bg-transparent print:overflow-visible">
+              <div className="shadow-2xl bg-white rounded-none border-none overflow-hidden print:shadow-none print:border-none print:rounded-none" style={{ width: '210mm', minHeight: '297mm' }}>
                 <PatientReceipt
                   patient={receiptPatientData}
                   prescription={receiptPrescriptionData}
