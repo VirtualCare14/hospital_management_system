@@ -32,19 +32,37 @@ const getInsuranceCompanies = async (req, res) => {
     }
 
     if (payerType && payerType.trim()) {
-      query.payerType = payerType.trim();
+      const pt = payerType.trim();
+      if (pt === 'Other (Custom)' || pt === 'Other') {
+        query.$or = [
+          { payerType: { $in: ['Other (Custom)', 'Other'] } },
+          { customPayerType: { $exists: true, $ne: '' } }
+        ];
+      } else {
+        query.payerType = pt;
+      }
     }
 
     if (search && search.trim()) {
       const escaped = escapeRegex(search.trim());
-      query.$or = [
+      const searchConditions = [
         { name: { $regex: escaped, $options: 'i' } },
         { code: { $regex: escaped, $options: 'i' } },
+        { customPayerType: { $regex: escaped, $options: 'i' } },
         { tollFreeNumber: { $regex: escaped, $options: 'i' } },
         { claimEmail: { $regex: escaped, $options: 'i' } },
         { cashlessEmail: { $regex: escaped, $options: 'i' } },
         { city: { $regex: escaped, $options: 'i' } }
       ];
+      if (query.$or) {
+        query.$and = [
+          { $or: query.$or },
+          { $or: searchConditions }
+        ];
+        delete query.$or;
+      } else {
+        query.$or = searchConditions;
+      }
     }
 
     // Check if pagination is requested
@@ -91,7 +109,7 @@ const getActiveInsuranceCompanies = async (req, res) => {
   try {
     const query = tenantFilter(req, { isActive: true });
     const companies = await InsuranceCompany.find(query)
-      .select('_id name code payerType cashlessEmail claimEmail hasInHouseTpa settlementTatDays')
+      .select('_id name code payerType customPayerType cashlessEmail claimEmail hasInHouseTpa settlementTatDays')
       .sort({ name: 1 })
       .lean();
     res.status(200).json(companies);
@@ -132,6 +150,7 @@ const createInsuranceCompany = async (req, res) => {
       name,
       code,
       payerType,
+      customPayerType,
       tollFreeNumber,
       claimEmail,
       cashlessEmail,
@@ -151,6 +170,44 @@ const createInsuranceCompany = async (req, res) => {
       return res.status(400).json({ message: 'Insurance Company Name is required.' });
     }
 
+    if (!payerType || !payerType.trim()) {
+      return res.status(400).json({ message: 'Payer Type is required.' });
+    }
+
+    const trimmedPayerType = payerType.trim();
+    const allowedPayerTypes = [
+      'Private',
+      'Public PSU',
+      'Standalone Health',
+      'Government Scheme',
+      'Corporate Trust',
+      'Panel',
+      'Other (Custom)',
+      'Other'
+    ];
+    if (!allowedPayerTypes.includes(trimmedPayerType)) {
+      return res.status(400).json({
+        message: `Invalid Payer Type. Allowed values are: ${allowedPayerTypes.filter(p => p !== 'Other').join(', ')}.`
+      });
+    }
+
+    let finalCustomPayerType = '';
+    if (trimmedPayerType === 'Other (Custom)' || trimmedPayerType === 'Other') {
+      if (!customPayerType || !customPayerType.trim()) {
+        return res.status(400).json({ message: 'Custom Payer Type is required when Other (Custom) is selected.' });
+      }
+      finalCustomPayerType = customPayerType.trim();
+    }
+
+    // Safely handle optional Settlement TAT
+    let parsedTat = null;
+    if (settlementTatDays !== undefined && settlementTatDays !== null && String(settlementTatDays).trim() !== '') {
+      parsedTat = Number(settlementTatDays);
+      if (isNaN(parsedTat) || parsedTat < 1) {
+        return res.status(400).json({ message: 'Settlement TAT must be a positive number (minimum 1 day).' });
+      }
+    }
+
     const hospitalId = req.user.hospitalId;
     const trimmedName = name.trim();
 
@@ -167,7 +224,15 @@ const createInsuranceCompany = async (req, res) => {
     let finalCode = code && code.trim() ? code.trim().toUpperCase() : '';
     if (!finalCode) {
       const count = await InsuranceCompany.countDocuments({ hospitalId });
-      finalCode = `INS-${1001 + count}`;
+      let candidate = `INS-${1001 + count}`;
+      let codeExists = await InsuranceCompany.findOne({ hospitalId, code: candidate });
+      let increment = 1;
+      while (codeExists) {
+        candidate = `INS-${1001 + count + increment}`;
+        codeExists = await InsuranceCompany.findOne({ hospitalId, code: candidate });
+        increment++;
+      }
+      finalCode = candidate;
     } else {
       // Check unique code per hospital
       const existingCode = await InsuranceCompany.findOne({
@@ -183,7 +248,8 @@ const createInsuranceCompany = async (req, res) => {
       hospitalId,
       name: trimmedName,
       code: finalCode,
-      payerType: payerType || 'Private',
+      payerType: trimmedPayerType,
+      customPayerType: finalCustomPayerType,
       tollFreeNumber: tollFreeNumber?.trim() || '',
       claimEmail: claimEmail?.trim().toLowerCase() || '',
       cashlessEmail: cashlessEmail?.trim().toLowerCase() || '',
@@ -195,7 +261,7 @@ const createInsuranceCompany = async (req, res) => {
       gstin: gstin?.trim() || '',
       panNumber: panNumber?.trim() || '',
       hasInHouseTpa: Boolean(hasInHouseTpa),
-      settlementTatDays: Number(settlementTatDays) > 0 ? Number(settlementTatDays) : 30,
+      settlementTatDays: parsedTat,
       notes: notes?.trim() || '',
       isActive: true,
       createdBy: req.user._id,
@@ -228,7 +294,10 @@ const updateInsuranceCompany = async (req, res) => {
     delete updateData.createdBy;
     delete updateData._id;
 
-    if (updateData.name && updateData.name.trim()) {
+    if (updateData.name !== undefined) {
+      if (!updateData.name || !updateData.name.trim()) {
+        return res.status(400).json({ message: 'Insurance Company Name is required.' });
+      }
       const trimmedName = updateData.name.trim();
       const existingName = await InsuranceCompany.findOne({
         hospitalId,
@@ -241,24 +310,113 @@ const updateInsuranceCompany = async (req, res) => {
       updateData.name = trimmedName;
     }
 
-    if (updateData.code && updateData.code.trim()) {
-      const finalCode = updateData.code.trim().toUpperCase();
-      const existingCode = await InsuranceCompany.findOne({
-        hospitalId,
-        _id: { $ne: id },
-        code: finalCode
-      });
-      if (existingCode) {
-        return res.status(400).json({ message: 'Another insurance company with this code already exists.' });
+    if (updateData.code !== undefined) {
+      if (updateData.code && updateData.code.trim()) {
+        const finalCode = updateData.code.trim().toUpperCase();
+        const existingCode = await InsuranceCompany.findOne({
+          hospitalId,
+          _id: { $ne: id },
+          code: finalCode
+        });
+        if (existingCode) {
+          return res.status(400).json({ message: 'Another insurance company with this code already exists.' });
+        }
+        updateData.code = finalCode;
+      } else {
+        // If code is empty or blank, preserve existing code and do not overwrite
+        delete updateData.code;
       }
-      updateData.code = finalCode;
+    }
+
+    const allowedPayerTypes = [
+      'Private',
+      'Public PSU',
+      'Standalone Health',
+      'Government Scheme',
+      'Corporate Trust',
+      'Panel',
+      'Other (Custom)',
+      'Other'
+    ];
+
+    if (updateData.payerType !== undefined) {
+      if (!updateData.payerType || !updateData.payerType.trim()) {
+        return res.status(400).json({ message: 'Payer Type is required.' });
+      }
+      const trimmedPayerType = updateData.payerType.trim();
+      if (!allowedPayerTypes.includes(trimmedPayerType)) {
+        return res.status(400).json({
+          message: `Invalid Payer Type. Allowed values are: ${allowedPayerTypes.filter(p => p !== 'Other').join(', ')}.`
+        });
+      }
+      updateData.payerType = trimmedPayerType;
+
+      if (trimmedPayerType === 'Other (Custom)' || trimmedPayerType === 'Other') {
+        if (!updateData.customPayerType || !updateData.customPayerType.trim()) {
+          return res.status(400).json({ message: 'Custom Payer Type is required when Other (Custom) is selected.' });
+        }
+        updateData.customPayerType = updateData.customPayerType.trim();
+      } else {
+        updateData.customPayerType = '';
+      }
+    } else if (updateData.customPayerType !== undefined) {
+      const existing = await InsuranceCompany.findOne({ _id: id, hospitalId });
+      if (existing && (existing.payerType === 'Other (Custom)' || existing.payerType === 'Other')) {
+        if (!updateData.customPayerType || !updateData.customPayerType.trim()) {
+          return res.status(400).json({ message: 'Custom Payer Type is required when Other (Custom) is selected.' });
+        }
+        updateData.customPayerType = updateData.customPayerType.trim();
+      }
+    }
+
+    // Safely handle Settlement TAT on update
+    if (updateData.settlementTatDays !== undefined) {
+      if (updateData.settlementTatDays === null || updateData.settlementTatDays === '' || String(updateData.settlementTatDays).trim() === '') {
+        updateData.settlementTatDays = null;
+      } else {
+        const parsedTat = Number(updateData.settlementTatDays);
+        if (isNaN(parsedTat) || parsedTat < 1) {
+          return res.status(400).json({ message: 'Settlement TAT must be a positive number (minimum 1 day).' });
+        }
+        updateData.settlementTatDays = parsedTat;
+      }
     }
 
     if (updateData.claimEmail !== undefined) {
-      updateData.claimEmail = updateData.claimEmail.trim().toLowerCase();
+      updateData.claimEmail = updateData.claimEmail?.trim().toLowerCase() || '';
     }
     if (updateData.cashlessEmail !== undefined) {
-      updateData.cashlessEmail = updateData.cashlessEmail.trim().toLowerCase();
+      updateData.cashlessEmail = updateData.cashlessEmail?.trim().toLowerCase() || '';
+    }
+    if (updateData.tollFreeNumber !== undefined) {
+      updateData.tollFreeNumber = updateData.tollFreeNumber?.trim() || '';
+    }
+    if (updateData.portalUrl !== undefined) {
+      updateData.portalUrl = updateData.portalUrl?.trim() || '';
+    }
+    if (updateData.address !== undefined) {
+      updateData.address = updateData.address?.trim() || '';
+    }
+    if (updateData.city !== undefined) {
+      updateData.city = updateData.city?.trim() || '';
+    }
+    if (updateData.state !== undefined) {
+      updateData.state = updateData.state?.trim() || '';
+    }
+    if (updateData.pincode !== undefined) {
+      updateData.pincode = updateData.pincode?.trim() || '';
+    }
+    if (updateData.gstin !== undefined) {
+      updateData.gstin = updateData.gstin?.trim() || '';
+    }
+    if (updateData.panNumber !== undefined) {
+      updateData.panNumber = updateData.panNumber?.trim() || '';
+    }
+    if (updateData.notes !== undefined) {
+      updateData.notes = updateData.notes?.trim() || '';
+    }
+    if (updateData.hasInHouseTpa !== undefined) {
+      updateData.hasInHouseTpa = Boolean(updateData.hasInHouseTpa);
     }
 
     updateData.updatedBy = req.user._id;
@@ -390,7 +548,7 @@ const getTpas = async (req, res) => {
       const [totalRecords, providers] = await Promise.all([
         TpaMaster.countDocuments(query),
         TpaMaster.find(query)
-          .populate('associatedInsurers', 'name code payerType cashlessEmail hasInHouseTpa')
+          .populate('associatedInsurers', 'name code payerType customPayerType cashlessEmail hasInHouseTpa')
           .sort({ name: 1 })
           .skip(skip)
           .limit(limitVal)
@@ -412,7 +570,7 @@ const getTpas = async (req, res) => {
 
     // Default: return list sorted by name
     const providers = await TpaMaster.find(query)
-      .populate('associatedInsurers', 'name code payerType cashlessEmail hasInHouseTpa')
+      .populate('associatedInsurers', 'name code payerType customPayerType cashlessEmail hasInHouseTpa')
       .sort({ name: 1 })
       .lean();
 
@@ -431,7 +589,7 @@ const getActiveTpas = async (req, res) => {
     const query = tenantFilter(req, { isActive: true });
     const providers = await TpaMaster.find(query)
       .select('_id name code preauthEmail contactPhone preauthTatHours discountRatePercentage associatedInsurers')
-      .populate('associatedInsurers', 'name code payerType')
+      .populate('associatedInsurers', 'name code payerType customPayerType')
       .sort({ name: 1 })
       .lean();
     res.status(200).json(providers);
@@ -452,7 +610,7 @@ const getTpaById = async (req, res) => {
     }
 
     const tpa = await TpaMaster.findOne(tenantFilter(req, { _id: id }))
-      .populate('associatedInsurers', 'name code payerType cashlessEmail claimEmail hasInHouseTpa');
+      .populate('associatedInsurers', 'name code payerType customPayerType cashlessEmail claimEmail hasInHouseTpa');
 
     if (!tpa) {
       return res.status(404).json({ message: 'TPA not found.' });
@@ -557,7 +715,7 @@ const createTpa = async (req, res) => {
     });
 
     await newTpa.save();
-    const populated = await TpaMaster.findById(newTpa._id).populate('associatedInsurers', 'name code payerType cashlessEmail');
+    const populated = await TpaMaster.findById(newTpa._id).populate('associatedInsurers', 'name code payerType customPayerType cashlessEmail');
 
     res.status(201).json(populated);
   } catch (error) {
@@ -626,7 +784,7 @@ const updateTpa = async (req, res) => {
       { _id: id, hospitalId },
       { $set: updateData },
       { returnDocument: 'after', runValidators: true }
-    ).populate('associatedInsurers', 'name code payerType cashlessEmail');
+    ).populate('associatedInsurers', 'name code payerType customPayerType cashlessEmail');
 
     if (!tpa) {
       return res.status(404).json({ message: 'TPA not found.' });

@@ -26,13 +26,16 @@ import client from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import SkeletonTable from '../../components/Skeleton/SkeletonTable';
 import PaginationFooter from '../../components/PaginationFooter';
+import { useHeader } from '../../context/HeaderContext';
 
 const PAYER_TYPES = [
   'Private',
   'Public PSU',
   'Standalone Health',
   'Government Scheme',
-  'Corporate Trust'
+  'Corporate Trust',
+  'Panel',
+  'Other (Custom)'
 ];
 
 const TpaMasterSettings = () => {
@@ -64,6 +67,7 @@ const TpaMasterSettings = () => {
     name: '',
     code: '',
     payerType: 'Private',
+    customPayerType: '',
     tollFreeNumber: '',
     claimEmail: '',
     cashlessEmail: '',
@@ -75,7 +79,7 @@ const TpaMasterSettings = () => {
     gstin: '',
     panNumber: '',
     hasInHouseTpa: false,
-    settlementTatDays: 30,
+    settlementTatDays: '',
     notes: ''
   });
 
@@ -187,7 +191,25 @@ const TpaMasterSettings = () => {
     }
   }, [tpaSearch, tpaInsurerFilter, tpaStatus, tpaPage, tpaPageSize]);
 
-  // Initial and reactive effects
+  // Header Refresh Integration
+  useHeader({
+    title: 'TPA & Insurance Master',
+    subtitle: 'Configure Insurance Companies, TPAs (Third Party Administrators), and Cashless Pre-Auth settings',
+    onRefresh: () => {
+      loadInsurers();
+      loadTpas();
+      loadActiveInsurersList();
+    }
+  });
+
+  // Load initial counts for both tabs on mount
+  useEffect(() => {
+    loadInsurers();
+    loadTpas();
+    loadActiveInsurersList();
+  }, []);
+
+  // Reactive tab switcher and filter reload
   useEffect(() => {
     if (activeTab === 'insurers') {
       loadInsurers();
@@ -207,6 +229,7 @@ const TpaMasterSettings = () => {
       name: '',
       code: '',
       payerType: 'Private',
+      customPayerType: '',
       tollFreeNumber: '',
       claimEmail: '',
       cashlessEmail: '',
@@ -218,7 +241,7 @@ const TpaMasterSettings = () => {
       gstin: '',
       panNumber: '',
       hasInHouseTpa: false,
-      settlementTatDays: 30,
+      settlementTatDays: '',
       notes: ''
     });
     setShowInsurerModal(true);
@@ -227,10 +250,23 @@ const TpaMasterSettings = () => {
   const handleOpenEditInsurer = (item) => {
     setEditingInsurer(item);
     setViewingInsurer(null);
+
+    let formPayerType = item.payerType || 'Private';
+    let formCustomPayerType = item.customPayerType || '';
+
+    if (formPayerType === 'Other' || formPayerType === 'Other (Custom)') {
+      formPayerType = 'Other (Custom)';
+      formCustomPayerType = item.customPayerType || '';
+    } else if (!PAYER_TYPES.includes(formPayerType)) {
+      formCustomPayerType = formPayerType;
+      formPayerType = 'Other (Custom)';
+    }
+
     setInsurerForm({
       name: item.name || '',
       code: item.code || '',
-      payerType: item.payerType || 'Private',
+      payerType: formPayerType,
+      customPayerType: formCustomPayerType,
       tollFreeNumber: item.tollFreeNumber || '',
       claimEmail: item.claimEmail || '',
       cashlessEmail: item.cashlessEmail || '',
@@ -242,7 +278,7 @@ const TpaMasterSettings = () => {
       gstin: item.gstin || '',
       panNumber: item.panNumber || '',
       hasInHouseTpa: Boolean(item.hasInHouseTpa),
-      settlementTatDays: item.settlementTatDays || 30,
+      settlementTatDays: (item.settlementTatDays !== null && item.settlementTatDays !== undefined) ? item.settlementTatDays : '',
       notes: item.notes || ''
     });
     setShowInsurerModal(true);
@@ -256,6 +292,16 @@ const TpaMasterSettings = () => {
 
   const handleSaveInsurer = async (e) => {
     e.preventDefault();
+    if (!insurerForm.payerType) {
+      toast.error('Payer Type is required');
+      return;
+    }
+
+    if (insurerForm.payerType === 'Other (Custom)' && !insurerForm.customPayerType.trim()) {
+      toast.error('Please enter a custom payer type');
+      return;
+    }
+
     if (!insurerForm.name.trim()) {
       toast.error('Insurance Company Name is required');
       return;
@@ -267,7 +313,11 @@ const TpaMasterSettings = () => {
         ...insurerForm,
         name: insurerForm.name.trim(),
         code: insurerForm.code.trim() || undefined,
-        settlementTatDays: Number(insurerForm.settlementTatDays) || 30
+        payerType: insurerForm.payerType,
+        customPayerType: insurerForm.payerType === 'Other (Custom)' ? insurerForm.customPayerType.trim() : '',
+        settlementTatDays: (insurerForm.settlementTatDays !== '' && insurerForm.settlementTatDays !== null)
+          ? Number(insurerForm.settlementTatDays)
+          : null
       };
 
       if (editingInsurer) {
@@ -672,7 +722,9 @@ const TpaMasterSettings = () => {
                           <div className="font-bold text-gray-900 leading-snug">{company.name}</div>
                           <div className="flex items-center gap-1.5 mt-0.5">
                             <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100/70 text-amber-900 border border-amber-200/60">
-                              {company.payerType}
+                              {company.payerType === 'Other (Custom)' || company.payerType === 'Other'
+                                ? (company.customPayerType ? `${company.customPayerType}` : 'Other (Custom)')
+                                : company.payerType}
                             </span>
                             {company.portalUrl && (
                               <a
@@ -1130,16 +1182,20 @@ const TpaMasterSettings = () => {
               <div className="space-y-4 text-sm">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-orange-50/30 p-4 rounded-2xl border border-orange-100">
                   <div>
+                    <span className="block text-[10px] font-bold uppercase text-gray-400">Payer Type</span>
+                    <span className="font-semibold text-gray-800">
+                      {viewingInsurer.payerType === 'Other (Custom)' || viewingInsurer.payerType === 'Other'
+                        ? (viewingInsurer.customPayerType ? `${viewingInsurer.customPayerType} (Custom)` : 'Other (Custom)')
+                        : viewingInsurer.payerType}
+                    </span>
+                  </div>
+                  <div>
                     <span className="block text-[10px] font-bold uppercase text-gray-400">Company Name</span>
                     <span className="font-bold text-gray-900 text-base">{viewingInsurer.name}</span>
                   </div>
                   <div>
                     <span className="block text-[10px] font-bold uppercase text-gray-400">Company Code</span>
                     <span className="font-mono font-bold text-orange-700">{viewingInsurer.code}</span>
-                  </div>
-                  <div>
-                    <span className="block text-[10px] font-bold uppercase text-gray-400">Payer Type</span>
-                    <span className="font-semibold text-gray-800">{viewingInsurer.payerType}</span>
                   </div>
                   <div>
                     <span className="block text-[10px] font-bold uppercase text-gray-400">TPA Handling</span>
@@ -1164,7 +1220,9 @@ const TpaMasterSettings = () => {
                   </div>
                   <div>
                     <span className="block text-[10px] font-bold uppercase text-gray-400">Settlement TAT</span>
-                    <span className="font-medium text-gray-800">{viewingInsurer.settlementTatDays || 30} Days</span>
+                    <span className="font-medium text-gray-800">
+                      {viewingInsurer.settlementTatDays ? `${viewingInsurer.settlementTatDays} Days` : 'N/A'}
+                    </span>
                   </div>
                   <div>
                     <span className="block text-[10px] font-bold uppercase text-gray-400">GSTIN</span>
@@ -1205,7 +1263,42 @@ const TpaMasterSettings = () => {
               <form onSubmit={handleSaveInsurer} className="space-y-4">
                 {/* Section: Basic Info */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="md:col-span-2">
+                  {/* Field 1: Payer Type (First Position) */}
+                  <div>
+                    <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-gray-600">
+                      Payer Type <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      className="input py-2.5 text-sm cursor-pointer"
+                      value={insurerForm.payerType}
+                      onChange={(e) => setInsurerForm(p => ({ ...p, payerType: e.target.value }))}
+                      required
+                    >
+                      {PAYER_TYPES.map(type => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Field 1b: Custom Payer Type (Only when Other (Custom) is selected) */}
+                  {insurerForm.payerType === 'Other (Custom)' && (
+                    <div>
+                      <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-gray-600">
+                        Specify Custom Payer Type <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        className="input py-2.5 text-sm"
+                        placeholder="e.g. International Insurer / Embassy"
+                        value={insurerForm.customPayerType}
+                        onChange={(e) => setInsurerForm(p => ({ ...p, customPayerType: e.target.value }))}
+                      />
+                    </div>
+                  )}
+
+                  {/* Field 2: Insurance Company Name (Immediately after Payer Type) */}
+                  <div>
                     <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-gray-600">
                       Insurance Company Name <span className="text-red-500">*</span>
                     </label>
@@ -1219,6 +1312,7 @@ const TpaMasterSettings = () => {
                     />
                   </div>
 
+                  {/* Field 3: Company Code (Optional) */}
                   <div>
                     <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-gray-600">
                       Company Code (Optional)
@@ -1230,21 +1324,6 @@ const TpaMasterSettings = () => {
                       value={insurerForm.code}
                       onChange={(e) => setInsurerForm(p => ({ ...p, code: e.target.value }))}
                     />
-                  </div>
-
-                  <div>
-                    <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-gray-600">
-                      Payer Type <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      className="input py-2.5 text-sm cursor-pointer"
-                      value={insurerForm.payerType}
-                      onChange={(e) => setInsurerForm(p => ({ ...p, payerType: e.target.value }))}
-                    >
-                      {PAYER_TYPES.map(type => (
-                        <option key={type} value={type}>{type}</option>
-                      ))}
-                    </select>
                   </div>
                 </div>
 
@@ -1321,6 +1400,7 @@ const TpaMasterSettings = () => {
                       <input
                         type="number"
                         min="1"
+                        placeholder="e.g. 30"
                         className="input py-2 text-sm"
                         value={insurerForm.settlementTatDays}
                         onChange={(e) => setInsurerForm(p => ({ ...p, settlementTatDays: e.target.value }))}
