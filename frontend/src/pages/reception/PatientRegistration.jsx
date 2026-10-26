@@ -274,6 +274,7 @@ const PatientRegistration = () => {
 
       const payload = {
         ...data,
+        bloodPressure: data.bloodPressure ? String(data.bloodPressure).replace(/[^0-9/]/g, '').trim() : undefined,
         age: parsedAge,
         dob: calculatedDob,
         opdFee: grossFee,
@@ -913,7 +914,43 @@ const PatientRegistration = () => {
                 <input className="input h-11 pl-11 text-base font-bold text-gray-900" placeholder="cm" type="number" step="0.1" {...register('height')} />
               </Field>
               <Field label="Blood Pressure" icon={Activity}>
-                <input className="input h-11 pl-11 text-base font-bold text-gray-900" placeholder="120/80" {...register('bloodPressure')} />
+                <input
+                  className="input h-11 pl-11 text-base font-bold text-gray-900"
+                  placeholder="120/80"
+                  inputMode="numeric"
+                  {...register('bloodPressure', {
+                    onChange: (e) => {
+                      const val = e.target.value;
+                      let cleaned = val.replace(/[^0-9/]/g, '').replace(/\/+/g, '/');
+                      const parts = cleaned.split('/');
+                      if (parts.length > 2) {
+                        cleaned = `${parts[0]}/${parts.slice(1).join('')}`;
+                      }
+                      setValue('bloodPressure', cleaned);
+                    }
+                  })}
+                  onKeyDown={(e) => {
+                    if ([
+                      'Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter', 'Home', 'End'
+                    ].includes(e.key)) {
+                      return;
+                    }
+                    if (e.ctrlKey || e.metaKey) return;
+                    if (!/^[0-9/]$/.test(e.key)) {
+                      e.preventDefault();
+                    }
+                  }}
+                  onPaste={(e) => {
+                    e.preventDefault();
+                    const text = (e.clipboardData || window.clipboardData).getData('text');
+                    let cleaned = text.replace(/[^0-9/]/g, '').replace(/\/+/g, '/');
+                    const parts = cleaned.split('/');
+                    if (parts.length > 2) {
+                      cleaned = `${parts[0]}/${parts.slice(1).join('')}`;
+                    }
+                    setValue('bloodPressure', cleaned);
+                  }}
+                />
               </Field>
               <Field label="Temperature (°F)" icon={Activity}>
                 <input className="input h-11 pl-11 text-base font-bold text-gray-900" placeholder="98.6" type="number" step="0.1" {...register('temperature')} />
