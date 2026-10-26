@@ -919,6 +919,13 @@ const getRegistrations = async (req, res) => {
         paymentStatus: v.paymentStatus || 'Paid',
         paymentMode: v.paymentMode || 'Cash',
         billNumber: v.billNumber || null,
+        isRefunded: Boolean(v.isRefunded || v.paymentStatus === 'Refunded'),
+        refundAmount: v.refundAmount || 0,
+        refundRemarks: v.refundRemarks || '',
+        refundDate: v.refundDate || null,
+        refundedByName: v.refundedByName || '',
+        refundReceiptNo: v.refundReceiptNo || '',
+        refundMode: v.refundMode || 'Cash',
         followUpDate: effectiveFollowUpDate,
         followUpSource: effectiveFollowUpSource,
         followUpRemarks: effectiveFollowUpRemarks,
@@ -1676,6 +1683,115 @@ const triggerPatientAbdmLink = async (req, res) => {
   }
 };
 
+// @desc    Process refund for patient registration/visit at reception
+// @route   POST /api/patients/registrations/:id/refund
+// @access  Private
+const refundPatientRegistration = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { remark, refundAmount, refundMode } = req.body;
+
+    if (!remark || !remark.trim()) {
+      return res.status(400).json({ message: 'Refund remark / reason is required.' });
+    }
+
+    const visit = await Visit.findOne(tenantQuery(req, { _id: id }))
+      .populate('patientId', 'patientName mobile uhid address gender dob aadhaar category')
+      .populate('doctorId', 'doctorName username opdFees department');
+
+    if (!visit) {
+      return res.status(404).json({ message: 'Registration record not found.' });
+    }
+
+    if (visit.isRefunded || visit.paymentStatus === 'Refunded') {
+      return res.status(400).json({ message: 'This registration has already been refunded.' });
+    }
+
+    const maxFee = visit.netOpdFee !== undefined && visit.netOpdFee !== null
+      ? visit.netOpdFee
+      : (visit.opdFee || 0);
+
+    let parsedAmount = refundAmount !== undefined && refundAmount !== null && refundAmount !== ''
+      ? Number(refundAmount)
+      : maxFee;
+
+    if (isNaN(parsedAmount) || parsedAmount < 0) {
+      return res.status(400).json({ message: 'Valid refund amount is required.' });
+    }
+
+    if (maxFee > 0 && parsedAmount > maxFee) {
+      return res.status(400).json({ message: `Refund amount cannot exceed the paid OPD fee of ₹${maxFee}.` });
+    }
+
+    const todayStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const randomSeq = Math.floor(1000 + Math.random() * 9000);
+    const refundReceiptNo = `REF-${todayStr}-${randomSeq}`;
+    const userStaffName = req.user.doctorName || req.user.username || 'Receptionist';
+
+    visit.paymentStatus = 'Refunded';
+    visit.isRefunded = true;
+    visit.refundAmount = parsedAmount;
+    visit.refundRemarks = remark.trim();
+    visit.refundDate = new Date();
+    visit.refundedBy = req.user._id;
+    visit.refundedByName = userStaffName;
+    visit.refundReceiptNo = refundReceiptNo;
+    visit.refundMode = refundMode || visit.paymentMode || 'Cash';
+
+    await visit.save();
+
+    // Check if an associated Billing document exists to adjust amountPaid and audit trail
+    const Billing = require('../models/Billing');
+    const linkedBill = await Billing.findOne(tenantQuery(req, {
+      $or: [
+        { 'items.sourceId': visit._id },
+        { billNo: visit.billNumber },
+        { invoiceNo: visit.billNumber }
+      ]
+    }));
+
+    if (linkedBill) {
+      linkedBill.amountPaid = Math.max(0, (linkedBill.amountPaid || 0) - parsedAmount);
+      if (parsedAmount >= (linkedBill.grandTotal || 0)) {
+        linkedBill.paymentStatus = 'Cancelled';
+      }
+      linkedBill.auditTrail = linkedBill.auditTrail || [];
+      linkedBill.auditTrail.push({
+        action: 'Reception Refund Processed',
+        performedBy: req.user._id,
+        performedByName: userStaffName,
+        timestamp: new Date(),
+        remarks: `Refund of ₹${parsedAmount} issued at reception. Reason: ${remark.trim()}`
+      });
+      await linkedBill.save();
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Refund of ₹${parsedAmount.toFixed(2)} processed successfully`,
+      visit,
+      refundDetails: {
+        refundReceiptNo,
+        refundAmount: parsedAmount,
+        refundRemarks: remark.trim(),
+        refundDate: visit.refundDate,
+        refundMode: visit.refundMode,
+        refundedByName: userStaffName,
+        patientName: visit.patientId?.patientName,
+        uhid: visit.uhid,
+        registrationNumber: visit.registrationNumber,
+        billNumber: visit.billNumber,
+        originalFee: maxFee,
+        department: visit.department,
+        doctorName: visit.doctorId?.doctorName || visit.doctorId?.username
+      }
+    });
+  } catch (error) {
+    console.error('Process Refund Error:', error);
+    res.status(500).json({ message: error.message || 'Server error while processing refund' });
+  }
+};
+
 module.exports = {
   createPatient,
   getPatients,
@@ -1693,6 +1809,8 @@ module.exports = {
   updateFollowUpDate,
   getFollowUpPatients,
   getPatientAbdmCareContexts,
-  triggerPatientAbdmLink
+  triggerPatientAbdmLink,
+  refundPatientRegistration
 };
+
 

@@ -545,6 +545,40 @@ const getHospitalTracking = async (req, res) => {
       }
     });
 
+    // Account for reception OPD revenue and deduct any refunds from hospital total revenue
+    const allVisits = await Visit.find(filter);
+    const billedSourceIds = new Set();
+    bills.forEach(b => {
+      b.items?.forEach(it => {
+        if (it.sourceId) billedSourceIds.add(it.sourceId.toString());
+      });
+      if (b.billNo) billedSourceIds.add(b.billNo);
+      if (b.invoiceNo) billedSourceIds.add(b.invoiceNo);
+    });
+
+    let opdReceptionNet = 0;
+    let totalOpdRefunded = 0;
+
+    allVisits.forEach(v => {
+      const isAlreadyInBill = billedSourceIds.has(v._id.toString()) || (v.billNumber && billedSourceIds.has(v.billNumber));
+      if (!isAlreadyInBill) {
+        if (v.paymentStatus === 'Paid') {
+          opdReceptionNet += (v.netOpdFee || 0);
+        } else if (v.paymentStatus === 'Refunded' || v.isRefunded) {
+          const paidFee = v.netOpdFee || 0;
+          const refAmt = v.refundAmount !== undefined && v.refundAmount !== null ? v.refundAmount : paidFee;
+          opdReceptionNet += Math.max(0, paidFee - refAmt);
+          totalOpdRefunded += refAmt;
+        }
+      } else {
+        if (v.paymentStatus === 'Refunded' || v.isRefunded) {
+          totalOpdRefunded += (v.refundAmount || v.netOpdFee || 0);
+        }
+      }
+    });
+
+    totalPaid = Math.max(0, totalPaid + opdReceptionNet);
+
     // 2. Total Patient
     const totalPatients = await Patient.countDocuments(filter);
 

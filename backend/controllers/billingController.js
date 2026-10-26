@@ -2381,6 +2381,21 @@ const getDashboardStats = async (req, res) => {
     paymentReceivedMonth += monthAdvanceTotal;
     selectedRangeCollection += rangeAdvanceTotal;
 
+    // Deduct reception OPD refunds so hospital billing revenue matches actual net revenue
+    const [todayRefundVisits, monthRefundVisits, rangeRefundVisits] = await Promise.all([
+      Visit.find({ ...tf, $or: [{ paymentStatus: 'Refunded' }, { isRefunded: true }], refundDate: { $gte: startOfToday, $lte: endOfToday } }),
+      Visit.find({ ...tf, $or: [{ paymentStatus: 'Refunded' }, { isRefunded: true }], refundDate: { $gte: startOfMonth } }),
+      Visit.find({ ...tf, $or: [{ paymentStatus: 'Refunded' }, { isRefunded: true }], refundDate: { $gte: startOfDate, $lte: endOfDate } })
+    ]);
+
+    const todayRefundTotal = todayRefundVisits.reduce((sum, v) => sum + (v.refundAmount || v.netOpdFee || 0), 0);
+    const monthRefundTotal = monthRefundVisits.reduce((sum, v) => sum + (v.refundAmount || v.netOpdFee || 0), 0);
+    const rangeRefundTotal = rangeRefundVisits.reduce((sum, v) => sum + (v.refundAmount || v.netOpdFee || 0), 0);
+
+    paymentReceivedToday = Math.max(0, paymentReceivedToday - todayRefundTotal);
+    paymentReceivedMonth = Math.max(0, paymentReceivedMonth - monthRefundTotal);
+    selectedRangeCollection = Math.max(0, selectedRangeCollection - rangeRefundTotal);
+
     res.json({
       // 9 Core Requested Metrics
       totalIpd,

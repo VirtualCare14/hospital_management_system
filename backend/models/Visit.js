@@ -124,7 +124,7 @@ const visitSchema = new mongoose.Schema({
   },
   paymentStatus: {
     type: String,
-    enum: ['Paid', 'Not Paid'],
+    enum: ['Paid', 'Not Paid', 'Refunded'],
     default: 'Paid'
   },
   paymentMode: {
@@ -135,6 +135,39 @@ const visitSchema = new mongoose.Schema({
   billNumber: {
     type: String,
     default: null
+  },
+  isRefunded: {
+    type: Boolean,
+    default: false
+  },
+  refundAmount: {
+    type: Number,
+    default: 0
+  },
+  refundRemarks: {
+    type: String,
+    default: ''
+  },
+  refundDate: {
+    type: Date,
+    default: null
+  },
+  refundedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  refundedByName: {
+    type: String,
+    default: ''
+  },
+  refundReceiptNo: {
+    type: String,
+    default: ''
+  },
+  refundMode: {
+    type: String,
+    default: 'Cash'
   }
 }, { timestamps: true });
 

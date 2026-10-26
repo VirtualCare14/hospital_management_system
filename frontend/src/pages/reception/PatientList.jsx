@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, Printer, Search, Trash2, X, Calendar, Hash, Users, FileText, Clock, Filter, ChevronDown, ChevronLeft, ChevronRight, Copy, Pencil, Save, MoreVertical, CalendarCheck, CheckCircle, History, FlaskConical, Activity, ShieldCheck } from 'lucide-react';
+import { Eye, Printer, Search, Trash2, X, Calendar, Hash, Users, FileText, Clock, Filter, ChevronDown, ChevronLeft, ChevronRight, Copy, Pencil, Save, MoreVertical, CalendarCheck, CheckCircle, History, FlaskConical, Activity, ShieldCheck, RotateCcw } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import toast from 'react-hot-toast';
@@ -180,6 +180,13 @@ const PatientList = () => {
   const [patientDetails, setPatientDetails] = useState(null);
   const [showReceipt, setShowReceipt] = useState(false);
   const receiptRef = useRef(null);
+
+  // Refund modal & processing states
+  const [refundModal, setRefundModal] = useState(null);
+  const [refundRemark, setRefundRemark] = useState('');
+  const [refundAmount, setRefundAmount] = useState('');
+  const [refundMode, setRefundMode] = useState('Cash');
+  const [processingRefund, setProcessingRefund] = useState(false);
 
   const fetchRegistrations = async () => {
     setLoading(true);
@@ -414,13 +421,148 @@ const PatientList = () => {
         netOpdFee: reg.netOpdFee !== undefined ? reg.netOpdFee : (data.netOpdFee || 0),
         paymentStatus: reg.paymentStatus || data.paymentStatus || 'Paid',
         paymentMode: reg.paymentMode || data.paymentMode || 'Cash',
-        billNumber: reg.billNumber || data.billNumber || null
+        billNumber: reg.billNumber || data.billNumber || null,
+        isRefunded: Boolean(reg.isRefunded || reg.paymentStatus === 'Refunded'),
+        refundAmount: reg.refundAmount !== undefined ? reg.refundAmount : (reg.netOpdFee || 0),
+        refundRemarks: reg.refundRemarks || '',
+        refundDate: reg.refundDate || null,
+        refundReceiptNo: reg.refundReceiptNo || null,
+        refundMode: reg.refundMode || null,
+        refundedByName: reg.refundedByName || null
       };
       setPatientDetails(fullDetails);
-      setPrintMode('patient_slip');
+      setPrintMode(fullDetails.isRefunded ? 'refund_slip' : 'patient_slip');
       setShowReceipt(true);
     } catch (error) {
       toast.error('Error loading patient documents');
+    }
+  };
+
+  const handleOpenRefundModal = (reg) => {
+    const defaultFee = reg.netOpdFee !== undefined && reg.netOpdFee !== null ? reg.netOpdFee : (reg.opdFee || 0);
+    setRefundModal(reg);
+    setRefundAmount(defaultFee > 0 ? String(defaultFee) : '0');
+    setRefundRemark('');
+    setRefundMode(reg.paymentMode && reg.paymentMode !== 'Pending' ? reg.paymentMode : 'Cash');
+  };
+
+  const handleProcessRefund = async () => {
+    if (!refundRemark.trim()) {
+      toast.error('Please enter a remark explaining the reason for the refund.');
+      return;
+    }
+    const parsedAmt = parseFloat(refundAmount);
+    if (isNaN(parsedAmt) || parsedAmt < 0) {
+      toast.error('Please enter a valid refund amount.');
+      return;
+    }
+    const maxPaid = refundModal.netOpdFee !== undefined && refundModal.netOpdFee !== null ? refundModal.netOpdFee : (refundModal.opdFee || 0);
+    if (maxPaid > 0 && parsedAmt > maxPaid) {
+      toast.error(`Refund amount cannot exceed the paid OPD fee of ₹${maxPaid}.`);
+      return;
+    }
+
+    setProcessingRefund(true);
+    try {
+      const { data } = await client.post(`/patients/registrations/${refundModal._id}/refund`, {
+        remark: refundRemark.trim(),
+        refundAmount: parsedAmt,
+        refundMode
+      });
+
+      toast.success(data.message || 'Refund processed successfully!');
+
+      const docName = refundModal.doctorName || refundModal.doctorId?.doctorName || refundModal.doctorId?.username || 'Doctor';
+      const refundPatientDetails = {
+        ...refundModal,
+        patientName: refundModal.patientName,
+        uhid: refundModal.uhid,
+        mobile: refundModal.mobile,
+        gender: refundModal.gender,
+        dob: refundModal.dob,
+        address: refundModal.address,
+        department: refundModal.department,
+        doctorId: typeof refundModal.doctorId === 'object' && refundModal.doctorId !== null
+          ? { ...refundModal.doctorId, doctorName: docName }
+          : { doctorName: docName, username: docName, opdFees: refundModal.opdFee },
+        registrationNumber: refundModal.registrationNumber,
+        billNumber: refundModal.billNumber,
+        opdFee: refundModal.opdFee,
+        discountType: refundModal.discountType,
+        discountValue: refundModal.discountValue,
+        discountAmount: refundModal.discountAmount,
+        netOpdFee: refundModal.netOpdFee,
+        paymentStatus: 'Refunded',
+        isRefunded: true,
+        refundAmount: data.refundDetails?.refundAmount !== undefined ? data.refundDetails.refundAmount : parsedAmt,
+        refundRemarks: data.refundDetails?.refundRemarks || refundRemark.trim(),
+        refundDate: data.refundDetails?.refundDate || new Date(),
+        refundReceiptNo: data.refundDetails?.refundReceiptNo || `REF-${Date.now().toString().slice(-6)}`,
+        refundMode: data.refundDetails?.refundMode || refundMode,
+        refundedByName: data.refundDetails?.refundedByName || 'Receptionist'
+      };
+
+      setRefundModal(null);
+      await fetchRegistrations();
+
+      // Automatically open and print the Refund Slip!
+      setPatientDetails(refundPatientDetails);
+      setPrintMode('refund_slip');
+      setShowReceipt(true);
+
+      setTimeout(() => {
+        handlePrintDocument('refund_slip');
+      }, 350);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to process refund');
+    } finally {
+      setProcessingRefund(false);
+    }
+  };
+
+  const handlePrintRefundSlip = async (reg) => {
+    try {
+      const { data } = await client.get(`/patients/${reg.patientId}`);
+      const docName = reg.doctorName || reg.doctorId?.doctorName || reg.doctorId?.username || 'Doctor';
+      const fullDetails = {
+        ...data,
+        patientName: reg.patientName || data.patientName,
+        uhid: reg.uhid || data.uhid,
+        mobile: reg.mobile || data.mobile,
+        gender: reg.gender || data.gender,
+        dob: reg.dob || data.dob,
+        address: reg.address || data.address,
+        department: reg.department || data.department,
+        doctorId: typeof reg.doctorId === 'object' && reg.doctorId !== null
+          ? { ...reg.doctorId, doctorName: docName }
+          : { doctorName: docName, username: docName, opdFees: reg.opdFee || data.opdFee },
+        registrationNumber: reg.registrationNumber || data.registrationNumber,
+        appointmentNumber: reg.appointmentNumber || data.appointmentNumber,
+        appointmentDate: reg.appointmentDate || data.appointmentDate,
+        slot: reg.slot || data.slot,
+        opdFee: reg.opdFee !== undefined ? reg.opdFee : (data.opdFee || 0),
+        discountType: reg.discountType || data.discountType || 'none',
+        discountValue: reg.discountValue !== undefined ? reg.discountValue : (data.discountValue || 0),
+        discountAmount: reg.discountAmount !== undefined ? reg.discountAmount : (data.discountAmount || 0),
+        netOpdFee: reg.netOpdFee !== undefined ? reg.netOpdFee : (data.netOpdFee || 0),
+        billNumber: reg.billNumber || data.billNumber || null,
+        paymentStatus: 'Refunded',
+        isRefunded: true,
+        refundAmount: reg.refundAmount !== undefined ? reg.refundAmount : (reg.netOpdFee || 0),
+        refundRemarks: reg.refundRemarks || 'Patient refund processed at reception',
+        refundDate: reg.refundDate || reg.registrationDate,
+        refundReceiptNo: reg.refundReceiptNo || `REF-${reg.registrationNumber || ''}`,
+        refundMode: reg.refundMode || reg.paymentMode || 'Cash',
+        refundedByName: reg.refundedByName || 'Receptionist'
+      };
+      setPatientDetails(fullDetails);
+      setPrintMode('refund_slip');
+      setShowReceipt(true);
+      setTimeout(() => {
+        handlePrintDocument('refund_slip');
+      }, 350);
+    } catch (error) {
+      toast.error('Error loading patient documents for refund slip');
     }
   };
 
@@ -768,11 +910,21 @@ const PatientList = () => {
                       </td>
                     )}
                     <td className="p-3">
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        reg.consultationStatus === 'completed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                      }`}>
-                        {reg.consultationStatus === 'completed' ? 'Completed' : 'Pending'}
-                      </span>
+                      <div className="flex flex-col items-start gap-1">
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          reg.consultationStatus === 'completed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                        }`}>
+                          {reg.consultationStatus === 'completed' ? 'Completed' : 'Pending'}
+                        </span>
+                        {(reg.paymentStatus === 'Refunded' || reg.isRefunded) && (
+                          <span 
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-red-100 text-red-700 border border-red-200 shadow-2xs"
+                            title={`Refunded: ₹${Number(reg.refundAmount || reg.netOpdFee || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}${reg.refundRemarks ? ` • ${reg.refundRemarks}` : ''}`}
+                          >
+                            <RotateCcw className="h-2.5 w-2.5 stroke-[2.5]" /> Refunded
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="p-3 relative action-menu-container">
                       <button
@@ -853,6 +1005,29 @@ const PatientList = () => {
                             <FlaskConical className="h-3.5 w-3.5 text-orange-600" /> Create Lab Bill
                           </button>
                           <div className="border-t border-orange-50 my-1"></div>
+                          {reg.paymentStatus === 'Refunded' || reg.isRefunded ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveMenuId(null);
+                                handlePrintRefundSlip(reg);
+                              }}
+                              className="w-full px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                            >
+                              <Printer className="h-3.5 w-3.5 text-red-600" /> Print Refund Slip
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveMenuId(null);
+                                handleOpenRefundModal(reg);
+                              }}
+                              className="w-full px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                            >
+                              <RotateCcw className="h-3.5 w-3.5 text-red-600" /> Refund
+                            </button>
+                          )}
                           <button
                             onClick={() => {
                               setActiveMenuId(null);
@@ -1316,7 +1491,17 @@ const PatientList = () => {
                           }`}>
                             {visit.consultationStatus === 'completed' ? 'Completed' : 'Pending'}
                           </span>
+                          {(visit.paymentStatus === 'Refunded' || visit.isRefunded) && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-red-100 text-red-700 border border-red-200">
+                              <RotateCcw className="h-2.5 w-2.5" /> Refunded (₹{Number(visit.refundAmount || visit.netOpdFee || 0).toFixed(2)})
+                            </span>
+                          )}
                         </div>
+                        {(visit.paymentStatus === 'Refunded' || visit.isRefunded) && visit.refundRemarks && (
+                          <p className="text-[10px] text-red-600 mt-0.5 font-semibold">
+                            <strong>Refund Reason:</strong> {visit.refundRemarks}
+                          </p>
+                        )}
                         <p className="text-xs text-gray-600 mt-1">
                           {visit.department} • Dr. {visit.doctorId?.doctorName || visit.doctorId?.username || 'N/A'}
                         </p>
@@ -1354,6 +1539,150 @@ const PatientList = () => {
         </div>
       )}
 
+      {/* Process Refund Modal */}
+      {refundModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto border border-red-100 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="flex justify-between items-center border-b border-red-100 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-red-100 text-red-600 rounded-xl">
+                  <RotateCcw className="h-5 w-5 stroke-[2.5]" />
+                </div>
+                <div>
+                  <h2 className="font-extrabold text-gray-900 text-lg">Process Patient Refund</h2>
+                  <p className="text-xs text-gray-500">
+                    UHID: <span className="font-mono font-bold text-orange-700">{formatUhid(refundModal.uhid)}</span> | Reg#: <span className="font-mono font-bold text-blue-700">{refundModal.registrationNumber}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRefundModal(null)}
+                className="text-gray-400 hover:text-gray-600 p-1 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Patient & Payment Summary Card */}
+            <div className="bg-red-50/50 border border-red-100 rounded-2xl p-4 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-500 font-semibold">Patient Name:</span>
+                <span className="font-extrabold text-gray-900">{refundModal.patientName}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-500 font-semibold">Department & Doctor:</span>
+                <span className="font-bold text-gray-800">
+                  {refundModal.department || 'General'} • {refundModal.doctorName ? (refundModal.doctorName.toLowerCase().startsWith('dr') ? refundModal.doctorName : `Dr. ${refundModal.doctorName}`) : 'Self'}
+                </span>
+              </div>
+              {refundModal.billNumber && (
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-500 font-semibold">Original Bill / Receipt #:</span>
+                  <span className="font-mono font-bold text-gray-800">{refundModal.billNumber}</span>
+                </div>
+              )}
+              <div className="border-t border-red-100 pt-2 flex items-center justify-between text-xs">
+                <span className="text-gray-600 font-bold uppercase tracking-wider text-[11px]">Paid Net OPD Fee:</span>
+                <span className="text-base font-black text-emerald-700">
+                  ₹{Number(refundModal.netOpdFee !== undefined && refundModal.netOpdFee !== null ? refundModal.netOpdFee : (refundModal.opdFee || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+
+            {/* Form Fields */}
+            <div className="space-y-3">
+              <div>
+                <label className="text-[11px] font-extrabold uppercase text-gray-700 block mb-1">
+                  Refund Amount (₹) *
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  className="input py-2 text-sm font-bold text-red-700 focus:ring-red-500 border-red-200"
+                  value={refundAmount}
+                  onChange={(e) => setRefundAmount(e.target.value)}
+                  placeholder="Enter refund amount"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-extrabold uppercase text-gray-700 block mb-1">
+                  Refund Payment Mode
+                </label>
+                <select
+                  className="input py-2 text-xs font-semibold cursor-pointer"
+                  value={refundMode}
+                  onChange={(e) => setRefundMode(e.target.value)}
+                >
+                  <option value="Cash">Cash</option>
+                  <option value="UPI">UPI / Online</option>
+                  <option value="Card">Card</option>
+                  <option value="Net Banking">Net Banking</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-extrabold uppercase text-gray-700 block mb-1">
+                  Remark / Reason for Refund <span className="text-red-600 font-black">*</span>
+                </label>
+                <textarea
+                  rows="3"
+                  className="input py-2 text-xs font-medium w-full resize-none border-red-200 focus:ring-red-500"
+                  placeholder="Explain why this fee is being refunded (e.g. Doctor unavailable, Patient cancelled consultation, Duplicate billing, Requested refund)..."
+                  value={refundRemark}
+                  onChange={(e) => setRefundRemark(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Financial Impact Notice */}
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 space-y-1">
+              <p className="font-extrabold flex items-center gap-1.5 text-amber-900">
+                ⚠️ Financial & System Update Notice:
+              </p>
+              <p className="text-[11px] leading-relaxed">
+                This action will mark the patient record as <strong>Refunded</strong>, subtract ₹{Number(refundAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })} from the <strong>Hospital Total Revenue</strong>, and automatically print the official <strong>Refund Slip</strong>.
+              </p>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setRefundModal(null)}
+                disabled={processingRefund}
+                className="px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleProcessRefund}
+                disabled={processingRefund || !refundRemark.trim()}
+                className="flex items-center gap-2 px-5 py-2 text-xs font-extrabold bg-red-600 hover:bg-red-700 text-white rounded-xl shadow-md shadow-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
+              >
+                {processingRefund ? (
+                  <>
+                    <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Processing Refund...
+                  </>
+                ) : (
+                  <>
+                    <RotateCcw className="h-3.5 w-3.5 stroke-[2.5]" />
+                    Confirm & Process Refund
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       </div>
 
       {/* Receipt & Patient Slip Print Modal */}
@@ -1362,13 +1691,24 @@ const PatientList = () => {
           <div className="card w-full max-w-4xl max-h-[90vh] flex flex-col bg-white overflow-hidden shadow-2xl rounded-2xl print:shadow-none print:border-none print:rounded-none print:max-w-none print:w-full print:max-h-none print:overflow-visible print:bg-transparent print:p-0 print:m-0">
             <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-orange-50 to-white no-print print:hidden">
               <div>
-                <h3 className="font-extrabold text-gray-900 text-lg">Print Patient Documents</h3>
+                <h3 className="font-extrabold text-gray-900 text-lg">
+                  {printMode === 'refund_slip' ? 'Print Refund Voucher / Slip' : 'Print Patient Documents'}
+                </h3>
                 <p className="text-xs text-gray-500 font-medium">
                   Patient: <strong className="text-orange-700">{patientDetails.patientName}</strong> | UHID: {formatUhid(patientDetails.uhid)} | Reg#: {patientDetails.registrationNumber || 'N/A'} {patientDetails.billNumber ? `| Bill #: ${patientDetails.billNumber}` : ''}
                 </p>
               </div>
 
               <div className="flex items-center gap-2">
+                {(patientDetails.isRefunded || patientDetails.paymentStatus === 'Refunded' || printMode === 'refund_slip') && (
+                  <button
+                    type="button"
+                    className="btn cursor-pointer flex items-center gap-1.5 text-xs font-bold bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 shadow-sm"
+                    onClick={() => handlePrintDocument('refund_slip')}
+                  >
+                    <Printer className="h-3.5 w-3.5" /> Print Refund Slip
+                  </button>
+                )}
                 <button
                   type="button"
                   className="btn-secondary cursor-pointer flex items-center gap-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 border-indigo-200 hover:bg-indigo-100 px-3 py-1.5"
@@ -1398,6 +1738,17 @@ const PatientList = () => {
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Document Mode:</span>
                 <div className="flex gap-1.5 bg-gray-200/80 p-0.5 rounded-md">
+                  {(patientDetails.isRefunded || patientDetails.paymentStatus === 'Refunded' || printMode === 'refund_slip') && (
+                    <button
+                      type="button"
+                      onClick={() => setPrintMode('refund_slip')}
+                      className={`text-xs font-bold px-3 py-1 rounded transition-all cursor-pointer ${
+                        printMode === 'refund_slip' ? 'bg-red-600 text-white shadow-xs font-extrabold' : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      Refund Slip Preview
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setPrintMode('patient_slip')}
@@ -1419,7 +1770,7 @@ const PatientList = () => {
                 </div>
               </div>
 
-              {printMode === 'patient_slip' && (
+              {(printMode === 'patient_slip' || printMode === 'refund_slip') && (
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Top Letterhead:</span>
                   <div className="flex gap-1.5 bg-gray-200/80 p-0.5 rounded-md">
@@ -1448,7 +1799,7 @@ const PatientList = () => {
               )}
             </div>
 
-            {printMode === 'patient_slip' && letterheadOption === 'image' && !hospitalSettings?.letterheadImageUrl && (
+            {(printMode === 'patient_slip' || printMode === 'refund_slip') && letterheadOption === 'image' && !hospitalSettings?.letterheadImageUrl && (
               <div className="px-4 py-2 bg-amber-50 border-b border-amber-200 text-amber-800 text-xs flex items-center gap-2 no-print print:hidden">
                 <span>⚠️ No custom letterhead photo uploaded in Hospital Settings. Showing system-generated header as fallback. You can upload one in Admin &gt; Hospital Settings.</span>
               </div>

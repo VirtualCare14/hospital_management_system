@@ -15,7 +15,8 @@ const {
   updateFollowUpDate,
   getFollowUpPatients,
   getPatientAbdmCareContexts,
-  triggerPatientAbdmLink
+  triggerPatientAbdmLink,
+  refundPatientRegistration
 } = require('../controllers/patientController');
 const authMiddleware = require('../middleware/authMiddleware');
 
@@ -29,6 +30,8 @@ router.get('/registrations/list', authMiddleware, require('../controllers/patien
 router.get('/registrations/history/:uhid', authMiddleware, require('../controllers/patientController').getVisitHistory);
 router.get('/registrations/follow-ups', authMiddleware, getFollowUpPatients);
 router.put('/registrations/:id/follow-up', authMiddleware, updateFollowUpDate);
+router.post('/registrations/:id/refund', authMiddleware, refundPatientRegistration);
+router.put('/registrations/:id/refund', authMiddleware, refundPatientRegistration);
 router.get('/:id/visits', authMiddleware, getPatientVisits);
 router.get('/:id/with-prescription', authMiddleware, getPatientWithPrescription);
 router.get('/:id/abdm-care-contexts', authMiddleware, getPatientAbdmCareContexts);

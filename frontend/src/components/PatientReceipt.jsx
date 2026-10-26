@@ -153,6 +153,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
 
   const isPatientSlipOnly = mode === 'patient_slip';
   const isBillReceiptOnly = mode === 'bill_receipt';
+  const isRefundSlip = mode === 'refund_slip';
 
   // Check if uploaded photo letterhead should be shown
   let showUploadedLetterhead = false;
@@ -172,7 +173,250 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
 
   const vitals = patient.demographics || prescription?.vitals || {};
   const hasVitals = vitals.weight || vitals.height || vitals.bloodPressure || vitals.temperature;
-  const documentTitle = isBillReceiptOnly ? 'PAYMENT RECEIPT' : 'PRESCRIPTION';
+  const documentTitle = isRefundSlip ? 'REFUND VOUCHER' : (isBillReceiptOnly ? 'PAYMENT RECEIPT' : 'PRESCRIPTION');
+
+  if (isRefundSlip) {
+    const refundAmt = patient.refundAmount !== undefined && patient.refundAmount !== null 
+      ? Number(patient.refundAmount) 
+      : (patient.netOpdFee || grossFee || 0);
+    const refundNo = patient.refundReceiptNo || ('REF-' + (patient.billNumber ? patient.billNumber.replace(/^[^-]+-/, '') : '000000'));
+    const refundDateStr = formatRegDate(patient.refundDate || new Date());
+
+    return (
+      <div ref={ref} className="a4-receipt" style={{
+        width: '100%',
+        maxWidth: '210mm',
+        minHeight: 'auto',
+        padding: showUploadedLetterhead ? '0 8mm 8mm 8mm' : '6mm 8mm 8mm 8mm',
+        margin: '0 auto',
+        backgroundColor: '#ffffff',
+        color: '#000000',
+        fontFamily: 'Arial, Helvetica, sans-serif',
+        fontSize: '11px',
+        lineHeight: '1.4',
+        position: 'relative',
+        boxSizing: 'border-box'
+      }}>
+        {showUploadedLetterhead ? (
+          <div style={{
+            width: 'calc(100% + 16mm)',
+            marginLeft: '-8mm',
+            marginRight: '-8mm',
+            marginTop: '0',
+            height: `${hospital?.letterheadHeaderHeight || 4.6}cm`,
+            overflow: 'hidden',
+            marginBottom: '8px',
+            border: 'none',
+            borderBottom: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <img
+              src={resolvedLetterhead || hospital?.letterheadImageUrl}
+              crossOrigin="anonymous"
+              alt="Hospital Letterhead"
+              style={{ width: '100%', height: '100%', objectFit: 'fill', display: 'block', border: 'none', outline: 'none' }}
+            />
+          </div>
+        ) : (
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            borderBottom: '2.5px solid #000',
+            paddingBottom: '14px',
+            marginBottom: '14px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, paddingRight: '20px' }}>
+              {resolvedLogo && (
+                <div style={{ flexShrink: 0 }}>
+                  <img 
+                    src={resolvedLogo} 
+                    crossOrigin="anonymous" 
+                    alt="Logo" 
+                    style={{ maxHeight: '75px', maxWidth: '75px', objectFit: 'contain', display: 'block' }} 
+                  />
+                </div>
+              )}
+              <div>
+                <h1 style={{ fontSize: '22px', fontWeight: '800', margin: '0', textTransform: 'uppercase', letterSpacing: '0.8px', color: '#111827' }}>
+                  {hospital?.hospitalName || 'Hospital Name'}
+                </h1>
+                {hospital?.hospitalHeading && (
+                  <p style={{ fontSize: '11px', margin: '3px 0 0 0', color: '#4b5563', fontWeight: '500' }}>{hospital.hospitalHeading}</p>
+                )}
+              </div>
+            </div>
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '4px',
+              textAlign: 'left',
+              fontSize: '11px',
+              color: '#111827',
+              lineHeight: '1.4',
+              maxWidth: '400px',
+              width: '100%',
+              alignItems: 'flex-start'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                </svg>
+                <div><strong>Address:</strong> {hospital?.address || 'Hospital Address'}</div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/>
+                </svg>
+                <div><strong>Contact No:</strong> {formatHospitalPhoneNumbers(hospital)}</div>
+              </div>
+
+              {(hospital?.emailAddress || hospital?.email) && (
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                  <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+                  </svg>
+                  <div><strong>Email ID:</strong> {hospital.emailAddress || hospital.email}</div>
+                </div>
+              )}
+
+              {hospital?.website && (
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                  <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                  </svg>
+                  <div><strong>Website:</strong> {hospital.website}</div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div style={{ textAlign: 'center', marginBottom: '8px', borderBottom: '2.5px solid #dc2626', paddingBottom: '4px' }}>
+          <h2 style={{ fontSize: '14px', fontWeight: '900', margin: '0', textTransform: 'uppercase', letterSpacing: '1.5px', color: '#b91c1c' }}>
+            REFUND VOUCHER / SLIP
+          </h2>
+          <p style={{ margin: '2px 0 0 0', fontSize: '10px', color: '#4b5563', fontWeight: 'bold' }}>
+            Reception OPD Consultation Fee Refund Receipt
+          </p>
+        </div>
+
+        {/* Voucher Meta Info Bar */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', backgroundColor: '#fef2f2', border: '1px solid #f87171', borderRadius: '4px', padding: '6px 10px', marginBottom: '8px', fontSize: '10.5px' }}>
+          <div>
+            <strong>Refund Voucher #:</strong> <span style={{ fontFamily: 'monospace', fontWeight: 'bold', color: '#b91c1c' }}>{refundNo}</span>
+          </div>
+          <div>
+            <strong>Refund Date & Time:</strong> {refundDateStr}
+          </div>
+          {patient.billNumber && (
+            <div>
+              <strong>Original Bill #:</strong> <span style={{ fontFamily: 'monospace', fontWeight: 'bold' }}>{patient.billNumber}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Patient Details */}
+        <div style={{ marginBottom: '8px', border: '1px solid #000', borderRadius: '2px', padding: '5px 8px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10.5px' }}>
+            <tbody>
+              <tr>
+                <td style={{ padding: '2px 0', width: '50%', lineHeight: '1.3' }}><strong>Patient Name:</strong> {patient.patientName}</td>
+                <td style={{ padding: '2px 0', width: '50%', lineHeight: '1.3' }}><strong>UHID:</strong> {patient.uhid}</td>
+              </tr>
+              <tr>
+                <td style={{ padding: '2px 0', lineHeight: '1.3' }}><strong>Gender / Age:</strong> {patient.gender} {patient.dob ? `(${ageFromDob(patient.dob)} yrs)` : ''}</td>
+                <td style={{ padding: '2px 0', lineHeight: '1.3' }}><strong>Mobile Number:</strong> {patient.mobile || '-'}</td>
+              </tr>
+              <tr>
+                <td style={{ padding: '2px 0', lineHeight: '1.3' }}><strong>Doctor Name:</strong> Dr. {doctorNameStr}</td>
+                <td style={{ padding: '2px 0', lineHeight: '1.3' }}><strong>Department:</strong> {patient.department || '-'}</td>
+              </tr>
+              <tr>
+                <td style={{ padding: '2px 0', lineHeight: '1.3' }}><strong>Registration #:</strong> {patient.registrationNumber || '-'}</td>
+                <td style={{ padding: '2px 0', lineHeight: '1.3' }}><strong>Refund Processed By:</strong> {patient.refundedByName || 'Receptionist'}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* Refund Particulars Table */}
+        <div style={{ marginBottom: '8px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10.5px', border: '1px solid #000' }}>
+            <thead>
+              <tr style={{ backgroundColor: '#fee2e2' }}>
+                <th style={{ padding: '5px 8px', border: '1px solid #000', textAlign: 'left' }}>Description</th>
+                <th style={{ padding: '5px 8px', border: '1px solid #000', textAlign: 'right' }}>Original Fee Paid</th>
+                <th style={{ padding: '5px 8px', border: '1px solid #000', textAlign: 'right', color: '#b91c1c' }}>Refund Amount</th>
+                <th style={{ padding: '5px 8px', border: '1px solid #000', textAlign: 'center' }}>Refund Mode</th>
+                <th style={{ padding: '5px 8px', border: '1px solid #000', textAlign: 'center' }}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style={{ padding: '6px 8px', border: '1px solid #000' }}>
+                  OPD Consultation Registration Fee - Dr. {doctorNameStr}
+                </td>
+                <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>
+                  ₹{Number(netFee || grossFee || 0).toFixed(2)}
+                </td>
+                <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right', fontWeight: 'bold', fontSize: '12px', color: '#b91c1c' }}>
+                  ₹{refundAmt.toFixed(2)}
+                </td>
+                <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold' }}>
+                  {patient.refundMode || patient.paymentMode || 'Cash'}
+                </td>
+                <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center' }}>
+                  <span style={{ backgroundColor: '#fee2e2', color: '#b91c1c', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', fontSize: '10px' }}>
+                    REFUNDED
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* Remarks Box */}
+        <div style={{ marginBottom: '8px', padding: '6px 8px', backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '2px', fontSize: '10.5px' }}>
+          <strong style={{ color: '#92400e' }}>Reason for Refund / Remarks:</strong> {patient.refundRemarks || 'Patient OPD consultation refund processed at reception.'}
+        </div>
+
+        {/* Amount in Words */}
+        <div style={{ marginBottom: '16px', padding: '5px 8px', backgroundColor: '#f9f9f9', border: '1px solid #ccc', fontSize: '10.5px' }}>
+          <strong>Refund Amount in Words:</strong> {amountInWords(refundAmt)}
+        </div>
+
+        {/* Signatures */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '35px', padding: '0 15px', fontSize: '10.5px' }}>
+          <div style={{ textAlign: 'center', width: '200px', borderTop: '1px solid #000', paddingTop: '4px' }}>
+            <strong>Patient / Receiver Signature</strong>
+          </div>
+          <div style={{ textAlign: 'center', width: '200px', borderTop: '1px solid #000', paddingTop: '4px' }}>
+            <strong>Authorized Receptionist / Cashier</strong>
+            <p style={{ margin: '1px 0 0 0', fontSize: '9px', color: '#666' }}>{patient.refundedByName || 'Reception Desk'}</p>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ 
+          position: 'relative',
+          marginTop: '20px',
+          textAlign: 'center',
+          fontSize: '9px',
+          color: '#666',
+          borderTop: '1px solid #ccc',
+          paddingTop: '6px',
+          pageBreakInside: 'avoid'
+        }}>
+          <p style={{ margin: '0' }}>This is an official hospital refund slip. Please retain this receipt for records.</p>
+          <p style={{ margin: '2px 0 0 0' }}>Printed on: {documentDateTime}</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isBillReceiptOnly) {
     return (
