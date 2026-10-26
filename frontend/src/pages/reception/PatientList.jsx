@@ -352,7 +352,7 @@ const PatientList = () => {
         demographics: {
           weight: editForm.weight !== '' ? Number(editForm.weight) : undefined,
           height: editForm.height !== '' ? Number(editForm.height) : undefined,
-          bloodPressure: editForm.bloodPressure ? editForm.bloodPressure.trim() : undefined,
+          bloodPressure: editForm.bloodPressure ? editForm.bloodPressure.replace(/[^0-9/]/g, '').trim() : undefined,
           temperature: editForm.temperature !== '' ? Number(editForm.temperature) : undefined
         }
       };
@@ -1267,9 +1267,38 @@ const PatientList = () => {
                         <label className="text-[10px] font-bold uppercase text-gray-500">BP (mmHg)</label>
                         <input
                           type="text"
+                          inputMode="numeric"
                           className="input text-xs py-1.5 bg-white"
                           value={editForm.bloodPressure}
-                          onChange={(e) => setEditForm({ ...editForm, bloodPressure: e.target.value })}
+                          onChange={(e) => {
+                            let val = e.target.value.replace(/[^0-9/]/g, '').replace(/\/+/g, '/');
+                            const parts = val.split('/');
+                            if (parts.length > 2) {
+                              val = `${parts[0]}/${parts.slice(1).join('')}`;
+                            }
+                            setEditForm({ ...editForm, bloodPressure: val });
+                          }}
+                          onKeyDown={(e) => {
+                            if ([
+                              'Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter', 'Home', 'End'
+                            ].includes(e.key)) {
+                              return;
+                            }
+                            if (e.ctrlKey || e.metaKey) return;
+                            if (!/^[0-9/]$/.test(e.key)) {
+                              e.preventDefault();
+                            }
+                          }}
+                          onPaste={(e) => {
+                            e.preventDefault();
+                            const text = (e.clipboardData || window.clipboardData).getData('text');
+                            let val = text.replace(/[^0-9/]/g, '').replace(/\/+/g, '/');
+                            const parts = val.split('/');
+                            if (parts.length > 2) {
+                              val = `${parts[0]}/${parts.slice(1).join('')}`;
+                            }
+                            setEditForm({ ...editForm, bloodPressure: val });
+                          }}
                           placeholder="120/80"
                         />
                       </div>

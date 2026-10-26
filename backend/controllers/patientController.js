@@ -362,7 +362,7 @@ const createPatient = async (req, res) => {
       demographics: {
         weight: weight || undefined,
         height: height || undefined,
-        bloodPressure: bloodPressure || undefined,
+        bloodPressure: bloodPressure ? String(bloodPressure).replace(/[^0-9/]/g, '').trim() || undefined : undefined,
         temperature: temperature || undefined
       },
       opdFee: parsedGrossFee,
@@ -1339,7 +1339,9 @@ const updatePatient = async (req, res) => {
         demographicsChanged = true;
       }
       if (newBP !== undefined) {
-        targetVisit.demographics.bloodPressure = (newBP !== '' && newBP !== null) ? String(newBP).trim() : undefined;
+        targetVisit.demographics.bloodPressure = (newBP !== '' && newBP !== null)
+          ? String(newBP).replace(/[^0-9/]/g, '').trim() || undefined
+          : undefined;
         demographicsChanged = true;
       }
       if (newTemp !== undefined) {
