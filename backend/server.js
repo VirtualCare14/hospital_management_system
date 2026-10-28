@@ -61,6 +61,7 @@ app.use('/api/super-admin', require('./routes/superAdminRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
 app.use('/api/admin/hospital-settings', require('./routes/hospitalSettingsRoutes'));
 app.use('/api/patients', require('./routes/patientRoutes'));
+app.use('/api/reception/visiting-schedules', require('./routes/visitingScheduleRoutes'));
 app.use('/api/consultation', require('./routes/consultationRoutes'));
 app.use('/api/prescription', require('./routes/prescriptionRoutes'));
 app.use('/api/lab', require('./routes/labRoutes'));

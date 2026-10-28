@@ -15,6 +15,7 @@ import PatientDetails from './pages/reception/PatientDetails.jsx';
 import PatientFollowUps from './pages/reception/PatientFollowUps.jsx';
 import AbhaDashboard from './pages/reception/abha/AbhaDashboard.jsx';
 import ReceptionLabBilling from './pages/reception/ReceptionLabBilling.jsx';
+import VisitingSpecialists from './pages/reception/VisitingSpecialists.jsx';
 import DoctorDashboard from './pages/doctor/DoctorDashboard.jsx';
 import DoctorPatientList from './pages/doctor/DoctorPatientList.jsx';
 import CompletedConsultations from './pages/doctor/CompletedConsultations.jsx';
@@ -106,6 +107,7 @@ function App() {
             <Route path="/reception/follow-ups" element={<PatientFollowUps />} />
             <Route path="/reception/abha" element={<AbhaDashboard />} />
             <Route path="/reception/lab-billing" element={<ReceptionLabBilling />} />
+            <Route path="/reception/visiting-specialists" element={<VisitingSpecialists />} />
           </Route>
           <Route element={<ProtectedRoute allowedRoles={['admin', 'doctor']} />}>
             <Route path="/doctor" element={<DoctorDashboard />} />

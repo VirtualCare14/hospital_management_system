@@ -12,8 +12,11 @@ const tenantQuery = (req, extra = {}) => (
 // @access  Private
 const createPrescription = async (req, res) => {
   try {
-    const { patientId, medicines, language, pdfUrl, consultationData } = req.body;
-    const doctorId = req.user._id;
+    if (!['doctor', 'admin', 'superadmin'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'Only authorized clinical staff or doctors can create prescriptions' });
+    }
+
+    const { patientId, medicines, language, pdfUrl, consultationData, consultationId: explicitConsId, visitId: explicitVisitId } = req.body;
 
     if (!patientId) {
       return res.status(400).json({ message: 'Patient ID is required' });
@@ -37,97 +40,111 @@ const createPrescription = async (req, res) => {
       return res.status(400).json({ message: 'Medicines list is required' });
     }
 
-    // 1. Find the latest pending consultation OR the latest consultation to mark completed
+    // 1. Identify or update associated Consultation
     let consultation = null;
-    let consultationId = null;
+    let consultationId = explicitConsId || null;
 
-    if (consultationData) {
-      // Find the LATEST PENDING consultation for this patient+doctor
+    if (consultationId) {
+      consultation = await Consultation.findOne(tenantQuery(req, { _id: consultationId }));
+    }
+
+    if (!consultation && consultationData) {
+      // Try to find the latest pending consultation for this patient
       consultation = await Consultation.findOne(
-        tenantQuery(req, { patientId, doctorId, consultationStatus: 'pending' })
+        tenantQuery(req, { patientId, consultationStatus: 'pending' })
       ).sort({ createdAt: -1 });
+    }
 
-      if (consultation) {
-        // Save the original diagnosis remark from consultation if not provided in prescription
+    // Identify associated Visit
+    const visitId = explicitVisitId || consultation?.visitId || null;
+    let visit = null;
+    if (visitId) {
+      visit = await Visit.findOne(tenantQuery(req, { _id: visitId }));
+    } else {
+      visit = await Visit.findOne(tenantQuery(req, { patientId })).sort({ createdAt: -1 });
+    }
+
+    const isVisiting = Boolean(consultation?.isVisitingDoctor || visit?.isVisitingDoctor);
+    const visitingScheduleId = isVisiting ? (consultation?.visitingScheduleId || visit?.visitingScheduleId || null) : null;
+    const visitingDoctorName = isVisiting ? (consultation?.visitingDoctorName || visit?.visitingDoctorName || visit?.doctorName || '') : '';
+    const finalDoctorId = isVisiting ? null : (visit?.doctorId || consultation?.doctorId || (req.user.role === 'doctor' ? req.user._id : null));
+
+    if (consultation) {
+      if (consultationData) {
         if (!consultationData.diagnosisRemark && consultation.diagnosisRemark) {
           consultationData.diagnosisRemark = consultation.diagnosisRemark;
         }
-        
-        consultation.consultationStatus = 'completed';
-        consultation.consultationCompletedDate = new Date();
         if (consultationData.symptoms) consultation.symptoms = consultationData.symptoms;
         if (consultationData.generalPastHistory !== undefined) consultation.generalPastHistory = consultationData.generalPastHistory;
         if (consultationData.diagnosisRemark) consultation.diagnosisRemark = consultationData.diagnosisRemark;
         if (consultationData.vitals) consultation.vitals = consultationData.vitals;
         if (consultationData.tests) consultation.tests = consultationData.tests;
         if (consultationData.followUpDate) consultation.followUpDate = consultationData.followUpDate;
-        await consultation.save();
-        consultationId = consultation._id;
-      } else {
-        consultation = await Consultation.create({
-          patientId,
-          hospitalId: req.user.hospitalId,
-          doctorId,
-          symptoms: consultationData.symptoms || [],
-          generalPastHistory: consultationData.generalPastHistory || '',
-          diagnosisRemark: consultationData.diagnosisRemark || '',
-          vitals: consultationData.vitals || {},
-          tests: consultationData.tests || [],
-          followUpDate: consultationData.followUpDate || '',
-          consultationStatus: 'completed',
-          consultationCompletedDate: new Date(),
-          consultationDateTime: new Date()
-        });
-        consultationId = consultation._id;
       }
-    } else {
-      // If no consultationData, try to mark the latest consultation as completed
-      consultation = await Consultation.findOneAndUpdate(
-        tenantQuery(req, { patientId, doctorId, consultationStatus: 'pending' }),
-        { 
-          consultationStatus: 'completed', 
-          consultationCompletedDate: new Date(),
-          consultationDateTime: new Date()
-        },
-        { sort: { createdAt: -1 }, returnDocument: 'after' }
-      );
-      if (consultation) {
-        consultationId = consultation._id;
-      }
+      consultation.consultationStatus = 'completed';
+      consultation.consultationCompletedDate = new Date();
+      await consultation.save();
+      consultationId = consultation._id;
+    } else if (consultationData) {
+      consultation = await Consultation.create({
+        patientId,
+        hospitalId: req.user.hospitalId,
+        doctorId: finalDoctorId,
+        isVisitingDoctor: isVisiting,
+        visitingScheduleId,
+        visitingDoctorName,
+        conductedBy: req.user._id,
+        conductedByName: req.user.doctorName || req.user.username || '',
+        visitId: visit?._id || visitId || null,
+        symptoms: consultationData.symptoms || [],
+        generalPastHistory: consultationData.generalPastHistory || '',
+        diagnosisRemark: consultationData.diagnosisRemark || '',
+        vitals: consultationData.vitals || {},
+        tests: consultationData.tests || [],
+        followUpDate: consultationData.followUpDate || '',
+        consultationStatus: 'completed',
+        consultationCompletedDate: new Date(),
+        consultationDateTime: new Date()
+      });
+      consultationId = consultation._id;
     }
 
     // 2. ALWAYS create a NEW Prescription record (never update existing)
-    // Get the visitId from consultation if available
-    const visitId = consultation ? consultation.visitId : null;
-    
-    // Get diagnosis remark from consultation if not explicitly provided
     const diagnosisRemark = consultationData?.diagnosisRemark || consultation?.diagnosisRemark || '';
     const patientAdvice = consultationData?.patientAdvice || consultation?.patientAdvice || '';
 
     const prescription = await Prescription.create({
       patientId,
       hospitalId: req.user.hospitalId,
-      doctorId,
-      consultationId: consultationId,
-      visitId: visitId,
+      doctorId: finalDoctorId,
+      isVisitingDoctor: isVisiting,
+      visitingScheduleId,
+      visitingDoctorName,
+      prescribedBy: req.user._id,
+      prescribedByName: req.user.doctorName || req.user.username || '',
+      consultationId: consultationId || null,
+      visitId: visit?._id || visitId || null,
       medicines,
       diagnosisRemark,
       patientAdvice,
       language: language || 'English',
       pdfUrl: pdfUrl || '',
-      prescriptionDateTime: new Date() // Auto capture system timestamp
+      prescriptionDateTime: new Date()
     });
 
-    // 3. Update Visit records to mark consultation as completed
-    if (visitId) {
+    // 3. Update Visit record to mark consultation as completed
+    if (visit) {
+      visit.consultationStatus = 'completed';
+      visit.consultationCompletedDate = new Date();
+      await visit.save();
+    } else if (visitId) {
       await Visit.updateOne(
         tenantQuery(req, { _id: visitId }),
         { consultationStatus: 'completed', consultationCompletedDate: new Date() }
       );
     } else {
-      // Fallback: update latest pending visit for patient/doctor
       await Visit.findOneAndUpdate(
-        tenantQuery(req, { patientId, doctorId, consultationStatus: 'pending' }),
+        tenantQuery(req, { patientId, consultationStatus: 'pending' }),
         { consultationStatus: 'completed', consultationCompletedDate: new Date() },
         { sort: { createdAt: -1 } }
       );

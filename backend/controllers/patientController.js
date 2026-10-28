@@ -5,12 +5,97 @@ const User = require('../models/User');
 const Hospital = require('../models/Hospital');
 const SameDayTreatment = require('../models/SameDayTreatment');
 const IpdAdminSettings = require('../models/IpdAdminSettings');
+const VisitingDoctorSchedule = require('../models/VisitingDoctorSchedule');
 const generateUhid = require('../utils/generateUhid');
 const { isSamePatientName, normalizePatientName } = require('../utils/patientUtils');
 
 const tenantQuery = (req, extra = {}) => (
   req?.user?.hospitalId ? { ...extra, hospitalId: req.user.hospitalId } : extra
 );
+
+// Parse time string ("10:00", "10:00 AM", "02:30 PM", "14:30") to minutes from midnight
+const parseTimeToMinutes = (timeStr) => {
+  if (!timeStr || typeof timeStr !== 'string') return null;
+  const trimmed = timeStr.trim().toUpperCase();
+  const ampmMatch = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/);
+  if (ampmMatch) {
+    let hours = parseInt(ampmMatch[1], 10);
+    const minutes = parseInt(ampmMatch[2], 10);
+    const modifier = ampmMatch[3];
+    if (modifier === 'PM' && hours < 12) hours += 12;
+    if (modifier === 'AM' && hours === 12) hours = 0;
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+    return hours * 60 + minutes;
+  }
+  return null;
+};
+
+// Parse slot string into start and end minutes
+const parseSlotTimeRange = (slotStr, defaultDuration = 15) => {
+  if (!slotStr || typeof slotStr !== 'string') return null;
+  const parts = slotStr.split('-').map(s => s.trim());
+  const startMins = parseTimeToMinutes(parts[0]);
+  if (startMins === null) return null;
+  let endMins;
+  if (parts.length > 1) {
+    endMins = parseTimeToMinutes(parts[1]);
+    if (endMins === null) return null;
+  } else {
+    endMins = startMins + defaultDuration;
+  }
+  return { startMins, endMins };
+};
+
+// Format minutes from midnight to 12h string (e.g. 600 => "10:00 AM")
+const formatMinutesTo12h = (totalMinutes) => {
+  let hours = Math.floor(totalMinutes / 60) % 24;
+  const minutes = totalMinutes % 60;
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  const strHours = hours < 10 ? '0' + hours : '' + hours;
+  const strMinutes = minutes < 10 ? '0' + minutes : '' + minutes;
+  return `${strHours}:${strMinutes} ${ampm}`;
+};
+
+// Resolve hospital ID helper strictly enforcing tenant isolation and authorization
+const resolveHospitalId = async (req) => {
+  // 1. Authenticated user's hospital is strictly authoritative when present
+  if (req?.user?.hospitalId) {
+    return req.user.hospitalId;
+  }
+  if (req?.hospital?._id && req.hospital.isActive !== false) {
+    return req.hospital._id;
+  }
+
+  // 2. Explicit target hospital allowed ONLY for authorized superadmin
+  if (req?.user?.role === 'superadmin' && req?.body?.hospitalId) {
+    try {
+      if (mongoose.Types.ObjectId.isValid(req.body.hospitalId)) {
+        const targetHosp = await Hospital.findById(req.body.hospitalId).select('_id isActive');
+        if (targetHosp && targetHosp.isActive) {
+          return targetHosp._id;
+        }
+      }
+    } catch (err) {
+      console.warn('Superadmin target hospital lookup error:', err.message);
+    }
+    return null;
+  }
+
+  // 3. Single-tenant development/test fallback only when NOT in production
+  // NEVER auto-create hospitals and NEVER silently select arbitrary hospitals in production
+  if (process.env.NODE_ENV !== 'production') {
+    try {
+      const defaultHosp = await Hospital.findOne({ isActive: true }).select('_id');
+      if (defaultHosp) return defaultHosp._id;
+    } catch (hospErr) {
+      console.warn('Development fallback hospital lookup error:', hospErr.message);
+    }
+  }
+
+  return null;
+};
 
 // Helper to get patient IDs strictly belonging to this clinic
 const getClinicPatientIds = async (req) => {
@@ -123,6 +208,8 @@ const createPatient = async (req, res) => {
       category,
       department,
       doctorId,
+      isVisitingDoctor: reqIsVisitingDoctor,
+      visitingScheduleId: reqVisitingScheduleId,
       appointmentDate,
       slot,
       visitType,
@@ -130,6 +217,16 @@ const createPatient = async (req, res) => {
       height,
       bloodPressure,
       temperature,
+      cvs,
+      respiratoryRate,
+      rr,
+      pulseRate,
+      pulse,
+      pr,
+      perAbdomen,
+      pa,
+      bilateralChest,
+      spo2,
       opdFee: reqOpdFee,
       discountType: reqDiscountType,
       discountValue: reqDiscountValue,
@@ -148,40 +245,136 @@ const createPatient = async (req, res) => {
 
     const isLab = visitType === 'Lab' || req.body.isLab || (department && (department === 'Laboratory' || department === 'Diagnostics' || department.toLowerCase().includes('lab')));
     const isEmergency = req.body.isEmergency || (!department && !slot && !isLab);
+    const isVisiting = Boolean(reqIsVisitingDoctor && reqVisitingScheduleId);
 
     if (!patientName || !mobile) {
       return res.status(400).json({ message: 'Patient Name and Mobile are required.' });
     }
 
-    if (!isEmergency && !isLab && (!department || !doctorId || !appointmentDate || !slot)) {
-      return res.status(400).json({ message: 'All required registration fields must be provided for OPD appointments' });
+    if (!isEmergency && !isLab) {
+      if (isVisiting) {
+        if (!department || !appointmentDate || !slot) {
+          return res.status(400).json({ message: 'Department, Appointment Date, and Slot are required for Super Speciality appointments' });
+        }
+      } else if (!department || !doctorId || !appointmentDate || !slot) {
+        return res.status(400).json({ message: 'All required registration fields must be provided for OPD appointments' });
+      }
     }
 
     const finalDepartment = department || (isLab ? 'Laboratory' : (isEmergency ? 'Emergency' : 'General'));
     const finalAppointmentDate = appointmentDate || new Date().toISOString().split('T')[0];
     const finalSlot = slot || (isLab ? 'Lab Walk-in' : (isEmergency ? 'Emergency' : 'Walk-in'));
 
-    // Verify doctor exists if doctorId is provided, or fallback to authenticated user
-    let doctor = null;
-    if (doctorId) {
-      doctor = await User.findOne(tenantQuery(req, { _id: doctorId }));
-    }
-    if (!doctor) {
-      doctor = await User.findOne(tenantQuery(req, { _id: req.user._id }));
-    }
-    const docIdForAppt = doctor?._id || req.user._id;
-
-    // Check if slot is already booked for non-emergency registration
-    if (!isEmergency && !isLab && doctorId && finalSlot !== 'Emergency' && finalSlot !== 'Lab Walk-in') {
-      const slotBooked = await Visit.findOne({
-        doctorId,
-        appointmentDate: finalAppointmentDate,
-        slot: finalSlot,
-        ...(req.user.hospitalId ? { hospitalId: req.user.hospitalId } : {})
+    // Resolve hospital ID early to ensure consistency across schedule verification, slot checks, and visit creation
+    const resolvedHospitalId = await resolveHospitalId(req);
+    if (!resolvedHospitalId) {
+      return res.status(403).json({
+        message: 'Unable to resolve authorized hospital tenant context. Access denied.'
       });
+    }
 
-      if (slotBooked) {
-        return res.status(400).json({ message: 'This slot is already booked for the selected doctor and date.' });
+    req.hospitalId = resolvedHospitalId;
+    if (req.user && !req.user.hospitalId) {
+      req.user.hospitalId = resolvedHospitalId;
+    }
+
+    // Visiting Specialist verification & duplicate slot check
+    // Validate appointment date against server authoritative current date in hospital timezone
+    const now = new Date();
+    const todayStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const timeStr = now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour12: false });
+    const [h, m] = timeStr.split(':').map(Number);
+    const currentMinutes = h * 60 + m;
+
+    if (finalAppointmentDate < todayStr) {
+      return res.status(400).json({ message: 'Cannot book appointments for past dates.' });
+    }
+
+    let visitingSchedule = null;
+    if (isVisiting) {
+      visitingSchedule = await VisitingDoctorSchedule.findOne({
+        _id: reqVisitingScheduleId,
+        hospitalId: resolvedHospitalId
+      });
+      if (!visitingSchedule || visitingSchedule.status !== 'Active') {
+        return res.status(400).json({ message: 'Selected doctor schedule not found or is no longer active.' });
+      }
+      if (!visitingSchedule.visitDates.includes(finalAppointmentDate)) {
+        return res.status(400).json({
+          message: `Selected doctor is not scheduled to visit on ${finalAppointmentDate}. Configured dates: ${visitingSchedule.visitDates.join(', ')}`
+        });
+      }
+
+      if (!isEmergency && !isLab && finalSlot !== 'Emergency' && finalSlot !== 'Lab Walk-in') {
+        const duration = visitingSchedule.slotDuration || 15;
+        const slotTimes = parseSlotTimeRange(finalSlot, duration);
+        const schedStartMins = parseTimeToMinutes(visitingSchedule.startTime);
+        const schedEndMins = parseTimeToMinutes(visitingSchedule.endTime);
+
+        if (slotTimes === null || schedStartMins === null || schedEndMins === null || slotTimes.startMins < schedStartMins || slotTimes.endMins > schedEndMins) {
+          return res.status(400).json({
+            message: `Selected slot (${finalSlot}) falls outside the doctor visiting hours (${visitingSchedule.startTime} - ${visitingSchedule.endTime}).`
+          });
+        }
+
+        // Prevent booking slots that have already passed today
+        if (finalAppointmentDate === todayStr && slotTimes.startMins < currentMinutes) {
+          return res.status(400).json({
+            message: 'Cannot book a slot whose time has already passed today.'
+          });
+        }
+
+        const slotParts = finalSlot.split('-').map(s => s.trim());
+        if (slotParts.length > 1 && (slotTimes.endMins - slotTimes.startMins) !== duration) {
+          return res.status(400).json({
+            message: `Selected slot duration does not match the configured schedule duration of ${duration} minutes.`
+          });
+        }
+
+        const startOnlySlot = formatMinutesTo12h(slotTimes.startMins);
+        const fullRangeSlot = `${startOnlySlot} - ${formatMinutesTo12h(slotTimes.endMins)}`;
+
+        const slotBooked = await Visit.findOne({
+          visitingScheduleId: visitingSchedule._id,
+          appointmentDate: finalAppointmentDate,
+          hospitalId: resolvedHospitalId,
+          consultationStatus: { $ne: 'cancelled' },
+          $or: [
+            { slot: finalSlot },
+            { slot: startOnlySlot },
+            { slot: fullRangeSlot }
+          ]
+        });
+
+        if (slotBooked) {
+          return res.status(400).json({ message: 'This slot is already booked for this doctor on the selected date.' });
+        }
+      }
+    }
+
+    // Permanent doctor verification & duplicate slot check
+    let doctor = null;
+    let docIdForAppt = null;
+    if (!isVisiting) {
+      if (doctorId) {
+        doctor = await User.findOne(tenantQuery(req, { _id: doctorId }));
+      }
+      if (!doctor) {
+        doctor = await User.findOne(tenantQuery(req, { _id: req.user._id }));
+      }
+      docIdForAppt = doctor?._id || req.user._id;
+
+      if (!isEmergency && !isLab && doctorId && finalSlot !== 'Emergency' && finalSlot !== 'Lab Walk-in') {
+        const slotBooked = await Visit.findOne({
+          doctorId,
+          appointmentDate: finalAppointmentDate,
+          slot: finalSlot,
+          hospitalId: resolvedHospitalId
+        });
+
+        if (slotBooked) {
+          return res.status(400).json({ message: 'This slot is already booked for the selected doctor and date.' });
+        }
       }
     }
 
@@ -245,29 +438,7 @@ const createPatient = async (req, res) => {
     let isExistingPatient = false;
     let visitNumber = 1;
 
-    let resolvedHospitalId = req.user?.hospitalId || req.body?.hospitalId || req.hospital?._id;
-    if (!resolvedHospitalId) {
-      try {
-        const defaultHosp = await Hospital.findOne({ isActive: true }).select('_id');
-        if (defaultHosp) {
-          resolvedHospitalId = defaultHosp._id;
-        } else {
-          const anyHosp = await Hospital.findOne().select('_id');
-          if (anyHosp) {
-            resolvedHospitalId = anyHosp._id;
-          } else {
-            const createdHosp = await Hospital.create({
-              name: 'Virtual Care Hospital',
-              code: 'VCH',
-              isActive: true
-            });
-            resolvedHospitalId = createdHosp._id;
-          }
-        }
-      } catch (hospErr) {
-        console.warn('Could not resolve hospital ID for patient creation:', hospErr);
-      }
-    }
+
 
     if (existingPatient) {
       patient = existingPatient;
@@ -309,23 +480,30 @@ const createPatient = async (req, res) => {
     // Generate registration number
     const registrationNumber = await generateRegistrationNumber(resolvedHospitalId);
 
-    // Generate appointment number (per doctor + department + date)
+    // Generate appointment number (per doctor/specialist + department + date)
+    const apptDoctorId = isVisiting ? visitingSchedule._id : docIdForAppt;
     const { appointmentNumber, appointmentDateSeq } = await generateAppointmentNumber(
-      resolvedHospitalId, docIdForAppt, finalDepartment, finalAppointmentDate
+      resolvedHospitalId, apptDoctorId, finalDepartment, finalAppointmentDate
     );
 
     // Determine visit type
     let finalVisitType = isEmergency ? 'Emergency' : (visitType || (isLab ? 'Lab' : 'OPD'));
+    if (finalVisitType === 'Super Speciality OPD') {
+      finalVisitType = 'OPD';
+    }
     if (department && department.toLowerCase().trim() === 'same day care') {
       finalVisitType = 'Same Day Treatment';
     } else if (isLab) {
       finalVisitType = 'Lab';
     }
 
-    // Process OPD Billing fields
-    const parsedGrossFee = reqOpdFee !== undefined && reqOpdFee !== null && reqOpdFee !== ''
-      ? Math.max(0, Number(reqOpdFee) || 0)
-      : (doctor?.opdFees || 0);
+    // Process OPD Billing fields (Visiting Specialist fee is strictly server-verified from schedule)
+    const defaultDoctorFee = isVisiting ? (visitingSchedule.consultationFee !== undefined && Number(visitingSchedule.consultationFee) >= 0 ? Number(visitingSchedule.consultationFee) : 0) : (doctor?.opdFees || 0);
+    const parsedGrossFee = isVisiting
+      ? defaultDoctorFee
+      : (reqOpdFee !== undefined && reqOpdFee !== null && reqOpdFee !== ''
+          ? Math.max(0, Number(reqOpdFee) || 0)
+          : defaultDoctorFee);
 
     const discountType = ['amount', 'percent'].includes(reqDiscountType) ? reqDiscountType : 'none';
     const discountValue = Math.max(0, Number(reqDiscountValue) || 0);
@@ -351,19 +529,30 @@ const createPatient = async (req, res) => {
       registrationDate: new Date(),
       visitType: finalVisitType,
       department: finalDepartment,
-      doctorId: docIdForAppt,
+      doctorId: isVisiting ? null : docIdForAppt,
+      isVisitingDoctor: isVisiting,
+      visitingScheduleId: isVisiting ? visitingSchedule._id : null,
+      visitingDoctorName: isVisiting ? visitingSchedule.doctorName : '',
+      doctorName: isVisiting ? visitingSchedule.doctorName : (doctor?.doctorName || doctor?.username || ''),
       appointmentDate: finalAppointmentDate,
       slot: finalSlot,
       appointmentNumber,
       appointmentDateSeq,
       appointmentDept: finalDepartment,
-      appointmentDoctorId: docIdForAppt,
+      appointmentDoctorId: apptDoctorId,
       visitNumber,
       demographics: {
         weight: weight || undefined,
         height: height || undefined,
         bloodPressure: bloodPressure ? String(bloodPressure).replace(/[^0-9/]/g, '').trim() || undefined : undefined,
-        temperature: temperature || undefined
+        temperature: temperature || undefined,
+        cvs: (cvs && typeof cvs === 'string' && cvs.trim()) ? cvs.trim() : undefined,
+        respiratoryRate: (respiratoryRate !== undefined && respiratoryRate !== '' && respiratoryRate !== null) ? Number(respiratoryRate) : ((rr !== undefined && rr !== '' && rr !== null) ? Number(rr) : undefined),
+        pulseRate: (pulseRate !== undefined && pulseRate !== '' && pulseRate !== null) ? Number(pulseRate) : ((pr !== undefined && pr !== '' && pr !== null) ? Number(pr) : ((pulse !== undefined && pulse !== '' && pulse !== null) ? Number(pulse) : undefined)),
+        pulse: (pulseRate !== undefined && pulseRate !== '' && pulseRate !== null) ? Number(pulseRate) : ((pr !== undefined && pr !== '' && pr !== null) ? Number(pr) : ((pulse !== undefined && pulse !== '' && pulse !== null) ? Number(pulse) : undefined)),
+        perAbdomen: (perAbdomen && typeof perAbdomen === 'string' && perAbdomen.trim()) ? perAbdomen.trim() : ((pa && typeof pa === 'string' && pa.trim()) ? pa.trim() : undefined),
+        bilateralChest: (bilateralChest && typeof bilateralChest === 'string' && bilateralChest.trim()) ? bilateralChest.trim() : undefined,
+        spo2: (spo2 !== undefined && spo2 !== '' && spo2 !== null) ? Number(spo2) : undefined
       },
       opdFee: parsedGrossFee,
       discountType,
@@ -405,7 +594,7 @@ const createPatient = async (req, res) => {
       } catch (e) { /* ignore */ }
 
       sameDayTreatmentRecord = new SameDayTreatment({
-        hospitalId: req.user.hospitalId,
+        hospitalId: resolvedHospitalId,
         patientId: patient._id,
         patientName: patient.patientName,
         uhid: patient.uhid,
@@ -443,12 +632,22 @@ const createPatient = async (req, res) => {
       gender: patient.gender,
       aadhaar: patient.aadhaar,
       department: visit.department,
-      doctorId: doctor ? {
+      doctorName: isVisiting ? visitingSchedule.doctorName : (doctor?.doctorName || doctor?.username || ''),
+      isVisitingDoctor: isVisiting,
+      visitingScheduleId: isVisiting ? visitingSchedule._id : null,
+      visitingDoctorName: isVisiting ? visitingSchedule.doctorName : '',
+      doctorId: isVisiting ? {
+        _id: visitingSchedule._id,
+        doctorName: visitingSchedule.doctorName,
+        username: visitingSchedule.doctorName,
+        opdFees: visitingSchedule.consultationFee,
+        isVisitingDoctor: true
+      } : (doctor ? {
         _id: doctor._id,
         doctorName: doctor.doctorName,
         username: doctor.username,
         opdFees: doctor.opdFees
-      } : visit.doctorId,
+      } : visit.doctorId),
       appointmentDate: visit.appointmentDate,
       slot: visit.slot,
       appointmentNumber: visit.appointmentNumber,
@@ -484,6 +683,14 @@ const createPatient = async (req, res) => {
     });
   } catch (error) {
     console.error('Create Patient Error:', error);
+    if (error.code === 11000) {
+      if (error.keyPattern?.visitingScheduleId || (error.message && error.message.includes('visitingScheduleId'))) {
+        return res.status(409).json({ message: 'This slot was just booked by another patient. Please select another slot.' });
+      }
+      if (error.keyPattern?.registrationNumber) {
+        return res.status(409).json({ message: 'Registration number collision occurred. Please retry registration.' });
+      }
+    }
     res.status(500).json({ message: error.message || 'Server error' });
   }
 };
@@ -661,7 +868,18 @@ const getPatientById = async (req, res) => {
       ...patient.toObject(),
       age: patientAge,
       department: latestVisit?.department || '',
-      doctorId: latestVisit?.doctorId || null,
+      doctorId: latestVisit?.doctorId || (latestVisit?.isVisitingDoctor ? {
+        _id: latestVisit.visitingScheduleId,
+        doctorName: latestVisit.doctorName || latestVisit.visitingDoctorName,
+        username: latestVisit.doctorName || latestVisit.visitingDoctorName,
+        opdFees: latestVisit.consultationFee || latestVisit.opdFee || 0,
+        isVisitingDoctor: true
+      } : null),
+      doctorName: latestVisit?.isVisitingDoctor ? (latestVisit.doctorName || latestVisit.visitingDoctorName) : (latestVisit?.doctorId?.doctorName || latestVisit?.doctorId?.username || latestVisit?.doctorName || ''),
+      isVisitingDoctor: latestVisit?.isVisitingDoctor || false,
+      visitingScheduleId: latestVisit?.visitingScheduleId || null,
+      visitingDoctorName: latestVisit?.visitingDoctorName || '',
+      speciality: latestVisit?.speciality || '',
       appointmentDate: latestVisit?.appointmentDate || '',
       slot: latestVisit?.slot || '',
       appointmentNumber: latestVisit?.appointmentNumber || null,
@@ -697,7 +915,20 @@ const getPatientVisits = async (req, res) => {
       .populate('doctorId', 'doctorName username department')
       .sort({ createdAt: -1 });
 
-    res.status(200).json(visits);
+    const formattedVisits = visits.map(v => {
+      const vObj = v.toObject();
+      if (v.isVisitingDoctor) {
+        vObj.doctorId = vObj.doctorId || {
+          _id: v.visitingScheduleId,
+          doctorName: v.doctorName || v.visitingDoctorName,
+          username: v.doctorName || v.visitingDoctorName,
+          isVisitingDoctor: true
+        };
+      }
+      return vObj;
+    });
+
+    res.status(200).json(formattedVisits);
   } catch (error) {
     console.error('Get Patient Visits Error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -909,7 +1140,17 @@ const getRegistrations = async (req, res) => {
         appointmentNumber: v.appointmentNumber,
         consultationStatus: v.consultationStatus,
         patientId: v.patientId?._id || v.patientId,
-        doctorId: pDoc || v.doctorId,
+        doctorName: v.isVisitingDoctor ? (v.visitingDoctorName || v.doctorName) : (pDoc?.doctorName || pDoc?.username || v.doctorName || ''),
+        isVisitingDoctor: Boolean(v.isVisitingDoctor),
+        visitingScheduleId: v.visitingScheduleId || null,
+        visitingDoctorName: v.visitingDoctorName || '',
+        doctorId: v.isVisitingDoctor ? {
+          _id: v.visitingScheduleId,
+          doctorName: v.visitingDoctorName || v.doctorName,
+          username: v.visitingDoctorName || v.doctorName,
+          opdFees: grossFee,
+          isVisitingDoctor: true
+        } : (pDoc || v.doctorId),
         demographics: v.demographics,
         opdFee: grossFee,
         discountType: v.discountType || 'none',
@@ -1011,12 +1252,16 @@ const getVisitHistory = async (req, res) => {
 // @access  Private
 const getBookedSlots = async (req, res) => {
   try {
-    const { doctorId, date } = req.query;
-    if (!doctorId || !date) {
-      return res.status(400).json({ message: 'doctorId and date query parameters are required' });
+    const { doctorId, visitingScheduleId, date } = req.query;
+    if ((!doctorId && !visitingScheduleId) || !date) {
+      return res.status(400).json({ message: 'doctorId or visitingScheduleId, and date query parameters are required' });
     }
 
-    const bookings = await Visit.find(tenantQuery(req, { doctorId, appointmentDate: date })).select('slot');
+    const query = visitingScheduleId
+      ? { visitingScheduleId, appointmentDate: date }
+      : { doctorId, appointmentDate: date };
+
+    const bookings = await Visit.find(tenantQuery(req, query)).select('slot');
     const bookedSlots = bookings.map(b => b.slot);
 
     res.status(200).json(bookedSlots);
@@ -1280,6 +1525,16 @@ const updatePatient = async (req, res) => {
       height,
       bloodPressure,
       temperature,
+      cvs,
+      respiratoryRate,
+      rr,
+      pulseRate,
+      pulse,
+      pr,
+      perAbdomen,
+      pa,
+      bilateralChest,
+      spo2,
       vitals,
       demographics
     } = req.body;
@@ -1326,6 +1581,12 @@ const updatePatient = async (req, res) => {
       const newHeight = height !== undefined ? height : rawVitals.height;
       const newBP = bloodPressure !== undefined ? bloodPressure : rawVitals.bloodPressure;
       const newTemp = temperature !== undefined ? temperature : rawVitals.temperature;
+      const newCvs = cvs !== undefined ? cvs : rawVitals.cvs;
+      const newRR = respiratoryRate !== undefined ? respiratoryRate : (rr !== undefined ? rr : rawVitals.respiratoryRate);
+      const newPR = pulseRate !== undefined ? pulseRate : (pr !== undefined ? pr : (pulse !== undefined ? pulse : (rawVitals.pulseRate || rawVitals.pulse)));
+      const newPA = perAbdomen !== undefined ? perAbdomen : (pa !== undefined ? pa : rawVitals.perAbdomen);
+      const newChest = bilateralChest !== undefined ? bilateralChest : rawVitals.bilateralChest;
+      const newSpO2 = spo2 !== undefined ? spo2 : rawVitals.spo2;
 
       if (!targetVisit.demographics) targetVisit.demographics = {};
       let demographicsChanged = false;
@@ -1346,6 +1607,32 @@ const updatePatient = async (req, res) => {
       }
       if (newTemp !== undefined) {
         targetVisit.demographics.temperature = (newTemp !== '' && newTemp !== null) ? Number(newTemp) : undefined;
+        demographicsChanged = true;
+      }
+      if (newCvs !== undefined) {
+        targetVisit.demographics.cvs = (newCvs !== '' && newCvs !== null) ? String(newCvs).trim() : undefined;
+        demographicsChanged = true;
+      }
+      if (newRR !== undefined) {
+        targetVisit.demographics.respiratoryRate = (newRR !== '' && newRR !== null) ? Number(newRR) : undefined;
+        demographicsChanged = true;
+      }
+      if (newPR !== undefined) {
+        const parsedPR = (newPR !== '' && newPR !== null) ? Number(newPR) : undefined;
+        targetVisit.demographics.pulseRate = parsedPR;
+        targetVisit.demographics.pulse = parsedPR;
+        demographicsChanged = true;
+      }
+      if (newPA !== undefined) {
+        targetVisit.demographics.perAbdomen = (newPA !== '' && newPA !== null) ? String(newPA).trim() : undefined;
+        demographicsChanged = true;
+      }
+      if (newChest !== undefined) {
+        targetVisit.demographics.bilateralChest = (newChest !== '' && newChest !== null) ? String(newChest).trim() : undefined;
+        demographicsChanged = true;
+      }
+      if (newSpO2 !== undefined) {
+        targetVisit.demographics.spo2 = (newSpO2 !== '' && newSpO2 !== null) ? Number(newSpO2) : undefined;
         demographicsChanged = true;
       }
 
@@ -1812,7 +2099,8 @@ module.exports = {
   getFollowUpPatients,
   getPatientAbdmCareContexts,
   triggerPatientAbdmLink,
-  refundPatientRegistration
+  refundPatientRegistration,
+  resolveHospitalId
 };
 
 

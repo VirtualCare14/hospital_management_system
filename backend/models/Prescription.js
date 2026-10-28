@@ -14,7 +14,31 @@ const prescriptionSchema = new mongoose.Schema({
   doctorId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: function() {
+      return !this.isVisitingDoctor;
+    }
+  },
+  isVisitingDoctor: {
+    type: Boolean,
+    default: false
+  },
+  visitingScheduleId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'VisitingDoctorSchedule',
+    default: null
+  },
+  visitingDoctorName: {
+    type: String,
+    default: ''
+  },
+  prescribedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  prescribedByName: {
+    type: String,
+    default: ''
   },
   consultationId: {
     type: mongoose.Schema.Types.ObjectId,

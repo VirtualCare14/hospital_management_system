@@ -146,7 +146,7 @@ const PatientDetails = () => {
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 md:grid-cols-4">
+        <div className="mt-5 grid gap-3 grid-cols-2 md:grid-cols-4 lg:grid-cols-5">
           <div className="rounded-xl bg-orange-50 p-3"><p className="text-xs text-gray-500">Weight</p><p className="font-bold">{patient.demographics?.weight || '-'} kg</p></div>
           <div className="rounded-xl bg-orange-50 p-3"><p className="text-xs text-gray-500">Height</p><p className="font-bold">{patient.demographics?.height || '-'} cm</p></div>
           <div className="rounded-xl bg-orange-50 p-3"><p className="text-xs text-gray-500">BP</p><p className="font-bold">{patient.demographics?.bloodPressure || '-'}</p></div>
@@ -158,6 +158,12 @@ const PatientDetails = () => {
                 : '-'}
             </p>
           </div>
+          <div className="rounded-xl bg-orange-50 p-3"><p className="text-xs text-gray-500">Pulse Rate (PR)</p><p className="font-bold">{patient.demographics?.pulseRate || patient.demographics?.pulse ? `${patient.demographics?.pulseRate || patient.demographics?.pulse} bpm` : '-'}</p></div>
+          <div className="rounded-xl bg-orange-50 p-3"><p className="text-xs text-gray-500">Resp. Rate (RR)</p><p className="font-bold">{patient.demographics?.respiratoryRate ? `${patient.demographics.respiratoryRate} breaths/min` : '-'}</p></div>
+          <div className="rounded-xl bg-orange-50 p-3"><p className="text-xs text-gray-500">SpO2</p><p className="font-bold">{patient.demographics?.spo2 !== undefined && patient.demographics?.spo2 !== null ? `${patient.demographics.spo2}%` : '-'}</p></div>
+          <div className="rounded-xl bg-orange-50 p-3"><p className="text-xs text-gray-500">CVS</p><p className="font-bold truncate" title={patient.demographics?.cvs}>{patient.demographics?.cvs || '-'}</p></div>
+          <div className="rounded-xl bg-orange-50 p-3"><p className="text-xs text-gray-500">Per Abdomen (PA)</p><p className="font-bold truncate" title={patient.demographics?.perAbdomen}>{patient.demographics?.perAbdomen || '-'}</p></div>
+          <div className="rounded-xl bg-orange-50 p-3"><p className="text-xs text-gray-500">Bilateral Chest</p><p className="font-bold truncate" title={patient.demographics?.bilateralChest}>{patient.demographics?.bilateralChest || '-'}</p></div>
         </div>
       </div>
 

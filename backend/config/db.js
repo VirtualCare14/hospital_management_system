@@ -59,6 +59,17 @@ const ensureTenantIndexes = async (db) => {
     { hospitalId: 1, registrationNumber: 1 },
     { unique: true, partialFilterExpression: { registrationNumber: { $type: "string" } }, name: 'hospital_visit_registration_unique' }
   );
+  await db.collection('visits').createIndex(
+    { hospitalId: 1, visitingScheduleId: 1, appointmentDate: 1, slot: 1 },
+    {
+      unique: true,
+      partialFilterExpression: {
+        isVisitingDoctor: true,
+        slot: { $type: "string" }
+      },
+      name: 'hospitalId_1_visitingScheduleId_1_appointmentDate_1_slot_1'
+    }
+  );
   await db.collection('pharmacyrequests').createIndex(
     { hospitalId: 1, requestNumber: 1 },
     { unique: true, name: 'hospital_pharmacy_request_unique' }

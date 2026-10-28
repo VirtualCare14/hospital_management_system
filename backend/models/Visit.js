@@ -26,7 +26,7 @@ const visitSchema = new mongoose.Schema({
   },
   visitType: {
     type: String,
-    enum: ['OPD', 'IPD', 'Same Day Treatment', 'Emergency', 'Lab'],
+    enum: ['OPD', 'IPD', 'Same Day Treatment', 'Emergency', 'Lab', 'Super Speciality OPD'],
     default: 'OPD',
     required: true
   },
@@ -37,7 +37,24 @@ const visitSchema = new mongoose.Schema({
   doctorId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: false
+  },
+  doctorName: {
+    type: String,
+    default: ''
+  },
+  isVisitingDoctor: {
+    type: Boolean,
+    default: false
+  },
+  visitingScheduleId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'VisitingDoctorSchedule',
+    default: null
+  },
+  visitingDoctorName: {
+    type: String,
+    default: ''
   },
   appointmentDate: {
     type: String, // Format: YYYY-MM-DD
@@ -72,7 +89,14 @@ const visitSchema = new mongoose.Schema({
     weight: { type: Number },
     height: { type: Number },
     bloodPressure: { type: String },
-    temperature: { type: Number }
+    temperature: { type: Number },
+    cvs: { type: String },
+    respiratoryRate: { type: Number },
+    pulseRate: { type: Number },
+    pulse: { type: Number },
+    perAbdomen: { type: String },
+    bilateralChest: { type: String },
+    spo2: { type: Number }
   },
   visitNumber: {
     type: Number // Sequential visit number for this patient (1st visit, 2nd visit, etc.)
@@ -177,6 +201,17 @@ visitSchema.index(
   { unique: true, partialFilterExpression: { registrationNumber: { $type: "string" } } }
 );
 visitSchema.index({ hospitalId: 1, appointmentDateSeq: 1, appointmentDept: 1, appointmentDoctorId: 1, appointmentNumber: 1 });
+// Concurrency protection: Prevent duplicate slot bookings for the same visiting specialist on a date
+visitSchema.index(
+  { hospitalId: 1, visitingScheduleId: 1, appointmentDate: 1, slot: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      isVisitingDoctor: true,
+      slot: { $type: "string" }
+    }
+  }
+);
 visitSchema.index({ hospitalId: 1, patientId: 1 });
 visitSchema.index({ hospitalId: 1, uhid: 1 });
 

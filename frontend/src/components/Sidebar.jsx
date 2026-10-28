@@ -95,6 +95,7 @@ const Sidebar = () => {
     { to: '/tpa/claims', label: 'TPA Claims', icon: ClipboardCheck },
     { to: '/admin/tpa-settings', label: 'TPA Master Settings', icon: ShieldCheck },
     { to: '/admin/same-day-care', label: 'Same Day Care Settings', icon: Bandage },
+    { to: '/reception/visiting-specialists', label: 'Visiting Specialists', icon: Stethoscope },
     { to: '/admin/pharmacy-settings', label: 'Pharmacy Settings', icon: Settings },
     ...(user?.allowClinicSetting ? [{ to: '/admin/clinic-settings', label: 'Clinic Settings', icon: Stethoscope }] : []),
     { to: '/admin/delete-data', label: 'Delete Data', icon: Trash2 },
@@ -102,6 +103,7 @@ const Sidebar = () => {
 
   const receptionLinks = [
     { to: '/reception/register', label: 'Register Patient', icon: ClipboardList },
+    { to: '/reception/visiting-specialists', label: 'Visiting Specialists', icon: Stethoscope },
     { to: '/reception/lab-billing', label: 'New Bill (Lab)', icon: FlaskConical },
     { to: '/reception/patients', label: 'Patient List', icon: Users },
     { to: '/reception/follow-ups', label: 'Patient Follow-Ups Tracking', icon: CalendarCheck },

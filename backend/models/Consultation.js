@@ -14,7 +14,31 @@ const consultationSchema = new mongoose.Schema({
   doctorId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: function() {
+      return !this.isVisitingDoctor;
+    }
+  },
+  isVisitingDoctor: {
+    type: Boolean,
+    default: false
+  },
+  visitingScheduleId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'VisitingDoctorSchedule',
+    default: null
+  },
+  visitingDoctorName: {
+    type: String,
+    default: ''
+  },
+  conductedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  conductedByName: {
+    type: String,
+    default: ''
   },
   visitId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -44,7 +68,14 @@ const consultationSchema = new mongoose.Schema({
     temperature: { type: Number },
     bmi: { type: Number },
     drugAllergy: { type: String },
-    bloodPressure: { type: String }
+    bloodPressure: { type: String },
+    cvs: { type: String },
+    respiratoryRate: { type: Number },
+    pulseRate: { type: Number },
+    pulse: { type: Number },
+    perAbdomen: { type: String },
+    bilateralChest: { type: String },
+    spo2: { type: Number }
   },
   tests: [{
     type: String

@@ -43,6 +43,7 @@ const DoctorDashboard = () => {
   const [patients, setPatients] = useState([]);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('today'); // previous | today | upcoming | completed | pending | all
+  const [providerType, setProviderType] = useState('all'); // all | standard | visiting
   const [counts, setCounts] = useState(null);
   const [returnNotifications, setReturnNotifications] = useState([]);
 
@@ -100,9 +101,10 @@ const DoctorDashboard = () => {
   };
 
   const fetchPatients = useCallback(() => {
-    client.get(`/consultation/appointments?filter=${filter}`).then(({ data }) => setPatients(data)).catch(() => setPatients([]));
-    client.get('/consultation/stats').then(({ data }) => setCounts(data)).catch(() => setCounts(null));
-  }, [filter]);
+    const providerParam = providerType !== 'all' ? `&providerType=${providerType}` : '';
+    client.get(`/consultation/appointments?filter=${filter}${providerParam}`).then(({ data }) => setPatients(data)).catch(() => setPatients([]));
+    client.get(`/consultation/stats?${providerParam}`).then(({ data }) => setCounts(data)).catch(() => setCounts(null));
+  }, [filter, providerType]);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -116,10 +118,10 @@ const DoctorDashboard = () => {
     client.get('/consultation/stats').then(({ data }) => setCounts(data)).catch(() => setCounts(null));
   }, []);
 
-  // Reset pagination to page 1 on filter or search change
+  // Reset pagination to page 1 on filter, providerType, or search change
   useEffect(() => {
     setCurrentPage(1);
-  }, [filter, search]);
+  }, [filter, search, providerType]);
 
   const refreshAll = () => {
     fetchPatients();
@@ -324,9 +326,34 @@ const DoctorDashboard = () => {
               Patient List {filter && <span className="text-orange-600 font-extrabold capitalize text-base">({filter === 'all' ? 'All Patients' : filter === 'completed' ? 'Consultation Completed' : filter === 'pending' ? 'Pending OPD' : `${filter} Patients`})</span>}
             </h2>
           </div>
-          <span className="text-xs font-bold text-gray-600 bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200">
-            Total Shown: <strong className="text-gray-900">{filteredPatients.length}</strong>
-          </span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="inline-flex rounded-xl bg-gray-100 p-1 border border-gray-200 text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => setProviderType('all')}
+                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${providerType === 'all' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-600 hover:text-gray-900'}`}
+              >
+                All OPD
+              </button>
+              <button
+                type="button"
+                onClick={() => setProviderType('standard')}
+                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${providerType === 'standard' ? 'bg-white text-orange-700 shadow-xs' : 'text-gray-600 hover:text-orange-700'}`}
+              >
+                Standard OPD
+              </button>
+              <button
+                type="button"
+                onClick={() => setProviderType('visiting')}
+                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${providerType === 'visiting' ? 'bg-purple-600 text-white shadow-xs' : 'text-gray-600 hover:text-purple-700'}`}
+              >
+                Visiting Specialists
+              </button>
+            </div>
+            <span className="text-xs font-bold text-gray-600 bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200">
+              Total Shown: <strong className="text-gray-900">{filteredPatients.length}</strong>
+            </span>
+          </div>
         </div>
 
         <div className="mt-4 overflow-x-auto rounded-2xl shadow-sm border">
@@ -336,6 +363,7 @@ const DoctorDashboard = () => {
                 <th className="p-3">Patient Name</th>
                 <th className="p-3">UHID</th>
                 <th className="p-3">Date / Slot</th>
+                <th className="p-3">Doctor / Specialist</th>
                 <th className="p-3">Department</th>
                 <th className="p-3">Status</th>
                 <th className="p-3">Actions</th>
@@ -350,8 +378,33 @@ const DoctorDashboard = () => {
                   </td>
                   <td className="p-3 font-semibold text-gray-700">{patient.uhid}</td>
                   <td className="p-3">
-                    <div className="font-semibold text-gray-950">{formatDate(patient.appointmentDate)}</div>
+                    <div className="font-semibold text-gray-950 flex items-center gap-1.5 flex-wrap">
+                      <span>{formatDate(patient.appointmentDate)}</span>
+                      {patient.appointmentNumber && (
+                        <span className="text-[10px] font-black text-orange-700 bg-orange-100 px-1.5 py-0.2 rounded border border-orange-200">
+                          #{patient.appointmentNumber}
+                        </span>
+                      )}
+                    </div>
                     <div className="text-xs text-gray-500">{patient.slot}</div>
+                  </td>
+                  <td className="p-3">
+                    {patient.isVisitingDoctor ? (
+                      <div>
+                        <span className="font-bold text-purple-950 text-xs block">
+                          Dr. {patient.visitingDoctorName || patient.doctorName}
+                        </span>
+                        <span className="inline-flex items-center text-[10px] font-bold bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded border border-purple-200 mt-0.5">
+                          Visiting Specialist
+                        </span>
+                      </div>
+                    ) : (
+                      <div>
+                        <span className="font-semibold text-gray-900 text-xs block">
+                          Dr. {patient.doctorName || patient.doctorId?.doctorName || patient.doctorId?.username || 'OPD Doctor'}
+                        </span>
+                      </div>
+                    )}
                   </td>
                   <td className="p-3">{patient.department || 'N/A'}</td>
                   <td className="p-3">
@@ -403,7 +456,7 @@ const DoctorDashboard = () => {
                   </td>
                 </tr>
               ))}
-              {filteredPatients.length === 0 && <tr><td colSpan={6} className="p-4 text-sm text-gray-500">No patients found.</td></tr>}
+              {filteredPatients.length === 0 && <tr><td colSpan={7} className="p-4 text-sm text-gray-500">No patients found.</td></tr>}
             </tbody>
           </table>
         </div>
