@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import {
   Printer, Save, Search, UserCheck, Clock, User, Phone, CreditCard,
   Calendar, MapPin, Building2, Stethoscope, IndianRupee, Tag, Wallet,
-  CheckCircle2, Activity, ChevronDown, ChevronUp, Check, Users, Coins, Eye, History, X, FlaskConical
+  CheckCircle2, Activity, ChevronDown, ChevronUp, Check, Users, Coins, Eye, History, X, FlaskConical, Heart, Plus
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -37,17 +37,209 @@ const Field = ({ label, required = false, icon: Icon, children, className = '', 
   </div>
 );
 
+// Vitals configuration and helper functions
+export const VITALS_CONFIG = {
+  bloodPressure: {
+    systolic: { min: 50, max: 250 },
+    diastolic: { min: 30, max: 150 }
+  },
+  pulseRate: { min: 30, max: 250 }, // beats/min
+  respiratoryRate: { min: 5, max: 60 }, // breaths/min
+  spo2: { min: 0, max: 100 } // %
+};
+
+export const BP_CONFIG = VITALS_CONFIG.bloodPressure;
+
+export const validatePulseRate = (value) => {
+  if (value === undefined || value === null || String(value).trim() === '') return true;
+  const str = String(value).trim();
+  if (!/^\d+$/.test(str)) {
+    return 'Pulse Rate must contain numeric digits only';
+  }
+  const num = parseInt(str, 10);
+  if (num < 0) {
+    return 'Pulse Rate cannot be negative';
+  }
+  if (num < VITALS_CONFIG.pulseRate.min || num > VITALS_CONFIG.pulseRate.max) {
+    return `Pulse Rate must be between ${VITALS_CONFIG.pulseRate.min} and ${VITALS_CONFIG.pulseRate.max} beats/min`;
+  }
+  return true;
+};
+
+export const validateRespiratoryRate = (value) => {
+  if (value === undefined || value === null || String(value).trim() === '') return true;
+  const str = String(value).trim();
+  if (!/^\d+$/.test(str)) {
+    return 'Respiratory Rate must contain numeric digits only';
+  }
+  const num = parseInt(str, 10);
+  if (num < 0) {
+    return 'Respiratory Rate cannot be negative';
+  }
+  if (num < VITALS_CONFIG.respiratoryRate.min || num > VITALS_CONFIG.respiratoryRate.max) {
+    return `Respiratory Rate must be between ${VITALS_CONFIG.respiratoryRate.min} and ${VITALS_CONFIG.respiratoryRate.max} breaths/min`;
+  }
+  return true;
+};
+
+export const validateSpO2 = (value) => {
+  if (value === undefined || value === null || String(value).trim() === '') return true;
+  const str = String(value).trim();
+  if (!/^\d+$/.test(str)) {
+    return 'SpO2 must contain numeric digits only';
+  }
+  const num = parseInt(str, 10);
+  if (num < 0 || num > 100) {
+    return 'SpO2 must be between 0% and 100%';
+  }
+  return true;
+};
+
+export const handleNumericIntegerKeyDown = (e) => {
+  if (
+    e.key === 'Backspace' ||
+    e.key === 'Delete' ||
+    e.key === 'ArrowLeft' ||
+    e.key === 'ArrowRight' ||
+    e.key === 'ArrowUp' ||
+    e.key === 'ArrowDown' ||
+    e.key === 'Tab' ||
+    e.key === 'Home' ||
+    e.key === 'End' ||
+    e.key === 'Enter' ||
+    e.key === 'Escape'
+  ) {
+    return;
+  }
+  if (e.ctrlKey || e.metaKey) {
+    return;
+  }
+  if (!/^\d$/.test(e.key)) {
+    e.preventDefault();
+  }
+};
+
+export const formatBp = (rawValue, prevValue = '') => {
+  if (!rawValue) return '';
+
+  const cleaned = rawValue.replace(/[^\d/]/g, '');
+  if (!cleaned) return '';
+
+  const isDeleting = cleaned.length < prevValue.length;
+
+  if (cleaned.includes('/')) {
+    const parts = cleaned.split('/');
+    const sys = parts[0].slice(0, 3);
+    const dia = parts.slice(1).join('').slice(0, 3);
+    return `${sys}/${dia}`;
+  }
+
+  if (cleaned.length <= 2) {
+    return cleaned;
+  }
+
+  if (cleaned.length === 3) {
+    if (!isDeleting) {
+      return `${cleaned}/`;
+    }
+    return cleaned;
+  }
+
+  const sys = cleaned.slice(0, 3);
+  const dia = cleaned.slice(3, 6);
+  return `${sys}/${dia}`;
+};
+
+export const validateBloodPressure = (value) => {
+  if (!value || !value.trim()) {
+    return true; // Optional vitals field
+  }
+
+  const trimmed = value.trim();
+
+  if (!trimmed.includes('/')) {
+    return 'Blood pressure must be in Systolic/Diastolic format (e.g. 120/80)';
+  }
+
+  const parts = trimmed.split('/');
+  if (parts.length !== 2) {
+    return 'Blood pressure must be in Systolic/Diastolic format (e.g. 120/80)';
+  }
+
+  const [sysStr, diaStr] = parts;
+
+  if (!sysStr) {
+    return 'Please enter systolic blood pressure (e.g. 120/80)';
+  }
+
+  if (!diaStr) {
+    return 'Please enter diastolic blood pressure (e.g. 120/80)';
+  }
+
+  if (!/^\d+$/.test(sysStr) || !/^\d+$/.test(diaStr)) {
+    return 'Blood pressure must contain only numeric digits (e.g. 120/80)';
+  }
+
+  const systolic = parseInt(sysStr, 10);
+  const diastolic = parseInt(diaStr, 10);
+
+  if (isNaN(systolic) || isNaN(diastolic)) {
+    return 'Invalid blood pressure values';
+  }
+
+  if (systolic < BP_CONFIG.systolic.min || systolic > BP_CONFIG.systolic.max) {
+    return `Systolic BP must be between ${BP_CONFIG.systolic.min} and ${BP_CONFIG.systolic.max} mmHg`;
+  }
+
+  if (diastolic < BP_CONFIG.diastolic.min || diastolic > BP_CONFIG.diastolic.max) {
+    return `Diastolic BP must be between ${BP_CONFIG.diastolic.min} and ${BP_CONFIG.diastolic.max} mmHg`;
+  }
+
+  if (systolic <= diastolic) {
+    return 'Systolic BP must be greater than diastolic BP';
+  }
+
+  return true;
+};
+
 const PatientRegistration = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const paramSpecialistId = searchParams.get('specialistId');
+  const paramDept = searchParams.get('dept');
+
   const [departments, setDepartments] = useState([]);
   const [doctors, setDoctors] = useState([]);
   const [departmentsLoading, setDepartmentsLoading] = useState(true);
   const [doctorsLoading, setDoctorsLoading] = useState(false);
+
+  // Super Speciality / Doctor States
+  const [doctorType, setDoctorType] = useState(paramSpecialistId ? 'visiting' : 'regular');
+  const [visitingSchedules, setVisitingSchedules] = useState([]);
+  const [visitingLoading, setVisitingLoading] = useState(false);
+  const [selectedVisitingId, setSelectedVisitingId] = useState(paramSpecialistId || '');
+  const [specialityText, setSpecialityText] = useState('');
+
+  // Department creation states
+  const [isAddingDept, setIsAddingDept] = useState(false);
+  const [newDeptName, setNewDeptName] = useState('');
+  const [creatingDept, setCreatingDept] = useState(false);
+
+  // Authoritative slot states
+  const [visitingAvailableSlots, setVisitingAvailableSlots] = useState([]);
+  const [visitingSlotMessage, setVisitingSlotMessage] = useState('');
+  const [visitingSlotError, setVisitingSlotError] = useState('');
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [isPastDateSelected, setIsPastDateSelected] = useState(false);
+
   const [bookedSlots, setBookedSlots] = useState([]);
   const [registeredPatient, setRegisteredPatient] = useState(null);
   const [showReceipt, setShowReceipt] = useState(false);
   const [showVitals, setShowVitals] = useState(false);
   const receiptRef = useRef(null);
+  const bpInputRef = useRef(null);
+  const lastBpValueRef = useRef('');
 
   const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm();
   const department = watch('department');
@@ -56,6 +248,144 @@ const PatientRegistration = () => {
   const patientNameValue = watch('patientName') || '';
   const mobileValue = watch('mobile') || '';
   const aadhaarValue = watch('aadhaar') || '';
+  const bloodPressureValue = watch('bloodPressure') || '';
+
+  useEffect(() => {
+    lastBpValueRef.current = bloodPressureValue;
+  }, [bloodPressureValue]);
+
+  const { onChange: bpRegisterOnChange, ref: bpRegisterRef, ...bpRegisterRest } = register('bloodPressure', {
+    validate: validateBloodPressure
+  });
+
+  const handleBpKeyDown = (e) => {
+    if (
+      e.key === 'Backspace' ||
+      e.key === 'Delete' ||
+      e.key === 'ArrowLeft' ||
+      e.key === 'ArrowRight' ||
+      e.key === 'ArrowUp' ||
+      e.key === 'ArrowDown' ||
+      e.key === 'Tab' ||
+      e.key === 'Home' ||
+      e.key === 'End' ||
+      e.key === 'Enter' ||
+      e.key === 'Escape'
+    ) {
+      return;
+    }
+
+    if (e.ctrlKey || e.metaKey) {
+      return;
+    }
+
+    if (e.key === '/') {
+      const val = e.target.value;
+      const { selectionStart, selectionEnd } = e.target;
+      const selectedText = val.slice(selectionStart, selectionEnd);
+      const hasSlashElsewhere = val.includes('/') && !selectedText.includes('/');
+      if (selectionStart === 0 || hasSlashElsewhere) {
+        e.preventDefault();
+        return;
+      }
+      return;
+    }
+
+    if (!/^\d$/.test(e.key)) {
+      e.preventDefault();
+      return;
+    }
+
+    const val = e.target.value;
+    const { selectionStart, selectionEnd } = e.target;
+    if (selectionStart !== selectionEnd) {
+      return;
+    }
+
+    const slashIndex = val.indexOf('/');
+    if (slashIndex === -1) {
+      if (val.length >= 3 && selectionStart < 3) {
+        e.preventDefault();
+      }
+    } else {
+      if (selectionStart <= slashIndex) {
+        const sys = val.slice(0, slashIndex);
+        if (sys.length >= 3) {
+          e.preventDefault();
+        }
+      } else {
+        const dia = val.slice(slashIndex + 1);
+        if (dia.length >= 3) {
+          e.preventDefault();
+        }
+      }
+    }
+  };
+
+  const handleBpChange = (e) => {
+    const input = e.target;
+    const rawValue = input.value;
+    const prevValue = lastBpValueRef.current || '';
+    const cursorBefore = input.selectionStart;
+
+    const formatted = formatBp(rawValue, prevValue);
+    lastBpValueRef.current = formatted;
+
+    input.value = formatted;
+    bpRegisterOnChange(e);
+
+    let targetCursor = cursorBefore;
+    if (formatted.length === 4 && formatted.endsWith('/') && prevValue.length === 2 && cursorBefore === 3) {
+      targetCursor = 4;
+    } else if (formatted.length > rawValue.length && cursorBefore >= 3) {
+      targetCursor = cursorBefore + (formatted.length - rawValue.length);
+    }
+
+    requestAnimationFrame(() => {
+      if (input && input.setSelectionRange) {
+        input.setSelectionRange(targetCursor, targetCursor);
+      }
+    });
+  };
+
+  const handleBpPaste = (e) => {
+    e.preventDefault();
+    const pasteText = e.clipboardData.getData('text');
+    if (!pasteText) return;
+
+    const cleaned = pasteText.replace(/[^\d/]/g, '').trim();
+    if (!cleaned) {
+      toast.error('Invalid blood pressure characters rejected');
+      return;
+    }
+
+    let formatted = '';
+    if (cleaned.includes('/')) {
+      const parts = cleaned.split('/');
+      const sys = parts[0].slice(0, 3);
+      const dia = parts.slice(1).join('').slice(0, 3);
+      formatted = `${sys}/${dia}`;
+    } else if (cleaned.length >= 4) {
+      formatted = `${cleaned.slice(0, 3)}/${cleaned.slice(3, 6)}`;
+    } else {
+      formatted = cleaned.slice(0, 3);
+    }
+
+    lastBpValueRef.current = formatted;
+    setValue('bloodPressure', formatted, { shouldValidate: true, shouldDirty: true });
+    if (bpInputRef.current) {
+      bpInputRef.current.value = formatted;
+    }
+  };
+
+  const onFormError = (formErrors) => {
+    const vitalFields = ['bloodPressure', 'pulseRate', 'respiratoryRate', 'spo2'];
+    const vitalErrField = vitalFields.find(f => formErrors[f]);
+    if (vitalErrField) {
+      setShowVitals(true);
+      toast.error(formErrors[vitalErrField].message);
+    }
+  };
 
   const isMobileValid = /^\d{10}$/.test(mobileValue.trim());
   const isAadhaarValid = /^\d{12}$/.test(aadhaarValue.trim());
@@ -68,23 +398,68 @@ const PatientRegistration = () => {
     }
   }, [setValue, watch]);
 
-  useEffect(() => {
+  const fetchDepartments = useCallback(async () => {
     setDepartmentsLoading(true);
-    client.get('/admin/departments')
-      .then(({ data }) => {
-        const activeDepts = data.filter((dept) => dept.isActive);
-        setDepartments(activeDepts);
-      })
-      .catch(() => {})
-      .finally(() => setDepartmentsLoading(false));
+    try {
+      const { data } = await client.get('/admin/departments');
+      const activeDepts = (data || []).filter((dept) => dept.isActive);
+      setDepartments(activeDepts);
+      return activeDepts;
+    } catch (err) {
+      console.warn('Failed to load departments:', err.message);
+      return [];
+    } finally {
+      setDepartmentsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchDepartments();
+  }, [fetchDepartments]);
+
+  const handleCreateDepartment = async () => {
+    const trimmed = newDeptName.trim();
+    if (!trimmed) {
+      toast.error('Please enter a department name');
+      return;
+    }
+
+    const exists = departments.find(d => d.departmentName.trim().toLowerCase() === trimmed.toLowerCase());
+    if (exists) {
+      toast.error(`Department "${exists.departmentName}" already exists`);
+      setValue('department', exists.departmentName, { shouldValidate: true });
+      setIsAddingDept(false);
+      setNewDeptName('');
+      return;
+    }
+
+    setCreatingDept(true);
+    try {
+      const { data: newDept } = await client.post('/admin/departments', { departmentName: trimmed });
+      toast.success(`Department "${newDept.departmentName}" created successfully`);
+      await fetchDepartments();
+      setValue('department', newDept.departmentName, { shouldValidate: true });
+      setIsAddingDept(false);
+      setNewDeptName('');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to create department');
+    } finally {
+      setCreatingDept(false);
+    }
+  };
+
+  useEffect(() => {
+    if (paramDept) {
+      setValue('department', paramDept);
+    }
+  }, [paramDept, setValue]);
 
   useEffect(() => {
     setValue('doctorId', '');
     setValue('slot', '');
     setBookedSlots([]);
 
-    if (!department) {
+    if (!department || doctorType === 'visiting') {
       setDoctors([]);
       return;
     }
@@ -103,24 +478,146 @@ const PatientRegistration = () => {
       })
       .catch(() => setDoctors([]))
       .finally(() => setDoctorsLoading(false));
-  }, [department, setValue]);
+  }, [department, doctorType, setValue]);
 
+  // Fetch active visiting specialist schedules
   useEffect(() => {
-    if (doctorId && appointmentDate) {
-      client.get(`/patients/booked-slots?doctorId=${doctorId}&date=${appointmentDate}`)
-        .then(({ data }) => setBookedSlots(data))
-        .catch(() => setBookedSlots([]));
-    } else {
-      setBookedSlots([]);
+    if (doctorType !== 'visiting') return;
+
+    setVisitingLoading(true);
+    const url = department
+      ? `/reception/visiting-schedules/active?department=${encodeURIComponent(department)}`
+      : '/reception/visiting-schedules/active';
+
+    client
+      .get(url)
+      .then(({ data }) => {
+        setVisitingSchedules(data || []);
+        if (paramSpecialistId && data.some((s) => s._id === paramSpecialistId)) {
+          setSelectedVisitingId(paramSpecialistId);
+        }
+      })
+      .catch(() => setVisitingSchedules([]))
+      .finally(() => setVisitingLoading(false));
+  }, [doctorType, department, paramSpecialistId]);
+
+  const selectedVisitingSchedule = useMemo(() => {
+    return visitingSchedules.find((s) => s._id === selectedVisitingId) || null;
+  }, [visitingSchedules, selectedVisitingId]);
+
+  // When visiting specialist is chosen, auto-fill fee, speciality, and date
+  useEffect(() => {
+    if (doctorType === 'visiting' && selectedVisitingSchedule) {
+      if (selectedVisitingSchedule.consultationFee !== undefined) {
+        setValue('opdFee', selectedVisitingSchedule.consultationFee);
+      }
+      if (selectedVisitingSchedule.speciality) {
+        setSpecialityText(selectedVisitingSchedule.speciality);
+      }
+      if (selectedVisitingSchedule.department && (!department || department !== selectedVisitingSchedule.department)) {
+        setValue('department', selectedVisitingSchedule.department);
+      }
+      if (Array.isArray(selectedVisitingSchedule.visitDates) && selectedVisitingSchedule.visitDates.length > 0) {
+        if (!selectedVisitingSchedule.visitDates.includes(appointmentDate)) {
+          setValue('appointmentDate', selectedVisitingSchedule.visitDates[0]);
+        }
+      }
+      setValue('slot', '');
     }
-  }, [doctorId, appointmentDate]);
+  }, [doctorType, selectedVisitingSchedule, department, appointmentDate, setValue]);
+
+  // Fetch available slots from backend (server authoritative date and time)
+  useEffect(() => {
+    const now = new Date();
+    const today = now.toLocaleDateString('en-CA');
+
+    if (appointmentDate && appointmentDate < today) {
+      setIsPastDateSelected(true);
+      setVisitingAvailableSlots([]);
+      setBookedSlots([]);
+      setVisitingSlotMessage('Cannot book appointments for past dates.');
+      setVisitingSlotError('');
+      setSlotsLoading(false);
+      return;
+    }
+    setIsPastDateSelected(false);
+
+    if (doctorType === 'visiting') {
+      if (selectedVisitingId && appointmentDate) {
+        setSlotsLoading(true);
+        setVisitingSlotError('');
+        client
+          .get(`/reception/visiting-schedules/${selectedVisitingId}/available-slots?date=${appointmentDate}`)
+          .then(({ data }) => {
+            setVisitingAvailableSlots(data.availableSlots || []);
+            setBookedSlots(data.bookedSlots || []);
+            setVisitingSlotMessage(data.message || '');
+            setVisitingSlotError('');
+          })
+          .catch((err) => {
+            setVisitingAvailableSlots([]);
+            setBookedSlots([]);
+            const errMsg = err.response?.data?.message || 'Failed to load available time slots.';
+            setVisitingSlotMessage(errMsg);
+            setVisitingSlotError(errMsg);
+          })
+          .finally(() => {
+            setSlotsLoading(false);
+          });
+      } else {
+        setVisitingAvailableSlots([]);
+        setBookedSlots([]);
+        setVisitingSlotMessage('');
+        setVisitingSlotError('');
+        setSlotsLoading(false);
+      }
+    } else {
+      if (doctorId && appointmentDate) {
+        setSlotsLoading(true);
+        client
+          .get(`/patients/booked-slots?doctorId=${doctorId}&date=${appointmentDate}`)
+          .then(({ data }) => {
+            setBookedSlots(data || []);
+            setVisitingSlotMessage('');
+            setVisitingSlotError('');
+          })
+          .catch(() => {
+            setBookedSlots([]);
+          })
+          .finally(() => {
+            setSlotsLoading(false);
+          });
+      } else {
+        setBookedSlots([]);
+        setVisitingSlotMessage('');
+        setVisitingSlotError('');
+        setSlotsLoading(false);
+      }
+    }
+  }, [doctorType, doctorId, selectedVisitingId, appointmentDate]);
 
   const selectedDoctorObj = doctors.find((d) => d._id === doctorId);
 
   let freeSlots = [];
   let doctorAvailabilityStatus = '';
 
-  if (selectedDoctorObj && appointmentDate) {
+  if (doctorType === 'visiting') {
+    if (isPastDateSelected) {
+      doctorAvailabilityStatus = 'Cannot book appointments for past dates.';
+      freeSlots = [];
+    } else if (selectedVisitingSchedule && appointmentDate) {
+      const dates = selectedVisitingSchedule.visitDates || [];
+      if (dates.length > 0 && !dates.includes(appointmentDate)) {
+        doctorAvailabilityStatus = `Dr. ${selectedVisitingSchedule.doctorName} is only scheduled on: ${dates.join(', ')}`;
+        freeSlots = [];
+      } else {
+        freeSlots = visitingAvailableSlots;
+        if (visitingSlotMessage && freeSlots.length === 0) {
+          doctorAvailabilityStatus = visitingSlotMessage;
+        }
+      }
+    }
+  } else if (selectedDoctorObj && appointmentDate) {
     const [year, month, day] = appointmentDate.split('-').map(Number);
     const dateObj = new Date(year, month - 1, day);
     const daysList = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -264,6 +761,57 @@ const PatientRegistration = () => {
 
   const onSubmit = async (data) => {
     try {
+      if (data.bloodPressure) {
+        const bpErr = validateBloodPressure(data.bloodPressure);
+        if (bpErr !== true) {
+          setShowVitals(true);
+          toast.error(bpErr);
+          return;
+        }
+      }
+      if (data.pulseRate) {
+        const prErr = validatePulseRate(data.pulseRate);
+        if (prErr !== true) {
+          setShowVitals(true);
+          toast.error(prErr);
+          return;
+        }
+      }
+      if (data.respiratoryRate) {
+        const rrErr = validateRespiratoryRate(data.respiratoryRate);
+        if (rrErr !== true) {
+          setShowVitals(true);
+          toast.error(rrErr);
+          return;
+        }
+      }
+      if (data.spo2) {
+        const spo2Err = validateSpO2(data.spo2);
+        if (spo2Err !== true) {
+          setShowVitals(true);
+          toast.error(spo2Err);
+          return;
+        }
+      }
+      if (doctorType === 'visiting') {
+        if (!selectedVisitingId) {
+          toast.error('Please select a doctor');
+          return;
+        }
+        if (!data.appointmentDate) {
+          toast.error('Please select an appointment date');
+          return;
+        }
+        if (selectedVisitingSchedule?.visitDates?.length > 0 && !selectedVisitingSchedule.visitDates.includes(data.appointmentDate)) {
+          toast.error(`Doctor is only scheduled on: ${selectedVisitingSchedule.visitDates.join(', ')}`);
+          return;
+        }
+        if (!data.slot) {
+          toast.error('Please select an available slot');
+          return;
+        }
+      }
+
       const tempVal = parseFloat(data.temperature);
       const grossFee = parseFloat(data.opdFee) || 0;
       const discType = data.discountType || 'none';
@@ -272,9 +820,18 @@ const PatientRegistration = () => {
       const birthYear = new Date().getFullYear() - parsedAge;
       const calculatedDob = `${birthYear}-01-01`;
 
+      const isVisiting = doctorType === 'visiting';
+      const visitingSched = isVisiting ? selectedVisitingSchedule : null;
+
       const payload = {
         ...data,
         bloodPressure: data.bloodPressure ? String(data.bloodPressure).replace(/[^0-9/]/g, '').trim() : undefined,
+        isVisitingDoctor: isVisiting,
+        visitingScheduleId: isVisiting ? visitingSched?._id : null,
+        visitingDoctorName: isVisiting ? visitingSched?.doctorName : undefined,
+        doctorName: isVisiting ? visitingSched?.doctorName : undefined,
+        speciality: isVisiting ? (specialityText.trim() || visitingSched?.speciality || '') : undefined,
+        doctorId: isVisiting ? null : data.doctorId,
         age: parsedAge,
         dob: calculatedDob,
         opdFee: grossFee,
@@ -282,7 +839,9 @@ const PatientRegistration = () => {
         discountValue: discVal,
         paymentStatus: data.paymentStatus || 'Paid',
         paymentMode: data.paymentStatus === 'Not Paid' ? 'Pending' : (data.paymentMode || 'Cash'),
-        visitType: (data.department && data.department.toLowerCase().trim() === 'same day care') ? 'Same Day Treatment' : 'OPD',
+        visitType: (data.department && data.department.toLowerCase().trim() === 'same day care')
+          ? 'Same Day Treatment'
+          : 'OPD',
         temperature: !isNaN(tempVal) ? ((tempVal - 32) * 5 / 9).toFixed(1) : undefined
       };
       const { data: res } = await client.post('/patients/create', payload);
@@ -290,9 +849,16 @@ const PatientRegistration = () => {
       setRegisteredPatient(res.patient);
       setShowReceipt(true);
       reset();
+      lastBpValueRef.current = '';
       const today = new Date().toISOString().split('T')[0];
       setValue('appointmentDate', today);
       setBookedSlots([]);
+      setSelectedVisitingId('');
+      setSpecialityText('');
+      setVisitingAvailableSlots([]);
+      setVisitingSlotMessage('');
+      setVisitingSlotError('');
+      setSlotsLoading(false);
       setExistingPatientData(null);
       setIsExistingPatient(false);
     } catch (err) {
@@ -374,7 +940,7 @@ const PatientRegistration = () => {
 
   return (
     <div className="space-y-6 w-full">
-      <form onSubmit={handleSubmit(onSubmit)} className={`card p-6 space-y-6 bg-white shadow-md rounded-2xl border border-gray-200 w-full ${showReceipt ? 'no-print print:hidden' : ''}`}>
+      <form onSubmit={handleSubmit(onSubmit, onFormError)} className={`card p-6 space-y-6 bg-white shadow-md rounded-2xl border border-gray-200 w-full ${showReceipt ? 'no-print print:hidden' : ''}`}>
         {isExistingPatient && (
           <div className="flex justify-end border-b border-gray-200 pb-3">
             <span className="inline-flex items-center gap-1.5 text-xs font-extrabold text-green-700 bg-green-50 border border-green-300 px-3.5 py-1.5 rounded-full">
@@ -719,67 +1285,318 @@ const PatientRegistration = () => {
                 </h2>
               </div>
 
-              {/* Department */}
-              <Field label="Department" required icon={Building2} error={errors.department?.message}>
-                {departmentsLoading ? (
+              {/* Doctor Type Selector */}
+              <div className="flex rounded-xl bg-gray-200/90 p-1 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDoctorType('regular');
+                    setSelectedVisitingId('');
+                    setValue('slot', '');
+                    setBookedSlots([]);
+                  }}
+                  className={`flex-1 py-1.5 px-3 rounded-lg transition-all text-center ${
+                    doctorType === 'regular'
+                      ? 'bg-white text-indigo-950 shadow-xs font-bold'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Standard OPD
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDoctorType('visiting');
+                    setValue('doctorId', '');
+                    setValue('slot', '');
+                    setBookedSlots([]);
+                  }}
+                  className={`flex-1 py-1.5 px-3 rounded-lg transition-all text-center flex items-center justify-center gap-1.5 ${
+                    doctorType === 'visiting'
+                      ? 'bg-orange-600 text-white shadow-xs font-bold'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <Stethoscope className="w-3.5 h-3.5" />
+                  <span>Super Speciality OPD</span>
+                </button>
+              </div>
+
+              {/* Department (Reusing existing Department Master with inline creation) */}
+              <Field
+                label="Department"
+                required
+                icon={Building2}
+                error={errors.department?.message}
+                hint={
+                  !isAddingDept && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddingDept(true);
+                        setNewDeptName('');
+                      }}
+                      className="text-[11px] text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Add Department</span>
+                    </button>
+                  )
+                }
+              >
+                {isAddingDept ? (
+                  <div className="flex items-center gap-1.5 w-full">
+                    <input
+                      type="text"
+                      className="input h-11 pl-9 pr-2 text-xs sm:text-sm font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 shadow-2xs flex-1"
+                      placeholder="Enter new department name"
+                      value={newDeptName}
+                      onChange={(e) => setNewDeptName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleCreateDepartment();
+                        } else if (e.key === 'Escape') {
+                          setIsAddingDept(false);
+                          setNewDeptName('');
+                        }
+                      }}
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      disabled={creatingDept}
+                      onClick={handleCreateDepartment}
+                      className="h-11 px-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg shadow-2xs transition-colors shrink-0"
+                    >
+                      {creatingDept ? 'Adding...' : 'Save'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={creatingDept}
+                      onClick={() => {
+                        setIsAddingDept(false);
+                        setNewDeptName('');
+                      }}
+                      className="h-11 px-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-lg border border-gray-300 transition-colors shrink-0"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : departmentsLoading ? (
                   <SkeletonInput />
                 ) : (
-                  <select className="input h-11 pl-9 pr-2 text-xs sm:text-sm font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs" {...register('department', { required: 'Department is required' })}>
+                  <select
+                    className="input h-11 pl-9 pr-2 text-xs sm:text-sm font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs"
+                    {...register('department', {
+                      required: 'Department is required',
+                      onChange: (e) => {
+                        const val = e.target.value;
+                        if (val === '__ADD_NEW__') {
+                          setIsAddingDept(true);
+                          setNewDeptName('');
+                          setValue('department', '');
+                          return;
+                        }
+                        if (doctorType === 'visiting' && selectedVisitingSchedule && selectedVisitingSchedule.department !== val) {
+                          setSelectedVisitingId('');
+                          setValue('slot', '');
+                          setBookedSlots([]);
+                        }
+                      }
+                    })}
+                  >
                     <option value="">Select department</option>
                     {departments.map((dept) => (
                       <option key={dept._id} value={dept.departmentName}>{dept.departmentName}</option>
                     ))}
+                    <option value="__ADD_NEW__" className="text-indigo-600 font-bold">+ Add New Department...</option>
                   </select>
                 )}
               </Field>
 
-              {/* Doctor / Same Day Care (word staff removed) */}
-              <Field label="Doctor / Same Day Care" required icon={Stethoscope} error={errors.doctorId?.message}>
-                {doctorsLoading ? (
-                  <SkeletonInput />
-                ) : (
-                  <select className="input h-11 pl-9 pr-2 text-xs sm:text-sm font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs" {...register('doctorId', { required: 'Doctor / Provider selection is required' })}>
-                    <option value="">Select doctor / care provider</option>
-                    {doctors.map((doc) => (
-                      <option key={doc._id} value={doc._id}>
-                        {doc.role === 'nursing' ? '' : 'Dr. '}{doc.doctorName || doc.username} {doc.role === 'nursing' ? '(Same Day Care)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </Field>
+              {/* Doctor / Specialist Dropdown */}
+              {doctorType === 'visiting' ? (
+                <Field
+                  label="Doctor Name"
+                  required
+                  icon={Stethoscope}
+                  hint={
+                    <button
+                      type="button"
+                      onClick={() => navigate('/reception/visiting-specialists')}
+                      className="text-[11px] text-orange-600 hover:text-orange-700 font-semibold underline"
+                    >
+                      Manage Schedules
+                    </button>
+                  }
+                >
+                  {visitingLoading ? (
+                    <SkeletonInput />
+                  ) : (
+                    <select
+                      className="input h-11 pl-9 pr-2 text-xs sm:text-sm font-bold text-gray-900 border-gray-300 focus:border-orange-500 focus:ring-2 focus:ring-orange-500 cursor-pointer shadow-2xs"
+                      value={selectedVisitingId}
+                      onChange={(e) => {
+                        const newDocId = e.target.value;
+                        setSelectedVisitingId(newDocId);
+                        setValue('slot', '');
+                        setVisitingAvailableSlots([]);
+                        setVisitingSlotError('');
+                      }}
+                    >
+                      <option value="">Select doctor</option>
+                      {visitingSchedules.length === 0 && (
+                        <option value="" disabled>
+                          {department ? `No active doctors scheduled for ${department}` : 'No active doctors found'}
+                        </option>
+                      )}
+                      {visitingSchedules.map((sched) => (
+                        <option key={sched._id} value={sched._id}>
+                          Dr. {sched.doctorName} — {sched.speciality ? `${sched.speciality} (${sched.department})` : sched.department} • {sched.startTime}-{sched.endTime} ({sched.slotDuration || 15}m) • ₹{sched.consultationFee}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </Field>
+              ) : (
+                <Field label="Doctor / Same Day Care" required icon={Stethoscope} error={errors.doctorId?.message}>
+                  {doctorsLoading ? (
+                    <SkeletonInput />
+                  ) : (
+                    <select
+                      className="input h-11 pl-9 pr-2 text-xs sm:text-sm font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs"
+                      {...register('doctorId', { required: doctorType === 'regular' ? 'Doctor / Provider selection is required' : false })}
+                    >
+                      <option value="">Select doctor / care provider</option>
+                      {doctors.map((doc) => (
+                        <option key={doc._id} value={doc._id}>
+                          {doc.role === 'nursing' ? '' : 'Dr. '}{doc.doctorName || doc.username} {doc.role === 'nursing' ? '(Same Day Care)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </Field>
+              )}
 
-              {/* Appointment Date (Auto-picked today's date) */}
+              {/* Specialist Info Card */}
+              {doctorType === 'visiting' && selectedVisitingSchedule && (
+                <div className="p-3 bg-orange-50/80 border border-orange-200 rounded-xl space-y-1.5 text-xs animate-in fade-in">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-gray-900 text-sm">
+                      Dr. {selectedVisitingSchedule.doctorName}
+                    </span>
+                    <span className="font-bold text-orange-800 bg-orange-100 border border-orange-200 px-2 py-0.5 rounded-md">
+                      Doctor Fee: ₹{selectedVisitingSchedule.consultationFee}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-gray-600 text-[11px]">
+                    <span><strong>Dept:</strong> {selectedVisitingSchedule.department}</span>
+                    {selectedVisitingSchedule.speciality && (
+                      <span><strong>Speciality:</strong> {selectedVisitingSchedule.speciality}</span>
+                    )}
+                    <span><strong>Visiting Hours:</strong> {selectedVisitingSchedule.startTime} - {selectedVisitingSchedule.endTime}</span>
+                    <span><strong>Slot:</strong> {selectedVisitingSchedule.slotDuration || 15} mins</span>
+                  </div>
+                  <div className="text-[11px] text-gray-600 pt-1 border-t border-orange-200/60">
+                    <strong>Configured Schedule Dates:</strong> {selectedVisitingSchedule.visitDates?.join(', ')}
+                  </div>
+                </div>
+              )}
+
+              {/* Appointment Date */}
               <Field label="Appointment Date" required icon={Calendar} error={errors.appointmentDate?.message}>
-                <input
-                  className="input h-11 pl-9 pr-1 text-xs sm:text-sm font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs"
-                  type="date"
-                  {...register('appointmentDate', { required: 'Appointment date is required' })}
-                />
+                <div className="w-full space-y-1.5">
+                  <input
+                    className="input h-11 pl-9 pr-1 text-xs sm:text-sm font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs w-full"
+                    type="date"
+                    {...register('appointmentDate', {
+                      required: 'Appointment date is required',
+                      onChange: () => {
+                        setValue('slot', '');
+                        setVisitingAvailableSlots([]);
+                        setVisitingSlotError('');
+                      }
+                    })}
+                  />
+                  {doctorType === 'visiting' && selectedVisitingSchedule?.visitDates?.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                      <span className="text-[11px] font-semibold text-gray-500">Scheduled:</span>
+                      {selectedVisitingSchedule.visitDates.map((dateStr) => (
+                        <button
+                          key={dateStr}
+                          type="button"
+                          onClick={() => {
+                            setValue('appointmentDate', dateStr);
+                            setValue('slot', '');
+                            setVisitingAvailableSlots([]);
+                            setVisitingSlotError('');
+                          }}
+                          className={`px-2 py-0.5 rounded-md text-xs font-mono font-medium border transition-colors ${
+                            appointmentDate === dateStr
+                              ? 'bg-orange-600 text-white border-orange-600 shadow-2xs'
+                              : 'bg-white text-orange-900 border-orange-200 hover:bg-orange-50'
+                          }`}
+                        >
+                          {dateStr}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </Field>
 
               {/* Free Available Slots */}
-              <Field label="Free Available Slots" required icon={Clock} error={errors.slot?.message}>
+              <Field
+                label="Free Available Slots"
+                required
+                icon={Clock}
+                error={errors.slot?.message || visitingSlotError}
+                hint={
+                  slotsLoading && (
+                    <span className="text-[11px] text-indigo-600 font-semibold animate-pulse flex items-center gap-1">
+                      <Clock className="w-3 h-3 animate-spin" />
+                      Loading slots...
+                    </span>
+                  )
+                }
+              >
                 <select 
-                  className={`input h-11 pl-9 pr-2 text-xs sm:text-sm font-bold border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs ${doctorAvailabilityStatus ? 'border-red-500 text-red-600' : 'text-gray-900'}`} 
+                  className={`input h-11 pl-9 pr-2 text-xs sm:text-sm font-bold border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs ${(errors.slot || visitingSlotError || doctorAvailabilityStatus) ? 'border-red-500 text-red-600' : 'text-gray-900'}`} 
                   {...register('slot', { required: 'Slot selection is required' })}
                 >
                   <option value="">
-                    {!doctorId || !appointmentDate
-                      ? 'Select doctor & date first'
-                      : doctorAvailabilityStatus
-                        ? doctorAvailabilityStatus
-                        : freeSlots.length === 0
-                          ? 'No free slots available for this date/time'
-                          : `Select free slot (${freeSlots.length} available)`}
+                    {slotsLoading
+                      ? 'Loading available time slots...'
+                      : visitingSlotError
+                        ? visitingSlotError
+                        : doctorType === 'visiting'
+                          ? !selectedVisitingId || !appointmentDate
+                            ? (!department ? 'Select department, doctor & date first' : 'Select doctor & date first')
+                            : isPastDateSelected
+                              ? 'Cannot book appointments for past dates'
+                              : doctorAvailabilityStatus
+                                ? doctorAvailabilityStatus
+                                : freeSlots.length === 0
+                                  ? 'No available time slots for this date.'
+                                  : `Select free slot (${freeSlots.length} available)`
+                          : !doctorId || !appointmentDate
+                            ? (!department ? 'Select department, doctor & date first' : 'Select doctor & date first')
+                            : isPastDateSelected
+                              ? 'Cannot book appointments for past dates'
+                              : doctorAvailabilityStatus
+                                ? doctorAvailabilityStatus
+                                : freeSlots.length === 0
+                                  ? 'No available time slots for this date.'
+                                  : `Select free slot (${freeSlots.length} available)`}
                   </option>
                   {freeSlots.map((slot) => (
                     <option key={slot} value={slot}>{slot}</option>
                   ))}
                 </select>
               </Field>
-              {doctorAvailabilityStatus && (
-                <p className="text-xs font-black text-red-600 mt-1">{doctorAvailabilityStatus}</p>
+              {(visitingSlotError || doctorAvailabilityStatus) && (
+                <p className="text-xs font-black text-red-600 mt-1">{visitingSlotError || doctorAvailabilityStatus}</p>
               )}
             </div>
           </div>
@@ -794,9 +1611,14 @@ const PatientRegistration = () => {
                     OPD Fee & Discount Billing
                   </h2>
                 </div>
-                {selectedDoctorObj && selectedDoctorObj.opdFees > 0 && (
+                {doctorType === 'regular' && selectedDoctorObj && selectedDoctorObj.opdFees > 0 && (
                   <span className="text-xs font-black text-emerald-800 bg-emerald-100 border border-emerald-300 px-2.5 py-1 rounded-md">
                     Admin Fee: ₹{selectedDoctorObj.opdFees}
+                  </span>
+                )}
+                {doctorType === 'visiting' && selectedVisitingSchedule && (
+                  <span className="text-xs font-black text-orange-800 bg-orange-100 border border-orange-300 px-2.5 py-1 rounded-md">
+                    Doctor Fee: ₹{selectedVisitingSchedule.consultationFee}
                   </span>
                 )}
               </div>
@@ -906,61 +1728,134 @@ const PatientRegistration = () => {
           </button>
 
           {showVitals && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4 mt-4 p-4 bg-gray-50 border border-gray-300 rounded-xl">
-              <Field label="Weight (kg)" icon={Activity}>
-                <input className="input h-11 pl-11 text-base font-bold text-gray-900" placeholder="kg" type="number" step="0.1" {...register('weight')} />
-              </Field>
-              <Field label="Height (cm)" icon={Activity}>
-                <input className="input h-11 pl-11 text-base font-bold text-gray-900" placeholder="cm" type="number" step="0.1" {...register('height')} />
-              </Field>
-              <Field label="Blood Pressure" icon={Activity}>
-                <input
-                  className="input h-11 pl-11 text-base font-bold text-gray-900"
-                  placeholder="120/80"
-                  inputMode="numeric"
-                  {...register('bloodPressure', {
-                    onChange: (e) => {
-                      const val = e.target.value;
-                      let cleaned = val.replace(/[^0-9/]/g, '').replace(/\/+/g, '/');
-                      const parts = cleaned.split('/');
-                      if (parts.length > 2) {
-                        cleaned = `${parts[0]}/${parts.slice(1).join('')}`;
-                      }
-                      setValue('bloodPressure', cleaned);
-                    }
-                  })}
-                  onKeyDown={(e) => {
-                    if ([
-                      'Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter', 'Home', 'End'
-                    ].includes(e.key)) {
-                      return;
-                    }
-                    if (e.ctrlKey || e.metaKey) return;
-                    if (!/^[0-9/]$/.test(e.key)) {
-                      e.preventDefault();
-                    }
-                  }}
-                  onPaste={(e) => {
-                    e.preventDefault();
-                    const text = (e.clipboardData || window.clipboardData).getData('text');
-                    let cleaned = text.replace(/[^0-9/]/g, '').replace(/\/+/g, '/');
-                    const parts = cleaned.split('/');
-                    if (parts.length > 2) {
-                      cleaned = `${parts[0]}/${parts.slice(1).join('')}`;
-                    }
-                    setValue('bloodPressure', cleaned);
-                  }}
-                />
-              </Field>
-              <Field label="Temperature (°F)" icon={Activity}>
-                <input className="input h-11 pl-11 text-base font-bold text-gray-900" placeholder="98.6" type="number" step="0.1" {...register('temperature')} />
-              </Field>
+            <div className="space-y-4 mt-4 p-4 bg-gray-50 border border-gray-300 rounded-xl">
+              {/* Row 1: Existing 4 vitals fields preserved in exact position */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+                <Field label="Weight (kg)" icon={Activity}>
+                  <input className="input h-11 pl-11 text-base font-bold text-gray-900" placeholder="kg" type="number" step="0.1" {...register('weight')} />
+                </Field>
+                <Field label="Height (cm)" icon={Activity}>
+                  <input className="input h-11 pl-11 text-base font-bold text-gray-900" placeholder="cm" type="number" step="0.1" {...register('height')} />
+                </Field>
+                <Field label="Blood Pressure (mmHg)" icon={Activity} error={errors.bloodPressure?.message}>
+                  <input
+                    type="text"
+                    className={`input h-11 pl-11 pr-14 text-base font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 shadow-2xs ${errors.bloodPressure ? 'border-red-500 focus:ring-red-500' : ''}`}
+                    placeholder="120/80"
+                    maxLength={7}
+                    autoComplete="off"
+                    {...bpRegisterRest}
+                    ref={(e) => {
+                      bpRegisterRef(e);
+                      bpInputRef.current = e;
+                    }}
+                    onKeyDown={handleBpKeyDown}
+                    onChange={handleBpChange}
+                    onPaste={handleBpPaste}
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400 pointer-events-none select-none">
+                    mmHg
+                  </span>
+                </Field>
+                <Field label="Temperature (°F)" icon={Activity}>
+                  <input className="input h-11 pl-11 text-base font-bold text-gray-900" placeholder="98.6" type="number" step="0.1" {...register('temperature')} />
+                </Field>
+              </div>
+
+              {/* Row 2: Pulse Rate, Respiratory Rate, SpO2, CVS */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4 pt-1">
+                <Field label="Pulse Rate (PR)" icon={Heart} error={errors.pulseRate?.message}>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    className={`input h-11 pl-11 pr-20 text-base font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 shadow-2xs ${errors.pulseRate ? 'border-red-500 focus:ring-red-500' : ''}`}
+                    placeholder="80"
+                    maxLength={3}
+                    autoComplete="off"
+                    {...register('pulseRate', { validate: validatePulseRate })}
+                    onKeyDown={handleNumericIntegerKeyDown}
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400 pointer-events-none select-none">
+                    beats/min
+                  </span>
+                </Field>
+
+                <Field label="Respiratory Rate (RR)" icon={Activity} error={errors.respiratoryRate?.message}>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    className={`input h-11 pl-11 pr-24 text-base font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 shadow-2xs ${errors.respiratoryRate ? 'border-red-500 focus:ring-red-500' : ''}`}
+                    placeholder="18"
+                    maxLength={3}
+                    autoComplete="off"
+                    {...register('respiratoryRate', { validate: validateRespiratoryRate })}
+                    onKeyDown={handleNumericIntegerKeyDown}
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400 pointer-events-none select-none">
+                    breaths/min
+                  </span>
+                </Field>
+
+                <Field label="SpO2 (%)" icon={Activity} error={errors.spo2?.message}>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    className={`input h-11 pl-11 pr-10 text-base font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 shadow-2xs ${errors.spo2 ? 'border-red-500 focus:ring-red-500' : ''}`}
+                    placeholder="98"
+                    maxLength={3}
+                    autoComplete="off"
+                    {...register('spo2', { validate: validateSpO2 })}
+                    onKeyDown={handleNumericIntegerKeyDown}
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400 pointer-events-none select-none">
+                    %
+                  </span>
+                </Field>
+
+                <Field label="CVS" icon={Stethoscope}>
+                  <input
+                    type="text"
+                    className="input h-11 pl-11 text-base font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                    placeholder="Enter CVS findings"
+                    autoComplete="off"
+                    {...register('cvs')}
+                  />
+                </Field>
+              </div>
+
+              {/* Row 3: Bilateral Chest & Per Abdomen (PA) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4 pt-1">
+                <Field label="Bilateral Chest" icon={Stethoscope}>
+                  <input
+                    type="text"
+                    className="input h-11 pl-11 text-base font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                    placeholder="Enter bilateral chest findings"
+                    autoComplete="off"
+                    {...register('bilateralChest')}
+                  />
+                </Field>
+
+                <Field label="Per Abdomen (PA)" icon={Stethoscope}>
+                  <input
+                    type="text"
+                    className="input h-11 pl-11 text-base font-bold text-gray-900 border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                    placeholder="Enter abdominal examination findings"
+                    autoComplete="off"
+                    {...register('perAbdomen')}
+                  />
+                </Field>
+              </div>
+)
             </div>
           )}
         </div>
 
         {Object.keys(errors).length > 0 && (
-          <p className="text-xs font-black text-red-600">Please fill out all mandatory fields marked with red asterisks (*).</p>
+          <p className="text-xs font-black text-red-600">
+            {Object.keys(errors).length === 1 && (errors.bloodPressure || errors.pulseRate || errors.respiratoryRate || errors.spo2)
+              ? `Please correct invalid vitals: ${errors.bloodPressure?.message || errors.pulseRate?.message || errors.respiratoryRate?.message || errors.spo2?.message}`
+              : 'Please fill out all mandatory fields marked with red asterisks (*).'}
+          </p>
         )}
 
         {/* Submit Action & Registration Date Time Display */}

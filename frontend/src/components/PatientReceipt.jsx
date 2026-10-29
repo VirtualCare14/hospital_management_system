@@ -169,11 +169,13 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
 
   const grossFee = patient.opdFee !== undefined ? patient.opdFee : (patient.doctorId?.opdFees || 0);
   const netFee = patient.netOpdFee !== undefined ? patient.netOpdFee : grossFee;
-  const doctorNameStr = patient.doctorId?.doctorName || patient.doctorId?.username || (typeof patient.doctorId === 'string' ? patient.doctorId : '-');
+  const rawDoctorName = patient.doctorName || patient.visitingDoctorName || patient.doctorId?.doctorName || patient.doctorId?.username || (typeof patient.doctorId === 'string' ? patient.doctorId : '-');
+  const doctorNameStr = rawDoctorName === '-' ? '-' : (/^dr\.?/i.test(rawDoctorName.trim()) ? rawDoctorName.trim() : `Dr. ${rawDoctorName.trim()}`);
 
   const vitals = patient.demographics || prescription?.vitals || {};
-  const hasVitals = vitals.weight || vitals.height || vitals.bloodPressure || vitals.temperature;
-  const documentTitle = isRefundSlip ? 'REFUND VOUCHER' : (isBillReceiptOnly ? 'PAYMENT RECEIPT' : 'PRESCRIPTION');
+  const hasVitals = vitals.weight || vitals.height || vitals.bloodPressure || vitals.temperature || vitals.pulseRate || vitals.pulse || vitals.respiratoryRate || vitals.spo2 || vitals.cvs || vitals.perAbdomen || vitals.bilateralChest;
+  const isVisiting = Boolean(patient.isVisitingDoctor || patient.doctorId?.isVisitingDoctor);
+  const documentTitle = isRefundSlip ? 'REFUND VOUCHER' : (isBillReceiptOnly ? 'PAYMENT RECEIPT' : (isPatientSlipOnly ? 'PATIENT SLIP' : 'PRESCRIPTION'));
 
   if (isRefundSlip) {
     const refundAmt = patient.refundAmount !== undefined && patient.refundAmount !== null 
@@ -619,12 +621,173 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
     );
   }
 
+  // Build Vitals / Examinations table rows matching reference format (Examinations | Value)
+  const rawPulse = vitals.pulseRate ?? vitals.pulse ?? vitals.pr ?? vitals.pulse_rate;
+  const pulseDisplay = (rawPulse !== undefined && rawPulse !== null && String(rawPulse).trim() !== '')
+    ? (String(rawPulse).toLowerCase().includes('beat') || String(rawPulse).toLowerCase().includes('bpm')
+        ? String(rawPulse).trim()
+        : `${String(rawPulse).trim()} beats/min`)
+    : '-';
+
+  const rawBp = vitals.bloodPressure ?? vitals.bp ?? vitals.blood_pressure;
+  const bpDisplay = (rawBp !== undefined && rawBp !== null && String(rawBp).trim() !== '')
+    ? String(rawBp).trim()
+    : '-';
+
+  const rawTemp = vitals.temperature ?? vitals.temp;
+  const tempDisplay = (rawTemp !== undefined && rawTemp !== null && String(rawTemp).trim() !== '')
+    ? (String(rawTemp).includes('°') || String(rawTemp).toLowerCase().includes('f') || String(rawTemp).toLowerCase().includes('c')
+        ? String(rawTemp).trim()
+        : `${String(rawTemp).trim()} °F`)
+    : '-';
+
+  const rawRr = vitals.respiratoryRate ?? vitals.rr ?? vitals.respiratory_rate;
+  const rrDisplay = (rawRr !== undefined && rawRr !== null && String(rawRr).trim() !== '')
+    ? (String(rawRr).toLowerCase().includes('breath')
+        ? String(rawRr).trim()
+        : `${String(rawRr).trim()} breaths/min`)
+    : '-';
+
+  const rawSpo2 = vitals.spo2 ?? vitals.spO2 ?? vitals.oxygen;
+  const spo2Display = (rawSpo2 !== undefined && rawSpo2 !== null && String(rawSpo2).trim() !== '')
+    ? (String(rawSpo2).includes('%')
+        ? String(rawSpo2).trim()
+        : `${String(rawSpo2).trim()}%`)
+    : '-';
+
+  const rawWt = vitals.weight ?? vitals.wt;
+  const rawHt = vitals.height ?? vitals.ht;
+  const hasWt = rawWt !== undefined && rawWt !== null && String(rawWt).trim() !== '';
+  const hasHt = rawHt !== undefined && rawHt !== null && String(rawHt).trim() !== '';
+  const wtStr = hasWt
+    ? (String(rawWt).toLowerCase().includes('kg') ? String(rawWt).trim() : `${String(rawWt).trim()} kg`)
+    : null;
+  const htStr = hasHt
+    ? (String(rawHt).toLowerCase().includes('cm') ? String(rawHt).trim() : `${String(rawHt).trim()} cm`)
+    : null;
+  const wtHtDisplay = (wtStr && htStr) ? `${wtStr} / ${htStr}` : (wtStr || htStr || '-');
+
+  const rawPallor = vitals.pallor;
+  const pallorDisplay = (rawPallor !== undefined && rawPallor !== null && String(rawPallor).trim() !== '')
+    ? String(rawPallor).trim()
+    : '-';
+
+  const rawEdema = vitals.edema ?? vitals.oedema;
+  const edemaDisplay = (rawEdema !== undefined && rawEdema !== null && String(rawEdema).trim() !== '')
+    ? String(rawEdema).trim()
+    : '-';
+
+  const rawChest = vitals.chest ?? vitals.bilateralChest ?? vitals.chestExam;
+  const chestDisplay = (rawChest !== undefined && rawChest !== null && String(rawChest).trim() !== '')
+    ? String(rawChest).trim()
+    : '-';
+
+  const rawCvs = vitals.cvs;
+  const cvsDisplay = (rawCvs !== undefined && rawCvs !== null && String(rawCvs).trim() !== '')
+    ? String(rawCvs).trim()
+    : '-';
+
+  const rawCns = vitals.cns;
+  const cnsDisplay = (rawCns !== undefined && rawCns !== null && String(rawCns).trim() !== '')
+    ? String(rawCns).trim()
+    : '-';
+
+  const vitalsTableRows = [
+    { label: 'PULSE', value: pulseDisplay },
+    { label: 'BP', value: bpDisplay },
+    { label: 'TEMP', value: tempDisplay },
+    { label: 'RR', value: rrDisplay },
+    { label: 'SPO2', value: spo2Display },
+    { label: 'WT/HT', value: wtHtDisplay },
+    { label: 'PALLOR', value: pallorDisplay },
+    { label: 'EDEMA', value: edemaDisplay },
+    { label: 'CHEST', value: chestDisplay },
+    { label: 'CVS', value: cvsDisplay },
+    { label: 'CNS', value: cnsDisplay }
+  ];
+
+  const renderVitalsTable = (isCompactRightCol = false) => {
+    if (printOptions.printVitals === false) return null;
+    return (
+      <div style={{
+        marginBottom: isCompactRightCol ? '0' : '10px',
+        border: '1px solid #000',
+        borderRadius: '2px',
+        padding: isCompactRightCol ? '5px 7px' : '6px 8px',
+        boxSizing: 'border-box',
+        backgroundColor: '#fff',
+        pageBreakInside: 'avoid',
+        width: isCompactRightCol ? '100%' : 'auto',
+        maxWidth: isCompactRightCol ? '100%' : '300px'
+      }}>
+        <table style={{
+          borderCollapse: 'collapse',
+          fontSize: '9.5px',
+          lineHeight: '1.35',
+          width: '100%',
+          tableLayout: 'fixed'
+        }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid #000' }}>
+              <th style={{
+                textAlign: 'left',
+                padding: '2.5px 4px 3px 0',
+                fontWeight: 'bold',
+                textDecoration: 'underline',
+                fontSize: '10px',
+                letterSpacing: '0.4px',
+                width: '52%'
+              }}>
+                EXAMINATIONS
+              </th>
+              <th style={{
+                textAlign: 'left',
+                padding: '2.5px 0 3px 2px',
+                fontWeight: 'bold',
+                textDecoration: 'underline',
+                fontSize: '10px',
+                letterSpacing: '0.4px',
+                width: '48%'
+              }}>
+                VALUE
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {vitalsTableRows.map((row, idx) => (
+              <tr key={idx} style={{ borderBottom: idx < vitalsTableRows.length - 1 ? '1px dotted #e5e7eb' : 'none' }}>
+                <td style={{
+                  padding: '2.5px 4px 2.5px 0',
+                  fontWeight: 'bold',
+                  fontSize: '9.5px',
+                  color: '#000',
+                  whiteSpace: 'nowrap'
+                }}>
+                  {row.label}
+                </td>
+                <td style={{
+                  padding: '2.5px 0 2.5px 2px',
+                  fontSize: '9.5px',
+                  color: '#000',
+                  overflowWrap: 'break-word',
+                  wordBreak: 'break-word'
+                }}>
+                  {row.value}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
   return (
     <div ref={ref} className="a4-receipt" style={{
       width: '100%',
       maxWidth: '210mm',
       minHeight: isPatientSlipOnly ? '280mm' : 'auto',
-      padding: showUploadedLetterhead ? '0 8mm 8mm 8mm' : '5px 8mm 8mm 8mm',
+      padding: showUploadedLetterhead ? '0 8mm 8mm 8mm' : '6mm 8mm 8mm 8mm',
       margin: '0 auto',
       marginTop: '0',
       backgroundColor: '#ffffff',
@@ -735,9 +898,9 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
       )}
 
       <h2 style={{ 
-        fontSize: '13px', 
-        fontWeight: 'bold', 
-        margin: '0 0 6px 0', 
+        fontSize: '14px',
+        fontWeight: 'bold',
+        margin: '0 0 8px 0', 
         textAlign: 'center',
         textTransform: 'uppercase',
         letterSpacing: '1.5px',
@@ -747,293 +910,349 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
         {documentTitle}
       </h2>
 
-      <div style={{ marginBottom: '8px', padding: '6px 8px', border: '1px solid #000', borderRadius: '2px' }}>
-        <p style={{ fontWeight: 'bold', margin: '0 0 4px 0', fontSize: '11px', textDecoration: 'underline' }}>
-          {t(activeLang, 'patientInfo')} & Appointment Details
-        </p>
-        <div style={{ display: 'flex', flexWrap: 'wrap', rowGap: '2px' }}>
-          <div style={{ width: '50%', padding: '1.5px 8px 1.5px 0', boxSizing: 'border-box' }}>
-            <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
-              <strong>Patient Name:</strong> {patient.patientName}
-            </p>
-          </div>
-          <div style={{ width: '50%', padding: '1.5px 0 1.5px 8px', boxSizing: 'border-box' }}>
-            <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
-              <strong>UHID:</strong> {patient.uhid}
-            </p>
-          </div>
-          <div style={{ width: '50%', padding: '1.5px 8px 1.5px 0', boxSizing: 'border-box' }}>
-            <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
-              <strong>Gender / Age:</strong> {patient.gender} {patient.dob ? `(${ageFromDob(patient.dob)} yrs)` : ''}
-            </p>
-          </div>
-          <div style={{ width: '50%', padding: '1.5px 0 1.5px 8px', boxSizing: 'border-box' }}>
-            <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
-              <strong>Mobile Number:</strong> {patient.mobile}
-            </p>
-          </div>
-          <div style={{ width: '50%', padding: '1.5px 8px 1.5px 0', boxSizing: 'border-box' }}>
-            <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
-              <strong>Department:</strong> {patient.department || '-'}
-            </p>
-          </div>
-          <div style={{ width: '50%', padding: '1.5px 0 1.5px 8px', boxSizing: 'border-box' }}>
-            <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
-              <strong>Doctor Name:</strong> Dr. {doctorNameStr}
-            </p>
-          </div>
-          <div style={{ width: '50%', padding: '1.5px 8px 1.5px 0', boxSizing: 'border-box' }}>
-            <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
-              <strong>Appointment Date & Time:</strong> {formatDate(patient.appointmentDate)} {patient.slot ? `(${patient.slot})` : ''}
-            </p>
-          </div>
-          <div style={{ width: '50%', padding: '1.5px 0 1.5px 8px', boxSizing: 'border-box' }}>
-            <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
-              <strong>Registration Number:</strong> {patient.registrationNumber || '-'}
-            </p>
-          </div>
-          {patient.address && (
-            <div style={{ width: '100%', padding: '1.5px 0 1.5px 0', boxSizing: 'border-box' }}>
-              <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
-                <strong>Address:</strong> {patient.address}
+            {prescription ? (
+        /* TWO-COLUMN PRESCRIPTION ARCHITECTURE */
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', width: '100%', marginBottom: '8px' }}>
+          {/* LEFT COLUMN: Clinical Content & Medicines */ }
+          <div style={{ flex: '1 1 0%', minWidth: 0 }}>
+            {/* 1. Patient Information & Appointment Details */ }
+            <div style={{ marginBottom: '6px', padding: '5px 8px', border: '1px solid #000', borderRadius: '2px', backgroundColor: '#fff' }}>
+              <p style={{ fontWeight: 'bold', margin: '0 0 4px 0', fontSize: '10.5px', textDecoration: 'underline' }}>
+                {t(activeLang, 'patientInfo')} & Appointment Details
               </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', rowGap: '2px' }}>
+                <div style={{ width: '50%', padding: '1.5px 6px 1.5px 0', boxSizing: 'border-box' }}>
+                  <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
+                    <strong>Patient Name:</strong> {patient.patientName}
+                  </p>
+                </div>
+                <div style={{ width: '50%', padding: '1.5px 0 1.5px 6px', boxSizing: 'border-box' }}>
+                  <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
+                    <strong>UHID:</strong> {patient.uhid}
+                  </p>
+                </div>
+                <div style={{ width: '50%', padding: '1.5px 6px 1.5px 0', boxSizing: 'border-box' }}>
+                  <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
+                    <strong>Gender / Age:</strong> {patient.gender} {patient.dob ? `(${ageFromDob(patient.dob)} yrs)` : ''}
+                  </p>
+                </div>
+                <div style={{ width: '50%', padding: '1.5px 0 1.5px 6px', boxSizing: 'border-box' }}>
+                  <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
+                    <strong>Mobile Number:</strong> {patient.mobile}
+                  </p>
+                </div>
+                <div style={{ width: '50%', padding: '1.5px 6px 1.5px 0', boxSizing: 'border-box' }}>
+                  <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
+                    <strong>Department / Speciality:</strong> {patient.department || '-'}{patient.speciality && !patient.department?.toLowerCase().includes(patient.speciality.toLowerCase()) ? ` - ${patient.speciality}` : ''}
+                  </p>
+                </div>
+                <div style={{ width: '50%', padding: '1.5px 0 1.5px 6px', boxSizing: 'border-box' }}>
+                  <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
+                    <strong>{isVisiting ? 'Visiting Specialist:' : 'Doctor Name:'}</strong> {doctorNameStr} {isVisiting ? '(Visiting Specialist)' : ''}
+                  </p>
+                </div>
+                <div style={{ width: '50%', padding: '1.5px 6px 1.5px 0', boxSizing: 'border-box' }}>
+                  <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
+                    <strong>Appointment Date & Time:</strong> {formatDate(patient.appointmentDate)} {patient.slot ? `(${patient.slot})` : ''}
+                  </p>
+                </div>
+                <div style={{ width: '50%', padding: '1.5px 0 1.5px 6px', boxSizing: 'border-box' }}>
+                  <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
+                    <strong>Registration Number:</strong> {patient.registrationNumber || '-'}
+                    {patient.appointmentNumber ? ` | Token #${patient.appointmentNumber}` : ''}
+                  </p>
+                </div>
+                {patient.address && (
+                  <div style={{ width: '100%', padding: '1.5px 0 1.5px 0', boxSizing: 'border-box' }}>
+                    <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
+                      <strong>Address:</strong> {patient.address}
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
-          )}
-        </div>
-      </div>
 
-      {(isPatientSlipOnly || mode === 'all') && hasVitals && printOptions.printVitals !== false && (
-        <div style={{ marginBottom: '12px', fontSize: '11px' }}>
-          <p style={{ margin: '0', lineHeight: '1.5' }}>
-            <strong>Vitals:</strong>{' '}
-            {[
-              vitals.weight ? `Weight: ${vitals.weight} kg` : null,
-              vitals.height ? `Height: ${vitals.height} cm` : null,
-              vitals.bloodPressure ? `BP: ${vitals.bloodPressure}` : null,
-              vitals.temperature ? `Temp: ${vitals.temperature} °F` : null,
-              vitals.bmi ? `BMI: ${vitals.bmi}` : null,
-              vitals.pulse ? `Pulse: ${vitals.pulse} bpm` : null,
-              vitals.spo2 ? `SpO2: ${vitals.spo2}%` : null
-            ].filter(Boolean).join(' | ')}
-          </p>
-        </div>
-      )}
+            {/* 2. Diagnosis & Remarks */ }
+            {prescription.diagnosisRemark && printOptions.printDiagnosisRemarks !== false && (
+              <div style={{ marginBottom: '6px' }}>
+                <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', fontSize: '10.5px' }}>Diagnosis & Remarks:</p>
+                <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.38', whiteSpace: 'pre-line' }}>
+                  {translateClinicalText(prescription.diagnosisRemark, activeLang)}
+                </p>
+              </div>
+            )}
 
-      {!prescription && !isPatientSlipOnly && (
-        <div style={{ marginBottom: '18px', padding: '10px', border: '1px solid #000', borderRadius: '2px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <p style={{ fontWeight: 'bold', margin: '0', fontSize: '12px', textDecoration: 'underline' }}>
-              OPD Fee & Payment Summary
-            </p>
-            {patient.billNumber && (
-              <p style={{ margin: '0', fontSize: '11px', fontWeight: 'bold' }}>
-                Receipt No: {patient.billNumber}
-              </p>
+            {/* 3. Advice for the Patient */ }
+            {prescription.patientAdvice && printOptions.printPatientAdvice !== false && (
+              <div style={{ marginBottom: '6px' }}>
+                <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', fontSize: '10.5px' }}>Advice for the Patient:</p>
+                <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.38', whiteSpace: 'pre-line' }}>
+                  {translateClinicalText(prescription.patientAdvice, activeLang)}
+                </p>
+              </div>
+            )}
+
+            {/* 4. Lab Investigations & Reports */ }
+            {prescription.tests && prescription.tests.length > 0 && printOptions.printLabTests !== false && (
+              <div style={{ marginBottom: '6px' }}>
+                <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', fontSize: '10.5px' }}>Lab Investigations & Reports:</p>
+                <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.38' }}>
+                  {prescription.tests.join(', ')}
+                </p>
+              </div>
+            )}
+
+            {/* 5. Medicines Table with fixed table layout and auto-wrapping */ }
+            {prescription.medicines && prescription.medicines.filter(m => m.medicine).length > 0 && (
+              <div style={{ marginBottom: '8px' }}>
+                <p style={{ fontWeight: 'bold', margin: '0 0 3px 0', fontSize: '10.5px', textDecoration: 'underline' }}>
+                  {t(activeLang, 'medicines')}:
+                </p>
+                <table style={{
+                  width: '100%',
+                  tableLayout: 'fixed',
+                  borderCollapse: 'collapse',
+                  fontSize: '9.5px',
+                  lineHeight: '1.3',
+                  border: '1px solid #000',
+                  boxSizing: 'border-box'
+                }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#e8e8e8' }}>
+                      <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '4%' }}>#</th>
+                      <th style={{ padding: '3.5px 3px', border: '1px solid #000', textAlign: 'left', fontWeight: 'bold', width: '24%', overflowWrap: 'break-word', wordBreak: 'break-word' }}>{t(activeLang, 'medicine')}</th>
+                      <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '11%', overflowWrap: 'break-word', wordBreak: 'break-word' }}>Dosage Form</th>
+                      <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '10%', overflowWrap: 'break-word', wordBreak: 'break-word' }}>Strength</th>
+                      <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '7%' }}>Dose</th>
+                      <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '14%', overflowWrap: 'break-word', wordBreak: 'break-word' }}>Frequency</th>
+                      <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '10%' }}>Duration</th>
+                      <th style={{ padding: '3.5px 3px', border: '1px solid #000', textAlign: 'left', fontWeight: 'bold', width: '13%', overflowWrap: 'break-word', wordBreak: 'break-word' }}>Remarks</th>
+                      <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '7%' }}>Qty</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {prescription.medicines.filter((m) => m.medicine).map((item, index) => {
+                      const doseNum = parseFloat(item.dose) || 0;
+                      const freqCount = (item.morning ? 1 : 0) + (item.afternoon ? 1 : 0) + (item.night ? 1 : 0);
+                      const durDays = parseFloat(item.duration) || 0;
+                      const calculatedQty = parseFloat((doseNum * freqCount * durDays).toFixed(2));
+                      const displayQty = item.qty !== undefined ? item.qty : calculatedQty;
+                      const frequencyStr = [
+                        item.morning ? '1' : '0',
+                        item.afternoon ? '1' : '0',
+                        item.night ? '1' : '0'
+                      ].join(' - ');
+
+                      return (
+                        <tr key={index} style={{ backgroundColor: index % 2 === 0 ? '#ffffff' : '#f7f7f7' }}>
+                          <td style={{ padding: '3px 2px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle' }}>{index + 1}</td>
+                          <td style={{ padding: '3px 3px', border: '1px solid #000', verticalAlign: 'middle', fontWeight: '600', overflowWrap: 'break-word', wordBreak: 'break-word' }}>{item.medicine}</td>
+                          <td style={{ padding: '3px 2px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle', fontWeight: '500', color: '#4a5568', overflowWrap: 'break-word', wordBreak: 'break-word' }}>{item.dosageForm || 'Tablet'}</td>
+                          <td style={{ padding: '3px 2px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle', overflowWrap: 'break-word', wordBreak: 'break-word' }}>{item.strength || '-'}</td>
+                          <td style={{ padding: '3px 2px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle' }}>{item.dose !== undefined ? item.dose : '1'}</td>
+                          <td style={{ padding: '3px 2px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle', fontFamily: 'monospace', fontSize: '9px' }}>{frequencyStr}</td>
+                          <td style={{ padding: '3px 2px', border: '1px solid #000', verticalAlign: 'middle', textAlign: 'center' }}>
+                            {item.duration ? `${translateClinicalText(item.duration, activeLang)} days` : '-'}
+                          </td>
+                          <td style={{ padding: '3px 3px', border: '1px solid #000', verticalAlign: 'middle', overflowWrap: 'break-word', wordBreak: 'break-word' }}>{translateClinicalText(item.remarks, activeLang) || '-'}</td>
+                          <td style={{ padding: '3px 2px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle', fontWeight: 'bold' }}>{displayQty}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* 6. Symptoms */ }
+            {prescription.symptoms && prescription.symptoms.length > 0 && (
+              <div style={{ marginBottom: '6px' }}>
+                <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', fontSize: '10.5px' }}>{t(activeLang, 'symptoms')}:</p>
+                {prescription.symptoms.length > 1 ? (
+                  <ul style={{ margin: '2px 0 0 0', paddingLeft: '16px', listStyleType: 'disc', fontSize: '10px', lineHeight: '1.38' }}>
+                    {prescription.symptoms.map((s, idx) => {
+                      let str = translateClinicalText(s.symptom, activeLang);
+                      if (s.durationDays) str += ` (${s.durationDays} ${s.durationUnit || 'Days'})`;
+                      if (printOptions.printSymptomHistory !== false && s.pastHistory) {
+                        str += ` [History: ${s.pastHistory}]`;
+                      }
+                      if (printOptions.printSymptomRemarks !== false && s.remarks) {
+                        str += ` [Remarks: ${s.remarks}]`;
+                      }
+                      return <li key={idx} style={{ marginBottom: '1.5px' }}>{str}</li>;
+                    })}
+                  </ul>
+                ) : (
+                  <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.38' }}>
+                    {prescription.symptoms.map((s) => {
+                      let str = translateClinicalText(s.symptom, activeLang);
+                      if (s.durationDays) str += ` (${s.durationDays} ${s.durationUnit || 'Days'})`;
+                      if (printOptions.printSymptomHistory !== false && s.pastHistory) {
+                        str += ` [History: ${s.pastHistory}]`;
+                      }
+                      if (printOptions.printSymptomRemarks !== false && s.remarks) {
+                        str += ` [Remarks: ${s.remarks}]`;
+                      }
+                      return str;
+                    }).join('; ')}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* 7. General Past History */ }
+            {prescription.pastHistory && printOptions.printGeneralPastHistory !== false && (
+              <div style={{ marginBottom: '6px' }}>
+                <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', fontSize: '10.5px' }}>General Past History:</p>
+                <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.38', whiteSpace: 'pre-line' }}>
+                  {prescription.pastHistory}
+                </p>
+              </div>
+            )}
+
+            {/* 8. Follow up date */ }
+            {prescription.followUpDate && (
+              <div style={{ marginBottom: '6px' }}>
+                <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', fontSize: '10.5px' }}>Follow up date:</p>
+                <p style={{ margin: '0', fontSize: '10px', fontWeight: 'bold' }}>
+                  {formatDate(prescription.followUpDate)}
+                </p>
+              </div>
             )}
           </div>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', border: '1px solid #000' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#f0f0f0' }}>
-                <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'left' }}>Description</th>
-                <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>Gross Fee</th>
-                <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>Discount</th>
-                <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>Net Amount</th>
-                <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center' }}>Payment Mode</th>
-                <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center' }}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td style={{ padding: '6px 8px', border: '1px solid #000' }}>
-                  OPD Consultation Fee - Dr. {doctorNameStr}
-                </td>
-                <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>
-                  ₹{grossFee.toFixed(2)}
-                </td>
-                <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>
-                  {patient.discountType === 'percent'
-                    ? `${patient.discountValue || 0}% (₹${(patient.discountAmount || 0).toFixed(2)})`
-                    : (patient.discountType === 'amount' && (patient.discountAmount || 0) > 0
-                        ? `₹${(patient.discountAmount || 0).toFixed(2)}`
-                        : '₹0.00')}
-                </td>
-                <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right', fontWeight: 'bold' }}>
-                  ₹{netFee.toFixed(2)}
-                </td>
-                <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center' }}>
-                  {patient.paymentMode || 'Cash'}
-                </td>
-                <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', color: patient.paymentStatus === 'Not Paid' ? '#dc2626' : '#16a34a' }}>
-                  {patient.paymentStatus || 'Paid'}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+
+          {/* RIGHT COLUMN: Vitals Section Aligned with Clinical Content */ }
+          {printOptions.printVitals !== false && (
+            <div style={{ width: '190px', flexShrink: 0 }}>
+              {renderVitalsTable(true)}
+            </div>
+          )}
         </div>
-      )}
-
-      {prescription && (
+      ) : (
+        /* NON-PRESCRIPTION LAYOUT (e.g. Patient Slip / Bill Receipt) */
         <>
-          <hr style={{ margin: '14px 0', border: 'none', borderTop: '1px solid #000' }} />
-          
-          {prescription.diagnosisRemark && printOptions.printDiagnosisRemarks !== false && (
-            <div style={{ marginBottom: '12px' }}>
-              <p style={{ fontWeight: 'bold', margin: '0 0 4px 0', fontSize: '11px' }}>Diagnosis & Remarks:</p>
-              <p style={{ 
-                margin: '0', 
-                fontSize: '10px',
-                lineHeight: '1.5',
-                whiteSpace: 'pre-line'
-              }}>
-                {translateClinicalText(prescription.diagnosisRemark, activeLang)}
-              </p>
+          <div style={{ marginBottom: '8px', padding: '6px 8px', border: '1px solid #000', borderRadius: '2px' }}>
+            <p style={{ fontWeight: 'bold', margin: '0 0 4px 0', fontSize: '11px', textDecoration: 'underline' }}>
+              {t(activeLang, 'patientInfo')} & Appointment Details
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', rowGap: '2px' }}>
+              <div style={{ width: '50%', padding: '1.5px 8px 1.5px 0', boxSizing: 'border-box' }}>
+                <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
+                  <strong>Patient Name:</strong> {patient.patientName}
+                </p>
+              </div>
+              <div style={{ width: '50%', padding: '1.5px 0 1.5px 8px', boxSizing: 'border-box' }}>
+                <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
+                  <strong>UHID:</strong> {patient.uhid}
+                </p>
+              </div>
+              <div style={{ width: '50%', padding: '1.5px 8px 1.5px 0', boxSizing: 'border-box' }}>
+                <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
+                  <strong>Gender / Age:</strong> {patient.gender} {patient.dob ? `(${ageFromDob(patient.dob)} yrs)` : ''}
+                </p>
+              </div>
+              <div style={{ width: '50%', padding: '1.5px 0 1.5px 8px', boxSizing: 'border-box' }}>
+                <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
+                  <strong>Mobile Number:</strong> {patient.mobile}
+                </p>
+              </div>
+              <div style={{ width: '50%', padding: '1.5px 8px 1.5px 0', boxSizing: 'border-box' }}>
+                <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
+                  <strong>Department / Speciality:</strong> {patient.department || '-'}{patient.speciality && !patient.department?.toLowerCase().includes(patient.speciality.toLowerCase()) ? ` - ${patient.speciality}` : ''}
+                </p>
+              </div>
+              <div style={{ width: '50%', padding: '1.5px 0 1.5px 8px', boxSizing: 'border-box' }}>
+                <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
+                  <strong>{isVisiting ? 'Visiting Specialist:' : 'Doctor Name:'}</strong> {doctorNameStr} {isVisiting ? '(Visiting Specialist)' : ''}
+                </p>
+              </div>
+              <div style={{ width: '50%', padding: '1.5px 8px 1.5px 0', boxSizing: 'border-box' }}>
+                <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
+                  <strong>Appointment Date & Time:</strong> {formatDate(patient.appointmentDate)} {patient.slot ? `(${patient.slot})` : ''}
+                </p>
+              </div>
+              <div style={{ width: '50%', padding: '1.5px 0 1.5px 8px', boxSizing: 'border-box' }}>
+                <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
+                  <strong>Registration Number:</strong> {patient.registrationNumber || '-'}
+                  {patient.appointmentNumber ? ` | Token #${patient.appointmentNumber}` : ''}
+                </p>
+              </div>
+              {isPatientSlipOnly && (
+                <div style={{ width: '50%', padding: '1.5px 8px 1.5px 0', boxSizing: 'border-box' }}>
+                  <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
+                    <strong>Consultation Fee:</strong> ₹{Number(netFee).toFixed(2)} ({patient.paymentStatus || 'Paid'})
+                  </p>
+                </div>
+              )}
+              {isPatientSlipOnly && patient.billNumber && (
+                <div style={{ width: '50%', padding: '1.5px 0 1.5px 8px', boxSizing: 'border-box' }}>
+                  <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
+                    <strong>Receipt No:</strong> {patient.billNumber}
+                  </p>
+                </div>
+              )}
+              {patient.address && (
+                <div style={{ width: '100%', padding: '1.5px 0 1.5px 0', boxSizing: 'border-box' }}>
+                  <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
+                    <strong>Address:</strong> {patient.address}
+                  </p>
+                </div>
+              )}
             </div>
-          )}
+          </div>
 
-          {prescription.patientAdvice && printOptions.printPatientAdvice !== false && (
-            <div style={{ marginBottom: '12px' }}>
-              <p style={{ fontWeight: 'bold', margin: '0 0 4px 0', fontSize: '11px' }}>Advice for the Patient:</p>
-              <p style={{ 
-                margin: '0', 
-                fontSize: '10px',
-                lineHeight: '1.5',
-                whiteSpace: 'pre-line'
-              }}>
-                {translateClinicalText(prescription.patientAdvice, activeLang)}
-              </p>
-            </div>
-          )}
+          {(isPatientSlipOnly || mode === 'all') && renderVitalsTable(false)}
 
-          {prescription.tests && prescription.tests.length > 0 && printOptions.printLabTests !== false && (
-            <div style={{ marginBottom: '12px' }}>
-              <p style={{ fontWeight: 'bold', margin: '0 0 4px 0', fontSize: '11px' }}>Lab Investigations & Reports:</p>
-              <p style={{ 
-                margin: '0', 
-                fontSize: '10px',
-                lineHeight: '1.5'
-              }}>
-                {prescription.tests.join(', ')}
-              </p>
-            </div>
-          )}
-
-          {prescription.medicines && prescription.medicines.filter(m => m.medicine).length > 0 && (
-            <div style={{ marginBottom: '15px' }}>
-              <p style={{ fontWeight: 'bold', margin: '0 0 5px 0', fontSize: '12px', textDecoration: 'underline' }}>
-                {t(activeLang, 'medicines')}:
-              </p>
-              <table style={{ 
-                width: '100%', 
-                borderCollapse: 'collapse', 
-                fontSize: '10px',
-                border: '1px solid #000'
-              }}>
+          {!prescription && !isPatientSlipOnly && (
+            <div style={{ marginBottom: '18px', padding: '10px', border: '1px solid #000', borderRadius: '2px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <p style={{ fontWeight: 'bold', margin: '0', fontSize: '12px', textDecoration: 'underline' }}>
+                  OPD Fee & Payment Summary
+                </p>
+                {patient.billNumber && (
+                  <p style={{ margin: '0', fontSize: '11px', fontWeight: 'bold' }}>
+                    Receipt No: {patient.billNumber}
+                  </p>
+                )}
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', border: '1px solid #000' }}>
                 <thead>
-                  <tr style={{ backgroundColor: '#e8e8e8' }}>
-                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'left', fontWeight: 'bold', width: '4%' }}>#</th>
-                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'left', fontWeight: 'bold', width: '25%' }}>{t(activeLang, 'medicine')}</th>
-                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '12%' }}>Dosage Form</th>
-                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '10%' }}>Strength</th>
-                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '8%' }}>Dose</th>
-                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '13%' }}>Frequency</th>
-                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '10%' }}>Duration</th>
-                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'left', fontWeight: 'bold', width: '10%' }}>Remarks</th>
-                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '8%' }}>Qty</th>
+                  <tr style={{ backgroundColor: '#f0f0f0' }}>
+                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'left' }}>Description</th>
+                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>Gross Fee</th>
+                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>Discount</th>
+                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>Net Amount</th>
+                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center' }}>Payment Mode</th>
+                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center' }}>Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {prescription.medicines.filter((m) => m.medicine).map((item, index) => {
-                    const doseNum = parseFloat(item.dose) || 0;
-                    const freqCount = (item.morning ? 1 : 0) + (item.afternoon ? 1 : 0) + (item.night ? 1 : 0);
-                    const durDays = parseFloat(item.duration) || 0;
-                    const calculatedQty = parseFloat((doseNum * freqCount * durDays).toFixed(2));
-                    const displayQty = item.qty !== undefined ? item.qty : calculatedQty;
-                    const frequencyStr = [
-                      item.morning ? '1' : '0',
-                      item.afternoon ? '1' : '0',
-                      item.night ? '1' : '0'
-                    ].join(' - ');
-
-                    return (
-                      <tr key={index} style={{ backgroundColor: index % 2 === 0 ? '#ffffff' : '#f7f7f7' }}>
-                        <td style={{ padding: '5px 8px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle' }}>{index + 1}</td>
-                        <td style={{ padding: '5px 8px', border: '1px solid #000', verticalAlign: 'middle', fontWeight: '500' }}>{item.medicine}</td>
-                        <td style={{ padding: '5px 8px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle', fontWeight: '500', color: '#4a5568' }}>{item.dosageForm || 'Tablet'}</td>
-                        <td style={{ padding: '5px 8px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle' }}>{item.strength || '-'}</td>
-                        <td style={{ padding: '5px 8px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle' }}>{item.dose !== undefined ? item.dose : '1'}</td>
-                        <td style={{ padding: '5px 8px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle', fontFamily: 'monospace' }}>{frequencyStr}</td>
-                        <td style={{ padding: '5px 8px', border: '1px solid #000', verticalAlign: 'middle', textAlign: 'center' }}>
-                          {item.duration ? `${translateClinicalText(item.duration, activeLang)} days` : '-'}
-                        </td>
-                        <td style={{ padding: '5px 8px', border: '1px solid #000', verticalAlign: 'middle' }}>{translateClinicalText(item.remarks, activeLang) || '-'}</td>
-                        <td style={{ padding: '5px 8px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle', fontWeight: 'bold' }}>{displayQty}</td>
-                      </tr>
-                    );
-                  })}
+                  <tr>
+                    <td style={{ padding: '6px 8px', border: '1px solid #000' }}>
+                      OPD Consultation Fee - {doctorNameStr} {isVisiting ? '(Visiting Specialist)' : ''}
+                    </td>
+                    <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>
+                      ₹{grossFee.toFixed(2)}
+                    </td>
+                    <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>
+                      {patient.discountType === 'percent'
+                        ? `${patient.discountValue || 0}% (₹${(patient.discountAmount || 0).toFixed(2)})`
+                        : (patient.discountType === 'amount' && (patient.discountAmount || 0) > 0
+                            ? `₹${(patient.discountAmount || 0).toFixed(2)}`
+                            : '₹0.00')}
+                    </td>
+                    <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right', fontWeight: 'bold' }}>
+                      ₹{netFee.toFixed(2)}
+                    </td>
+                    <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center' }}>
+                      {patient.paymentMode || 'Cash'}
+                    </td>
+                    <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', color: patient.paymentStatus === 'Not Paid' ? '#dc2626' : '#16a34a' }}>
+                      {patient.paymentStatus || 'Paid'}
+                    </td>
+                  </tr>
                 </tbody>
               </table>
-            </div>
-          )}
-
-          {prescription.symptoms && prescription.symptoms.length > 0 && (
-            <div style={{ marginBottom: '12px' }}>
-              <p style={{ fontWeight: 'bold', margin: '0 0 4px 0', fontSize: '11px' }}>{t(activeLang, 'symptoms')}:</p>
-              {prescription.symptoms.length > 1 ? (
-                <ul style={{ margin: '4px 0 0 0', paddingLeft: '18px', listStyleType: 'disc', fontSize: '10px', lineHeight: '1.6' }}>
-                  {prescription.symptoms.map((s, idx) => {
-                    let str = translateClinicalText(s.symptom, activeLang);
-                    if (s.durationDays) str += ` (${s.durationDays} ${s.durationUnit || 'Days'})`;
-                    if (printOptions.printSymptomHistory !== false && s.pastHistory) {
-                      str += ` [History: ${s.pastHistory}]`;
-                    }
-                    if (printOptions.printSymptomRemarks !== false && s.remarks) {
-                      str += ` [Remarks: ${s.remarks}]`;
-                    }
-                    return <li key={idx} style={{ marginBottom: '2px' }}>{str}</li>;
-                  })}
-                </ul>
-              ) : (
-                <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.5' }}>
-                  {prescription.symptoms.map((s) => {
-                    let str = translateClinicalText(s.symptom, activeLang);
-                    if (s.durationDays) str += ` (${s.durationDays} ${s.durationUnit || 'Days'})`;
-                    if (printOptions.printSymptomHistory !== false && s.pastHistory) {
-                      str += ` [History: ${s.pastHistory}]`;
-                    }
-                    if (printOptions.printSymptomRemarks !== false && s.remarks) {
-                      str += ` [Remarks: ${s.remarks}]`;
-                    }
-                    return str;
-                  }).join('; ')}
-                </p>
-              )}
-            </div>
-          )}
-
-          {prescription.pastHistory && printOptions.printGeneralPastHistory !== false && (
-            <div style={{ marginBottom: '12px' }}>
-              <p style={{ fontWeight: 'bold', margin: '0 0 4px 0', fontSize: '11px' }}>General Past History:</p>
-              <p style={{ 
-                margin: '0', 
-                fontSize: '10px',
-                lineHeight: '1.5',
-                whiteSpace: 'pre-line'
-              }}>
-                {prescription.pastHistory}
-              </p>
-            </div>
-          )}
-
-          {prescription.followUpDate && (
-            <div style={{ marginBottom: '12px' }}>
-              <p style={{ fontWeight: 'bold', margin: '0 0 4px 0', fontSize: '11px' }}>Follow up date:</p>
-              <p style={{ 
-                margin: '0', 
-                fontSize: '10px',
-                fontWeight: 'bold'
-              }}>
-                {formatDate(prescription.followUpDate)}
-              </p>
             </div>
           )}
         </>
@@ -1044,7 +1263,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
         bottom: isPatientSlipOnly ? '8mm' : 'auto',
         left: isPatientSlipOnly ? '8mm' : 'auto',
         right: isPatientSlipOnly ? '8mm' : 'auto',
-        marginTop: isPatientSlipOnly ? '0' : '25px',
+        marginTop: isPatientSlipOnly ? '0' : (prescription ? '12px' : '20px'),
         textAlign: 'center', 
         fontSize: '9px', 
         color: '#666', 

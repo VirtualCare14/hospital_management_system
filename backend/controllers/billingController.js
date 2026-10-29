@@ -747,7 +747,7 @@ const generateBillItems = async (req, res) => {
       .populate('doctorInCharge', 'doctorName')
       .sort({ createdAt: -1 });
 
-    const doctorName = latestAdmission?.doctorInCharge?.doctorName || latestConsultation?.doctorId?.doctorName || latestVisit?.doctorId?.doctorName || 'Not Assigned';
+    const doctorName = latestAdmission?.doctorInCharge?.doctorName || (latestConsultation?.isVisitingDoctor ? (latestConsultation.visitingDoctorName || 'Visiting Specialist') : latestConsultation?.doctorId?.doctorName) || (latestVisit?.isVisitingDoctor ? (latestVisit.visitingDoctorName || latestVisit.doctorName || 'Visiting Specialist') : latestVisit?.doctorId?.doctorName) || 'Not Assigned';
     const registrationDate = patient.createdAt;
     const admissionDetails = latestAdmission ? {
       _id: latestAdmission._id,
@@ -780,7 +780,12 @@ const generateBillItems = async (req, res) => {
         items.push({
           category: 'OPD',
           date: fmtDate(v.createdAt),
-          description: `OPD Consultation - Dr. ${v.doctorId?.doctorName || 'Doctor'} (${v.registrationNumber})`,
+          description: (() => {
+            const rawDoc = v.isVisitingDoctor ? (v.visitingDoctorName || v.doctorName || 'Visiting Specialist') : (v.doctorId?.doctorName || v.doctorName || 'Doctor');
+            const cleanDoc = /^dr\.?/i.test(rawDoc.trim()) ? rawDoc.trim() : `Dr. ${rawDoc.trim()}`;
+            const specBadge = v.isVisitingDoctor ? ' (Visiting Specialist)' : '';
+            return `OPD Consultation - ${cleanDoc}${specBadge} (${v.registrationNumber})`;
+          })(),
           price: grossFee,
           discount: discountAmt,
           discountType: v.discountType || 'none',
@@ -811,7 +816,12 @@ const generateBillItems = async (req, res) => {
           items.push({
             category: 'OPD',
             date: fmtDate(c.consultationDateTime || c.createdAt),
-            description: `Doctor Consultation - Dr. ${c.doctorId?.doctorName || 'Doctor'}`,
+            description: (() => {
+              const rawDoc = c.isVisitingDoctor ? (c.visitingDoctorName || 'Visiting Specialist') : (c.doctorId?.doctorName || 'Doctor');
+              const cleanDoc = /^dr\.?/i.test(rawDoc.trim()) ? rawDoc.trim() : `Dr. ${rawDoc.trim()}`;
+              const specBadge = c.isVisitingDoctor ? ' (Visiting Specialist)' : '';
+              return `Doctor Consultation - ${cleanDoc}${specBadge}`;
+            })(),
             price: docFee,
             discount: 0,
             quantity: 1,

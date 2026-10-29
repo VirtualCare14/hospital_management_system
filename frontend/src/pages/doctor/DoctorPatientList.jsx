@@ -242,9 +242,32 @@ const DoctorPatientList = () => {
                     </td>
                     <td className="p-3">{patient.mobile}</td>
                     <td className="p-3">
-                      Dr. {patient.doctorId?.doctorName || patient.doctorId?.username || 'N/A'}
+                      {patient.isVisitingDoctor || patient.doctorId?.isVisitingDoctor ? (
+                        <div>
+                          <span className="font-bold text-purple-950 block text-xs">
+                            Dr. {patient.visitingDoctorName || patient.doctorName || patient.doctorId?.doctorName}
+                          </span>
+                          <span className="inline-flex items-center text-[10px] font-bold bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded border border-purple-200 mt-0.5">
+                            Visiting Specialist
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="font-semibold text-gray-900 block text-xs">
+                          Dr. {patient.doctorId?.doctorName || patient.doctorId?.username || 'N/A'}
+                        </span>
+                      )}
                     </td>
-                    <td className="p-3">{formatDate(patient.appointmentDate)} {patient.slot}</td>
+                    <td className="p-3">
+                      <div className="font-semibold text-gray-950 flex items-center gap-1.5 flex-wrap">
+                        <span>{formatDate(patient.appointmentDate)}</span>
+                        {patient.appointmentNumber && (
+                          <span className="text-[10px] font-black text-orange-700 bg-orange-100 px-1.5 py-0.2 rounded border border-orange-200">
+                            #{patient.appointmentNumber}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-500">{patient.slot}</div>
+                    </td>
                     <td className="p-3 pr-4 text-center">
                       <div className="flex items-center justify-center gap-2">
                         <Link 

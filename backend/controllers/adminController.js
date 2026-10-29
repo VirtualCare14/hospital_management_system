@@ -368,16 +368,18 @@ const deleteUser = async (req, res) => {
 const createDepartment = async (req, res) => {
   try {
     const { departmentName } = req.body;
-    if (!departmentName) {
+    const trimmed = (departmentName || '').trim();
+    if (!trimmed) {
       return res.status(400).json({ message: 'Department name is required' });
     }
 
-    const deptExists = await Department.findOne(hospitalFilter(req, { departmentName: { $regex: new RegExp(`^${departmentName}$`, 'i') } }));
+    const safeRegex = new RegExp('^' + trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i');
+    const deptExists = await Department.findOne(hospitalFilter(req, { departmentName: { $regex: safeRegex } }));
     if (deptExists) {
       return res.status(400).json({ message: 'Department already exists' });
     }
 
-    const newDept = new Department({ hospitalId: req.user.hospitalId, departmentName });
+    const newDept = new Department({ hospitalId: req.user.hospitalId, departmentName: trimmed });
     await newDept.save();
 
     res.status(201).json(newDept);

@@ -895,7 +895,18 @@ const PatientList = () => {
                     </td>
                     <td className="p-3 text-xs">
                       {reg.doctorName
-                        ? (reg.doctorName.toLowerCase().startsWith('dr') ? reg.doctorName : `Dr. ${reg.doctorName}`)
+                        ? (
+                          <div className="flex flex-col">
+                            <span className="font-medium text-gray-900">
+                              {reg.doctorName.toLowerCase().startsWith('dr') ? reg.doctorName : `Dr. ${reg.doctorName}`}
+                            </span>
+                            {reg.isVisitingDoctor && (
+                              <span className="text-[10px] text-orange-600 font-bold mt-0.5">
+                                Visiting Specialist
+                              </span>
+                            )}
+                          </div>
+                        )
                         : (reg.visitType === 'Lab' || reg.department === 'Laboratory' || (reg.department && reg.department.toLowerCase().includes('lab')) ? 'Self / Lab' : 'Self')}
                     </td>
                     {receptionSeePatientDue && (
@@ -1532,7 +1543,7 @@ const PatientList = () => {
                           </p>
                         )}
                         <p className="text-xs text-gray-600 mt-1">
-                          {visit.department} • Dr. {visit.doctorId?.doctorName || visit.doctorId?.username || 'N/A'}
+                          {visit.department} • Dr. {visit.doctorName || visit.visitingDoctorName || visit.doctorId?.doctorName || visit.doctorId?.username || 'N/A'}
                         </p>
                         <p className="text-[10px] text-gray-400 mt-0.5">
                           {visit.registrationDate ? new Date(visit.registrationDate).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '-'}

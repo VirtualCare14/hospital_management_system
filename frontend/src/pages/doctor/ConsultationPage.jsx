@@ -21,6 +21,14 @@ import {
   navigateWhatsAppShareWindow,
   openWhatsAppShareWindow
 } from '../../../../shared/prescriptionWhatsApp.js';
+import {
+  formatBp,
+  validateBloodPressure,
+  validatePulseRate,
+  validateRespiratoryRate,
+  validateSpO2,
+  handleNumericIntegerKeyDown
+} from '../reception/PatientRegistration';
 
 const calculateQty = (med) => {
   const m = med.morning ? 1 : 0;
@@ -59,6 +67,7 @@ const ConsultationPage = () => {
   const [followUpDate, setFollowUpDate] = useState('');
   const [followUpRemarks, setFollowUpRemarks] = useState('');
   const [visitId, setVisitId] = useState(null);
+  const [currentVisit, setCurrentVisit] = useState(null);
   const [previousConsultation, setPreviousConsultation] = useState(null);
   const [latestPastPrescription, setLatestPastPrescription] = useState(null);
   const [pastPrescriptions, setPastPrescriptions] = useState([]);
@@ -104,11 +113,105 @@ const ConsultationPage = () => {
     { medicine: '', dosageForm: 'Tablet', strength: '', dose: '1', morning: true, afternoon: false, night: true, duration: '5', remarks: 'After food', qty: 0 }
   ]);
 
-  const { register, handleSubmit, reset, watch } = useForm({
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm({
     defaultValues: {
       sendToLab: true
     }
   });
+
+  const bpInputRef = useRef(null);
+  const lastBpValueRef = useRef('');
+  const bloodPressureValue = watch('bloodPressure') || '';
+  useEffect(() => {
+    lastBpValueRef.current = bloodPressureValue;
+  }, [bloodPressureValue]);
+
+  const { onChange: bpRegisterOnChange, ref: bpRegisterRef, ...bpRegisterRest } = register('bloodPressure', {
+    validate: validateBloodPressure
+  });
+
+  const handleBpKeyDown = (e) => {
+    if (
+      e.key === 'Backspace' ||
+      e.key === 'Delete' ||
+      e.key === 'ArrowLeft' ||
+      e.key === 'ArrowRight' ||
+      e.key === 'ArrowUp' ||
+      e.key === 'ArrowDown' ||
+      e.key === 'Tab' ||
+      e.key === 'Home' ||
+      e.key === 'End' ||
+      e.key === 'Enter' ||
+      e.key === 'Escape'
+    ) {
+      return;
+    }
+    if (e.ctrlKey || e.metaKey) {
+      return;
+    }
+    if (e.key === '/') {
+      const val = e.target.value || '';
+      if (val.includes('/') || val.length === 0) {
+        e.preventDefault();
+      }
+      return;
+    }
+    if (!/^\d$/.test(e.key)) {
+      e.preventDefault();
+    }
+  };
+
+  const handleBpChange = (e) => {
+    const rawValue = e.target.value;
+    const prevValue = lastBpValueRef.current || '';
+    const formatted = formatBp(rawValue, prevValue);
+    lastBpValueRef.current = formatted;
+    e.target.value = formatted;
+    setValue('bloodPressure', formatted, { shouldValidate: true, shouldDirty: true });
+    bpRegisterOnChange(e);
+  };
+
+  const handleBpPaste = (e) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text') || '';
+    const digitsAndSlash = pasted.replace(/[^\d/]/g, '');
+    const formatted = formatBp(digitsAndSlash, lastBpValueRef.current);
+    lastBpValueRef.current = formatted;
+    setValue('bloodPressure', formatted, { shouldValidate: true, shouldDirty: true });
+    if (bpInputRef.current) {
+      bpInputRef.current.value = formatted;
+    }
+  };
+
+  const handleSaveVitalsModal = () => {
+    const bp = watch('bloodPressure');
+    const bpErr = validateBloodPressure(bp);
+    if (bpErr !== true) {
+      toast.error(bpErr);
+      return;
+    }
+    const pr = watch('pulseRate');
+    const prErr = validatePulseRate(pr);
+    if (prErr !== true) {
+      toast.error(prErr);
+      return;
+    }
+    const rr = watch('respiratoryRate');
+    const rrErr = validateRespiratoryRate(rr);
+    if (rrErr !== true) {
+      toast.error(rrErr);
+      return;
+    }
+    const spo2 = watch('spo2');
+    const spo2Err = validateSpO2(spo2);
+    if (spo2Err !== true) {
+      toast.error(spo2Err);
+      return;
+    }
+    setShowEditVitalsModal(false);
+    toast.success("Vitals updated successfully!");
+  };
+
   const isReadOnly = Boolean(patient?.isDischarged || isSaved);
 
   // Fetch Pharmacy Inventory Medicines
@@ -162,8 +265,11 @@ const ConsultationPage = () => {
         ]);
 
         let completedConsultation = null;
-        if (consultationsRes.status === 'fulfilled' && consultationsRes.value.data?.length > 0) {
-          completedConsultation = consultationsRes.value.data.find(c => c.consultationStatus === 'completed') || consultationsRes.value.data[0];
+        const consList = Array.isArray(consultationsRes?.value?.data)
+          ? consultationsRes.value.data
+          : (consultationsRes?.value?.data?.consultations || []);
+        if (consList.length > 0) {
+          completedConsultation = consList.find(c => c.consultationStatus === 'completed') || consList[0];
           if (completedConsultation) setPreviousConsultation(completedConsultation);
         }
 
@@ -171,14 +277,27 @@ const ConsultationPage = () => {
           const patientObj = patientRes.value.data;
           setPatient(patientObj);
           
-          const vitalsData = completedConsultation?.vitals || patientObj.demographics || {};
+          const latestVisitDemographics = (visitsRes.status === 'fulfilled' && visitsRes.value.data?.length > 0)
+            ? visitsRes.value.data[0].demographics
+            : null;
+          const receptionVitals = patientObj.demographics || latestVisitDemographics || {};
+          const isPendingEncounter = patientObj.consultationStatus !== 'completed';
+          const primaryVitals = isPendingEncounter ? receptionVitals : (completedConsultation?.vitals || receptionVitals);
+          const fallbackVitals = isPendingEncounter ? (completedConsultation?.vitals || {}) : receptionVitals;
+
           reset({
-            weight: vitalsData.weight || '',
-            height: vitalsData.height || '',
-            temperature: vitalsData.temperature || '',
-            bloodPressure: vitalsData.bloodPressure || '',
-            bmi: vitalsData.bmi || '',
-            drugAllergy: vitalsData.drugAllergy || '',
+            weight: primaryVitals.weight ?? fallbackVitals.weight ?? '',
+            height: primaryVitals.height ?? fallbackVitals.height ?? '',
+            temperature: primaryVitals.temperature ?? fallbackVitals.temperature ?? '',
+            bloodPressure: primaryVitals.bloodPressure || fallbackVitals.bloodPressure || '',
+            bmi: primaryVitals.bmi ?? fallbackVitals.bmi ?? '',
+            drugAllergy: primaryVitals.drugAllergy || fallbackVitals.drugAllergy || '',
+            cvs: primaryVitals.cvs || fallbackVitals.cvs || '',
+            respiratoryRate: primaryVitals.respiratoryRate ?? primaryVitals.rr ?? fallbackVitals.respiratoryRate ?? fallbackVitals.rr ?? '',
+            pulseRate: primaryVitals.pulseRate ?? primaryVitals.pulse ?? primaryVitals.pr ?? fallbackVitals.pulseRate ?? fallbackVitals.pulse ?? fallbackVitals.pr ?? '',
+            perAbdomen: primaryVitals.perAbdomen || primaryVitals.pa || fallbackVitals.perAbdomen || fallbackVitals.pa || '',
+            bilateralChest: primaryVitals.bilateralChest || fallbackVitals.bilateralChest || '',
+            spo2: primaryVitals.spo2 ?? fallbackVitals.spo2 ?? '',
             sendToLab: true
           });
         }
@@ -212,6 +331,7 @@ const ConsultationPage = () => {
 
         if (visitsRes.status === 'fulfilled' && visitsRes.value.data?.length > 0) {
           setVisitId(visitsRes.value.data[0]._id);
+          setCurrentVisit(visitsRes.value.data[0]);
         }
 
         if (prescriptionRes.status === 'fulfilled' && prescriptionRes.value.data) {
@@ -476,7 +596,13 @@ const ConsultationPage = () => {
       temperature: formVitals.temperature || patient?.demographics?.temperature || previousConsultation?.vitals?.temperature,
       bloodPressure: formVitals.bloodPressure || patient?.demographics?.bloodPressure || previousConsultation?.vitals?.bloodPressure,
       bmi: formVitals.bmi || patient?.demographics?.bmi || previousConsultation?.vitals?.bmi,
-      drugAllergy: formVitals.drugAllergy || patient?.demographics?.drugAllergy || previousConsultation?.vitals?.drugAllergy
+      drugAllergy: formVitals.drugAllergy || patient?.demographics?.drugAllergy || previousConsultation?.vitals?.drugAllergy,
+      cvs: formVitals.cvs || patient?.demographics?.cvs || previousConsultation?.vitals?.cvs,
+      respiratoryRate: formVitals.respiratoryRate ?? patient?.demographics?.respiratoryRate ?? patient?.demographics?.rr ?? previousConsultation?.vitals?.respiratoryRate,
+      pulseRate: formVitals.pulseRate ?? patient?.demographics?.pulseRate ?? patient?.demographics?.pulse ?? patient?.demographics?.pr ?? previousConsultation?.vitals?.pulseRate ?? previousConsultation?.vitals?.pulse,
+      perAbdomen: formVitals.perAbdomen || patient?.demographics?.perAbdomen || patient?.demographics?.pa || previousConsultation?.vitals?.perAbdomen,
+      bilateralChest: formVitals.bilateralChest || patient?.demographics?.bilateralChest || previousConsultation?.vitals?.bilateralChest,
+      spo2: formVitals.spo2 ?? patient?.demographics?.spo2 ?? previousConsultation?.vitals?.spo2
     };
 
     const mergedSymptoms = [
@@ -532,7 +658,13 @@ const ConsultationPage = () => {
       temperature: formVitals.temperature || patient?.demographics?.temperature || previousConsultation?.vitals?.temperature,
       bloodPressure: formVitals.bloodPressure || patient?.demographics?.bloodPressure || previousConsultation?.vitals?.bloodPressure,
       bmi: formVitals.bmi || patient?.demographics?.bmi || previousConsultation?.vitals?.bmi,
-      drugAllergy: formVitals.drugAllergy || patient?.demographics?.drugAllergy || previousConsultation?.vitals?.drugAllergy
+      drugAllergy: formVitals.drugAllergy || patient?.demographics?.drugAllergy || previousConsultation?.vitals?.drugAllergy,
+      cvs: formVitals.cvs || patient?.demographics?.cvs || previousConsultation?.vitals?.cvs,
+      respiratoryRate: formVitals.respiratoryRate ?? patient?.demographics?.respiratoryRate ?? patient?.demographics?.rr ?? previousConsultation?.vitals?.respiratoryRate,
+      pulseRate: formVitals.pulseRate ?? patient?.demographics?.pulseRate ?? patient?.demographics?.pulse ?? patient?.demographics?.pr ?? previousConsultation?.vitals?.pulseRate ?? previousConsultation?.vitals?.pulse,
+      perAbdomen: formVitals.perAbdomen || patient?.demographics?.perAbdomen || patient?.demographics?.pa || previousConsultation?.vitals?.perAbdomen,
+      bilateralChest: formVitals.bilateralChest || patient?.demographics?.bilateralChest || previousConsultation?.vitals?.bilateralChest,
+      spo2: formVitals.spo2 ?? patient?.demographics?.spo2 ?? previousConsultation?.vitals?.spo2
     };
 
     return {
@@ -696,13 +828,53 @@ const ConsultationPage = () => {
         ? [previousConsultation?.diagnosisRemark, diagnosisRemark].filter(Boolean).join('\n')
         : diagnosisRemark;
 
+      if (data.bloodPressure) {
+        const bpErr = validateBloodPressure(data.bloodPressure);
+        if (bpErr !== true) {
+          toast.error(bpErr);
+          setSaving(false);
+          return;
+        }
+      }
+      if (data.pulseRate) {
+        const prErr = validatePulseRate(data.pulseRate);
+        if (prErr !== true) {
+          toast.error(prErr);
+          setSaving(false);
+          return;
+        }
+      }
+      if (data.respiratoryRate) {
+        const rrErr = validateRespiratoryRate(data.respiratoryRate);
+        if (rrErr !== true) {
+          toast.error(rrErr);
+          setSaving(false);
+          return;
+        }
+      }
+      if (data.spo2) {
+        const spo2Err = validateSpO2(data.spo2);
+        if (spo2Err !== true) {
+          toast.error(spo2Err);
+          setSaving(false);
+          return;
+        }
+      }
+
       const mergedVitals = {
         weight: data.weight || previousConsultation?.vitals?.weight,
         height: data.height || previousConsultation?.vitals?.height,
         temperature: data.temperature || previousConsultation?.vitals?.temperature,
         bmi: data.bmi || previousConsultation?.vitals?.bmi,
         drugAllergy: data.drugAllergy || previousConsultation?.vitals?.drugAllergy,
-        bloodPressure: data.bloodPressure || previousConsultation?.vitals?.bloodPressure
+        bloodPressure: data.bloodPressure || previousConsultation?.vitals?.bloodPressure,
+        cvs: data.cvs || previousConsultation?.vitals?.cvs,
+        respiratoryRate: data.respiratoryRate ?? previousConsultation?.vitals?.respiratoryRate,
+        pulseRate: data.pulseRate ?? previousConsultation?.vitals?.pulseRate ?? previousConsultation?.vitals?.pulse,
+        pulse: data.pulseRate ?? previousConsultation?.vitals?.pulseRate ?? previousConsultation?.vitals?.pulse,
+        perAbdomen: data.perAbdomen || previousConsultation?.vitals?.perAbdomen,
+        bilateralChest: data.bilateralChest || previousConsultation?.vitals?.bilateralChest,
+        spo2: data.spo2 ?? previousConsultation?.vitals?.spo2
       };
 
       const mergedTests = [
@@ -781,13 +953,53 @@ const ConsultationPage = () => {
         ? [previousConsultation?.diagnosisRemark, diagnosisRemark].filter(Boolean).join('\n')
         : diagnosisRemark;
 
+      if (formValues.bloodPressure) {
+        const bpErr = validateBloodPressure(formValues.bloodPressure);
+        if (bpErr !== true) {
+          toast.error(bpErr);
+          setSaving(false);
+          return;
+        }
+      }
+      if (formValues.pulseRate) {
+        const prErr = validatePulseRate(formValues.pulseRate);
+        if (prErr !== true) {
+          toast.error(prErr);
+          setSaving(false);
+          return;
+        }
+      }
+      if (formValues.respiratoryRate) {
+        const rrErr = validateRespiratoryRate(formValues.respiratoryRate);
+        if (rrErr !== true) {
+          toast.error(rrErr);
+          setSaving(false);
+          return;
+        }
+      }
+      if (formValues.spo2) {
+        const spo2Err = validateSpO2(formValues.spo2);
+        if (spo2Err !== true) {
+          toast.error(spo2Err);
+          setSaving(false);
+          return;
+        }
+      }
+
       const mergedVitals = {
         weight: formValues.weight || previousConsultation?.vitals?.weight,
         height: formValues.height || previousConsultation?.vitals?.height,
         temperature: formValues.temperature || previousConsultation?.vitals?.temperature,
         bmi: formValues.bmi || previousConsultation?.vitals?.bmi,
         drugAllergy: formValues.drugAllergy || previousConsultation?.vitals?.drugAllergy,
-        bloodPressure: formValues.bloodPressure || previousConsultation?.vitals?.bloodPressure
+        bloodPressure: formValues.bloodPressure || previousConsultation?.vitals?.bloodPressure,
+        cvs: formValues.cvs || previousConsultation?.vitals?.cvs,
+        respiratoryRate: formValues.respiratoryRate ?? previousConsultation?.vitals?.respiratoryRate,
+        pulseRate: formValues.pulseRate ?? previousConsultation?.vitals?.pulseRate ?? previousConsultation?.vitals?.pulse,
+        pulse: formValues.pulseRate ?? previousConsultation?.vitals?.pulseRate ?? previousConsultation?.vitals?.pulse,
+        perAbdomen: formValues.perAbdomen || previousConsultation?.vitals?.perAbdomen,
+        bilateralChest: formValues.bilateralChest || previousConsultation?.vitals?.bilateralChest,
+        spo2: formValues.spo2 ?? previousConsultation?.vitals?.spo2
       };
 
       const mergedTests = [
@@ -1028,6 +1240,28 @@ const ConsultationPage = () => {
           </button>
         </div>
       </div>
+
+      {(Boolean(currentVisit?.isVisitingDoctor || patient?.isVisitingDoctor)) && (
+        <div className="card p-3 bg-purple-50/90 border border-purple-200 flex items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <span className="p-2 rounded-xl bg-purple-600 text-white text-xs font-black">★</span>
+            <div>
+              <h4 className="font-extrabold text-purple-950 text-sm">Super Speciality OPD Encounter</h4>
+              <p className="text-xs text-purple-800 font-semibold">
+                Visiting Specialist: <strong className="text-purple-950 font-black">Dr. {currentVisit?.visitingDoctorName || patient?.visitingDoctorName || patient?.doctorName || 'Specialist'}</strong> ({currentVisit?.department || patient?.department || 'Super Speciality'})
+                {currentVisit?.appointmentNumber && (
+                  <span className="ml-2 px-1.5 py-0.5 rounded bg-purple-200 text-purple-900 font-bold text-[11px]">
+                    Token #{currentVisit.appointmentNumber}
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+          <span className="text-xs font-bold text-purple-700 bg-white px-2.5 py-1 rounded-lg border border-purple-200">
+            Staff: {user?.doctorName || user?.username || 'Clinical Staff'}
+          </span>
+        </div>
+      )}
 
       {isReadOnly && !patient?.isDischarged && (
         <div className="card p-4 border border-emerald-200 bg-emerald-50/90 flex items-center justify-between gap-3 shadow-xs">
@@ -1865,26 +2099,92 @@ const ConsultationPage = () => {
                   </button>
                 )}
               </div>
-              <div className="space-y-1.5 text-xs sm:text-sm font-extrabold text-gray-800">
+              <div className="space-y-1.5 text-xs sm:text-sm font-extrabold text-gray-800 max-h-[380px] overflow-y-auto pr-1">
                 <div className="flex justify-between border-b border-gray-50 pb-1">
                   <span className="text-gray-600">Weight:</span>
-                  <span className="text-sm sm:text-base font-black text-gray-950">{watch('weight') || patient?.demographics?.weight || previousConsultation?.vitals?.weight || '-'} kg</span>
+                  <span className="text-sm sm:text-base font-black text-gray-950">
+                    {(() => {
+                      const val = watch('weight') ?? patient?.demographics?.weight ?? previousConsultation?.vitals?.weight;
+                      return (val !== undefined && val !== null && val !== '') ? `${val} kg` : '-';
+                    })()}
+                  </span>
                 </div>
                 <div className="flex justify-between border-b border-gray-50 pb-1">
                   <span className="text-gray-600">Height:</span>
-                  <span className="text-sm sm:text-base font-black text-gray-950">{watch('height') || patient?.demographics?.height || previousConsultation?.vitals?.height || '-'} cm</span>
+                  <span className="text-sm sm:text-base font-black text-gray-950">
+                    {(() => {
+                      const val = watch('height') ?? patient?.demographics?.height ?? previousConsultation?.vitals?.height;
+                      return (val !== undefined && val !== null && val !== '') ? `${val} cm` : '-';
+                    })()}
+                  </span>
                 </div>
                 <div className="flex justify-between border-b border-gray-50 pb-1">
                   <span className="text-gray-600">BP:</span>
-                  <span className="text-sm sm:text-base font-black text-gray-950">{watch('bloodPressure') || patient?.demographics?.bloodPressure || previousConsultation?.vitals?.bloodPressure || '-'}</span>
+                  <span className="text-sm sm:text-base font-black text-gray-950">
+                    {(() => {
+                      const bp = watch('bloodPressure') || patient?.demographics?.bloodPressure || previousConsultation?.vitals?.bloodPressure;
+                      if (!bp) return '-';
+                      return String(bp).includes('mmHg') ? bp : `${bp} mmHg`;
+                    })()}
+                  </span>
                 </div>
                 <div className="flex justify-between border-b border-gray-50 pb-1">
                   <span className="text-gray-600">Temp:</span>
-                  <span className="text-sm sm:text-base font-black text-gray-950">{watch('temperature') || patient?.demographics?.temperature || previousConsultation?.vitals?.temperature || '-'} °C</span>
+                  <span className="text-sm sm:text-base font-black text-gray-950">
+                    {(() => {
+                      const val = watch('temperature') ?? patient?.demographics?.temperature ?? previousConsultation?.vitals?.temperature;
+                      return (val !== undefined && val !== null && val !== '') ? `${val} °C` : '-';
+                    })()}
+                  </span>
+                </div>
+                <div className="flex justify-between border-b border-gray-50 pb-1">
+                  <span className="text-gray-600">PR:</span>
+                  <span className="text-sm sm:text-base font-black text-gray-950">
+                    {(() => {
+                      const val = watch('pulseRate') ?? patient?.demographics?.pulseRate ?? patient?.demographics?.pulse ?? patient?.demographics?.pr ?? previousConsultation?.vitals?.pulseRate ?? previousConsultation?.vitals?.pulse;
+                      return (val !== undefined && val !== null && val !== '') ? `${val} beats/min` : '-';
+                    })()}
+                  </span>
+                </div>
+                <div className="flex justify-between border-b border-gray-50 pb-1">
+                  <span className="text-gray-600">RR:</span>
+                  <span className="text-sm sm:text-base font-black text-gray-950">
+                    {(() => {
+                      const val = watch('respiratoryRate') ?? patient?.demographics?.respiratoryRate ?? patient?.demographics?.rr ?? previousConsultation?.vitals?.respiratoryRate;
+                      return (val !== undefined && val !== null && val !== '') ? `${val} breaths/min` : '-';
+                    })()}
+                  </span>
+                </div>
+                <div className="flex justify-between border-b border-gray-50 pb-1">
+                  <span className="text-gray-600">SpO2:</span>
+                  <span className="text-sm sm:text-base font-black text-gray-950">
+                    {(() => {
+                      const val = watch('spo2') ?? patient?.demographics?.spo2 ?? previousConsultation?.vitals?.spo2;
+                      return (val !== undefined && val !== null && val !== '') ? `${val} %` : '-';
+                    })()}
+                  </span>
                 </div>
                 <div className="flex justify-between border-b border-gray-50 pb-1">
                   <span className="text-gray-600">BMI:</span>
                   <span className="text-sm sm:text-base font-black text-gray-950">{watch('bmi') || patient?.demographics?.bmi || previousConsultation?.vitals?.bmi || '-'}</span>
+                </div>
+                <div className="flex justify-between items-center border-b border-gray-50 pb-1 gap-2">
+                  <span className="text-gray-600 shrink-0">CVS:</span>
+                  <span className="text-xs sm:text-sm font-black text-gray-950 text-right truncate max-w-[130px]" title={watch('cvs') || patient?.demographics?.cvs || previousConsultation?.vitals?.cvs || '-'}>
+                    {watch('cvs') || patient?.demographics?.cvs || previousConsultation?.vitals?.cvs || '-'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center border-b border-gray-50 pb-1 gap-2">
+                  <span className="text-gray-600 shrink-0">PA:</span>
+                  <span className="text-xs sm:text-sm font-black text-gray-950 text-right truncate max-w-[130px]" title={watch('perAbdomen') || patient?.demographics?.perAbdomen || patient?.demographics?.pa || previousConsultation?.vitals?.perAbdomen || '-'}>
+                    {watch('perAbdomen') || patient?.demographics?.perAbdomen || patient?.demographics?.pa || previousConsultation?.vitals?.perAbdomen || '-'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center border-b border-gray-50 pb-1 gap-2">
+                  <span className="text-gray-600 shrink-0">Bilateral Chest:</span>
+                  <span className="text-xs sm:text-sm font-black text-gray-950 text-right truncate max-w-[120px]" title={watch('bilateralChest') || patient?.demographics?.bilateralChest || previousConsultation?.vitals?.bilateralChest || '-'}>
+                    {watch('bilateralChest') || patient?.demographics?.bilateralChest || previousConsultation?.vitals?.bilateralChest || '-'}
+                  </span>
                 </div>
                 <div className="flex justify-between pt-0.5">
                   <span className="text-gray-600">Allergies:</span>
@@ -2096,7 +2396,7 @@ const ConsultationPage = () => {
       {/* Edit Vitals Modal */}
       {showEditVitalsModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="card w-full max-w-md p-6 bg-white border border-gray-200 shadow-2xl rounded-2xl animate-in fade-in zoom-in duration-150">
+          <div className="card w-full max-w-lg p-5 relative bg-white border border-gray-100 shadow-2xl rounded-2xl animate-in fade-in zoom-in duration-200">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3 mb-4">
               <h3 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
                 <Activity className="h-5 w-5 text-orange-600" /> Edit Patient Vitals
@@ -2110,7 +2410,7 @@ const ConsultationPage = () => {
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 space-y-0">
+            <div className="grid grid-cols-2 gap-3 space-y-0 max-h-[65vh] overflow-y-auto px-1">
               <div>
                 <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-1">Weight (kg)</label>
                 <input className="input w-full text-sm font-bold text-gray-900 border-gray-300" placeholder="e.g. 70" {...register('weight')} />
@@ -2120,31 +2420,88 @@ const ConsultationPage = () => {
                 <input className="input w-full text-sm font-bold text-gray-900 border-gray-300" placeholder="e.g. 175" {...register('height')} />
               </div>
               <div>
+                <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-1">Blood Pressure (mmHg)</label>
+                <input
+                  className={`input w-full text-sm font-bold text-gray-900 border-gray-300 ${errors.bloodPressure ? 'border-red-500 ring-1 ring-red-500' : ''}`}
+                  placeholder="120/80"
+                  {...bpRegisterRest}
+                  ref={(e) => {
+                    bpRegisterRef(e);
+                    bpInputRef.current = e;
+                  }}
+                  onKeyDown={handleBpKeyDown}
+                  onChange={handleBpChange}
+                  onPaste={handleBpPaste}
+                />
+                {errors.bloodPressure && <p className="text-[11px] font-bold text-red-600 mt-0.5">{errors.bloodPressure.message}</p>}
+              </div>
+              <div>
                 <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-1">Temp (°C)</label>
                 <input className="input w-full text-sm font-bold text-gray-900 border-gray-300" placeholder="e.g. 37" {...register('temperature')} />
               </div>
               <div>
-                <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-1">Blood Pressure</label>
-                <input className="input w-full text-sm font-bold text-gray-900 border-gray-300" placeholder="120/80" {...register('bloodPressure')} />
+                <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-1">Pulse Rate (PR) <span className="text-[10px] text-gray-500 font-semibold">(beats/min)</span></label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  className={`input w-full text-sm font-bold text-gray-900 border-gray-300 ${errors.pulseRate ? 'border-red-500 ring-1 ring-red-500' : ''}`}
+                  placeholder="e.g. 80"
+                  {...register('pulseRate', { validate: validatePulseRate })}
+                  onKeyDown={handleNumericIntegerKeyDown}
+                />
+                {errors.pulseRate && <p className="text-[11px] font-bold text-red-600 mt-0.5">{errors.pulseRate.message}</p>}
+              </div>
+              <div>
+                <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-1">Respiratory Rate (RR) <span className="text-[10px] text-gray-500 font-semibold">(breaths/min)</span></label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  className={`input w-full text-sm font-bold text-gray-900 border-gray-300 ${errors.respiratoryRate ? 'border-red-500 ring-1 ring-red-500' : ''}`}
+                  placeholder="e.g. 18"
+                  {...register('respiratoryRate', { validate: validateRespiratoryRate })}
+                  onKeyDown={handleNumericIntegerKeyDown}
+                />
+                {errors.respiratoryRate && <p className="text-[11px] font-bold text-red-600 mt-0.5">{errors.respiratoryRate.message}</p>}
+              </div>
+              <div>
+                <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-1">SpO2 (%)</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  className={`input w-full text-sm font-bold text-gray-900 border-gray-300 ${errors.spo2 ? 'border-red-500 ring-1 ring-red-500' : ''}`}
+                  placeholder="e.g. 98"
+                  {...register('spo2', { validate: validateSpO2 })}
+                  onKeyDown={handleNumericIntegerKeyDown}
+                />
+                {errors.spo2 && <p className="text-[11px] font-bold text-red-600 mt-0.5">{errors.spo2.message}</p>}
               </div>
               <div>
                 <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-1">BMI</label>
                 <input className="input w-full text-sm font-bold text-gray-900 border-gray-300" placeholder="e.g. 22.5" {...register('bmi')} />
               </div>
-              <div>
+              <div className="col-span-2">
+                <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-1">CVS (Cardiovascular System)</label>
+                <input className="input w-full text-sm font-bold text-gray-900 border-gray-300" placeholder="Enter CVS findings" {...register('cvs')} />
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-1">Per Abdomen (PA)</label>
+                <input className="input w-full text-sm font-bold text-gray-900 border-gray-300" placeholder="Enter abdominal examination findings" {...register('perAbdomen')} />
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-1">Bilateral Chest</label>
+                <input className="input w-full text-sm font-bold text-gray-900 border-gray-300" placeholder="Enter bilateral chest findings" {...register('bilateralChest')} />
+              </div>
+              <div className="col-span-2">
                 <label className="text-xs sm:text-sm font-extrabold text-gray-800 block mb-1">Drug Allergy</label>
                 <input className="input w-full text-sm font-bold text-red-600 border-gray-300" placeholder="e.g. Penicillin" {...register('drugAllergy')} />
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-5 border-t border-gray-100 mt-4">
+            <div className="flex justify-end gap-2 pt-4 border-t border-gray-100 mt-4">
               <button
                 type="button"
-                onClick={() => {
-                  setShowEditVitalsModal(false);
-                  toast.success("Vitals updated successfully!");
-                }}
-                className="btn bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs py-2 px-4 cursor-pointer rounded-xl"
+                onClick={handleSaveVitalsModal}
+                className="btn bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs py-2 px-4 cursor-pointer rounded-xl shadow-xs"
               >
                 Save & Close Vitals
               </button>
@@ -2183,14 +2540,6 @@ const ConsultationPage = () => {
                     })}
                   </select>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={() => handleDirectPdfPrint()}
-                  className="btn bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold py-1.5 px-3 flex items-center gap-1.5 rounded-lg cursor-pointer"
-                >
-                  <Printer className="h-4 w-4" /> Print Now
-                </button>
 
                 <button
                   type="button"

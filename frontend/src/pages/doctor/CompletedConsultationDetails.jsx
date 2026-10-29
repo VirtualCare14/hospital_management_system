@@ -372,9 +372,27 @@ const CompletedConsultationDetails = () => {
               </p>
             </div>
             <div>
+              <p className="text-xs text-gray-500 font-semibold uppercase">Consulting Doctor</p>
+              <p className="text-sm font-semibold">
+                {consultation.isVisitingDoctor ? (
+                  <span className="font-bold text-purple-950">
+                    Dr. {consultation.visitingDoctorName || patient?.visitingDoctorName || 'Visiting Specialist'} <span className="text-[10px] bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded font-extrabold border border-purple-200">Visiting Specialist</span>
+                  </span>
+                ) : (
+                  <span>Dr. {consultation.doctorId?.doctorName || consultation.doctorId?.username || 'OPD Doctor'}</span>
+                )}
+              </p>
+            </div>
+            {consultation.isVisitingDoctor && (consultation.conductedByName || patient?.registeredBy) && (
+              <div>
+                <p className="text-xs text-gray-500 font-semibold uppercase">Recorded By Staff</p>
+                <p className="text-sm font-semibold text-gray-700">{consultation.conductedByName || patient?.registeredBy}</p>
+              </div>
+            )}
+            <div>
               <p className="text-xs text-gray-500 font-semibold uppercase">Status</p>
               <p className="text-sm font-semibold">
-                <span className="inline-block px-2 py-1 bg-green-100 text-green-700 rounded-md text-xs">
+                <span className="inline-block px-2 py-1 bg-green-100 text-green-700 rounded-md text-xs font-bold">
                   ✓ Completed
                 </span>
               </p>
@@ -682,14 +700,6 @@ const CompletedConsultationDetails = () => {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handlePrintLabReport}
-                  className="px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  Print
-                </button>
                 <button
                   type="button"
                   onClick={() => setShowReportModal(false)}

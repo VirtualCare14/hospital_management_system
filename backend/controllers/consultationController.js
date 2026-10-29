@@ -14,6 +14,8 @@ const buildPatientData = (visit) => {
   if (!visit || !visit.patientId) return null;
   const pat = visit.patientId;
   const patientObj = pat._doc || pat;
+  const isVisiting = Boolean(visit.isVisitingDoctor);
+  const specialistName = visit.visitingDoctorName || visit.doctorName || '';
   return {
     _id: pat._id || patientObj._id,
     visitId: visit._id,
@@ -23,7 +25,17 @@ const buildPatientData = (visit) => {
     gender: patientObj.gender,
     dob: patientObj.dob,
     department: visit.department || patientObj.department || '',
-    doctorId: visit.doctorId || patientObj.doctorId || null,
+    doctorId: isVisiting ? {
+      _id: visit.visitingScheduleId,
+      doctorName: specialistName,
+      username: specialistName,
+      isVisitingDoctor: true
+    } : (visit.doctorId || patientObj.doctorId || null),
+    doctorName: isVisiting ? specialistName : (visit.doctorId?.doctorName || visit.doctorId?.username || ''),
+    isVisitingDoctor: isVisiting,
+    visitingScheduleId: visit.visitingScheduleId || null,
+    visitingDoctorName: specialistName,
+    appointmentNumber: visit.appointmentNumber || null,
     appointmentDate: visit.appointmentDate || '',
     slot: visit.slot || '',
     consultationStatus: visit.consultationStatus || 'pending',
@@ -45,7 +57,15 @@ const sanitizeVitals = (vitals) => {
     height: parseNumber(vitals.height),
     temperature: parseNumber(vitals.temperature),
     bmi: parseNumber(vitals.bmi),
-    drugAllergy: vitals.drugAllergy
+    drugAllergy: vitals.drugAllergy,
+    bloodPressure: vitals.bloodPressure !== undefined && vitals.bloodPressure !== null ? String(vitals.bloodPressure).trim() : undefined,
+    cvs: vitals.cvs !== undefined && vitals.cvs !== null ? String(vitals.cvs).trim() : undefined,
+    respiratoryRate: parseNumber(vitals.respiratoryRate ?? vitals.rr),
+    pulseRate: parseNumber(vitals.pulseRate ?? vitals.pulse ?? vitals.pr),
+    pulse: parseNumber(vitals.pulseRate ?? vitals.pulse ?? vitals.pr),
+    perAbdomen: vitals.perAbdomen !== undefined && vitals.perAbdomen !== null ? String(vitals.perAbdomen).trim() : (vitals.pa !== undefined && vitals.pa !== null ? String(vitals.pa).trim() : undefined),
+    bilateralChest: vitals.bilateralChest !== undefined && vitals.bilateralChest !== null ? String(vitals.bilateralChest).trim() : undefined,
+    spo2: parseNumber(vitals.spo2)
   };
 };
 
@@ -54,6 +74,10 @@ const sanitizeVitals = (vitals) => {
 // @access  Private
 const createConsultation = async (req, res) => {
   try {
+    if (!['doctor', 'admin', 'superadmin'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'Only authorized clinical staff or doctors can create consultations' });
+    }
+
     const {
       patientId,
       visitId,
@@ -70,8 +94,6 @@ const createConsultation = async (req, res) => {
       followUpDate,
       followUpRemarks
     } = req.body;
-
-    const doctorId = req.user._id;
 
     if (!patientId) {
       return res.status(400).json({ message: 'Patient ID is required' });
@@ -91,6 +113,19 @@ const createConsultation = async (req, res) => {
       return res.status(400).json({ message: 'Patient is discharged. No further actions can be performed.' });
     }
 
+    // Identify Visit and determine if Visiting Specialist encounter
+    let visit = null;
+    if (visitId) {
+      visit = await Visit.findOne(tenantQuery(req, { _id: visitId }));
+    } else {
+      visit = await Visit.findOne(tenantQuery(req, { patientId })).sort({ createdAt: -1 });
+    }
+
+    const isVisiting = Boolean(visit?.isVisitingDoctor);
+    const visitingScheduleId = isVisiting ? (visit.visitingScheduleId || null) : null;
+    const visitingDoctorName = isVisiting ? (visit.visitingDoctorName || visit.doctorName || '') : '';
+    const finalDoctorId = isVisiting ? null : (visit?.doctorId || (req.user.role === 'doctor' ? req.user._id : (req.body.doctorId || null)));
+
     // 1. Save new symptoms to the Symptom autocomplete index
     if (symptoms && Array.isArray(symptoms)) {
       for (const item of symptoms) {
@@ -105,22 +140,54 @@ const createConsultation = async (req, res) => {
       }
     }
 
-    // 2. ALWAYS create a NEW Consultation record (never overwrite)
-    const consultation = await Consultation.create({
-      patientId,
-      hospitalId: req.user.hospitalId,
-      doctorId,
-      visitId: visitId || null,
-      symptoms,
-      generalPastHistory: pastHistory,
-      diagnosisRemark,
-      patientAdvice: patientAdvice || '',
-      vitals: sanitizeVitals(vitals),
-      tests: tests || [],
-      followUpDate,
-      followUpRemarks: followUpRemarks || '',
-      consultationDateTime: new Date() // Auto capture system timestamp
-    });
+    // 2. Prevent duplicate pending consultation for the same encounter on reopen/refresh
+    let consultation = null;
+    if (visit?._id) {
+      consultation = await Consultation.findOne(tenantQuery(req, {
+        visitId: visit._id,
+        consultationStatus: 'pending'
+      }));
+    }
+
+    if (consultation) {
+      consultation.symptoms = symptoms;
+      consultation.generalPastHistory = pastHistory;
+      consultation.diagnosisRemark = diagnosisRemark;
+      consultation.patientAdvice = patientAdvice || '';
+      consultation.vitals = sanitizeVitals(vitals);
+      consultation.tests = tests || [];
+      consultation.followUpDate = followUpDate;
+      consultation.followUpRemarks = followUpRemarks || '';
+      if (isVisiting) {
+        consultation.isVisitingDoctor = true;
+        consultation.visitingScheduleId = visitingScheduleId;
+        consultation.visitingDoctorName = visitingDoctorName;
+        consultation.conductedBy = req.user._id;
+        consultation.conductedByName = req.user.doctorName || req.user.username || '';
+      }
+      await consultation.save();
+    } else {
+      consultation = await Consultation.create({
+        patientId,
+        hospitalId: req.user.hospitalId,
+        doctorId: finalDoctorId,
+        isVisitingDoctor: isVisiting,
+        visitingScheduleId,
+        visitingDoctorName,
+        conductedBy: req.user._id,
+        conductedByName: req.user.doctorName || req.user.username || '',
+        visitId: visit?._id || visitId || null,
+        symptoms,
+        generalPastHistory: pastHistory,
+        diagnosisRemark,
+        patientAdvice: patientAdvice || '',
+        vitals: sanitizeVitals(vitals),
+        tests: tests || [],
+        followUpDate,
+        followUpRemarks: followUpRemarks || '',
+        consultationDateTime: new Date()
+      });
+    }
 
     // Update Visit followUpDate & followUpRemarks if set by doctor
     if (followUpDate || followUpRemarks) {
@@ -145,7 +212,9 @@ const createConsultation = async (req, res) => {
     // 3. Create Lab Request entries if tests are assigned
     const shouldSendToLab = sendToLab !== false && sendToLab !== 'false';
     if (tests && Array.isArray(tests) && tests.length > 0 && shouldSendToLab) {
-      const docName = req.user.doctorName ? `Dr. ${req.user.doctorName}` : (req.user.username ? `Dr. ${req.user.username}` : 'OPD Doctor');
+      const docName = isVisiting
+        ? `Dr. ${visitingDoctorName} (Visiting Specialist)`
+        : (req.user.doctorName ? `Dr. ${req.user.doctorName}` : (req.user.username ? `Dr. ${req.user.username}` : 'OPD Doctor'));
       const isHomeCollection = collectionType === 'Home Sample Collection';
       const requests = tests.map((test) => {
         const testName = typeof test === 'string' ? test.trim() : (test?.test || test?.title || test?.name || String(test));
@@ -363,7 +432,20 @@ const fetchPatientsForDoctor = async (req, doctorId, filter) => {
   const tomorrow = d.toISOString().slice(0, 10);
 
   const targetDoctorId = req.query.doctorId || (req.user.role === 'doctor' ? doctorId : null);
-  const doctorQuery = targetDoctorId ? { doctorId: targetDoctorId } : {};
+  let doctorQuery = {};
+
+  if (req.query.visitingScheduleId) {
+    doctorQuery = { isVisitingDoctor: true, visitingScheduleId: req.query.visitingScheduleId };
+  } else if (req.query.providerType === 'visiting' || req.query.isVisiting === 'true') {
+    doctorQuery = { isVisitingDoctor: true };
+  } else if (req.query.providerType === 'standard' || req.query.isVisiting === 'false') {
+    doctorQuery = { isVisitingDoctor: false, ...(targetDoctorId ? { doctorId: targetDoctorId } : {}) };
+  } else if (targetDoctorId && req.user.role === 'doctor') {
+    doctorQuery = { doctorId: targetDoctorId, isVisitingDoctor: false };
+  } else if (targetDoctorId) {
+    doctorQuery = { doctorId: targetDoctorId };
+  }
+
   if (req.user.role === 'clinic') {
     doctorQuery.createdBy = req.user._id;
   }
@@ -374,7 +456,9 @@ const fetchPatientsForDoctor = async (req, doctorId, filter) => {
     const visits = await Visit.find(tenantQuery(req, { 
       ...doctorQuery, 
       appointmentDate: { $lt: today },
-      consultationStatus: { $ne: 'completed' }
+      consultationStatus: { $nin: ['completed', 'cancelled'] },
+      isRefunded: { $ne: true },
+      paymentStatus: { $ne: 'Refunded' }
     }))
       .populate('patientId')
       .populate('createdBy', 'username doctorName role')
@@ -424,7 +508,9 @@ const fetchPatientsForDoctor = async (req, doctorId, filter) => {
     const visits = await Visit.find(tenantQuery(req, { 
       ...doctorQuery, 
       appointmentDate: { $regex: `^${today}` },
-      consultationStatus: { $ne: 'completed' }
+      consultationStatus: { $nin: ['completed', 'cancelled'] },
+      isRefunded: { $ne: true },
+      paymentStatus: { $ne: 'Refunded' }
     }))
       .populate('patientId')
       .populate('createdBy', 'username doctorName role')
@@ -474,7 +560,9 @@ const fetchPatientsForDoctor = async (req, doctorId, filter) => {
     const visits = await Visit.find(tenantQuery(req, { 
       ...doctorQuery, 
       appointmentDate: { $gte: tomorrow },
-      consultationStatus: { $ne: 'completed' }
+      consultationStatus: { $nin: ['completed', 'cancelled'] },
+      isRefunded: { $ne: true },
+      paymentStatus: { $ne: 'Refunded' }
     }))
       .populate('patientId')
       .populate('createdBy', 'username doctorName role')
@@ -533,6 +621,8 @@ const fetchPatientsForDoctor = async (req, doctorId, filter) => {
     patients = completedConsultations.map(c => {
       const p = c.patientId;
       if (!p) return null;
+      const isVisiting = Boolean(c.isVisitingDoctor);
+      const specialistName = c.visitingDoctorName || '';
       return {
         _id: p._id,
         uhid: p.uhid,
@@ -541,7 +631,16 @@ const fetchPatientsForDoctor = async (req, doctorId, filter) => {
         gender: p.gender,
         dob: p.dob,
         department: p.department || c.department || '',
-        doctorId: targetDoctorId ? { _id: targetDoctorId } : null,
+        doctorId: isVisiting ? {
+          _id: c.visitingScheduleId,
+          doctorName: specialistName,
+          username: specialistName,
+          isVisitingDoctor: true
+        } : (c.doctorId || (targetDoctorId ? { _id: targetDoctorId } : null)),
+        doctorName: isVisiting ? specialistName : (c.doctorId?.doctorName || c.doctorId?.username || ''),
+        isVisitingDoctor: isVisiting,
+        visitingScheduleId: c.visitingScheduleId || null,
+        visitingDoctorName: specialistName,
         appointmentDate: c.consultationCompletedDate || c.createdAt,
         slot: 'Completed',
         consultationStatus: 'completed',
@@ -553,7 +652,9 @@ const fetchPatientsForDoctor = async (req, doctorId, filter) => {
   } else if (filter === 'pending') {
     const visits = await Visit.find(tenantQuery(req, {
       ...doctorQuery,
-      consultationStatus: { $ne: 'completed' }
+      consultationStatus: { $nin: ['completed', 'cancelled'] },
+      isRefunded: { $ne: true },
+      paymentStatus: { $ne: 'Refunded' }
     }))
       .populate('patientId')
       .populate('createdBy', 'username doctorName role')
@@ -748,8 +849,10 @@ const getCompletedConsultationDetails = async (req, res) => {
 
     if (!consultation) return res.status(404).json({ message: 'Consultation not found' });
 
-    if (req.user.role === 'doctor' && consultation.doctorId._id.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: 'Not authorized' });
+    if (req.user.role === 'doctor') {
+      if (!consultation.isVisitingDoctor && consultation.doctorId && consultation.doctorId._id?.toString() !== req.user._id.toString()) {
+        return res.status(403).json({ message: 'Not authorized' });
+      }
     }
 
     const prescription = await Prescription.findOne(tenantQuery(req, {
@@ -771,15 +874,28 @@ const getCompletedConsultationDetails = async (req, res) => {
       .populate('report.generatedBy', 'doctorName username')
       .sort({ createdAt: -1 });
 
+    const isVisitingCons = Boolean(consultation.isVisitingDoctor || consultation.visitId?.isVisitingDoctor);
+    const specialistDisplayName = consultation.visitingDoctorName || consultation.visitId?.visitingDoctorName || '';
     const patientObj = {
       ...(consultation.patientId ? (consultation.patientId.toObject ? consultation.patientId.toObject() : consultation.patientId) : {}),
       department: consultation.visitId?.department || consultation.doctorId?.department || consultation.department || 'OPD',
-      doctorId: consultation.doctorId || consultation.visitId?.doctorId || null,
+      doctorId: isVisitingCons ? {
+        _id: consultation.visitingScheduleId || consultation.visitId?.visitingScheduleId,
+        doctorName: specialistDisplayName,
+        username: specialistDisplayName,
+        isVisitingDoctor: true
+      } : (consultation.doctorId || consultation.visitId?.doctorId || null),
+      doctorName: isVisitingCons ? specialistDisplayName : (consultation.doctorId?.doctorName || consultation.doctorId?.username || consultation.visitId?.doctorId?.doctorName || ''),
+      isVisitingDoctor: isVisitingCons,
+      visitingDoctorName: specialistDisplayName,
+      visitingScheduleId: consultation.visitingScheduleId || consultation.visitId?.visitingScheduleId || null,
+      appointmentNumber: consultation.visitId?.appointmentNumber || null,
       appointmentDate: consultation.visitId?.appointmentDate || consultation.consultationCompletedDate || consultation.createdAt,
       slot: consultation.visitId?.slot || '',
       registrationNumber: consultation.visitId?.registrationNumber || '',
       demographics: consultation.visitId?.demographics || consultation.vitals || null,
       registeredBy: consultation.visitId?.createdBy ? (consultation.visitId.createdBy.doctorName || consultation.visitId.createdBy.username) : 'Receptionist',
+      conductedByName: consultation.conductedByName || '',
       opdFee: consultation.visitId?.opdFee || 0,
       netOpdFee: consultation.visitId?.netOpdFee || 0,
       paymentMode: consultation.visitId?.paymentMode || 'Cash',

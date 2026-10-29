@@ -44,13 +44,23 @@ const adminOnly = (req, res, next) => {
   }
 };
 
+// Middleware to allow admin, superadmin, or reception staff
+const adminOrReception = (req, res, next) => {
+  const role = req.user?.role?.toLowerCase?.().trim?.() || (typeof req.user?.role === 'string' ? req.user.role.toLowerCase().trim() : '');
+  if (['admin', 'superadmin', 'reception'].includes(role)) {
+    next();
+  } else {
+    res.status(403).json({ message: 'Access denied: admin or reception permission required' });
+  }
+};
+
 router.post('/create-user', authMiddleware, adminOnly, createUser);
 router.get('/users', authMiddleware, adminOnly, getUsers);
 router.get('/users/limit', authMiddleware, adminOnly, getUserLimit);
 router.put('/users/:id', authMiddleware, adminOnly, updateUser);
 router.delete('/users/:id', authMiddleware, adminOnly, deleteUser);
 
-router.post('/departments', authMiddleware, adminOnly, createDepartment);
+router.post('/departments', authMiddleware, adminOrReception, createDepartment);
 router.get('/departments', authMiddleware, getDepartments); // Open to all authenticated staff to populate dropdowns
 router.put('/departments/:id', authMiddleware, adminOnly, updateDepartment);
 router.delete('/departments/:id', authMiddleware, adminOnly, deleteDepartment);
