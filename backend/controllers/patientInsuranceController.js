@@ -157,7 +157,7 @@ const createPatientInsurance = async (req, res) => {
 
     const populated = await PatientInsurance.findById(newPolicy._id)
       .populate('patientId', 'uhid patientName mobile gender category')
-      .populate('insuranceCompanyId', 'name code payerType cashlessEmail claimEmail tollFreeNumber')
+      .populate('insuranceCompanyId', 'name code payerType customPayerType cashlessEmail claimEmail tollFreeNumber')
       .populate('tpaId', 'name code preauthEmail contactPhone');
 
     res.status(201).json(populated);
@@ -223,7 +223,7 @@ const getPatientInsurances = async (req, res) => {
         PatientInsurance.countDocuments(query),
         PatientInsurance.find(query)
           .populate('patientId', 'uhid patientName mobile gender category')
-          .populate('insuranceCompanyId', 'name code payerType cashlessEmail claimEmail tollFreeNumber')
+          .populate('insuranceCompanyId', 'name code payerType customPayerType cashlessEmail claimEmail tollFreeNumber')
           .populate('tpaId', 'name code preauthEmail contactPhone')
           .sort({ createdAt: -1 })
           .skip(skip)
@@ -247,7 +247,7 @@ const getPatientInsurances = async (req, res) => {
     // Unpaginated full list
     const policies = await PatientInsurance.find(query)
       .populate('patientId', 'uhid patientName mobile gender category')
-      .populate('insuranceCompanyId', 'name code payerType cashlessEmail claimEmail tollFreeNumber')
+      .populate('insuranceCompanyId', 'name code payerType customPayerType cashlessEmail claimEmail tollFreeNumber')
       .populate('tpaId', 'name code preauthEmail contactPhone')
       .sort({ createdAt: -1 })
       .lean();
@@ -271,7 +271,7 @@ const getPatientInsuranceById = async (req, res) => {
 
     const policy = await PatientInsurance.findOne(tenantFilter(req, { _id: id }))
       .populate('patientId', 'uhid patientName mobile gender category address dob')
-      .populate('insuranceCompanyId', 'name code payerType cashlessEmail claimEmail tollFreeNumber portalUrl settlementTatDays')
+      .populate('insuranceCompanyId', 'name code payerType customPayerType cashlessEmail claimEmail tollFreeNumber portalUrl settlementTatDays')
       .populate('tpaId', 'name code preauthEmail contactPhone preauthTatHours discountRatePercentage');
 
     if (!policy) {
@@ -374,7 +374,7 @@ const updatePatientInsurance = async (req, res) => {
       { returnDocument: 'after', runValidators: true }
     )
       .populate('patientId', 'uhid patientName mobile gender category')
-      .populate('insuranceCompanyId', 'name code payerType cashlessEmail claimEmail tollFreeNumber')
+      .populate('insuranceCompanyId', 'name code payerType customPayerType cashlessEmail claimEmail tollFreeNumber')
       .populate('tpaId', 'name code preauthEmail contactPhone');
 
     res.status(200).json(updated);

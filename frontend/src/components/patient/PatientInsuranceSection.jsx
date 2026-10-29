@@ -818,7 +818,7 @@ const PatientInsuranceSection = ({ patientId, patientName, onPolicyChange }) => 
                       <option value="">-- Select Insurance Company --</option>
                       {activeInsurers.map((ins) => (
                         <option key={ins._id} value={ins._id}>
-                          {ins.name} ({ins.code}) — {ins.payerType}
+                          {ins.name} ({ins.code}) — {ins.payerType === 'Other (Custom)' || ins.payerType === 'Other' ? (ins.customPayerType || 'Other') : ins.payerType}
                         </option>
                       ))}
                     </select>
@@ -1163,7 +1163,9 @@ const PatientInsuranceSection = ({ patientId, patientName, onPolicyChange }) => 
                     </span>
                   )}
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
-                    {viewingPolicy.insuranceCompanyId?.payerType || 'Private'}
+                    {(viewingPolicy.insuranceCompanyId?.payerType === 'Other (Custom)' || viewingPolicy.insuranceCompanyId?.payerType === 'Other')
+                      ? (viewingPolicy.insuranceCompanyId?.customPayerType || 'Other')
+                      : (viewingPolicy.insuranceCompanyId?.payerType || 'Private')}
                   </span>
                   <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${

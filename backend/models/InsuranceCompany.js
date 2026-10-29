@@ -20,8 +20,22 @@ const insuranceCompanySchema = new mongoose.Schema({
   },
   payerType: {
     type: String,
-    enum: ['Private', 'Public PSU', 'Standalone Health', 'Government Scheme', 'Corporate Trust'],
+    enum: [
+      'Private',
+      'Public PSU',
+      'Standalone Health',
+      'Government Scheme',
+      'Corporate Trust',
+      'Panel',
+      'Other (Custom)',
+      'Other'
+    ],
     default: 'Private',
+    trim: true
+  },
+  customPayerType: {
+    type: String,
+    default: '',
     trim: true
   },
   tollFreeNumber: {
@@ -82,7 +96,7 @@ const insuranceCompanySchema = new mongoose.Schema({
   },
   settlementTatDays: {
     type: Number,
-    default: 30,
+    default: null,
     min: 1
   },
   isActive: {
