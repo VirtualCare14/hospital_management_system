@@ -421,6 +421,8 @@ const PatientList = () => {
         netOpdFee: reg.netOpdFee !== undefined ? reg.netOpdFee : (data.netOpdFee || 0),
         paymentStatus: reg.paymentStatus || data.paymentStatus || 'Paid',
         paymentMode: reg.paymentMode || data.paymentMode || 'Cash',
+        splitPayments: reg.splitPayments || data.splitPayments || null,
+        mixedPayments: reg.mixedPayments || data.mixedPayments || null,
         billNumber: reg.billNumber || data.billNumber || null,
         isRefunded: Boolean(reg.isRefunded || reg.paymentStatus === 'Refunded'),
         refundAmount: reg.refundAmount !== undefined ? reg.refundAmount : (reg.netOpdFee || 0),
@@ -443,7 +445,7 @@ const PatientList = () => {
     setRefundModal(reg);
     setRefundAmount(defaultFee > 0 ? String(defaultFee) : '0');
     setRefundRemark('');
-    setRefundMode(reg.paymentMode && reg.paymentMode !== 'Pending' ? reg.paymentMode : 'Cash');
+    setRefundMode(reg.paymentMode && reg.paymentMode !== 'Pending' && reg.paymentMode !== 'Split' ? reg.paymentMode : 'Cash');
   };
 
   const handleProcessRefund = async () => {

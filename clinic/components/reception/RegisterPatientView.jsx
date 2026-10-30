@@ -242,6 +242,60 @@ export default function RegisterPatientView({ onNavigate }) {
   }
   const netPayable = Math.max(0, Number((grossFee - discountAmount).toFixed(2)));
 
+  const [splitCash, setSplitCash] = useState('');
+  const [splitUpi, setSplitUpi] = useState('');
+
+  // Synchronize split payments when in Split mode
+  useEffect(() => {
+    if (formData.paymentStatus === 'Paid' && formData.paymentMode === 'Split') {
+      if (netPayable > 0) {
+        const cNum = parseFloat(splitCash) || 0;
+        const uNum = parseFloat(splitUpi) || 0;
+        if (splitCash === '' && splitUpi === '') {
+          setSplitCash(String(netPayable));
+          setSplitUpi('0');
+        } else if (Math.abs((cNum + uNum) - netPayable) > 0.01) {
+          const newCash = Math.min(cNum, netPayable);
+          setSplitCash(String(newCash));
+          setSplitUpi(String(Math.max(0, Number((netPayable - newCash).toFixed(2)))));
+        }
+      } else {
+        setSplitCash('0');
+        setSplitUpi('0');
+      }
+    }
+  }, [formData.paymentStatus, formData.paymentMode, netPayable]);
+
+  const handleSplitCashChange = (e) => {
+    const val = e.target.value;
+    setSplitCash(val);
+    if (val === '') return;
+    const cashNum = parseFloat(val);
+    if (!isNaN(cashNum)) {
+      if (cashNum >= 0 && cashNum <= netPayable) {
+        const remaining = Math.max(0, Number((netPayable - cashNum).toFixed(2)));
+        setSplitUpi(String(remaining));
+      } else if (cashNum > netPayable) {
+        setSplitUpi('0');
+      }
+    }
+  };
+
+  const handleSplitUpiChange = (e) => {
+    const val = e.target.value;
+    setSplitUpi(val);
+    if (val === '') return;
+    const upiNum = parseFloat(val);
+    if (!isNaN(upiNum)) {
+      if (upiNum >= 0 && upiNum <= netPayable) {
+        const remaining = Math.max(0, Number((netPayable - upiNum).toFixed(2)));
+        setSplitCash(String(remaining));
+      } else if (upiNum > netPayable) {
+        setSplitCash('0');
+      }
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -284,6 +338,19 @@ export default function RegisterPatientView({ onNavigate }) {
 
     setSubmitting(true);
     try {
+      const isSplitPayment = formData.paymentStatus === 'Paid' && formData.paymentMode === 'Split';
+      const cNum = parseFloat(splitCash) || 0;
+      const uNum = parseFloat(splitUpi) || 0;
+
+      if (isSplitPayment) {
+        const totalSplit = cNum + uNum;
+        if (netPayable > 0 && Math.abs(totalSplit - netPayable) > 0.01) {
+          toast.error(`Split payment total (₹${totalSplit.toFixed(2)}) must equal Net OPD Fee (₹${netPayable.toFixed(2)})`);
+          setSubmitting(false);
+          return;
+        }
+      }
+
       const payload = {
         patientName: formData.patientName.trim(),
         mobile: formData.mobile.trim(),
@@ -301,6 +368,11 @@ export default function RegisterPatientView({ onNavigate }) {
         discountValue: discountVal,
         paymentStatus: formData.paymentStatus,
         paymentMode: formData.paymentStatus === 'Not Paid' ? 'Pending' : formData.paymentMode,
+        splitPayments: isSplitPayment ? { cash: cNum, upi: uNum } : undefined,
+        mixedPayments: isSplitPayment ? [
+          { method: 'Cash', amount: cNum },
+          { method: 'UPI', amount: uNum }
+        ] : undefined,
         // Vitals
         weight: formData.weight ? Number(formData.weight) : undefined,
         height: formData.height ? Number(formData.height) : undefined,
@@ -331,6 +403,8 @@ export default function RegisterPatientView({ onNavigate }) {
     setPatientDuesData(null);
     setRegisteredPatient(null);
     setShowReceipt(false);
+    setSplitCash('');
+    setSplitUpi('');
     setFormData({
       patientName: '',
       mobile: '',
@@ -811,9 +885,56 @@ export default function RegisterPatientView({ onNavigate }) {
                     <option value="UPI">UPI</option>
                     <option value="Card">Card</option>
                     <option value="Net Banking">Net Banking</option>
+                    <option value="Split">Split (Cash + UPI)</option>
                   </select>
                 </Field>
               </div>
+
+              {/* Split Payment (Cash + UPI) Fields */}
+              {formData.paymentStatus === 'Paid' && formData.paymentMode === 'Split' && (
+                <div className="p-3 bg-white border border-indigo-200 rounded-xl shadow-2xs space-y-2.5">
+                  <div className="flex items-center justify-between text-xs border-b border-indigo-100 pb-1.5">
+                    <span className="font-black text-indigo-950 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                      <IndianRupee className="h-3.5 w-3.5 text-indigo-600" /> Split Payment (Cash + UPI)
+                    </span>
+                    <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                      Math.abs((parseFloat(splitCash) || 0) + (parseFloat(splitUpi) || 0) - netPayable) < 0.01
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                        : 'bg-amber-100 text-amber-800 border border-amber-300'
+                    }`}>
+                      {Math.abs((parseFloat(splitCash) || 0) + (parseFloat(splitUpi) || 0) - netPayable) < 0.01
+                        ? '✓ Split Matches Net Fee'
+                        : `Diff: ₹${Math.abs((parseFloat(splitCash) || 0) + (parseFloat(splitUpi) || 0) - netPayable).toFixed(2)}`}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Field label="Cash Amount (₹)" icon={IndianRupee}>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        placeholder="0.00"
+                        value={splitCash}
+                        onChange={handleSplitCashChange}
+                        className="input h-11 pl-9 pr-2 text-xs sm:text-sm font-bold text-gray-900 bg-white border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                      />
+                    </Field>
+
+                    <Field label="UPI Amount (₹)" icon={IndianRupee}>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        placeholder="0.00"
+                        value={splitUpi}
+                        onChange={handleSplitUpiChange}
+                        className="input h-11 pl-9 pr-2 text-xs sm:text-sm font-bold text-gray-900 bg-white border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                      />
+                    </Field>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -593,7 +593,11 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
                   ₹{netFee.toFixed(2)}
                 </td>
                 <td style={{ padding: '4px 6px', border: '1px solid #000', textAlign: 'center' }}>
-                  {patient.paymentMode || 'Cash'}
+                  {(patient.paymentMode === 'Split' || patient.paymentMode === 'Split Payment') && patient.splitPayments ? (
+                    <span>Split (Cash: ₹{patient.splitPayments.cash || 0}, UPI: ₹{patient.splitPayments.upi || 0})</span>
+                  ) : (
+                    patient.paymentMode || 'Cash'
+                  )}
                 </td>
               </tr>
             </tbody>
@@ -1245,7 +1249,11 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
                       ₹{netFee.toFixed(2)}
                     </td>
                     <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center' }}>
-                      {patient.paymentMode || 'Cash'}
+                      {(patient.paymentMode === 'Split' || patient.paymentMode === 'Split Payment') && patient.splitPayments ? (
+                        <span>Split (Cash: ₹{patient.splitPayments.cash || 0}, UPI: ₹{patient.splitPayments.upi || 0})</span>
+                      ) : (
+                        patient.paymentMode || 'Cash'
+                      )}
                     </td>
                     <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', color: patient.paymentStatus === 'Not Paid' ? '#dc2626' : '#16a34a' }}>
                       {patient.paymentStatus || 'Paid'}

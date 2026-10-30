@@ -231,7 +231,9 @@ const createPatient = async (req, res) => {
       discountType: reqDiscountType,
       discountValue: reqDiscountValue,
       paymentStatus: reqPaymentStatus,
-      paymentMode: reqPaymentMode
+      paymentMode: reqPaymentMode,
+      splitPayments: reqSplitPayments,
+      mixedPayments: reqMixedPayments
     } = req.body;
 
     const cleanAddress = (address && typeof address === 'string' && address.trim()) ? address.trim() : 'Not specified';
@@ -520,6 +522,18 @@ const createPatient = async (req, res) => {
     const paymentMode = paymentStatus === 'Not Paid' ? 'Pending' : (reqPaymentMode || 'Cash');
     const billNumber = `OPD-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
 
+    let splitPaymentsData = undefined;
+    let mixedPaymentsData = undefined;
+    if (paymentStatus === 'Paid' && (paymentMode === 'Split' || paymentMode === 'Split Payment' || paymentMode === 'Cash + UPI' || paymentMode === 'Mixed Payment')) {
+      const cashAmt = parseFloat(reqSplitPayments?.cash !== undefined ? reqSplitPayments.cash : (Array.isArray(reqMixedPayments) ? reqMixedPayments.find(p => p.method === 'Cash')?.amount : 0)) || 0;
+      const upiAmt = parseFloat(reqSplitPayments?.upi !== undefined ? reqSplitPayments.upi : (Array.isArray(reqMixedPayments) ? reqMixedPayments.find(p => p.method === 'UPI')?.amount : 0)) || 0;
+      splitPaymentsData = { cash: cashAmt, upi: upiAmt };
+      mixedPaymentsData = [
+        { method: 'Cash', amount: cashAmt },
+        { method: 'UPI', amount: upiAmt }
+      ];
+    }
+
     // Create a Visit record
     const visit = new Visit({
       hospitalId: resolvedHospitalId,
@@ -561,6 +575,8 @@ const createPatient = async (req, res) => {
       netOpdFee,
       paymentStatus,
       paymentMode,
+      splitPayments: splitPaymentsData,
+      mixedPayments: mixedPaymentsData,
       billNumber,
       createdBy: req.user._id
     });
@@ -668,6 +684,8 @@ const createPatient = async (req, res) => {
       netOpdFee: visit.netOpdFee,
       paymentStatus: visit.paymentStatus,
       paymentMode: visit.paymentMode,
+      splitPayments: visit.splitPayments,
+      mixedPayments: visit.mixedPayments,
       billNumber: visit.billNumber
     };
 
@@ -797,6 +815,8 @@ const getPatients = async (req, res) => {
           netOpdFee: netFee,
           paymentStatus: latestVisit?.paymentStatus || 'Paid',
           paymentMode: latestVisit?.paymentMode || 'Cash',
+          splitPayments: latestVisit?.splitPayments || null,
+          mixedPayments: latestVisit?.mixedPayments || [],
           billNumber: latestVisit?.billNumber || null
         };
       })
@@ -896,6 +916,8 @@ const getPatientById = async (req, res) => {
       netOpdFee: latestVisit?.netOpdFee !== undefined ? latestVisit.netOpdFee : (latestVisit?.opdFee || 0),
       paymentStatus: latestVisit?.paymentStatus || 'Paid',
       paymentMode: latestVisit?.paymentMode || 'Cash',
+      splitPayments: latestVisit?.splitPayments || null,
+      mixedPayments: latestVisit?.mixedPayments || [],
       billNumber: latestVisit?.billNumber || null
     };
 
@@ -1159,6 +1181,8 @@ const getRegistrations = async (req, res) => {
         netOpdFee: netFee,
         paymentStatus: v.paymentStatus || 'Paid',
         paymentMode: v.paymentMode || 'Cash',
+        splitPayments: v.splitPayments || null,
+        mixedPayments: v.mixedPayments || [],
         billNumber: v.billNumber || null,
         isRefunded: Boolean(v.isRefunded || v.paymentStatus === 'Refunded'),
         refundAmount: v.refundAmount || 0,

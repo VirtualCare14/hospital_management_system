@@ -153,9 +153,17 @@ const visitSchema = new mongoose.Schema({
   },
   paymentMode: {
     type: String,
-    enum: ['Cash', 'UPI', 'Card', 'Net Banking', 'Other', 'Pending'],
+    enum: ['Cash', 'UPI', 'Card', 'Net Banking', 'Other', 'Pending', 'Split', 'Split Payment', 'Cash + UPI', 'Mixed Payment'],
     default: 'Cash'
   },
+  splitPayments: {
+    cash: { type: Number, default: 0 },
+    upi: { type: Number, default: 0 }
+  },
+  mixedPayments: [{
+    method: { type: String },
+    amount: { type: Number, default: 0 }
+  }],
   billNumber: {
     type: String,
     default: null
