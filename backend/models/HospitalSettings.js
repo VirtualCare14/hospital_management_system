@@ -56,6 +56,42 @@ const hospitalSettingsSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+
+  // Custom Full-Page Hospital Letterhead Settings (PDF / Image)
+  letterheadType: {
+    type: String,
+    enum: ['system', 'photo', 'custom'],
+    default: 'system'
+  },
+  customLetterheadUrl: {
+    type: String,
+    default: ''
+  },
+  customLetterheadPublicId: {
+    type: String,
+    default: ''
+  },
+  customLetterheadFileType: {
+    type: String,
+    enum: ['pdf', 'image'],
+    default: 'pdf'
+  },
+  customLetterheadHeaderHeight: {
+    type: Number,
+    default: 45 // in mm
+  },
+  customLetterheadFooterHeight: {
+    type: Number,
+    default: 30 // in mm
+  },
+  customLetterheadLeftMargin: {
+    type: Number,
+    default: 12 // in mm
+  },
+  customLetterheadRightMargin: {
+    type: Number,
+    default: 12 // in mm
+  },
   hospitalId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Hospital',

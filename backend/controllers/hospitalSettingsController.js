@@ -54,7 +54,10 @@ const createOrUpdateHospitalSettings = asyncHandler(async (req, res) => {
       sdtPricingInBilling, accessDiscount, receptionSeePatientDue, dueModificationEnabled,
       medicationGracePeriod, medicationMissedThreshold,
       letterheadImageUrl, letterheadImagePublicId, letterheadHeaderHeight, letterheadFooterHeight,
-      useSystemLetterhead
+      useSystemLetterhead,
+      letterheadType, customLetterheadUrl, customLetterheadPublicId, customLetterheadFileType,
+      customLetterheadHeaderHeight, customLetterheadFooterHeight,
+      customLetterheadLeftMargin, customLetterheadRightMargin
     } = req.body;
     
     // Process phoneNumbers structured list if provided
@@ -102,6 +105,14 @@ const createOrUpdateHospitalSettings = asyncHandler(async (req, res) => {
       letterheadHeaderHeight: letterheadHeaderHeight !== undefined ? Number(letterheadHeaderHeight) : (settings ? settings.letterheadHeaderHeight : 4.60),
       letterheadFooterHeight: letterheadFooterHeight !== undefined ? Number(letterheadFooterHeight) : (settings ? settings.letterheadFooterHeight : 3.40),
       useSystemLetterhead: useSystemLetterhead !== undefined ? Boolean(useSystemLetterhead) : (settings ? (settings.useSystemLetterhead !== undefined ? settings.useSystemLetterhead : true) : true),
+      letterheadType: letterheadType !== undefined ? letterheadType : (settings ? (settings.letterheadType || (useSystemLetterhead === false ? 'photo' : 'system')) : 'system'),
+      customLetterheadUrl: customLetterheadUrl !== undefined ? customLetterheadUrl : (settings ? (settings.customLetterheadUrl || '') : ''),
+      customLetterheadPublicId: customLetterheadPublicId !== undefined ? customLetterheadPublicId : (settings ? (settings.customLetterheadPublicId || '') : ''),
+      customLetterheadFileType: customLetterheadFileType !== undefined ? customLetterheadFileType : (settings ? (settings.customLetterheadFileType || 'pdf') : 'pdf'),
+      customLetterheadHeaderHeight: customLetterheadHeaderHeight !== undefined ? Number(customLetterheadHeaderHeight) : (settings && settings.customLetterheadHeaderHeight !== undefined ? settings.customLetterheadHeaderHeight : 45),
+      customLetterheadFooterHeight: customLetterheadFooterHeight !== undefined ? Number(customLetterheadFooterHeight) : (settings && settings.customLetterheadFooterHeight !== undefined ? settings.customLetterheadFooterHeight : 30),
+      customLetterheadLeftMargin: customLetterheadLeftMargin !== undefined ? Number(customLetterheadLeftMargin) : (settings && settings.customLetterheadLeftMargin !== undefined ? settings.customLetterheadLeftMargin : 12),
+      customLetterheadRightMargin: customLetterheadRightMargin !== undefined ? Number(customLetterheadRightMargin) : (settings && settings.customLetterheadRightMargin !== undefined ? settings.customLetterheadRightMargin : 12),
       alternateMobileNumber: alternateMobileNumber || '',
       emailAddress: emailAddress || '',
       website: website || '',
@@ -254,25 +265,43 @@ const deleteLogo = asyncHandler(async (req, res) => {
 // @access  Private/Admin
 const uploadLetterhead = asyncHandler(async (req, res) => {
   try {
-    const { imageData, folder = 'hms/hospital-letterheads' } = req.body;
+    const { imageData, folder = 'hms/hospital-letterheads', fileType = 'pdf' } = req.body;
     
     if (!imageData) {
-      return res.status(400).json({ message: 'Letterhead image data is required' });
+      return res.status(400).json({ message: 'Letterhead file data is required' });
     }
     
-    // Upload to Cloudinary with rectangular format support
+    const isCloudinaryConfigured = Boolean(
+      process.env.CLOUDINARY_CLOUD_NAME &&
+      process.env.CLOUDINARY_API_KEY &&
+      process.env.CLOUDINARY_API_SECRET
+    );
+
+    const isPdf = fileType === 'pdf' || (typeof imageData === 'string' && (imageData.startsWith('data:application/pdf') || imageData.includes('.pdf')));
+
+    if (!isCloudinaryConfigured) {
+      // Local or test environment fallback
+      return res.status(200).json({
+        url: imageData,
+        publicId: 'local-letterhead-' + Date.now(),
+        fileType: isPdf ? 'pdf' : 'image'
+      });
+    }
+    
+    // Upload to Cloudinary with auto format support (PDF & Images)
     const uploaded = await cloudinary.uploader.upload(imageData, {
       folder,
-      resource_type: 'image',
-      transformation: {
+      resource_type: isPdf ? 'auto' : 'image',
+      transformation: (!isPdf && typeof imageData === 'string' && imageData.startsWith('data:image')) ? {
         width: 2400,
         crop: 'limit'
-      }
+      } : undefined
     });
     
     res.status(200).json({
       url: uploaded.secure_url,
-      publicId: uploaded.public_id
+      publicId: uploaded.public_id,
+      fileType: isPdf ? 'pdf' : 'image'
     });
   } catch (error) {
     console.error('Letterhead Upload Error:', error);
