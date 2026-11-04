@@ -421,7 +421,19 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
                   ₹{netFee.toFixed(2)}
                 </td>
                 <td style={{ padding: '4px 6px', border: '1px solid #000', textAlign: 'center' }}>
-                  {paymentMode}
+                  {(paymentMode === 'Split' || paymentMode === 'Split Payment') && (v?.splitPayments || p?.splitPayments || raw?.splitPayments || v?.mixedPayments || p?.mixedPayments || raw?.mixedPayments) ? (
+                    (() => {
+                      const sp = v?.splitPayments || p?.splitPayments || raw?.splitPayments || {};
+                      const mp = v?.mixedPayments || p?.mixedPayments || raw?.mixedPayments || [];
+                      const m1 = sp.mode1 || mp[0]?.method || (sp.cash > 0 ? 'Cash' : 'Mode 1');
+                      const a1 = sp.amount1 !== undefined ? sp.amount1 : (mp[0]?.amount !== undefined ? mp[0].amount : sp.cash);
+                      const m2 = sp.mode2 || mp[1]?.method || (sp.upi > 0 ? 'UPI' : 'Mode 2');
+                      const a2 = sp.amount2 !== undefined ? sp.amount2 : (mp[1]?.amount !== undefined ? mp[1].amount : sp.upi);
+                      return `Split (${m1}: ₹${Number(a1 || 0).toFixed(2)}, ${m2}: ₹${Number(a2 || 0).toFixed(2)})`;
+                    })()
+                  ) : (
+                    paymentMode
+                  )}
                 </td>
               </tr>
             </tbody>

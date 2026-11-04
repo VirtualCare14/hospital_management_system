@@ -158,7 +158,11 @@ const visitSchema = new mongoose.Schema({
   },
   splitPayments: {
     cash: { type: Number, default: 0 },
-    upi: { type: Number, default: 0 }
+    upi: { type: Number, default: 0 },
+    mode1: { type: String, default: 'Cash' },
+    amount1: { type: Number, default: 0 },
+    mode2: { type: String, default: 'UPI' },
+    amount2: { type: Number, default: 0 }
   },
   mixedPayments: [{
     method: { type: String },

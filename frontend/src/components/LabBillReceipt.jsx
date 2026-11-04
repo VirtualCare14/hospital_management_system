@@ -1,7 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { Printer, X } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Printer, X, Loader2 } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import { useAuth } from '../context/AuthContext';
 import client from '../api/client';
+import { openPdfPrintWindow } from '../utils/pdfUtils';
 
 // Utility to convert number to words
 function amountInWords(num) {
@@ -29,6 +32,8 @@ function amountInWords(num) {
 export default function LabBillReceipt({ billData, hospitalSettings: initialHospital, onClose }) {
   const { user } = useAuth();
   const [hospital, setHospital] = useState(initialHospital || null);
+  const [isPrintingPdf, setIsPrintingPdf] = useState(false);
+  const printAreaRef = useRef(null);
 
   useEffect(() => {
     if (!hospital) {
@@ -54,12 +59,15 @@ export default function LabBillReceipt({ billData, hospitalSettings: initialHosp
     mobileNumber = '8949895216',
     referredBy = 'Self',
     date = new Date().toLocaleDateString('en-GB'),
+    time,
     receivedBy: rawReceivedBy,
+    paymentMode,
     investigations = [
       { sno: 1, name: 'Dengue IgG', amount: 100 }
     ],
     totalAmount = 100,
-    amountPaid = 100
+    amountPaid = 100,
+    balanceDue = 0
   } = billData;
 
   const receivedBy = rawReceivedBy || user?.doctorName || user?.name || user?.username || 'Staff';
@@ -90,17 +98,43 @@ export default function LabBillReceipt({ billData, hospitalSettings: initialHosp
   const hospitalPhone = getHospitalPhone();
   const logoUrl = hospital?.logoUrl || '';
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
+    if (isPrintingPdf) return;
+    setIsPrintingPdf(true);
+    try {
+      if (printAreaRef.current) {
+        const canvas = await html2canvas(printAreaRef.current, {
+          scale: 2.5,
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff',
+          imageTimeout: 15000
+        });
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+        pdf.autoPrint();
+        openPdfPrintWindow(pdf, `Lab Bill Receipt - ${billNo}`);
+        setIsPrintingPdf(false);
+        return;
+      }
+    } catch (err) {
+      console.warn('PDF print error, falling back to window.print():', err);
+    } finally {
+      setIsPrintingPdf(false);
+    }
     window.print();
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto print:p-0 print:m-0 print:static print:bg-transparent print:backdrop-blur-none print:overflow-visible print:block print:w-full print:h-auto">
       {/* Dynamic isolated print styles */}
       <style>{`
         @media print {
           @page {
-            margin: 0;
+            margin: 6mm 8mm;
             size: portrait;
           }
 
@@ -109,8 +143,12 @@ export default function LabBillReceipt({ billData, hospitalSettings: initialHosp
             color: #000000 !important;
             margin: 0 !important;
             padding: 0 !important;
-            height: 100% !important;
-            overflow: hidden !important;
+            width: 100% !important;
+            height: auto !important;
+            min-height: 100% !important;
+            overflow: visible !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
 
           body * {
@@ -118,21 +156,26 @@ export default function LabBillReceipt({ billData, hospitalSettings: initialHosp
           }
 
           .lab-receipt-print-area,
-          .lab-receipt-print-area * {
+          .lab-receipt-print-area *,
+          .print-area,
+          .print-area * {
             visibility: visible !important;
           }
 
           .lab-receipt-print-area {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
+            display: block !important;
+            visibility: visible !important;
+            position: relative !important;
+            left: auto !important;
+            top: auto !important;
             width: 100% !important;
             max-width: 100% !important;
-            padding: 15mm 12mm !important;
-            margin: 0 !important;
-            border: none !important;
+            padding: 4mm 6mm !important;
+            margin: 0 auto !important;
+            border: 1px solid #cbd5e1 !important;
             box-shadow: none !important;
             background: #ffffff !important;
+            color: #000000 !important;
             font-size: 11px !important;
             line-height: 1.35 !important;
             page-break-after: avoid !important;
@@ -140,24 +183,43 @@ export default function LabBillReceipt({ billData, hospitalSettings: initialHosp
           }
 
           .no-print,
-          .no-print * {
+          .no-print *,
+          .print\\:hidden,
+          .print\\:hidden * {
             display: none !important;
           }
         }
       `}</style>
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-2xl max-w-3xl w-full p-6 space-y-6 animate-in fade-in zoom-in-95 my-8">
+      <div className="bg-white border border-slate-200 rounded-xl shadow-2xl max-w-3xl w-full p-6 space-y-6 animate-in fade-in zoom-in-95 my-8 print:p-0 print:m-0 print:border-none print:shadow-none print:rounded-none print:w-full print:max-w-none print:space-y-0 print:static print:bg-transparent">
         
         {/* ACTION BAR (Hidden when printing) */}
-        <div className="flex items-center justify-between border-b border-slate-200 pb-3 no-print">
+        <div className="flex items-center justify-between border-b border-slate-200 pb-3 no-print print:hidden">
           <h3 className="text-base font-bold text-slate-800">Lab Bill Receipt</h3>
           <div className="flex items-center gap-2">
             <button
               onClick={handlePrint}
-              className="px-4 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1.5 transition-colors"
+              disabled={isPrintingPdf}
+              className="px-4 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1.5 transition-colors disabled:opacity-60"
             >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Print Receipt</span>
+              {isPrintingPdf ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Preparing...</span>
+                </>
+              ) : (
+                <>
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Print Receipt</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={() => window.print()}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+              title="Direct Browser Print (Ctrl+P)"
+            >
+              Browser Print
             </button>
             <button
               onClick={onClose}
@@ -169,7 +231,10 @@ export default function LabBillReceipt({ billData, hospitalSettings: initialHosp
         </div>
 
         {/* PRINTABLE RECEIPT CONTENT CONTAINER */}
-        <div className="lab-receipt-print-area print-area bg-white text-slate-900 font-sans p-4 space-y-3 border border-slate-200 rounded-lg">
+        <div 
+          ref={printAreaRef}
+          className="lab-receipt-print-area print-area bg-white text-slate-900 font-sans p-4 space-y-3 border border-slate-200 rounded-lg print:border-slate-300 print:p-4 print:m-0 print:w-full"
+        >
           
           {/* HEADER: Hospital details with logo from Admin module */}
           <div className="flex items-start justify-between border-b border-slate-300 pb-3">
@@ -178,6 +243,7 @@ export default function LabBillReceipt({ billData, hospitalSettings: initialHosp
                 <img
                   src={logoUrl}
                   alt="Hospital Logo"
+                  crossOrigin="anonymous"
                   className="h-12 w-auto object-contain shrink-0"
                 />
               )}
@@ -198,10 +264,15 @@ export default function LabBillReceipt({ billData, hospitalSettings: initialHosp
           </div>
 
           {/* BILL NO */}
-          <div className="py-1">
+          <div className="py-1 flex items-center justify-between">
             <p className="text-xs font-bold text-slate-900">
               Bill / Reg. No. {billNo}
             </p>
+            {time && (
+              <p className="text-[11px] text-slate-500 font-medium">
+                Time: {time}
+              </p>
+            )}
           </div>
 
           {/* PATIENT DETAILS GRID */}
@@ -269,6 +340,18 @@ export default function LabBillReceipt({ billData, hospitalSettings: initialHosp
                 <span>Amount paid</span>
                 <span className="font-extrabold text-slate-900">Rs.{amountPaid}</span>
               </div>
+              {Number(balanceDue) > 0 && (
+                <div className="flex justify-between py-0.5 border-b border-slate-200 text-red-600 font-bold">
+                  <span>Balance Due</span>
+                  <span>Rs.{balanceDue}</span>
+                </div>
+              )}
+              {paymentMode && (
+                <div className="flex justify-between py-0.5 border-b border-slate-200">
+                  <span>Payment Mode</span>
+                  <span className="font-extrabold text-slate-900">{paymentMode}</span>
+                </div>
+              )}
               <div className="flex justify-between py-0.5 border-b border-slate-200">
                 <span>Amount Paid (in words):</span>
                 <span className="font-bold text-slate-900 text-[11px] text-right pl-2">

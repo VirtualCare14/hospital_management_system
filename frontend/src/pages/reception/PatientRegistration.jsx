@@ -752,8 +752,10 @@ const PatientRegistration = () => {
   const paymentStatusVal = watch('paymentStatus') || 'Paid';
   const paymentModeVal = watch('paymentMode') || 'Cash';
 
-  const [splitCash, setSplitCash] = useState('');
-  const [splitUpi, setSplitUpi] = useState('');
+  const [splitMode1, setSplitMode1] = useState('Cash');
+  const [splitAmount1, setSplitAmount1] = useState('');
+  const [splitMode2, setSplitMode2] = useState('UPI');
+  const [splitAmount2, setSplitAmount2] = useState('');
 
   let calculatedDiscountAmt = 0;
   if (discountTypeVal === 'percent') {
@@ -767,49 +769,49 @@ const PatientRegistration = () => {
   useEffect(() => {
     if (paymentStatusVal === 'Paid' && paymentModeVal === 'Split') {
       if (netPayableFee > 0) {
-        const cNum = parseFloat(splitCash) || 0;
-        const uNum = parseFloat(splitUpi) || 0;
-        if (splitCash === '' && splitUpi === '') {
-          setSplitCash(String(netPayableFee));
-          setSplitUpi('0');
-        } else if (Math.abs((cNum + uNum) - netPayableFee) > 0.01) {
-          const newCash = Math.min(cNum, netPayableFee);
-          setSplitCash(String(newCash));
-          setSplitUpi(String(Math.max(0, Number((netPayableFee - newCash).toFixed(2)))));
+        const a1 = parseFloat(splitAmount1) || 0;
+        const a2 = parseFloat(splitAmount2) || 0;
+        if (splitAmount1 === '' && splitAmount2 === '') {
+          setSplitAmount1(String(netPayableFee));
+          setSplitAmount2('0');
+        } else if (Math.abs((a1 + a2) - netPayableFee) > 0.01) {
+          const newA1 = Math.min(a1, netPayableFee);
+          setSplitAmount1(String(newA1));
+          setSplitAmount2(String(Math.max(0, Number((netPayableFee - newA1).toFixed(2)))));
         }
       } else {
-        setSplitCash('0');
-        setSplitUpi('0');
+        setSplitAmount1('0');
+        setSplitAmount2('0');
       }
     }
   }, [paymentStatusVal, paymentModeVal, netPayableFee]);
 
-  const handleSplitCashChange = (e) => {
+  const handleSplitAmount1Change = (e) => {
     const val = e.target.value;
-    setSplitCash(val);
+    setSplitAmount1(val);
     if (val === '') return;
-    const cashNum = parseFloat(val);
-    if (!isNaN(cashNum)) {
-      if (cashNum >= 0 && cashNum <= netPayableFee) {
-        const remaining = Math.max(0, Number((netPayableFee - cashNum).toFixed(2)));
-        setSplitUpi(String(remaining));
-      } else if (cashNum > netPayableFee) {
-        setSplitUpi('0');
+    const num = parseFloat(val);
+    if (!isNaN(num)) {
+      if (num >= 0 && num <= netPayableFee) {
+        const remaining = Math.max(0, Number((netPayableFee - num).toFixed(2)));
+        setSplitAmount2(String(remaining));
+      } else if (num > netPayableFee) {
+        setSplitAmount2('0');
       }
     }
   };
 
-  const handleSplitUpiChange = (e) => {
+  const handleSplitAmount2Change = (e) => {
     const val = e.target.value;
-    setSplitUpi(val);
+    setSplitAmount2(val);
     if (val === '') return;
-    const upiNum = parseFloat(val);
-    if (!isNaN(upiNum)) {
-      if (upiNum >= 0 && upiNum <= netPayableFee) {
-        const remaining = Math.max(0, Number((netPayableFee - upiNum).toFixed(2)));
-        setSplitCash(String(remaining));
-      } else if (upiNum > netPayableFee) {
-        setSplitCash('0');
+    const num = parseFloat(val);
+    if (!isNaN(num)) {
+      if (num >= 0 && num <= netPayableFee) {
+        const remaining = Math.max(0, Number((netPayableFee - num).toFixed(2)));
+        setSplitAmount1(String(remaining));
+      } else if (num > netPayableFee) {
+        setSplitAmount1('0');
       }
     }
   };
@@ -879,11 +881,11 @@ const PatientRegistration = () => {
       const visitingSched = isVisiting ? selectedVisitingSchedule : null;
 
       const isSplitPayment = (data.paymentStatus || 'Paid') === 'Paid' && data.paymentMode === 'Split';
-      const cNum = parseFloat(splitCash) || 0;
-      const uNum = parseFloat(splitUpi) || 0;
+      const a1Num = parseFloat(splitAmount1) || 0;
+      const a2Num = parseFloat(splitAmount2) || 0;
 
       if (isSplitPayment) {
-        const totalSplit = cNum + uNum;
+        const totalSplit = a1Num + a2Num;
         if (netPayableFee > 0 && Math.abs(totalSplit - netPayableFee) > 0.01) {
           toast.error(`Split payment total (₹${totalSplit.toFixed(2)}) must equal Net OPD Fee (₹${netPayableFee.toFixed(2)})`);
           return;
@@ -906,10 +908,17 @@ const PatientRegistration = () => {
         discountValue: discVal,
         paymentStatus: data.paymentStatus || 'Paid',
         paymentMode: data.paymentStatus === 'Not Paid' ? 'Pending' : (data.paymentMode || 'Cash'),
-        splitPayments: isSplitPayment ? { cash: cNum, upi: uNum } : undefined,
+        splitPayments: isSplitPayment ? {
+          mode1: splitMode1,
+          amount1: a1Num,
+          mode2: splitMode2,
+          amount2: a2Num,
+          cash: splitMode1 === 'Cash' ? a1Num : (splitMode2 === 'Cash' ? a2Num : 0),
+          upi: splitMode1 === 'UPI' ? a1Num : (splitMode2 === 'UPI' ? a2Num : 0)
+        } : undefined,
         mixedPayments: isSplitPayment ? [
-          { method: 'Cash', amount: cNum },
-          { method: 'UPI', amount: uNum }
+          { method: splitMode1, amount: a1Num },
+          { method: splitMode2, amount: a2Num }
         ] : undefined,
         visitType: (data.department && data.department.toLowerCase().trim() === 'same day care')
           ? 'Same Day Treatment'
@@ -921,8 +930,8 @@ const PatientRegistration = () => {
       setRegisteredPatient(res.patient);
       setShowReceipt(true);
       reset();
-      setSplitCash('');
-      setSplitUpi('');
+      setSplitAmount1('');
+      setSplitAmount2('');
       lastBpValueRef.current = '';
       const today = new Date().toISOString().split('T')[0];
       setValue('appointmentDate', today);
@@ -1756,7 +1765,7 @@ const PatientRegistration = () => {
                       <option value="UPI">UPI</option>
                       <option value="Card">Card</option>
                       <option value="Net Banking">Net Banking</option>
-                      <option value="Split">Split (Cash + UPI)</option>
+                      <option value="Split">Split</option>
                       <option value="Other">Other</option>
                     </select>
                   </Field>
@@ -1769,48 +1778,82 @@ const PatientRegistration = () => {
                 )}
               </div>
 
-              {/* Split Payment (Cash + UPI) Fields */}
+              {/* Split Payment Fields */}
               {paymentStatusVal === 'Paid' && paymentModeVal === 'Split' && (
                 <div className="p-3 bg-white border border-indigo-200 rounded-xl shadow-2xs space-y-2.5">
                   <div className="flex items-center justify-between text-xs border-b border-indigo-100 pb-1.5">
                     <span className="font-black text-indigo-950 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                      <IndianRupee className="h-3.5 w-3.5 text-indigo-600" /> Split Payment (Cash + UPI)
+                      <IndianRupee className="h-3.5 w-3.5 text-indigo-600" /> Split Payment
                     </span>
                     <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
-                      Math.abs((parseFloat(splitCash) || 0) + (parseFloat(splitUpi) || 0) - netPayableFee) < 0.01
+                      Math.abs((parseFloat(splitAmount1) || 0) + (parseFloat(splitAmount2) || 0) - netPayableFee) < 0.01
                         ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                         : 'bg-amber-100 text-amber-800 border border-amber-300'
                     }`}>
-                      {Math.abs((parseFloat(splitCash) || 0) + (parseFloat(splitUpi) || 0) - netPayableFee) < 0.01
+                      {Math.abs((parseFloat(splitAmount1) || 0) + (parseFloat(splitAmount2) || 0) - netPayableFee) < 0.01
                         ? '✓ Split Matches Net Fee'
-                        : `Diff: ₹${Math.abs((parseFloat(splitCash) || 0) + (parseFloat(splitUpi) || 0) - netPayableFee).toFixed(2)}`}
+                        : `Diff: ₹${Math.abs((parseFloat(splitAmount1) || 0) + (parseFloat(splitAmount2) || 0) - netPayableFee).toFixed(2)}`}
                     </span>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <Field label="Cash Amount (₹)" icon={IndianRupee}>
-                      <input
-                        type="number"
-                        min="0"
-                        step="any"
-                        placeholder="0.00"
-                        value={splitCash}
-                        onChange={handleSplitCashChange}
-                        className="input h-11 pl-9 pr-2 text-xs sm:text-sm font-bold text-gray-900 bg-white border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
-                      />
-                    </Field>
+                    {/* Split 1 */}
+                    <div className="space-y-2">
+                      <Field label="Payment Mode 1" icon={Wallet}>
+                        <select
+                          value={splitMode1}
+                          onChange={(e) => setSplitMode1(e.target.value)}
+                          className="input h-11 pl-9 pr-2 text-xs sm:text-sm font-bold text-gray-900 bg-white border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs"
+                        >
+                          <option value="Cash">Cash</option>
+                          <option value="UPI">UPI</option>
+                          <option value="Card">Card</option>
+                          <option value="Net Banking">Net Banking</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </Field>
 
-                    <Field label="UPI Amount (₹)" icon={IndianRupee}>
-                      <input
-                        type="number"
-                        min="0"
-                        step="any"
-                        placeholder="0.00"
-                        value={splitUpi}
-                        onChange={handleSplitUpiChange}
-                        className="input h-11 pl-9 pr-2 text-xs sm:text-sm font-bold text-gray-900 bg-white border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
-                      />
-                    </Field>
+                      <Field label={`${splitMode1} Amount (₹)`} icon={IndianRupee}>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          placeholder="0.00"
+                          value={splitAmount1}
+                          onChange={handleSplitAmount1Change}
+                          className="input h-11 pl-9 pr-2 text-xs sm:text-sm font-bold text-gray-900 bg-white border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                        />
+                      </Field>
+                    </div>
+
+                    {/* Split 2 */}
+                    <div className="space-y-2">
+                      <Field label="Payment Mode 2" icon={Wallet}>
+                        <select
+                          value={splitMode2}
+                          onChange={(e) => setSplitMode2(e.target.value)}
+                          className="input h-11 pl-9 pr-2 text-xs sm:text-sm font-bold text-gray-900 bg-white border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs"
+                        >
+                          <option value="UPI">UPI</option>
+                          <option value="Cash">Cash</option>
+                          <option value="Card">Card</option>
+                          <option value="Net Banking">Net Banking</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </Field>
+
+                      <Field label={`${splitMode2} Amount (₹)`} icon={IndianRupee}>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          placeholder="0.00"
+                          value={splitAmount2}
+                          onChange={handleSplitAmount2Change}
+                          className="input h-11 pl-9 pr-2 text-xs sm:text-sm font-bold text-gray-900 bg-white border-gray-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                        />
+                      </Field>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1836,7 +1879,7 @@ const PatientRegistration = () => {
                 <div className="border-t border-dashed border-indigo-100 pt-2 flex items-center justify-between text-xs font-bold text-indigo-900 bg-indigo-50/60 p-2 rounded-lg">
                   <span>Split Breakdown:</span>
                   <span className="font-mono font-extrabold text-indigo-800">
-                    Cash: ₹{(parseFloat(splitCash) || 0).toFixed(2)} | UPI: ₹{(parseFloat(splitUpi) || 0).toFixed(2)}
+                    {splitMode1}: ₹{(parseFloat(splitAmount1) || 0).toFixed(2)} | {splitMode2}: ₹{(parseFloat(splitAmount2) || 0).toFixed(2)}
                   </span>
                 </div>
               )}
