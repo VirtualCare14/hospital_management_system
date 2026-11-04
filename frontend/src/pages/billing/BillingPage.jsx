@@ -132,9 +132,21 @@ const BillingPage = () => {
     }
   }, []);
 
+  const loadConsumableCatalog = useCallback(async () => {
+    try {
+      const { data } = await client.get('/ipd/settings');
+      if (data?.consumableServices && Array.isArray(data.consumableServices)) {
+        setConsumableCatalog(data.consumableServices.filter(s => s.isActive !== false));
+      }
+    } catch (err) {
+      console.warn('Could not load consumable services catalog for billing:', err.message);
+    }
+  }, []);
+
   useEffect(() => {
     fetchHospitalSettingsForBilling();
-  }, [fetchHospitalSettingsForBilling, activeTab]);
+    loadConsumableCatalog();
+  }, [fetchHospitalSettingsForBilling, loadConsumableCatalog, activeTab]);
 
   const handleOpenRecoveryModal = (bill) => {
     setSelectedBillForRecovery(bill);
@@ -356,6 +368,17 @@ const BillingPage = () => {
   const [showInsuranceModal, setShowInsuranceModal] = useState(false);
   const [validatingCashless, setValidatingCashless] = useState(false);
   const [showSplitConfirm, setShowSplitConfirm] = useState(false);
+
+  // Consumable Services (Post-TPA / Hospital Catalog) State & Modal
+  const [showConsumableModal, setShowConsumableModal] = useState(false);
+  const [consumableCatalog, setConsumableCatalog] = useState([]);
+  const [selectedConsumableItem, setSelectedConsumableItem] = useState('');
+  const [consumableName, setConsumableName] = useState('');
+  const [consumablePrice, setConsumablePrice] = useState('');
+  const [consumableQty, setConsumableQty] = useState('1');
+  const [consumableGst, setConsumableGst] = useState('0');
+  const [consumableDiscount, setConsumableDiscount] = useState('0');
+  const [consumableIsNonPayable, setConsumableIsNonPayable] = useState(true);
 
   // Dashboard Stats
   const [stats, setStats] = useState({
@@ -887,6 +910,106 @@ const BillingPage = () => {
     setItems(prev => prev.filter((_, i) => i !== idxToRemove));
     setSelectedItemIndexes(prev => prev.filter(i => i !== idxToRemove).map(i => (i > idxToRemove ? i - 1 : i)));
     toast.success('Custom charge item removed');
+  };
+
+  // Open Consumable Services Modal
+  const handleOpenConsumableModal = () => {
+    if (!selectedPatient) {
+      toast.error('Please select a patient first');
+      return;
+    }
+    // Default non-payable to true if patient has active TPA pre-auth / cashless claim
+    setConsumableIsNonPayable(Boolean(patientPreAuthList.length > 0 || tpaAllocation > 0 || isCashlessSplitActive));
+    setSelectedConsumableItem('');
+    setConsumableName('');
+    setConsumablePrice('');
+    setConsumableQty('1');
+    setConsumableGst('0');
+    setConsumableDiscount('0');
+    setShowConsumableModal(true);
+  };
+
+  // Select Consumable from Preconfigured Catalog
+  const handleConsumableSelection = (e) => {
+    const val = e.target.value;
+    setSelectedConsumableItem(val);
+    if (!val || val === '__custom__') {
+      setConsumableName('');
+      setConsumablePrice('');
+      setConsumableGst('0');
+      return;
+    }
+    const found = consumableCatalog.find(c => c.name === val);
+    if (found) {
+      setConsumableName(found.name);
+      setConsumablePrice(found.price !== undefined ? String(found.price) : '0');
+      setConsumableGst(found.gst !== undefined ? String(found.gst) : '0');
+    } else {
+      setConsumableName(val);
+    }
+  };
+
+  // Add Consumable Service to Invoice Items
+  const handleAddConsumableService = (e, keepOpen = false) => {
+    if (e) e.preventDefault();
+    if (!consumableName.trim()) {
+      toast.error('Please enter or select a consumable service name');
+      return;
+    }
+    const priceVal = parseFloat(consumablePrice);
+    if (isNaN(priceVal) || priceVal < 0) {
+      toast.error('Please enter a valid price amount');
+      return;
+    }
+
+    const qtyVal = Math.max(1, parseInt(consumableQty) || 1);
+    const grossAmt = priceVal * qtyVal;
+    const discVal = Math.min(grossAmt, parseFloat(consumableDiscount) || 0);
+    const gstPct = Math.min(100, Math.max(0, parseFloat(consumableGst) || 0));
+
+    const baseAmt = Math.max(0, grossAmt - discVal);
+    const gstAmt = baseAmt * (gstPct / 100);
+    const totalAmt = baseAmt + gstAmt;
+
+    const displayName = (consumableIsNonPayable && (patientPreAuthList.length > 0 || tpaAllocation > 0))
+      ? `${consumableName.trim()} (Post-TPA Consumable)`
+      : consumableName.trim();
+
+    const newItemObj = {
+      category: 'Consumable',
+      name: displayName,
+      description: displayName,
+      price: priceVal,
+      discountAmount: discVal,
+      gstPercentage: gstPct,
+      gstAmount: Number(gstAmt.toFixed(2)),
+      quantity: qtyVal,
+      total: Number(totalAmt.toFixed(2)),
+      isCustom: true,
+      isConsumable: true,
+      isNonPayable: consumableIsNonPayable,
+      date: new Date().toLocaleDateString('en-CA')
+    };
+
+    setItems(prev => {
+      const updated = [...prev, newItemObj];
+      const newIdx = updated.length - 1;
+      setSelectedItemIndexes(sPrev => [...sPrev, newIdx]);
+      return updated;
+    });
+
+    toast.success(`Consumable service "${displayName}" (₹${totalAmt.toFixed(2)}) added to invoice!`);
+
+    if (keepOpen) {
+      setSelectedConsumableItem('');
+      setConsumableName('');
+      setConsumablePrice('');
+      setConsumableQty('1');
+      setConsumableGst('0');
+      setConsumableDiscount('0');
+    } else {
+      setShowConsumableModal(false);
+    }
   };
 
   const handleOpenEditLineItemModal = (idx, item) => {
@@ -1856,6 +1979,15 @@ const BillingPage = () => {
                     
                     <button
                       type="button"
+                      onClick={handleOpenConsumableModal}
+                      className="w-full bg-amber-50/90 hover:bg-amber-600 text-amber-800 hover:text-white border border-amber-300 hover:border-amber-600 font-extrabold text-xs py-2.5 px-4 rounded-xl shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap group"
+                      title="Add consumable services (syringes, gloves, kits, post-TPA non-payables)"
+                    >
+                      <Package className="h-4 w-4 text-amber-600 group-hover:text-white transition-colors" /> + Add Consumable Services
+                    </button>
+                    
+                    <button
+                      type="button"
                       onClick={() => setShowPaymentModal(true)}
                       className="w-full bg-orange-50/80 hover:bg-orange-500 text-orange-600 hover:text-white border border-orange-200/80 hover:border-orange-500 font-extrabold text-xs py-2.5 px-4 rounded-xl shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap"
                       title="Open Final Payment Collection & Ledger popup"
@@ -2470,6 +2602,14 @@ const BillingPage = () => {
                               Remove
                             </button>
                           </div>
+                          <button
+                            type="button"
+                            onClick={handleOpenConsumableModal}
+                            className="w-full mt-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg py-2 px-3 text-xs font-extrabold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
+                            title="Add non-payable consumable services after TPA claim"
+                          >
+                            <Package className="h-3.5 w-3.5 text-amber-600" /> + Add Consumables (Post-TPA)
+                          </button>
                         </div>
                       ) : (
                         <div className="space-y-2 text-xs">
@@ -3733,6 +3873,236 @@ const BillingPage = () => {
       )}
 
       {/* ======================================================================= */}
+      {/* ========== MODAL 4B: ADD CONSUMABLE SERVICES (POST-TPA) POPUP ========= */}
+      {showConsumableModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4 border border-amber-200 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-amber-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-amber-100 text-amber-700 rounded-xl">
+                  <Package className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-gray-900">
+                    Add Consumable Services
+                  </h3>
+                  <p className="text-[11px] text-gray-500 font-medium">
+                    Add medical consumables & procedural kits (ideal for post-TPA claim exclusions)
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowConsumableModal(false)}
+                className="p-1 hover:bg-amber-50 text-gray-400 hover:text-gray-600 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Context Notice if TPA Claim is active */}
+            {(tpaAllocation > 0 || patientPreAuthList.length > 0) && (
+              <div className="p-3 bg-blue-50/70 rounded-xl border border-blue-200 text-xs space-y-1">
+                <div className="flex items-center justify-between font-bold text-blue-900">
+                  <span className="flex items-center gap-1.5">
+                    <Shield className="h-3.5 w-3.5 text-blue-600" /> TPA Cashless Claim Active
+                  </span>
+                  <span className="font-mono text-[11px] text-blue-700 font-extrabold">
+                    {activePreAuth?.claimNumber ? `Claim #${activePreAuth.claimNumber}` : 'Pre-Auth'}
+                  </span>
+                </div>
+                <p className="text-[10px] text-blue-700 leading-relaxed">
+                  Consumables added here will be categorized under <strong>Consumable</strong>. In cashless billing, TPA covers up to the approved limit (₹{eligibleTpaCoverage.toFixed(2)}), and non-payable consumables will be automatically accounted into the patient's out-of-pocket balance.
+                </p>
+              </div>
+            )}
+
+            <form onSubmit={(e) => handleAddConsumableService(e, false)} className="space-y-4">
+              {/* Select from Consumable Services Catalog */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-700">
+                    Select From Consumables Catalog
+                  </label>
+                  {consumableCatalog.length > 0 && (
+                    <span className="text-[10px] font-bold text-amber-700">
+                      {consumableCatalog.length} catalog items available
+                    </span>
+                  )}
+                </div>
+                <select
+                  className="input py-2 text-xs font-bold border-amber-200 focus:ring-amber-500 cursor-pointer"
+                  value={selectedConsumableItem}
+                  onChange={handleConsumableSelection}
+                >
+                  <option value="">-- Choose from Catalog or Enter Custom Below --</option>
+                  {consumableCatalog.map((c, i) => (
+                    <option key={i} value={c.name}>
+                      {c.name} {c.price !== undefined ? `(₹${c.price})` : ''} {c.category ? `• ${c.category}` : ''}
+                    </option>
+                  ))}
+                  <option value="__custom__">+ Enter Custom Consumable Item Name</option>
+                </select>
+              </div>
+
+              {/* Consumable Name / Description */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1">
+                  Consumable Service Description *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Surgical Gloves, IV Set, Syringe 5ml, Hygiene Kit..."
+                  className="input py-2 text-xs font-bold border-amber-200"
+                  value={consumableName}
+                  onChange={(e) => setConsumableName(e.target.value)}
+                  list="billing-consumables-datalist"
+                />
+                <datalist id="billing-consumables-datalist">
+                  {consumableCatalog.map((c, i) => (
+                    <option key={i} value={c.name} />
+                  ))}
+                </datalist>
+              </div>
+
+              {/* Price, Qty, GST, Discount */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-1">
+                    Price (₹) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    step="0.01"
+                    className="input py-1.5 px-2.5 text-xs font-mono font-bold border-amber-200 text-right"
+                    value={consumablePrice}
+                    onChange={(e) => setConsumablePrice(e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-1">
+                    Qty *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    className="input py-1.5 px-2.5 text-xs font-mono font-bold border-amber-200 text-center"
+                    value={consumableQty}
+                    onChange={(e) => setConsumableQty(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-1">
+                    GST (%)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    className="input py-1.5 px-2.5 text-xs font-mono font-bold border-amber-200 text-right"
+                    value={consumableGst}
+                    onChange={(e) => setConsumableGst(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-1">
+                    Discount (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="input py-1.5 px-2.5 text-xs font-mono font-bold border-amber-200 text-right"
+                    value={consumableDiscount}
+                    onChange={(e) => setConsumableDiscount(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Post-TPA / Non-Payable Tagging */}
+              <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-200 flex items-start gap-2.5">
+                <input
+                  type="checkbox"
+                  id="markNonPayableCheck"
+                  checked={consumableIsNonPayable}
+                  onChange={(e) => setConsumableIsNonPayable(e.target.checked)}
+                  className="mt-0.5 rounded border-amber-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+                />
+                <label htmlFor="markNonPayableCheck" className="text-xs cursor-pointer select-none">
+                  <span className="font-extrabold text-amber-950 block">Tag as Post-TPA Consumable (Non-Payable by TPA)</span>
+                  <span className="text-[10px] text-amber-700">Identifies this charge as patient-payable consumable excluded from insurance cashless coverage.</span>
+                </label>
+              </div>
+
+              {/* Live Calculation Preview */}
+              <div className="p-3 bg-gradient-to-r from-amber-50 via-orange-50/60 to-amber-50 rounded-xl border border-amber-200 flex items-center justify-between text-xs font-bold">
+                <span className="text-gray-700">Calculated Consumable Total:</span>
+                <span className="text-base font-black text-amber-800">
+                  ₹{((Math.max(0, (parseFloat(consumablePrice) || 0) * Math.max(1, parseInt(consumableQty) || 1) - Math.min((parseFloat(consumablePrice) || 0) * Math.max(1, parseInt(consumableQty) || 1), parseFloat(consumableDiscount) || 0))) * (1 + Math.max(0, parseFloat(consumableGst) || 0) / 100)).toFixed(2)}
+                </span>
+              </div>
+
+              {/* List of Consumables Already on this Invoice */}
+              {items.filter(i => i.category === 'Consumable').length > 0 && (
+                <div className="space-y-1.5 pt-1 border-t border-amber-100">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-gray-600">
+                    <span>Consumables on this Invoice ({items.filter(i => i.category === 'Consumable').length})</span>
+                    <span className="font-mono text-amber-800 font-extrabold">
+                      Total: ₹{items.filter(i => i.category === 'Consumable').reduce((s, i) => s + (i.total || 0), 0).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="max-h-24 overflow-y-auto space-y-1 pr-1">
+                    {items.filter(i => i.category === 'Consumable').map((ci, cIdx) => (
+                      <div key={cIdx} className="flex items-center justify-between text-[10px] bg-gray-50 p-1.5 rounded border border-gray-200">
+                        <span className="font-bold text-gray-800 truncate max-w-[260px]">{ci.description || ci.name} (x{ci.quantity})</span>
+                        <span className="font-mono font-bold text-gray-900">₹{Number(ci.total || 0).toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-between border-t border-amber-100 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowConsumableModal(false)}
+                  className="btn-secondary py-2 px-3 text-xs font-bold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={!consumableName.trim() || !consumablePrice}
+                    onClick={(e) => handleAddConsumableService(e, true)}
+                    className="btn-secondary py-2 px-3 text-xs font-bold text-amber-800 border-amber-300 hover:bg-amber-100 disabled:opacity-50 cursor-pointer"
+                  >
+                    Add & Add Another
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!consumableName.trim() || !consumablePrice}
+                    className="btn py-2 px-4 text-xs font-extrabold flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white disabled:opacity-50 cursor-pointer shadow-xs"
+                  >
+                    <Plus className="h-4 w-4" /> Add to Invoice
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================================= */}
       {/* ============= MODAL 5: EDIT LINE ITEM POPUP MODAL ===================== */}
       {showEditLineItemModal && editingItemIdx !== null && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fadeIn">
@@ -3950,13 +4320,24 @@ const BillingPage = () => {
                           <span className="font-extrabold text-blue-900 text-xs">₹{calculatedTpaReceivable.toFixed(2)}</span>
                         </div>
                       </div>
-                      <div className="flex gap-1.5 pt-1">
+                      <div className="flex gap-1.5 pt-1 flex-wrap">
                         <button
                           type="button"
                           onClick={() => setCustomPaidAmount(String(calculatedPatientPayable))}
-                          className="flex-1 text-[10px] font-bold py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-md transition cursor-pointer"
+                          className="flex-1 text-[10px] font-bold py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-md transition cursor-pointer whitespace-nowrap"
                         >
                           Collect Patient Share (₹{calculatedPatientPayable.toFixed(2)})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowPaymentModal(false);
+                            handleOpenConsumableModal();
+                          }}
+                          className="text-[10px] font-bold py-1 px-2.5 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 rounded-md transition flex items-center gap-1 cursor-pointer whitespace-nowrap"
+                          title="Add non-payable consumable services"
+                        >
+                          <Package className="h-3 w-3 text-amber-700" /> + Consumables
                         </button>
                         <button
                           type="button"
@@ -3965,7 +4346,7 @@ const BillingPage = () => {
                               setTransactionRef(activePreAuth.claimNumber);
                             }
                           }}
-                          className="text-[10px] font-bold py-1 px-2 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-md transition cursor-pointer"
+                          className="text-[10px] font-bold py-1 px-2 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-md transition cursor-pointer whitespace-nowrap"
                         >
                           Fill Claim Ref
                         </button>
@@ -4555,6 +4936,29 @@ const BillingPage = () => {
                       = Patient Due: ₹{Math.max(0, grandTotal - advanceApplied - proposedTpaAllocation).toFixed(2)}
                     </div>
                   </div>
+                </div>
+
+                {/* 5. Post-TPA Consumable Services Quick Banner */}
+                <div className="p-3 bg-gradient-to-r from-amber-50/90 via-orange-50/60 to-amber-50/90 rounded-xl border border-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-amber-100 text-amber-800 rounded-lg shrink-0">
+                      <Package className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-black text-amber-950 block">Add Consumable Services (Post-TPA Exclusions)</span>
+                      <span className="text-[10px] text-amber-800 leading-tight">Add surgical kits, gloves, syringes, or medical consumables not covered under this TPA claim.</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowInsuranceModal(false);
+                      handleOpenConsumableModal();
+                    }}
+                    className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs rounded-lg shadow-2xs transition flex items-center gap-1.5 shrink-0 cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> + Add Consumable Services
+                  </button>
                 </div>
 
                 {/* Footer Buttons */}

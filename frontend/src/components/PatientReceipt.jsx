@@ -593,8 +593,16 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
                   ₹{netFee.toFixed(2)}
                 </td>
                 <td style={{ padding: '4px 6px', border: '1px solid #000', textAlign: 'center' }}>
-                  {(patient.paymentMode === 'Split' || patient.paymentMode === 'Split Payment') && patient.splitPayments ? (
-                    <span>Split (Cash: ₹{patient.splitPayments.cash || 0}, UPI: ₹{patient.splitPayments.upi || 0})</span>
+                  {(patient.paymentMode === 'Split' || patient.paymentMode === 'Split Payment') && (patient.splitPayments || (patient.mixedPayments && patient.mixedPayments.length > 0)) ? (
+                    <span>
+                      Split ({
+                        patient.mixedPayments && patient.mixedPayments.length > 0
+                          ? patient.mixedPayments.map(p => `${p.method}: ₹${p.amount}`).join(', ')
+                          : (patient.splitPayments?.mode1 && patient.splitPayments?.mode2
+                              ? `${patient.splitPayments.mode1}: ₹${patient.splitPayments.amount1 || 0}, ${patient.splitPayments.mode2}: ₹${patient.splitPayments.amount2 || 0}`
+                              : `Cash: ₹${patient.splitPayments.cash || 0}, UPI: ₹${patient.splitPayments.upi || 0}`)
+                      })
+                    </span>
                   ) : (
                     patient.paymentMode || 'Cash'
                   )}
@@ -1249,8 +1257,16 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
                       ₹{netFee.toFixed(2)}
                     </td>
                     <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center' }}>
-                      {(patient.paymentMode === 'Split' || patient.paymentMode === 'Split Payment') && patient.splitPayments ? (
-                        <span>Split (Cash: ₹{patient.splitPayments.cash || 0}, UPI: ₹{patient.splitPayments.upi || 0})</span>
+                      {(patient.paymentMode === 'Split' || patient.paymentMode === 'Split Payment') && (patient.splitPayments || (patient.mixedPayments && patient.mixedPayments.length > 0)) ? (
+                        <span>
+                          Split ({
+                            patient.mixedPayments && patient.mixedPayments.length > 0
+                              ? patient.mixedPayments.map(p => `${p.method}: ₹${p.amount}`).join(', ')
+                              : (patient.splitPayments?.mode1 && patient.splitPayments?.mode2
+                                  ? `${patient.splitPayments.mode1}: ₹${patient.splitPayments.amount1 || 0}, ${patient.splitPayments.mode2}: ₹${patient.splitPayments.amount2 || 0}`
+                                  : `Cash: ₹${patient.splitPayments.cash || 0}, UPI: ₹${patient.splitPayments.upi || 0}`)
+                          })
+                        </span>
                       ) : (
                         patient.paymentMode || 'Cash'
                       )}

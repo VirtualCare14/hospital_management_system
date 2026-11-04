@@ -525,12 +525,25 @@ const createPatient = async (req, res) => {
     let splitPaymentsData = undefined;
     let mixedPaymentsData = undefined;
     if (paymentStatus === 'Paid' && (paymentMode === 'Split' || paymentMode === 'Split Payment' || paymentMode === 'Cash + UPI' || paymentMode === 'Mixed Payment')) {
-      const cashAmt = parseFloat(reqSplitPayments?.cash !== undefined ? reqSplitPayments.cash : (Array.isArray(reqMixedPayments) ? reqMixedPayments.find(p => p.method === 'Cash')?.amount : 0)) || 0;
-      const upiAmt = parseFloat(reqSplitPayments?.upi !== undefined ? reqSplitPayments.upi : (Array.isArray(reqMixedPayments) ? reqMixedPayments.find(p => p.method === 'UPI')?.amount : 0)) || 0;
-      splitPaymentsData = { cash: cashAmt, upi: upiAmt };
-      mixedPaymentsData = [
-        { method: 'Cash', amount: cashAmt },
-        { method: 'UPI', amount: upiAmt }
+      const mode1 = reqSplitPayments?.mode1 || (Array.isArray(reqMixedPayments) && reqMixedPayments[0]?.method) || 'Cash';
+      const amount1 = parseFloat(reqSplitPayments?.amount1 !== undefined ? reqSplitPayments.amount1 : (Array.isArray(reqMixedPayments) && reqMixedPayments[0]?.amount)) || 0;
+      const mode2 = reqSplitPayments?.mode2 || (Array.isArray(reqMixedPayments) && reqMixedPayments[1]?.method) || 'UPI';
+      const amount2 = parseFloat(reqSplitPayments?.amount2 !== undefined ? reqSplitPayments.amount2 : (Array.isArray(reqMixedPayments) && reqMixedPayments[1]?.amount)) || 0;
+
+      const cashAmt = parseFloat(reqSplitPayments?.cash !== undefined ? reqSplitPayments.cash : (Array.isArray(reqMixedPayments) ? reqMixedPayments.find(p => p.method === 'Cash')?.amount : 0)) || (mode1 === 'Cash' ? amount1 : (mode2 === 'Cash' ? amount2 : 0));
+      const upiAmt = parseFloat(reqSplitPayments?.upi !== undefined ? reqSplitPayments.upi : (Array.isArray(reqMixedPayments) ? reqMixedPayments.find(p => p.method === 'UPI')?.amount : 0)) || (mode1 === 'UPI' ? amount1 : (mode2 === 'UPI' ? amount2 : 0));
+
+      splitPaymentsData = {
+        cash: cashAmt,
+        upi: upiAmt,
+        mode1,
+        amount1,
+        mode2,
+        amount2
+      };
+      mixedPaymentsData = (Array.isArray(reqMixedPayments) && reqMixedPayments.length > 0) ? reqMixedPayments : [
+        { method: mode1, amount: amount1 },
+        { method: mode2, amount: amount2 }
       ];
     }
 

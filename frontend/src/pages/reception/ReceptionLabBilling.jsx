@@ -929,7 +929,8 @@ export default function ReceptionLabBilling() {
   };
 
   return (
-    <div className="space-y-5 pb-12 max-w-7xl mx-auto">
+    <>
+      <div className={`space-y-5 pb-12 max-w-7xl mx-auto ${showReceiptModal ? 'no-print print:hidden' : ''}`}>
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
         <div>
@@ -1961,6 +1962,8 @@ export default function ReceptionLabBilling() {
         </div>
       )}
 
+      </div>
+
       {/* Modal 2: Exact Lab Bill Receipt Modal matching Labs module */}
       {showReceiptModal && createdBillReceiptData && (
         <LabBillReceipt
@@ -1969,6 +1972,6 @@ export default function ReceptionLabBilling() {
           onClose={() => setShowReceiptModal(false)}
         />
       )}
-    </div>
+    </>
   );
 }
