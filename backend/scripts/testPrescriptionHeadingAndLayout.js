@@ -106,7 +106,7 @@ async function main() {
     assert(receiptCode.includes('Page 1 of 2 (Continued on next page) →'), 'Missing Page 1 continuation indicator');
     assert(receiptCode.includes('PRESCRIPTION (PAGE 2)'), 'Missing Page 2 banner');
     assert(receiptCode.includes('Page 2 of 2'), 'Missing Page 2 of 2 indicator');
-    assert(receiptCode.includes('Hospital Custom Letterhead Page 2'), 'Missing Page 2 letterhead repetition');
+    assert(receiptCode.includes('custom-letterhead-content'), 'Missing custom-letterhead-content');
   });
 
   // Test 8: Custom Letterhead millimeter margins preserved

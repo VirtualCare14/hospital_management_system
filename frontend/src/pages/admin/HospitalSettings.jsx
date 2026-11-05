@@ -204,7 +204,9 @@ const HospitalSettings = () => {
           letterheadImageUrl: data.data.letterheadImageUrl || '',
           letterheadImagePublicId: data.data.letterheadImagePublicId || '',
           letterheadHeaderHeight: data.data.letterheadHeaderHeight !== undefined ? data.data.letterheadHeaderHeight : 4.6,
-          useSystemLetterhead: data.data.useSystemLetterhead !== undefined ? data.data.useSystemLetterhead : true
+          useSystemLetterhead: data.data.useSystemLetterhead !== undefined ? data.data.useSystemLetterhead : true,
+          letterheadType: data.data.letterheadType || (data.data.useSystemLetterhead === false ? 'photo' : 'system'),
+          customLetterheadHeaderHeight: data.data.customLetterheadHeaderHeight !== undefined ? data.data.customLetterheadHeaderHeight : 45
         });
         setPreviewLogo(data.data.logoUrl);
         setPreviewLetterhead(data.data.letterheadImageUrl || null);
@@ -431,6 +433,8 @@ const HospitalSettings = () => {
         letterheadImagePublicId: data.letterheadImagePublicId !== undefined ? data.letterheadImagePublicId : (settings?.letterheadImagePublicId || ''),
         letterheadHeaderHeight: Number(data.letterheadHeaderHeight || 4.6),
         useSystemLetterhead: Boolean(data.useSystemLetterhead),
+        letterheadType: data.letterheadType || watch('letterheadType') || 'system',
+        customLetterheadHeaderHeight: Number(data.customLetterheadHeaderHeight !== undefined ? data.customLetterheadHeaderHeight : (watch('customLetterheadHeaderHeight') || 45)),
         alternateMobileNumber: data.alternateMobileNumber || '',
         emailAddress: data.emailAddress || '',
         website: data.website || '',
@@ -805,7 +809,7 @@ const HospitalSettings = () => {
                   </div>
                 </button>
 
-                {/* 3. Custom Letterhead */}
+                {/* 3. Pre-Printed Letterhead Paper */}
                 <button
                   type="button"
                   onClick={() => {
@@ -819,15 +823,15 @@ const HospitalSettings = () => {
                   }`}
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-lg">📄</span>
+                    <span className="text-lg">📋</span>
                     {watch('letterheadType') === 'custom' && (
                       <span className="text-[10px] font-bold text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full">Active</span>
                     )}
                   </div>
                   <div>
-                    <div className="font-bold text-xs text-gray-900">Custom Letterhead</div>
+                    <div className="font-bold text-xs text-gray-900">Pre-Printed Letterhead Paper</div>
                     <p className="text-[11px] text-gray-500 mt-1">
-                      Upload full hospital letterhead (PDF/PNG/JPG). Content prints inside designated blank area.
+                      For physical pre-printed stationary. Leaves blank top space; prescription title, patient info, and vitals print below without digital letterhead.
                     </p>
                   </div>
                 </button>
@@ -946,169 +950,63 @@ const HospitalSettings = () => {
                 </div>
               )}
 
-              {/* Option 3: Custom Letterhead (Full Page PDF / Image) */}
+              {/* Option 3: Pre-Printed Letterhead Paper */}
               {watch('letterheadType') === 'custom' && (
                 <div className="space-y-4 animate-fadeIn">
                   <div className="flex items-start gap-2.5 p-3.5 bg-emerald-50/90 border border-emerald-200 rounded-xl text-emerald-900 text-xs">
                     <Info className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
                     <div>
-                      <span className="font-bold">Custom Hospital Letterhead Mode Active:</span> Upload your complete hospital letterhead page (PDF, PNG, or JPG). The pre-printed hospital header and footer will be visually preserved, and doctor-entered prescription details will print strictly within the writable blank area configured below.
+                      <span className="font-bold">Pre-Printed Letterhead Paper Mode Active:</span> Designed for printing onto physical hospital stationery / letterhead paper. No software header or digital letterhead will be printed. The prescription heading, patient details, and vitals start printing cleanly below your configured pre-printed header height.
                     </div>
                   </div>
 
                   {/* Two column layout: Left configuration & controls, Right visual preview */}
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start bg-white p-4 rounded-xl border border-orange-200">
-                    {/* Left: Upload and Margins (7 cols) */}
+                    {/* Left: Single Height Control (7 cols) */}
                     <div className="lg:col-span-7 space-y-4">
-                      {/* Upload / Replace letterhead file */}
-                      <div className="space-y-1.5">
-                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
-                          Upload Custom Letterhead (PDF / PNG / JPG) <span className="text-red-500">*</span>
+                      <div className="p-4 bg-orange-50/40 border border-orange-200 rounded-xl space-y-3">
+                        <label className="block text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center gap-1.5">
+                          <span className="text-base">📏</span> Pre-Printed Header Height (in mm) <span className="text-red-500">*</span>
                         </label>
-                        <p className="text-[11px] text-gray-500">
-                          Supports full-page PDF letterhead or high-resolution PNG/JPG scans (up to 15MB).
-                        </p>
-
-                        <div className="p-3 border-2 border-dashed border-orange-200 rounded-xl bg-orange-50/20">
-                          {previewCustomLetterhead ? (
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="flex items-center gap-2.5 min-w-0">
-                                <div className="p-2 bg-orange-100 text-orange-700 rounded-lg shrink-0 font-bold text-xs uppercase">
-                                  {previewCustomLetterheadType === 'pdf' ? 'PDF' : 'IMG'}
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="text-xs font-bold text-gray-900 truncate">
-                                    Custom Hospital Letterhead
-                                  </div>
-                                  <div className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
-                                    ✓ Letterhead file attached and ready
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2 shrink-0">
-                                <label className="btn-secondary text-xs px-2.5 py-1.5 cursor-pointer flex items-center gap-1">
-                                  <Upload className="h-3.5 w-3.5" />
-                                  {uploadingCustomLetterhead ? 'Uploading...' : 'Replace'}
-                                  <input
-                                    type="file"
-                                    accept=".pdf,image/png,image/jpeg,image/jpg"
-                                    className="hidden"
-                                    onChange={handleCustomLetterheadUpload}
-                                    disabled={uploadingCustomLetterhead}
-                                  />
-                                </label>
-                                <button
-                                  type="button"
-                                  onClick={handleDeleteCustomLetterhead}
-                                  className="btn-danger text-xs px-2.5 py-1.5 flex items-center gap-1 cursor-pointer"
-                                  title="Remove custom letterhead"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="py-4 text-center space-y-2">
-                              <label className="btn-secondary inline-flex items-center gap-2 cursor-pointer py-2 px-4 text-xs font-bold">
-                                <Upload className="h-3.5 w-3.5" />
-                                {uploadingCustomLetterhead ? 'Uploading File...' : 'Choose Letterhead File (PDF / Image)'}
-                                <input
-                                  type="file"
-                                  accept=".pdf,image/png,image/jpeg,image/jpg"
-                                  className="hidden"
-                                  onChange={handleCustomLetterheadUpload}
-                                  disabled={uploadingCustomLetterhead}
-                                />
-                              </label>
-                              <p className="text-[10px] text-gray-400">PDF is recommended for crisp vector printing</p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* 4 Millimeter Inputs in a 2x2 grid */}
-                      <div className="pt-2 border-t border-gray-100">
-                        <div className="text-xs font-bold text-gray-800 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
-                          <span>📐</span> Print Area Margins (in Millimeters - mm)
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">
-                              Header Height (mm) <span className="text-red-500">*</span>
-                            </label>
+                        <div className="flex items-center gap-3">
+                          <div className="w-36">
                             <input
                               type="number"
                               step="1"
                               min="0"
-                              max="120"
-                              className="input text-xs"
+                              max="150"
+                              className="input text-sm font-semibold text-gray-800"
                               placeholder="45"
                               {...register('customLetterheadHeaderHeight')}
                             />
-                            <span className="text-[10px] text-gray-400 block mt-0.5">Top space for pre-printed logo/header (default 45mm)</span>
                           </div>
-                          <div>
-                            <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">
-                              Footer Height (mm) <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                              type="number"
-                              step="1"
-                              min="0"
-                              max="100"
-                              className="input text-xs"
-                              placeholder="30"
-                              {...register('customLetterheadFooterHeight')}
-                            />
-                            <span className="text-[10px] text-gray-400 block mt-0.5">Bottom space for pre-printed footer (default 30mm)</span>
-                          </div>
-                          <div>
-                            <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">
-                              Left Margin (mm) <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                              type="number"
-                              step="1"
-                              min="0"
-                              max="50"
-                              className="input text-xs"
-                              placeholder="12"
-                              {...register('customLetterheadLeftMargin')}
-                            />
-                            <span className="text-[10px] text-gray-400 block mt-0.5">Left edge spacing (default 12mm)</span>
-                          </div>
-                          <div>
-                            <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">
-                              Right Margin (mm) <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                              type="number"
-                              step="1"
-                              min="0"
-                              max="50"
-                              className="input text-xs"
-                              placeholder="12"
-                              {...register('customLetterheadRightMargin')}
-                            />
-                            <span className="text-[10px] text-gray-400 block mt-0.5">Right edge spacing (default 12mm)</span>
-                          </div>
+                          <span className="text-xs font-bold text-gray-600 bg-white px-3 py-2 rounded-lg border border-gray-200 shadow-2xs">
+                            = {((Number(watch('customLetterheadHeaderHeight')) || 45) / 10).toFixed(1)} cm
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-gray-600 leading-relaxed">
+                          Enter the height of your physical pre-printed letterhead header in millimeters (mm). The software leaves this blank margin at the top so that the prescription title, patient information, and vitals will print cleanly onto your paper stationary without any digital letterhead.
+                        </p>
+                        <div className="text-[11px] text-gray-600 bg-white/80 p-2.5 rounded-lg border border-orange-100 flex items-center gap-2">
+                          <span className="text-sm">💡</span>
+                          <span><strong>Standard Recommendation:</strong> Most physical hospital pre-printed letterheads have a <strong>45 mm (4.5 cm)</strong> header area at the top.</span>
                         </div>
                       </div>
 
-                      {/* Live calculation bar */}
+                      {/* Live breakdown bar */}
                       <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl text-emerald-900 text-xs">
                         <div className="font-bold flex items-center gap-1.5 text-emerald-800">
-                          <span>📏</span> Calculated Doctor Printable Area (A4 Standard: 210 × 297 mm):
+                          <span>📐</span> A4 Page Layout Breakdown (210 × 297 mm):
                         </div>
-                        <div className="text-[11px] mt-1 text-emerald-700">
-                          Writable Width: <strong>{Math.max(0, 210 - (Number(watch('customLetterheadLeftMargin')) || 12) - (Number(watch('customLetterheadRightMargin')) || 12))} mm</strong> &nbsp;|&nbsp; 
-                          Writable Height: <strong>{Math.max(0, 297 - (Number(watch('customLetterheadHeaderHeight')) || 45) - (Number(watch('customLetterheadFooterHeight')) || 30))} mm</strong>
+                        <div className="text-[11px] mt-1.5 text-emerald-700 space-y-1">
+                          <div>• Pre-printed Stationary Header: <strong>{Number(watch('customLetterheadHeaderHeight')) || 45} mm</strong> (Empty space on paper)</div>
+                          <div>• Printable Prescription & Vitals Area: <strong>{Math.max(0, 297 - (Number(watch('customLetterheadHeaderHeight')) || 45) - 15)} mm</strong> vertical space</div>
                         </div>
                       </div>
                     </div>
 
                     {/* Right: Interactive Visual A4 Representation (5 cols) */}
-                    <div className="lg:col-span-5 flex flex-col items-center justify-center p-2 bg-gray-50/60 rounded-xl border border-gray-200">
+                    <div className="lg:col-span-5 flex flex-col items-center justify-center p-3 bg-gray-50/70 rounded-xl border border-gray-200">
                       <div className="text-[11px] font-bold text-gray-600 mb-2 uppercase tracking-wider flex items-center gap-1">
                         <Eye className="h-3.5 w-3.5 text-orange-500" /> Interactive Print Area Simulation
                       </div>
@@ -1122,15 +1020,6 @@ const HospitalSettings = () => {
                           boxSizing: 'border-box'
                         }}
                       >
-                        {/* Background custom letterhead preview if image */}
-                        {previewCustomLetterhead && (previewCustomLetterheadType === 'image' || previewCustomLetterhead.startsWith('data:image') || /\.(png|jpe?g)$/i.test(previewCustomLetterhead)) && (
-                          <img
-                            src={previewCustomLetterhead}
-                            alt="Letterhead background"
-                            className="absolute inset-0 w-full h-full object-fill opacity-25 pointer-events-none"
-                          />
-                        )}
-
                         {/* Top Pre-printed Header Protected Area */}
                         <div
                           className="absolute top-0 left-0 right-0 bg-amber-100/90 border-b-2 border-dashed border-amber-400 flex flex-col items-center justify-center px-1 text-center transition-all duration-150 z-10"
@@ -1138,73 +1027,53 @@ const HospitalSettings = () => {
                             height: `${Math.min(100, ((Number(watch('customLetterheadHeaderHeight')) || 45) / 297) * 100)}%`
                           }}
                         >
-                          <span className="text-[8.5px] font-bold text-amber-900 leading-tight">
+                          <span className="text-[8px] font-bold text-amber-900 leading-tight">
                             Pre-printed Header
                           </span>
-                          <span className="text-[7.5px] text-amber-700 font-mono">
+                          <span className="text-[7.5px] text-amber-700 font-mono font-semibold">
                             {Number(watch('customLetterheadHeaderHeight')) || 45} mm
                           </span>
-                        </div>
-
-                        {/* Bottom Pre-printed Footer Protected Area */}
-                        <div
-                          className="absolute bottom-0 left-0 right-0 bg-amber-100/90 border-t-2 border-dashed border-amber-400 flex flex-col items-center justify-center px-1 text-center transition-all duration-150 z-10"
-                          style={{
-                            height: `${Math.min(100, ((Number(watch('customLetterheadFooterHeight')) || 30) / 297) * 100)}%`
-                          }}
-                        >
-                          <span className="text-[8.5px] font-bold text-amber-900 leading-tight">
-                            Pre-printed Footer
-                          </span>
-                          <span className="text-[7.5px] text-amber-700 font-mono">
-                            {Number(watch('customLetterheadFooterHeight')) || 30} mm
+                          <span className="text-[6.5px] text-amber-600 italic">
+                            (Physical paper space)
                           </span>
                         </div>
 
-                        {/* Left Margin Stripe */}
+                        {/* Content Area starting below header height */}
                         <div
-                          className="absolute bg-blue-100/40 border-r border-dashed border-blue-300 transition-all duration-150 z-5"
+                          className="absolute bg-white border-t border-emerald-400 flex flex-col items-center p-1.5 text-center transition-all duration-150 z-5"
                           style={{
                             top: `${Math.min(100, ((Number(watch('customLetterheadHeaderHeight')) || 45) / 297) * 100)}%`,
-                            bottom: `${Math.min(100, ((Number(watch('customLetterheadFooterHeight')) || 30) / 297) * 100)}%`,
+                            bottom: 0,
                             left: 0,
-                            width: `${Math.min(50, ((Number(watch('customLetterheadLeftMargin')) || 12) / 210) * 100)}%`
-                          }}
-                        />
-
-                        {/* Right Margin Stripe */}
-                        <div
-                          className="absolute bg-blue-100/40 border-l border-dashed border-blue-300 transition-all duration-150 z-5"
-                          style={{
-                            top: `${Math.min(100, ((Number(watch('customLetterheadHeaderHeight')) || 45) / 297) * 100)}%`,
-                            bottom: `${Math.min(100, ((Number(watch('customLetterheadFooterHeight')) || 30) / 297) * 100)}%`,
-                            right: 0,
-                            width: `${Math.min(50, ((Number(watch('customLetterheadRightMargin')) || 12) / 210) * 100)}%`
-                          }}
-                        />
-
-                        {/* Middle Writable Area */}
-                        <div
-                          className="absolute bg-emerald-50/85 border-2 border-dashed border-emerald-500 rounded flex flex-col items-center justify-center p-1 text-center shadow-inner transition-all duration-150 z-5"
-                          style={{
-                            top: `${Math.min(100, ((Number(watch('customLetterheadHeaderHeight')) || 45) / 297) * 100)}%`,
-                            bottom: `${Math.min(100, ((Number(watch('customLetterheadFooterHeight')) || 30) / 297) * 100)}%`,
-                            left: `${Math.min(50, ((Number(watch('customLetterheadLeftMargin')) || 12) / 210) * 100)}%`,
-                            right: `${Math.min(50, ((Number(watch('customLetterheadRightMargin')) || 12) / 210) * 100)}%`
+                            right: 0
                           }}
                         >
-                          <span className="text-[8.5px] font-extrabold text-emerald-800 leading-tight">
-                            ✍️ Doctor Writable Area
-                          </span>
-                          <span className="text-[7.5px] text-emerald-700 font-semibold mt-0.5">
-                            {Math.max(0, 210 - (Number(watch('customLetterheadLeftMargin')) || 12) - (Number(watch('customLetterheadRightMargin')) || 12))} × {Math.max(0, 297 - (Number(watch('customLetterheadHeaderHeight')) || 45) - (Number(watch('customLetterheadFooterHeight')) || 30))} mm
-                          </span>
-                          <span className="text-[6.5px] text-emerald-600 mt-0.5 leading-tight">
-                            Prescription content prints here
-                          </span>
+                          {/* Mini Simulation of Prescription Title, Patient Info, and Vitals */}
+                          <div className="w-full border-b border-gray-800 pb-0.5 mb-1 text-center">
+                            <span className="text-[7.5px] font-extrabold text-gray-900 tracking-wider">
+                              PRESCRIPTION
+                            </span>
+                          </div>
+
+                          <div className="w-full grid grid-cols-2 gap-0.5 border border-gray-400 p-0.5 rounded-xs text-[6px] text-left text-gray-700 mb-1">
+                            <div><strong>Patient:</strong> Rahul (32y)</div>
+                            <div><strong>UHID:</strong> UH-2026-001</div>
+                            <div><strong>Doctor:</strong> Dr. Sharma</div>
+                            <div><strong>Date:</strong> 05 Nov 2026</div>
+                          </div>
+
+                          <div className="w-full flex items-center justify-between border border-blue-300 bg-blue-50/50 p-0.5 rounded-xs text-[6px] text-blue-900 font-semibold mb-1">
+                            <span>BP: 120/80</span>
+                            <span>Pulse: 72</span>
+                            <span>SpO2: 99%</span>
+                          </div>
+
+                          <div className="mt-auto pb-0.5 text-[6.5px] text-emerald-700 font-bold">
+                            ✍️ Prints directly without letterhead
+                          </div>
                         </div>
                       </div>
-                      <span className="text-[10px] text-gray-400 mt-1.5 font-medium">A4 Standard Sheet (210 × 297 mm)</span>
+                      <span className="text-[10px] text-gray-400 mt-2 font-medium">A4 Paper Simulation (210 × 297 mm)</span>
                     </div>
                   </div>
                 </div>
@@ -1811,7 +1680,7 @@ const HospitalSettings = () => {
                     }`}
                     title="Follow current setting in form"
                   >
-                    Active Setting ({(watch('letterheadType') === 'custom') ? 'Custom' : (watch('useSystemLetterhead') ? 'System' : 'Photo')})
+                    Active Setting ({(watch('letterheadType') === 'custom') ? 'Pre-Printed' : (watch('useSystemLetterhead') ? 'System' : 'Photo')})
                   </button>
                   <button
                     type="button"
@@ -1820,7 +1689,7 @@ const HospitalSettings = () => {
                       previewLetterheadMode === 'custom' ? 'bg-white text-orange-600 shadow-xs' : 'text-gray-600 hover:text-gray-900'
                     }`}
                   >
-                    📄 Custom Letterhead
+                    📋 Pre-Printed Paper
                   </button>
                   <button
                     type="button"

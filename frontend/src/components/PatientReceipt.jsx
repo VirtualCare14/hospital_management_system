@@ -178,23 +178,23 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
     documentTitle = 'PATIENT SLIP';
   }
 
-  // Check if custom letterhead should be used
+  // Check if pre-printed / custom letterhead mode should be used
   const customLhUrl = resolvedCustomLetterhead || hospital?.customLetterheadUrl;
   let isCustomLetterhead = false;
   if (letterheadMode === 'custom') {
-    isCustomLetterhead = Boolean(customLhUrl);
+    isCustomLetterhead = true;
   } else if (letterheadMode === 'system' || letterheadMode === 'image') {
     isCustomLetterhead = false;
   } else {
     // 'auto' mode: check hospital.letterheadType
-    isCustomLetterhead = (hospital?.letterheadType === 'custom') && Boolean(customLhUrl);
+    isCustomLetterhead = (hospital?.letterheadType === 'custom');
   }
 
-  // Margins & header/footer heights for custom letterhead (in mm)
+  // Margins & header/footer heights for pre-printed letterhead (in mm)
   const customHeaderHeight = Number(hospital?.customLetterheadHeaderHeight !== undefined ? hospital.customLetterheadHeaderHeight : 45);
-  const customFooterHeight = Number(hospital?.customLetterheadFooterHeight !== undefined ? hospital.customLetterheadFooterHeight : 30);
-  const customLeftMargin = Number(hospital?.customLetterheadLeftMargin !== undefined ? hospital.customLetterheadLeftMargin : 12);
-  const customRightMargin = Number(hospital?.customLetterheadRightMargin !== undefined ? hospital.customLetterheadRightMargin : 12);
+  const customFooterHeight = Number(hospital?.customLetterheadFooterHeight !== undefined ? hospital.customLetterheadFooterHeight : 15);
+  const customLeftMargin = Number(hospital?.customLetterheadLeftMargin !== undefined ? hospital.customLetterheadLeftMargin : 8);
+  const customRightMargin = Number(hospital?.customLetterheadRightMargin !== undefined ? hospital.customLetterheadRightMargin : 8);
 
   // Check if uploaded photo letterhead should be shown
   let showUploadedLetterhead = false;
@@ -863,24 +863,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
           pageBreakAfter: 'always',
           breakAfter: 'page'
         }}>
-          {/* Custom Letterhead Background - Page 1 */}
-          <div className="custom-letterhead-bg" style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            zIndex: 0,
-            pointerEvents: 'none',
-            overflow: 'hidden'
-          }}>
-            <img
-              src={customLhUrl}
-              crossOrigin="anonymous"
-              alt="Hospital Custom Letterhead Page 1"
-              style={{ width: '100%', height: '100%', objectFit: 'fill', display: 'block' }}
-            />
-          </div>
+          {/* Pre-printed stationery paper: No digital letterhead background */}
 
           {/* Writable Content Area - Page 1 */}
           <div className="custom-letterhead-content" style={{
@@ -1079,24 +1062,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
           position: 'relative',
           boxSizing: 'border-box'
         }}>
-          {/* Custom Letterhead Background - Page 2 */}
-          <div className="custom-letterhead-bg" style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            zIndex: 0,
-            pointerEvents: 'none',
-            overflow: 'hidden'
-          }}>
-            <img
-              src={customLhUrl}
-              crossOrigin="anonymous"
-              alt="Hospital Custom Letterhead Page 2"
-              style={{ width: '100%', height: '100%', objectFit: 'fill', display: 'block' }}
-            />
-          </div>
+          {/* Pre-printed stationery paper: No digital letterhead background */}
 
           {/* Writable Content Area - Page 2 */}
           <div className="custom-letterhead-content" style={{
@@ -1268,31 +1234,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
       position: 'relative',
       boxSizing: 'border-box'
     }}>
-      {/* Custom Full-Page Hospital Letterhead Background */}
-      {isCustomLetterhead && (
-        <div className="custom-letterhead-bg" style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          zIndex: 0,
-          pointerEvents: 'none',
-          overflow: 'hidden'
-        }}>
-          <img
-            src={customLhUrl}
-            crossOrigin="anonymous"
-            alt="Hospital Custom Letterhead"
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'fill',
-              display: 'block'
-            }}
-          />
-        </div>
-      )}
+      {/* Pre-printed stationery paper: No digital letterhead background */}
 
       {/* Writable Content Area */}
       <div className="custom-letterhead-content" style={{
