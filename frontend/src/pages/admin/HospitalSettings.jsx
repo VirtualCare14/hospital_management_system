@@ -1693,6 +1693,7 @@ const HospitalSettings = () => {
                 hospitalSettings={getLiveHospitalSettingsForPreview()}
                 mode={previewSlipMode}
                 letterheadMode={previewLetterheadMode}
+                printOptions={{ reuseReceptionPaper: false }}
               />
             </div>
           </div>

@@ -52,7 +52,8 @@ const PrescriptionPage = () => {
   const [language, setLanguage] = useState('English');
   const [printOptions, setPrintOptions] = useState(() => {
     const saved = localStorage.getItem('doctor_print_options');
-    return saved ? JSON.parse(saved) : {
+    const parsed = saved ? JSON.parse(saved) : {};
+    return {
       printVitals: true,
       printLabTests: true,
       printSymptomHistory: true,
@@ -60,7 +61,10 @@ const PrescriptionPage = () => {
       printGeneralPastHistory: true,
       printDiagnosisRemarks: true,
       printPatientAdvice: true,
-      printPreviousHistory: false
+      printPreviousHistory: false,
+      reuseReceptionPaper: true,
+      ...parsed,
+      ...(parsed.reuseReceptionPaper === undefined ? { reuseReceptionPaper: true } : {})
     };
   });
 

@@ -88,7 +88,8 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
     printLabTests: true,
     printSymptomHistory: true,
     printSymptomRemarks: true,
-    printGeneralPastHistory: true
+    printGeneralPastHistory: true,
+    reuseReceptionPaper: true
   };
 
   useEffect(() => {
@@ -174,6 +175,18 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
     // Common paper for patient registration slip and doctor prescription
     documentTitle = 'PRESCRIPTION';
   }
+
+  // Paper reuse architecture:
+  // When printing a doctor prescription, reuseReceptionPaper defaults to true.
+  // When reuseReceptionPaper is true, the digital header, PRESCRIPTION heading,
+  // patient details box, and vitals table are hidden (preserving exact vertical layout height)
+  // so the physical paper taken from reception can be fed into the printer without duplicate printing.
+  const isReusingPaper = Boolean(
+    isPrescriptionFormat && 
+    !isPatientSlipOnly && 
+    (printOptions?.reuseReceptionPaper === true || 
+     (printOptions?.reuseReceptionPaper !== false && (propPrintOptions ? propPrintOptions.reuseReceptionPaper !== false : true)))
+  );
 
   // Check if pre-printed / custom letterhead mode should be used
   const customLhUrl = resolvedCustomLetterhead || hospital?.customLetterheadUrl;
@@ -893,15 +906,15 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
             paddingLeft: `${customLeftMargin}mm`,
             paddingRight: `${customRightMargin}mm`
           }}>
-            <div style={{ flex: '1 0 auto', width: '100%', boxSizing: 'border-box' }}>
-              <div style={{ textAlign: 'center', marginBottom: '8px', borderBottom: '2.5px solid #000', paddingBottom: '4px' }}>
+            <div style={{ flex: '1 0 auto', width: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ textAlign: 'center', marginBottom: '8px', borderBottom: '2.5px solid #000', paddingBottom: '4px', visibility: isReusingPaper ? 'hidden' : 'visible' }}>
                 <h2 style={{ fontSize: '15px', fontWeight: '900', margin: '0', textTransform: 'uppercase', letterSpacing: '1.5px', color: '#000' }}>
                   PRESCRIPTION
                 </h2>
               </div>
 
               {/* TWO-COLUMN PRESCRIPTION ARCHITECTURE: Patient Info, Clinical Details & Vitals */}
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', width: '100%', marginBottom: '8px', boxSizing: 'border-box' }}>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', width: '100%', marginBottom: '8px', boxSizing: 'border-box', visibility: isReusingPaper ? 'hidden' : 'visible' }}>
                 {/* LEFT COLUMN: Clinical Content & Medicines */}
                 <div style={{ flex: '1 1 0%', minWidth: 0, boxSizing: 'border-box' }}>
                   {/* Patient Info */}
@@ -1092,7 +1105,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
             paddingLeft: `${customLeftMargin}mm`,
             paddingRight: `${customRightMargin}mm`
           }}>
-            <div style={{ flex: '1 0 auto', width: '100%', boxSizing: 'border-box' }}>
+            <div style={{ flex: '1 0 auto', width: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
               {/* Continuation Banner */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #000', paddingBottom: '4px', marginBottom: '10px', fontSize: '10.5px' }}>
                 <span style={{ fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>
@@ -1235,7 +1248,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
     <div ref={ref} className={`a4-receipt ${isCustomLetterhead ? 'custom-letterhead-page' : ''}`} style={{
       width: '100%',
       maxWidth: '210mm',
-      minHeight: isCustomLetterhead ? '297mm' : (isPatientSlipOnly ? '280mm' : 'auto'),
+      minHeight: isCustomLetterhead ? '297mm' : (isPatientSlipOnly || isPrescriptionFormat ? '280mm' : 'auto'),
       padding: isCustomLetterhead ? 0 : (showUploadedLetterhead ? '0 8mm 8mm 8mm' : '6mm 8mm 8mm 8mm'),
       margin: '0 auto',
       marginTop: '0',
@@ -1254,7 +1267,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
         position: 'relative',
         zIndex: 1,
         width: '100%',
-        minHeight: isCustomLetterhead ? '297mm' : (isPatientSlipOnly ? '280mm' : 'auto'),
+        minHeight: isCustomLetterhead ? '297mm' : (isPatientSlipOnly || isPrescriptionFormat ? '280mm' : 'auto'),
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
@@ -1265,7 +1278,9 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
         paddingRight: isCustomLetterhead ? `${customRightMargin}mm` : 0
       }}>
         <div style={{ flex: '1 0 auto', width: '100%', boxSizing: 'border-box' }}>
-          {!isCustomLetterhead && (showUploadedLetterhead ? (
+          {!isCustomLetterhead && (
+          <div style={{ visibility: isReusingPaper ? 'hidden' : 'visible' }}>
+            {showUploadedLetterhead ? (
             <div style={{
               width: 'calc(100% + 16mm)',
               marginLeft: '-8mm',
@@ -1362,10 +1377,12 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
                 )}
               </div>
             </div>
-          ))}
+          )}
+          </div>
+        )}
 
           {/* Document Title Header */}
-          <div style={{ textAlign: 'center', marginBottom: '8px', borderBottom: '2.5px solid #000', paddingBottom: '4px' }}>
+          <div style={{ textAlign: 'center', marginBottom: '8px', borderBottom: '2.5px solid #000', paddingBottom: '4px', visibility: isReusingPaper ? 'hidden' : 'visible' }}>
             <h2 style={{ fontSize: '15px', fontWeight: '900', margin: '0', textTransform: 'uppercase', letterSpacing: '1.5px', color: '#000' }}>
               {documentTitle}
             </h2>
@@ -1375,7 +1392,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
           {isPrescriptionFormat ? (
             <>
               {/* TWO-COLUMN PRESCRIPTION ARCHITECTURE: Patient Info, Clinical Details & Vitals */}
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', width: '100%', marginBottom: '8px', boxSizing: 'border-box' }}>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', width: '100%', marginBottom: '8px', boxSizing: 'border-box', visibility: isReusingPaper ? 'hidden' : 'visible' }}>
                 {/* LEFT COLUMN: Clinical Content & Medicines */}
                 <div style={{ flex: '1 1 0%', minWidth: 0, boxSizing: 'border-box' }}>
                   {/* 1. Patient Information & Appointment Details */}
@@ -1434,8 +1451,18 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
                       )}
                     </div>
                   </div>
+                </div>
 
-                  {/* 2. Diagnosis & Remarks */}
+                {/* RIGHT COLUMN: Vitals Section Aligned with Clinical Content */}
+                {printOptions.printVitals !== false && (
+                  <div style={{ width: '190px', flexShrink: 0, boxSizing: 'border-box' }}>
+                    {renderVitalsTable(true)}
+                  </div>
+                )}
+              </div>
+
+              {/* FULL-WIDTH CLINICAL CONTENT & MEDICINES SECTION */}
+              {/* 2. Diagnosis & Remarks */}
                   {prescription?.diagnosisRemark && printOptions.printDiagnosisRemarks !== false && (
                     <div style={{ marginBottom: '6px' }}>
                       <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', fontSize: '10.5px' }}>{t(activeLang, 'diagnosis')}:</p>
@@ -1576,21 +1603,12 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
                     </div>
                   )}
 
-                  {/* Doctor Signature */}
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px', paddingRight: '8px' }}>
-                    <div style={{ textAlign: 'center', minWidth: '160px', borderTop: '1px solid #000', paddingTop: '3px' }}>
-                      <strong style={{ fontSize: '10px' }}>Doctor's Signature</strong>
-                      <p style={{ margin: '1px 0 0 0', fontSize: '9px', color: '#333' }}>{doctorNameStr}</p>
-                    </div>
-                  </div>
+              {/* Doctor's Signature - Anchored on Right Bottom */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'auto', marginBottom: '14px', paddingRight: '12px', boxSizing: 'border-box' }}>
+                <div style={{ textAlign: 'center', minWidth: '170px', borderTop: '1.5px solid #000', paddingTop: '4px' }}>
+                  <strong style={{ fontSize: '11px', color: '#000' }}>Doctor's Signature</strong>
+                  <p style={{ margin: '2px 0 0 0', fontSize: '10px', fontWeight: 'bold', color: '#111827' }}>{doctorNameStr}</p>
                 </div>
-
-                {/* RIGHT COLUMN: Vitals Section Aligned with Clinical Content */}
-                {printOptions.printVitals !== false && (
-                  <div style={{ width: '190px', flexShrink: 0, boxSizing: 'border-box' }}>
-                    {renderVitalsTable(true)}
-                  </div>
-                )}
               </div>
 
               {/* Keep comment for test compatibility */}
