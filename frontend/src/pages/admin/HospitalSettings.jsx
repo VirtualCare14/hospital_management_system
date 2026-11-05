@@ -572,26 +572,20 @@ const HospitalSettings = () => {
         onclone: (clonedDoc) => sanitizeClonedDocumentForPdf ? sanitizeClonedDocumentForPdf(clonedDoc) : undefined
       });
       const imgData = canvas.toDataURL('image/png');
-      const isA5 = previewSlipMode === 'bill_receipt';
-      const pdf = isA5
-        ? new jsPDF('p', 'mm', 'a5')
+      const isHalfPage = previewSlipMode === 'bill_receipt';
+      const pdf = isHalfPage
+        ? new jsPDF({ orientation: 'landscape', unit: 'mm', format: [148.5, 210] })
         : new jsPDF('p', 'mm', 'a4');
 
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfPageHeight = pdf.internal.pageSize.getHeight();
-      let drawWidth = pdfWidth;
-      let drawHeight = (canvas.height * pdfWidth) / canvas.width;
 
-      if (isA5 && drawHeight > pdfPageHeight) {
-        const scale = (pdfPageHeight - 4) / drawHeight;
-        drawWidth = drawWidth * scale;
-        drawHeight = drawHeight * scale;
+      if (isHalfPage) {
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfPageHeight);
+      } else {
+        const drawHeight = (canvas.height * pdfWidth) / canvas.width;
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, drawHeight);
       }
-
-      const xOffset = (pdfWidth - drawWidth) / 2;
-      const yOffset = isA5 ? Math.max(2, Math.min(6, (pdfPageHeight - drawHeight) / 2)) : 0;
-
-      pdf.addImage(imgData, 'PNG', xOffset, yOffset, drawWidth, drawHeight);
       pdf.autoPrint();
       const docTitle = previewSlipMode === 'prescription' 
         ? 'Rx Prescription' 
@@ -1691,9 +1685,7 @@ const HospitalSettings = () => {
 
           {/* Modal Body: A4 Paper Preview */}
           <div className="p-4 sm:p-6 overflow-y-auto bg-slate-200/80 flex-1 flex justify-center items-start print:p-0 print:m-0 print:bg-transparent print:overflow-visible print:block">
-            <div className={`bg-white shadow-2xl rounded-none w-full ${
-              previewSlipMode === 'bill_receipt' ? 'max-w-[148mm]' : 'max-w-[210mm]'
-            } border-none overflow-hidden print:shadow-none print:border-none print:rounded-none print:w-full print:m-0 print:p-0`}>
+            <div className="bg-white shadow-2xl rounded-none w-full max-w-[210mm] border-none overflow-hidden print:shadow-none print:border-none print:rounded-none print:w-full print:max-w-[210mm] print:m-0 print:p-0">
               <PatientReceipt
                 ref={slipPreviewRef}
                 patient={samplePatient}
