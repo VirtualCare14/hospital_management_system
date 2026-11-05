@@ -875,13 +875,13 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
             position: 'relative',
             zIndex: 1,
             width: '100%',
-            minHeight: `calc(297mm - ${customHeaderHeight}mm - ${customFooterHeight}mm)`,
+            minHeight: '297mm',
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
             boxSizing: 'border-box',
             paddingTop: `${customHeaderHeight}mm`,
-            paddingBottom: `${customFooterHeight}mm`,
+            paddingBottom: '8mm',
             paddingLeft: `${customLeftMargin}mm`,
             paddingRight: `${customRightMargin}mm`
           }}>
@@ -1074,13 +1074,13 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
             position: 'relative',
             zIndex: 1,
             width: '100%',
-            minHeight: `calc(297mm - ${customHeaderHeight}mm - ${customFooterHeight}mm)`,
+            minHeight: '297mm',
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
             boxSizing: 'border-box',
             paddingTop: `${customHeaderHeight}mm`,
-            paddingBottom: `${customFooterHeight}mm`,
+            paddingBottom: '8mm',
             paddingLeft: `${customLeftMargin}mm`,
             paddingRight: `${customRightMargin}mm`
           }}>
@@ -1246,13 +1246,13 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
         position: 'relative',
         zIndex: 1,
         width: '100%',
-        minHeight: isCustomLetterhead ? `calc(297mm - ${customHeaderHeight}mm - ${customFooterHeight}mm)` : (isPatientSlipOnly ? '265mm' : 'auto'),
+        minHeight: isCustomLetterhead ? '297mm' : (isPatientSlipOnly ? '280mm' : 'auto'),
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
         boxSizing: 'border-box',
         paddingTop: isCustomLetterhead ? `${customHeaderHeight}mm` : 0,
-        paddingBottom: isCustomLetterhead ? `${customFooterHeight}mm` : 0,
+        paddingBottom: isCustomLetterhead ? '8mm' : 0,
         paddingLeft: isCustomLetterhead ? `${customLeftMargin}mm` : 0,
         paddingRight: isCustomLetterhead ? `${customRightMargin}mm` : 0
       }}>
