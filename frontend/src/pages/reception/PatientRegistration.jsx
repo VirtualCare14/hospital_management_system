@@ -1009,7 +1009,7 @@ const PatientRegistration = () => {
         const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
         pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
         pdf.autoPrint();
-        openPdfPrintWindow(pdf, 'Patient Registration Slip');
+        openPdfPrintWindow(pdf, 'Prescription Slip');
       } catch (error) {
         console.error('Print receipt error:', error);
         toast.error('Error generating receipt. Please try again.');
@@ -2062,7 +2062,7 @@ const PatientRegistration = () => {
                 className="btn-secondary cursor-pointer flex items-center gap-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 border-indigo-200 hover:bg-indigo-100 px-3.5 py-2 rounded-lg"
                 onClick={() => handlePrint('patient_slip')}
               >
-                <Printer className="h-4 w-4 text-indigo-600" /> Print Patient Slip
+                <Printer className="h-4 w-4 text-indigo-600" /> Print Prescription
               </button>
               <button
                 type="button"

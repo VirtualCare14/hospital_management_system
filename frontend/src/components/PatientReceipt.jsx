@@ -170,12 +170,9 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
     documentTitle = 'REFUND VOUCHER';
   } else if (isBillReceiptOnly) {
     documentTitle = 'PAYMENT RECEIPT';
-  } else if (isPatientSlipOnly) {
-    documentTitle = 'PATIENT SLIP';
-  } else if (isPrescriptionFormat) {
-    documentTitle = 'PRESCRIPTION';
   } else {
-    documentTitle = 'PATIENT SLIP';
+    // Common paper for patient registration slip and doctor prescription
+    documentTitle = 'PRESCRIPTION';
   }
 
   // Check if pre-printed / custom letterhead mode should be used
@@ -232,9 +229,8 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
     documentTitle = 'REFUND VOUCHER';
   } else if (isBillReceiptOnly) {
     documentTitle = 'PAYMENT RECEIPT';
-  } else if (isPatientSlipOnly) {
-    documentTitle = 'PATIENT SLIP';
   } else {
+    // Common paper for patient registration slip and doctor prescription
     documentTitle = 'PRESCRIPTION';
   }
 

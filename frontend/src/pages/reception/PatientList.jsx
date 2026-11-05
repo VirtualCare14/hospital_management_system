@@ -1758,7 +1758,7 @@ const PatientList = () => {
                   className="btn-secondary cursor-pointer flex items-center gap-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 border-indigo-200 hover:bg-indigo-100 px-3 py-1.5"
                   onClick={() => handlePrintDocument('patient_slip')}
                 >
-                  <Printer className="h-3.5 w-3.5 text-indigo-600" /> Print Patient Slip
+                  <Printer className="h-3.5 w-3.5 text-indigo-600" /> Print Prescription
                 </button>
                 <button
                   type="button"

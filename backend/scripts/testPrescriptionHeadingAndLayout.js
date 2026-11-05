@@ -29,12 +29,11 @@ async function main() {
   const settingsCode = fs.readFileSync(settingsPath, 'utf8');
 
   // Test 1: Document title logic produces correct heading per mode
-  runTest('Heading: Explicit PRESCRIPTION heading for prescription mode and PATIENT SLIP for patient slip mode', () => {
+  runTest('Heading: Unified PRESCRIPTION heading for both doctor prescription and patient registration slip', () => {
     assert(receiptCode.includes("let documentTitle = 'PRESCRIPTION';"), 'Missing default PRESCRIPTION title');
     assert(receiptCode.includes("documentTitle = 'REFUND VOUCHER';"), 'Missing REFUND VOUCHER title');
     assert(receiptCode.includes("documentTitle = 'PAYMENT RECEIPT';"), 'Missing PAYMENT RECEIPT title');
-    assert(receiptCode.includes("documentTitle = 'PATIENT SLIP';"), 'Missing PATIENT SLIP title');
-    assert(receiptCode.includes("else if (isPatientSlipOnly)"), 'Missing patient slip condition');
+    assert(!receiptCode.includes("documentTitle = 'PATIENT SLIP';"), 'PATIENT SLIP title must not be used (must use PRESCRIPTION)');
     assert(receiptCode.includes('{documentTitle}'), 'Document title must be rendered in header');
   });
 
