@@ -2081,66 +2081,42 @@ const PatientRegistration = () => {
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gray-50 px-4 py-2.5 border border-gray-200 rounded-lg">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Document Mode:</span>
-              <div className="flex gap-1.5 bg-gray-200/80 p-0.5 rounded-md">
-                <button
-                  type="button"
-                  onClick={() => setPrintMode('patient_slip')}
-                  className={`text-xs font-bold px-3 py-1 rounded transition-all cursor-pointer ${
-                    printMode === 'patient_slip' ? 'bg-white text-indigo-700 shadow-xs' : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  Patient Slip Preview
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPrintMode('bill_receipt')}
-                  className={`text-xs font-bold px-3 py-1 rounded transition-all cursor-pointer ${
-                    printMode === 'bill_receipt' ? 'bg-white text-indigo-700 shadow-xs' : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  Bill Receipt Preview
-                </button>
-              </div>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gray-50/80 px-3.5 py-2 border border-gray-200 rounded-xl">
+            {/* Clean Document Switcher */}
+            <div className="flex items-center gap-1.5 bg-gray-200/70 p-0.5 rounded-lg">
+              <button
+                type="button"
+                onClick={() => setPrintMode('patient_slip')}
+                className={`text-xs font-bold px-3 py-1.5 rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${
+                  printMode === 'patient_slip' ? 'bg-white text-indigo-700 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                📄 Prescription Preview
+              </button>
+              <button
+                type="button"
+                onClick={() => setPrintMode('bill_receipt')}
+                className={`text-xs font-bold px-3 py-1.5 rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${
+                  printMode === 'bill_receipt' ? 'bg-white text-indigo-700 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                🧾 Bill Receipt Preview
+              </button>
             </div>
 
+            {/* Simple Uncluttered Letterhead Selector */}
             {printMode === 'patient_slip' && (
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Top Letterhead:</span>
-                <div className="flex gap-1.5 bg-gray-200/80 p-0.5 rounded-md">
-                  <button
-                    type="button"
-                    onClick={() => setLetterheadOption('system')}
-                    className={`text-xs font-bold px-2.5 py-1 rounded transition-all cursor-pointer flex items-center gap-1.5 ${
-                      letterheadOption === 'system' ? 'bg-white text-orange-600 shadow-xs' : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                    title="Clean system-generated header with hospital name, logo, and contact info"
-                  >
-                    ⚙️ System Generated
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setLetterheadOption('image')}
-                    className={`text-xs font-bold px-2.5 py-1 rounded transition-all cursor-pointer flex items-center gap-1.5 ${
-                      letterheadOption === 'image' ? 'bg-white text-orange-600 shadow-xs' : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                    title="Custom uploaded rectangular letterhead photo"
-                  >
-                    🖼️ Photo Letterhead
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setLetterheadOption('custom')}
-                    className={`text-xs font-bold px-2.5 py-1 rounded transition-all cursor-pointer flex items-center gap-1.5 ${
-                      letterheadOption === 'custom' ? 'bg-white text-orange-600 shadow-xs' : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                    title="Leaves blank top margin for physical pre-printed letterhead paper"
-                  >
-                    📋 Pre-Printed Paper
-                  </button>
-                </div>
+                <label className="text-xs font-medium text-gray-500">Letterhead:</label>
+                <select
+                  value={letterheadOption}
+                  onChange={(e) => setLetterheadOption(e.target.value)}
+                  className="text-xs font-bold bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-gray-800 shadow-2xs focus:ring-1 focus:ring-indigo-500 focus:outline-none cursor-pointer"
+                >
+                  <option value="custom">📋 Pre-Printed Paper</option>
+                  <option value="system">⚙️ System Generated</option>
+                  <option value="image">🖼️ Photo Letterhead</option>
+                </select>
               </div>
             )}
           </div>
