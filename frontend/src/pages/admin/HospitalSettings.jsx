@@ -834,25 +834,12 @@ const HospitalSettings = () => {
 
               {/* DETAILS PANEL BASED ON SELECTED MODE */}
               
-              {/* Option 1: System Generated explanation */}
-              {(watch('letterheadType') === 'system' || (!watch('letterheadType') && watch('useSystemLetterhead'))) && (
-                <div className="flex items-start gap-2.5 p-3.5 bg-blue-50/80 border border-blue-200 rounded-xl text-blue-900 text-xs">
-                  <Info className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-bold">System Generated Mode Active:</span> Prescriptions, Patient Slips, and Receipts will print with the software's clean structured header including your hospital name, logo, address, and phone numbers.
-                  </div>
-                </div>
-              )}
+              
 
               {/* Option 2: Photo Letterhead upload and height */}
               {watch('letterheadType') === 'photo' && (
                 <div className="space-y-4 animate-fadeIn">
-                  <div className="flex items-start gap-2.5 p-3.5 bg-amber-50/80 border border-amber-200 rounded-xl text-amber-900 text-xs">
-                    <Info className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-bold">Photo Banner Mode Active:</span> The uploaded rectangular letterhead banner below will appear at the top across the full width of printed prescriptions and patient slips.
-                    </div>
-                  </div>
+                  
 
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
@@ -948,12 +935,7 @@ const HospitalSettings = () => {
               {/* Option 3: Pre-Printed Letterhead Paper */}
               {watch('letterheadType') === 'custom' && (
                 <div className="space-y-4 animate-fadeIn">
-                  <div className="flex items-start gap-2.5 p-3.5 bg-emerald-50/90 border border-emerald-200 rounded-xl text-emerald-900 text-xs">
-                    <Info className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-bold">Pre-Printed Letterhead Paper Mode Active:</span> Designed for printing onto physical hospital stationery / letterhead paper. No software header or digital letterhead will be printed. The prescription heading, patient details, and vitals start printing cleanly below your configured pre-printed header height.
-                    </div>
-                  </div>
+                  
 
                   {/* Two column layout: Left configuration & controls, Right visual preview */}
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start bg-white p-4 rounded-xl border border-orange-200">
