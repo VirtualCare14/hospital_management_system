@@ -29,12 +29,11 @@ async function main() {
   const settingsCode = fs.readFileSync(settingsPath, 'utf8');
 
   // Test 1: Document title logic produces correct heading per mode
-  runTest('Heading: Explicit PRESCRIPTION heading for prescription mode and PATIENT SLIP for patient slip mode', () => {
+  runTest('Heading: Unified PRESCRIPTION heading for both doctor prescription and patient registration slip', () => {
     assert(receiptCode.includes("let documentTitle = 'PRESCRIPTION';"), 'Missing default PRESCRIPTION title');
     assert(receiptCode.includes("documentTitle = 'REFUND VOUCHER';"), 'Missing REFUND VOUCHER title');
     assert(receiptCode.includes("documentTitle = 'PAYMENT RECEIPT';"), 'Missing PAYMENT RECEIPT title');
-    assert(receiptCode.includes("documentTitle = 'PATIENT SLIP';"), 'Missing PATIENT SLIP title');
-    assert(receiptCode.includes("else if (isPatientSlipOnly)"), 'Missing patient slip condition');
+    assert(!receiptCode.includes("documentTitle = 'PATIENT SLIP';"), 'PATIENT SLIP title must not be used (must use PRESCRIPTION)');
     assert(receiptCode.includes('{documentTitle}'), 'Document title must be rendered in header');
   });
 
@@ -106,7 +105,7 @@ async function main() {
     assert(receiptCode.includes('Page 1 of 2 (Continued on next page) →'), 'Missing Page 1 continuation indicator');
     assert(receiptCode.includes('PRESCRIPTION (PAGE 2)'), 'Missing Page 2 banner');
     assert(receiptCode.includes('Page 2 of 2'), 'Missing Page 2 of 2 indicator');
-    assert(receiptCode.includes('Hospital Custom Letterhead Page 2'), 'Missing Page 2 letterhead repetition');
+    assert(receiptCode.includes('custom-letterhead-content'), 'Missing custom-letterhead-content');
   });
 
   // Test 8: Custom Letterhead millimeter margins preserved
@@ -133,6 +132,14 @@ async function main() {
     assert(settingsCode.includes("setPreviewSlipMode('patient_slip')"), 'Missing switch to patient_slip');
     assert(settingsCode.includes("setPreviewSlipMode('prescription')"), 'Missing switch to prescription');
     assert(settingsCode.includes("setPreviewSlipMode('bill_receipt')"), 'Missing switch to bill_receipt');
+  });
+
+  // Test 11: Invoice Footer Declaration/Message wired to prescription footer
+  runTest('Footer: Invoice Footer Declaration/Message sets footer text in system and photo prescriptions', () => {
+    assert(receiptCode.includes('customFooterDeclaration'), 'Missing customFooterDeclaration resolution');
+    assert(receiptCode.includes('hospital?.invoiceFooterMessage'), 'Missing hospital.invoiceFooterMessage check');
+    assert(receiptCode.includes('{footerDeclaration}'), 'Missing {footerDeclaration} in prescription footer');
+    assert(settingsCode.includes("invoiceFooterMessage: watch('invoiceFooterMessage')"), 'Missing live invoiceFooterMessage injection in settings preview');
   });
 
   console.log('\n----------------------------------------------------------------------');

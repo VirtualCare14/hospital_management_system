@@ -88,7 +88,8 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
     printLabTests: true,
     printSymptomHistory: true,
     printSymptomRemarks: true,
-    printGeneralPastHistory: true
+    printGeneralPastHistory: true,
+    reuseReceptionPaper: true
   };
 
   useEffect(() => {
@@ -170,31 +171,40 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
     documentTitle = 'REFUND VOUCHER';
   } else if (isBillReceiptOnly) {
     documentTitle = 'PAYMENT RECEIPT';
-  } else if (isPatientSlipOnly) {
-    documentTitle = 'PATIENT SLIP';
-  } else if (isPrescriptionFormat) {
-    documentTitle = 'PRESCRIPTION';
   } else {
-    documentTitle = 'PATIENT SLIP';
+    // Common paper for patient registration slip and doctor prescription
+    documentTitle = 'PRESCRIPTION';
   }
 
-  // Check if custom letterhead should be used
+  // Paper reuse architecture:
+  // When printing a doctor prescription, reuseReceptionPaper defaults to true.
+  // When reuseReceptionPaper is true, the digital header, PRESCRIPTION heading,
+  // patient details box, and vitals table are hidden (preserving exact vertical layout height)
+  // so the physical paper taken from reception can be fed into the printer without duplicate printing.
+  const isReusingPaper = Boolean(
+    isPrescriptionFormat && 
+    !isPatientSlipOnly && 
+    (printOptions?.reuseReceptionPaper === true || 
+     (printOptions?.reuseReceptionPaper !== false && (propPrintOptions ? propPrintOptions.reuseReceptionPaper !== false : true)))
+  );
+
+  // Check if pre-printed / custom letterhead mode should be used
   const customLhUrl = resolvedCustomLetterhead || hospital?.customLetterheadUrl;
   let isCustomLetterhead = false;
   if (letterheadMode === 'custom') {
-    isCustomLetterhead = Boolean(customLhUrl);
+    isCustomLetterhead = true;
   } else if (letterheadMode === 'system' || letterheadMode === 'image') {
     isCustomLetterhead = false;
   } else {
     // 'auto' mode: check hospital.letterheadType
-    isCustomLetterhead = (hospital?.letterheadType === 'custom') && Boolean(customLhUrl);
+    isCustomLetterhead = (hospital?.letterheadType === 'custom');
   }
 
-  // Margins & header/footer heights for custom letterhead (in mm)
+  // Margins & header/footer heights for pre-printed letterhead (in mm)
   const customHeaderHeight = Number(hospital?.customLetterheadHeaderHeight !== undefined ? hospital.customLetterheadHeaderHeight : 45);
-  const customFooterHeight = Number(hospital?.customLetterheadFooterHeight !== undefined ? hospital.customLetterheadFooterHeight : 30);
-  const customLeftMargin = Number(hospital?.customLetterheadLeftMargin !== undefined ? hospital.customLetterheadLeftMargin : 12);
-  const customRightMargin = Number(hospital?.customLetterheadRightMargin !== undefined ? hospital.customLetterheadRightMargin : 12);
+  const customFooterHeight = Number(hospital?.customLetterheadFooterHeight !== undefined ? hospital.customLetterheadFooterHeight : 15);
+  const customLeftMargin = Number(hospital?.customLetterheadLeftMargin !== undefined ? hospital.customLetterheadLeftMargin : 8);
+  const customRightMargin = Number(hospital?.customLetterheadRightMargin !== undefined ? hospital.customLetterheadRightMargin : 8);
 
   // Check if uploaded photo letterhead should be shown
   let showUploadedLetterhead = false;
@@ -210,6 +220,15 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
     }
   }
 
+  // Footer text resolution: System Generated and Photo Generated prescriptions use invoiceFooterMessage declaration if configured
+  const customFooterDeclaration = (hospital?.invoiceFooterMessage && String(hospital.invoiceFooterMessage).trim().length > 0)
+    ? String(hospital.invoiceFooterMessage).trim()
+    : null;
+  const defaultPrescriptionFooter = 'This is a computer-generated document. No signature required.';
+  const footerDeclaration = (!isCustomLetterhead && customFooterDeclaration)
+    ? customFooterDeclaration
+    : (customFooterDeclaration || defaultPrescriptionFooter);
+
   const grossFee = patient.opdFee !== undefined ? patient.opdFee : (patient.doctorId?.opdFees || 0);
   const netFee = patient.netOpdFee !== undefined ? patient.netOpdFee : grossFee;
   const rawDoctorName = patient.doctorName || patient.visitingDoctorName || patient.doctorId?.doctorName || patient.doctorId?.username || (typeof patient.doctorId === 'string' ? patient.doctorId : '-');
@@ -223,9 +242,8 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
     documentTitle = 'REFUND VOUCHER';
   } else if (isBillReceiptOnly) {
     documentTitle = 'PAYMENT RECEIPT';
-  } else if (isPatientSlipOnly) {
-    documentTitle = 'PATIENT SLIP';
   } else {
+    // Common paper for patient registration slip and doctor prescription
     documentTitle = 'PRESCRIPTION';
   }
 
@@ -240,8 +258,12 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
       <div ref={ref} className="a4-receipt" style={{
         width: '100%',
         maxWidth: '210mm',
-        minHeight: 'auto',
-        padding: showUploadedLetterhead ? '0 8mm 8mm 8mm' : '6mm 8mm 8mm 8mm',
+        minHeight: '148.5mm',
+        height: '148.5mm',
+        padding: showUploadedLetterhead ? '0 8mm 6mm 8mm' : '6mm 8mm 6mm 8mm',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
         margin: '0 auto',
         backgroundColor: '#ffffff',
         color: '#000000',
@@ -279,8 +301,8 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
             justifyContent: 'space-between',
             alignItems: 'center',
             borderBottom: '2.5px solid #000',
-            paddingBottom: '14px',
-            marginBottom: '14px'
+            paddingBottom: '10px',
+            marginBottom: '10px'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, paddingRight: '20px' }}>
               {resolvedLogo && (
@@ -289,12 +311,12 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
                     src={resolvedLogo} 
                     crossOrigin="anonymous" 
                     alt="Logo" 
-                    style={{ maxHeight: '75px', maxWidth: '75px', objectFit: 'contain', display: 'block' }} 
+                    style={{ maxHeight: '68px', maxWidth: '68px', objectFit: 'contain', display: 'block' }} 
                   />
                 </div>
               )}
               <div>
-                <h1 style={{ fontSize: '22px', fontWeight: '800', margin: '0', textTransform: 'uppercase', letterSpacing: '0.8px', color: '#111827' }}>
+                <h1 style={{ fontSize: '20px', fontWeight: '800', margin: '0', textTransform: 'uppercase', letterSpacing: '0.8px', color: '#111827' }}>
                   {hospital?.hospitalName || 'Hospital Name'}
                 </h1>
                 {hospital?.hospitalHeading && (
@@ -465,7 +487,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
           paddingTop: '6px',
           pageBreakInside: 'avoid'
         }}>
-          <p style={{ margin: '0' }}>This is an official hospital refund slip. Please retain this receipt for records.</p>
+          <p style={{ margin: '0', whiteSpace: 'pre-line' }}>{customFooterDeclaration || 'This is an official hospital refund slip. Please retain this receipt for records.'}</p>
           <p style={{ margin: '2px 0 0 0' }}>Printed on: {documentDateTime}</p>
         </div>
       </div>
@@ -477,8 +499,12 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
       <div ref={ref} className="a4-receipt" style={{
         width: '100%',
         maxWidth: '210mm',
-        minHeight: 'auto',
-        padding: showUploadedLetterhead ? '0 8mm 8mm 8mm' : '6mm 8mm 8mm 8mm',
+        minHeight: '148.5mm',
+        height: '148.5mm',
+        padding: showUploadedLetterhead ? '0 8mm 6mm 8mm' : '6mm 8mm 6mm 8mm',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
         margin: '0 auto',
         backgroundColor: '#ffffff',
         color: '#000000',
@@ -526,12 +552,12 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
                     src={resolvedLogo} 
                     crossOrigin="anonymous" 
                     alt="Logo" 
-                    style={{ maxHeight: '75px', maxWidth: '75px', objectFit: 'contain', display: 'block' }} 
+                    style={{ maxHeight: '68px', maxWidth: '68px', objectFit: 'contain', display: 'block' }} 
                   />
                 </div>
               )}
               <div>
-                <h1 style={{ fontSize: '22px', fontWeight: '800', margin: '0', textTransform: 'uppercase', letterSpacing: '0.8px', color: '#111827' }}>
+                <h1 style={{ fontSize: '20px', fontWeight: '800', margin: '0', textTransform: 'uppercase', letterSpacing: '0.8px', color: '#111827' }}>
                   {hospital?.hospitalName || 'Hospital Name'}
                 </h1>
                 {hospital?.hospitalHeading && (
@@ -670,15 +696,15 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
 
         <div style={{ 
           position: 'relative',
-          marginTop: '20px',
+          marginTop: 'auto',
           textAlign: 'center',
           fontSize: '9px',
           color: '#666',
           borderTop: '1px solid #ccc',
-          paddingTop: '8px',
+          paddingTop: '6px',
           pageBreakInside: 'avoid'
         }}>
-          <p style={{ margin: '0' }}>This is a computer-generated receipt. Thank you.</p>
+          <p style={{ margin: '0', whiteSpace: 'pre-line' }}>{customFooterDeclaration || 'This is a computer-generated receipt. Thank you.'}</p>
           <p style={{ margin: '2px 0 0 0' }}>Printed on: {documentDateTime}</p>
         </div>
       </div>
@@ -863,49 +889,32 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
           pageBreakAfter: 'always',
           breakAfter: 'page'
         }}>
-          {/* Custom Letterhead Background - Page 1 */}
-          <div className="custom-letterhead-bg" style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            zIndex: 0,
-            pointerEvents: 'none',
-            overflow: 'hidden'
-          }}>
-            <img
-              src={customLhUrl}
-              crossOrigin="anonymous"
-              alt="Hospital Custom Letterhead Page 1"
-              style={{ width: '100%', height: '100%', objectFit: 'fill', display: 'block' }}
-            />
-          </div>
+          {/* Pre-printed stationery paper: No digital letterhead background */}
 
           {/* Writable Content Area - Page 1 */}
           <div className="custom-letterhead-content" style={{
             position: 'relative',
             zIndex: 1,
             width: '100%',
-            minHeight: `calc(297mm - ${customHeaderHeight}mm - ${customFooterHeight}mm)`,
+            minHeight: '297mm',
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
             boxSizing: 'border-box',
             paddingTop: `${customHeaderHeight}mm`,
-            paddingBottom: `${customFooterHeight}mm`,
+            paddingBottom: '8mm',
             paddingLeft: `${customLeftMargin}mm`,
             paddingRight: `${customRightMargin}mm`
           }}>
-            <div style={{ flex: '1 0 auto', width: '100%', boxSizing: 'border-box' }}>
-              <div style={{ textAlign: 'center', marginBottom: '8px', borderBottom: '2.5px solid #000', paddingBottom: '4px' }}>
+            <div style={{ flex: '1 0 auto', width: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ textAlign: 'center', marginBottom: '8px', borderBottom: '2.5px solid #000', paddingBottom: '4px', visibility: isReusingPaper ? 'hidden' : 'visible' }}>
                 <h2 style={{ fontSize: '15px', fontWeight: '900', margin: '0', textTransform: 'uppercase', letterSpacing: '1.5px', color: '#000' }}>
                   PRESCRIPTION
                 </h2>
               </div>
 
               {/* TWO-COLUMN PRESCRIPTION ARCHITECTURE: Patient Info, Clinical Details & Vitals */}
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', width: '100%', marginBottom: '8px', boxSizing: 'border-box' }}>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', width: '100%', marginBottom: '8px', boxSizing: 'border-box', visibility: isReusingPaper ? 'hidden' : 'visible' }}>
                 {/* LEFT COLUMN: Clinical Content & Medicines */}
                 <div style={{ flex: '1 1 0%', minWidth: 0, boxSizing: 'border-box' }}>
                   {/* Patient Info */}
@@ -1079,41 +1088,24 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
           position: 'relative',
           boxSizing: 'border-box'
         }}>
-          {/* Custom Letterhead Background - Page 2 */}
-          <div className="custom-letterhead-bg" style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            zIndex: 0,
-            pointerEvents: 'none',
-            overflow: 'hidden'
-          }}>
-            <img
-              src={customLhUrl}
-              crossOrigin="anonymous"
-              alt="Hospital Custom Letterhead Page 2"
-              style={{ width: '100%', height: '100%', objectFit: 'fill', display: 'block' }}
-            />
-          </div>
+          {/* Pre-printed stationery paper: No digital letterhead background */}
 
           {/* Writable Content Area - Page 2 */}
           <div className="custom-letterhead-content" style={{
             position: 'relative',
             zIndex: 1,
             width: '100%',
-            minHeight: `calc(297mm - ${customHeaderHeight}mm - ${customFooterHeight}mm)`,
+            minHeight: '297mm',
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
             boxSizing: 'border-box',
             paddingTop: `${customHeaderHeight}mm`,
-            paddingBottom: `${customFooterHeight}mm`,
+            paddingBottom: '8mm',
             paddingLeft: `${customLeftMargin}mm`,
             paddingRight: `${customRightMargin}mm`
           }}>
-            <div style={{ flex: '1 0 auto', width: '100%', boxSizing: 'border-box' }}>
+            <div style={{ flex: '1 0 auto', width: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
               {/* Continuation Banner */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #000', paddingBottom: '4px', marginBottom: '10px', fontSize: '10.5px' }}>
                 <span style={{ fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>
@@ -1242,7 +1234,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
               width: '100%',
               boxSizing: 'border-box'
             }}>
-              <p style={{ margin: '0' }}>This is a computer-generated document. No signature required.</p>
+              <p style={{ margin: '0', whiteSpace: 'pre-line' }}>{footerDeclaration}</p>
               <p style={{ margin: '2px 0 0 0' }}>Generated on: {documentDateTime} &nbsp;|&nbsp; Page 2 of 2</p>
             </div>
           </div>
@@ -1256,7 +1248,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
     <div ref={ref} className={`a4-receipt ${isCustomLetterhead ? 'custom-letterhead-page' : ''}`} style={{
       width: '100%',
       maxWidth: '210mm',
-      minHeight: isCustomLetterhead ? '297mm' : (isPatientSlipOnly ? '280mm' : 'auto'),
+      minHeight: isCustomLetterhead ? '297mm' : (isPatientSlipOnly || isPrescriptionFormat ? '280mm' : 'auto'),
       padding: isCustomLetterhead ? 0 : (showUploadedLetterhead ? '0 8mm 8mm 8mm' : '6mm 8mm 8mm 8mm'),
       margin: '0 auto',
       marginTop: '0',
@@ -1268,49 +1260,27 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
       position: 'relative',
       boxSizing: 'border-box'
     }}>
-      {/* Custom Full-Page Hospital Letterhead Background */}
-      {isCustomLetterhead && (
-        <div className="custom-letterhead-bg" style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          zIndex: 0,
-          pointerEvents: 'none',
-          overflow: 'hidden'
-        }}>
-          <img
-            src={customLhUrl}
-            crossOrigin="anonymous"
-            alt="Hospital Custom Letterhead"
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'fill',
-              display: 'block'
-            }}
-          />
-        </div>
-      )}
+      {/* Pre-printed stationery paper: No digital letterhead background */}
 
       {/* Writable Content Area */}
       <div className="custom-letterhead-content" style={{
         position: 'relative',
         zIndex: 1,
         width: '100%',
-        minHeight: isCustomLetterhead ? `calc(297mm - ${customHeaderHeight}mm - ${customFooterHeight}mm)` : (isPatientSlipOnly ? '265mm' : 'auto'),
+        minHeight: isCustomLetterhead ? '297mm' : (isPatientSlipOnly || isPrescriptionFormat ? '280mm' : 'auto'),
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
         boxSizing: 'border-box',
         paddingTop: isCustomLetterhead ? `${customHeaderHeight}mm` : 0,
-        paddingBottom: isCustomLetterhead ? `${customFooterHeight}mm` : 0,
+        paddingBottom: isCustomLetterhead ? '8mm' : 0,
         paddingLeft: isCustomLetterhead ? `${customLeftMargin}mm` : 0,
         paddingRight: isCustomLetterhead ? `${customRightMargin}mm` : 0
       }}>
         <div style={{ flex: '1 0 auto', width: '100%', boxSizing: 'border-box' }}>
-          {!isCustomLetterhead && (showUploadedLetterhead ? (
+          {!isCustomLetterhead && (
+          <div style={{ visibility: isReusingPaper ? 'hidden' : 'visible' }}>
+            {showUploadedLetterhead ? (
             <div style={{
               width: 'calc(100% + 16mm)',
               marginLeft: '-8mm',
@@ -1407,10 +1377,12 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
                 )}
               </div>
             </div>
-          ))}
+          )}
+          </div>
+        )}
 
           {/* Document Title Header */}
-          <div style={{ textAlign: 'center', marginBottom: '8px', borderBottom: '2.5px solid #000', paddingBottom: '4px' }}>
+          <div style={{ textAlign: 'center', marginBottom: '8px', borderBottom: '2.5px solid #000', paddingBottom: '4px', visibility: isReusingPaper ? 'hidden' : 'visible' }}>
             <h2 style={{ fontSize: '15px', fontWeight: '900', margin: '0', textTransform: 'uppercase', letterSpacing: '1.5px', color: '#000' }}>
               {documentTitle}
             </h2>
@@ -1420,7 +1392,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
           {isPrescriptionFormat ? (
             <>
               {/* TWO-COLUMN PRESCRIPTION ARCHITECTURE: Patient Info, Clinical Details & Vitals */}
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', width: '100%', marginBottom: '8px', boxSizing: 'border-box' }}>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', width: '100%', marginBottom: '8px', boxSizing: 'border-box', visibility: isReusingPaper ? 'hidden' : 'visible' }}>
                 {/* LEFT COLUMN: Clinical Content & Medicines */}
                 <div style={{ flex: '1 1 0%', minWidth: 0, boxSizing: 'border-box' }}>
                   {/* 1. Patient Information & Appointment Details */}
@@ -1479,8 +1451,18 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
                       )}
                     </div>
                   </div>
+                </div>
 
-                  {/* 2. Diagnosis & Remarks */}
+                {/* RIGHT COLUMN: Vitals Section Aligned with Clinical Content */}
+                {printOptions.printVitals !== false && (
+                  <div style={{ width: '190px', flexShrink: 0, boxSizing: 'border-box' }}>
+                    {renderVitalsTable(true)}
+                  </div>
+                )}
+              </div>
+
+              {/* FULL-WIDTH CLINICAL CONTENT & MEDICINES SECTION */}
+              {/* 2. Diagnosis & Remarks */}
                   {prescription?.diagnosisRemark && printOptions.printDiagnosisRemarks !== false && (
                     <div style={{ marginBottom: '6px' }}>
                       <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', fontSize: '10.5px' }}>{t(activeLang, 'diagnosis')}:</p>
@@ -1621,21 +1603,12 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
                     </div>
                   )}
 
-                  {/* Doctor Signature */}
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px', paddingRight: '8px' }}>
-                    <div style={{ textAlign: 'center', minWidth: '160px', borderTop: '1px solid #000', paddingTop: '3px' }}>
-                      <strong style={{ fontSize: '10px' }}>Doctor's Signature</strong>
-                      <p style={{ margin: '1px 0 0 0', fontSize: '9px', color: '#333' }}>{doctorNameStr}</p>
-                    </div>
-                  </div>
+              {/* Doctor's Signature - Anchored on Right Bottom */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'auto', marginBottom: '14px', paddingRight: '12px', boxSizing: 'border-box' }}>
+                <div style={{ textAlign: 'center', minWidth: '170px', borderTop: '1.5px solid #000', paddingTop: '4px' }}>
+                  <strong style={{ fontSize: '11px', color: '#000' }}>Doctor's Signature</strong>
+                  <p style={{ margin: '2px 0 0 0', fontSize: '10px', fontWeight: 'bold', color: '#111827' }}>{doctorNameStr}</p>
                 </div>
-
-                {/* RIGHT COLUMN: Vitals Section Aligned with Clinical Content */}
-                {printOptions.printVitals !== false && (
-                  <div style={{ width: '190px', flexShrink: 0, boxSizing: 'border-box' }}>
-                    {renderVitalsTable(true)}
-                  </div>
-                )}
               </div>
 
               {/* Keep comment for test compatibility */}
@@ -1807,7 +1780,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
           width: '100%',
           boxSizing: 'border-box'
         }}>
-          <p style={{ margin: '0' }}>This is a computer-generated document. No signature required.</p>
+          <p style={{ margin: '0', whiteSpace: 'pre-line' }}>{footerDeclaration}</p>
           <p style={{ margin: '2px 0 0 0' }}>Generated on: {documentDateTime}</p>
         </div>
       </div>

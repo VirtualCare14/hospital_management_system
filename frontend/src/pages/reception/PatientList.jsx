@@ -71,7 +71,9 @@ const PatientList = () => {
         if (data?.exists && data?.data) {
           setHospitalSettings(data.data);
           setReceptionSeePatientDue(Boolean(data.data.receptionSeePatientDue));
-          if (data.data.useSystemLetterhead === false && data.data.letterheadImageUrl) {
+          if (data.data.letterheadType === 'custom') {
+            setLetterheadOption('custom');
+          } else if (data.data.letterheadType === 'photo' || (data.data.useSystemLetterhead === false && data.data.letterheadImageUrl)) {
             setLetterheadOption('image');
           } else {
             setLetterheadOption('system');
@@ -577,12 +579,23 @@ const PatientList = () => {
             scale: 2, useCORS: true, backgroundColor: '#ffffff', imageTimeout: 20000
           });
           const imgData = canvas.toDataURL('image/png');
-          const pdf = new jsPDF('p', 'mm', 'a4');
+          const isHalfPage = modeToPrint === 'bill_receipt' || modeToPrint === 'refund_slip';
+          const pdf = isHalfPage
+            ? new jsPDF({ orientation: 'landscape', unit: 'mm', format: [148.5, 210] })
+            : new jsPDF('p', 'mm', 'a4');
+
           const pdfWidth = pdf.internal.pageSize.getWidth();
-          const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+          const pdfPageHeight = pdf.internal.pageSize.getHeight();
+
+          if (isHalfPage) {
+            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfPageHeight);
+          } else {
+            const drawHeight = (canvas.height * pdfWidth) / canvas.width;
+            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, drawHeight);
+          }
           pdf.autoPrint();
-          openPdfPrintWindow(pdf, 'Patient Receipt');
+          const docTitle = modeToPrint === 'bill_receipt' ? 'Payment Receipt' : (modeToPrint === 'refund_slip' ? 'Refund Voucher' : 'Prescription Slip');
+          openPdfPrintWindow(pdf, docTitle);
         } catch (error) {
           toast.error('Error printing document. Please try again.');
         }
@@ -1756,7 +1769,7 @@ const PatientList = () => {
                   className="btn-secondary cursor-pointer flex items-center gap-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 border-indigo-200 hover:bg-indigo-100 px-3 py-1.5"
                   onClick={() => handlePrintDocument('patient_slip')}
                 >
-                  <Printer className="h-3.5 w-3.5 text-indigo-600" /> Print Patient Slip
+                  <Printer className="h-3.5 w-3.5 text-indigo-600" /> Print Prescription
                 </button>
                 <button
                   type="button"
@@ -1776,67 +1789,51 @@ const PatientList = () => {
             </div>
 
             {/* Document Preview Mode & Top Letterhead Controls */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gray-50 px-4 py-2 border-b border-gray-200 no-print print:hidden">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Document Mode:</span>
-                <div className="flex gap-1.5 bg-gray-200/80 p-0.5 rounded-md">
-                  {(patientDetails.isRefunded || patientDetails.paymentStatus === 'Refunded' || printMode === 'refund_slip') && (
-                    <button
-                      type="button"
-                      onClick={() => setPrintMode('refund_slip')}
-                      className={`text-xs font-bold px-3 py-1 rounded transition-all cursor-pointer ${
-                        printMode === 'refund_slip' ? 'bg-red-600 text-white shadow-xs font-extrabold' : 'text-gray-600 hover:text-gray-900'
-                      }`}
-                    >
-                      Refund Slip Preview
-                    </button>
-                  )}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gray-50/80 px-3.5 py-2 border-b border-gray-200 no-print print:hidden">
+              <div className="flex items-center gap-1.5 bg-gray-200/70 p-0.5 rounded-lg">
+                {(patientDetails.isRefunded || patientDetails.paymentStatus === 'Refunded' || printMode === 'refund_slip') && (
                   <button
                     type="button"
-                    onClick={() => setPrintMode('patient_slip')}
-                    className={`text-xs font-bold px-3 py-1 rounded transition-all cursor-pointer ${
-                      printMode === 'patient_slip' ? 'bg-white text-indigo-700 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+                    onClick={() => setPrintMode('refund_slip')}
+                    className={`text-xs font-bold px-3 py-1.5 rounded-md transition-all cursor-pointer ${
+                      printMode === 'refund_slip' ? 'bg-red-600 text-white shadow-xs font-extrabold' : 'text-gray-600 hover:text-gray-900'
                     }`}
                   >
-                    Patient Slip Preview
+                    Refund Voucher
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setPrintMode('bill_receipt')}
-                    className={`text-xs font-bold px-3 py-1 rounded transition-all cursor-pointer ${
-                      printMode === 'bill_receipt' ? 'bg-white text-indigo-700 shadow-xs' : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                  >
-                    Bill Receipt Preview
-                  </button>
-                </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setPrintMode('patient_slip')}
+                  className={`text-xs font-bold px-3 py-1.5 rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${
+                    printMode === 'patient_slip' ? 'bg-white text-indigo-700 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  📄 Prescription Preview
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPrintMode('bill_receipt')}
+                  className={`text-xs font-bold px-3 py-1.5 rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${
+                    printMode === 'bill_receipt' ? 'bg-white text-indigo-700 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  🧾 Bill Receipt Preview
+                </button>
               </div>
 
               {(printMode === 'patient_slip' || printMode === 'refund_slip') && (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Top Letterhead:</span>
-                  <div className="flex gap-1.5 bg-gray-200/80 p-0.5 rounded-md">
-                    <button
-                      type="button"
-                      onClick={() => setLetterheadOption('system')}
-                      className={`text-xs font-bold px-2.5 py-1 rounded transition-all cursor-pointer flex items-center gap-1.5 ${
-                        letterheadOption === 'system' ? 'bg-white text-orange-600 shadow-xs' : 'text-gray-600 hover:text-gray-900'
-                      }`}
-                      title="Clean system-generated header with hospital name, logo, and contact info"
-                    >
-                      ⚙️ System Generated
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setLetterheadOption('image')}
-                      className={`text-xs font-bold px-2.5 py-1 rounded transition-all cursor-pointer flex items-center gap-1.5 ${
-                        letterheadOption === 'image' ? 'bg-white text-orange-600 shadow-xs' : 'text-gray-600 hover:text-gray-900'
-                      }`}
-                      title="Custom uploaded rectangular letterhead photo"
-                    >
-                      🖼️ Photo Letterhead
-                    </button>
-                  </div>
+                  <label className="text-xs font-medium text-gray-500">Letterhead:</label>
+                  <select
+                    value={letterheadOption}
+                    onChange={(e) => setLetterheadOption(e.target.value)}
+                    className="text-xs font-bold bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-gray-800 shadow-2xs focus:ring-1 focus:ring-indigo-500 focus:outline-none cursor-pointer"
+                  >
+                    <option value="custom">📋 Pre-Printed Paper</option>
+                    <option value="system">⚙️ System Generated</option>
+                    <option value="image">🖼️ Photo Letterhead</option>
+                  </select>
                 </div>
               )}
             </div>

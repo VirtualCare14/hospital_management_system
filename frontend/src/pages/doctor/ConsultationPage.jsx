@@ -94,7 +94,8 @@ const ConsultationPage = () => {
   const [showEditPrintModal, setShowEditPrintModal] = useState(false);
   const [printOptions, setPrintOptions] = useState(() => {
     const saved = localStorage.getItem('doctor_print_options');
-    return saved ? JSON.parse(saved) : {
+    const parsed = saved ? JSON.parse(saved) : {};
+    return {
       printVitals: true,
       printLabTests: true,
       printSymptomHistory: true,
@@ -102,7 +103,10 @@ const ConsultationPage = () => {
       printGeneralPastHistory: true,
       printDiagnosisRemarks: true,
       printPatientAdvice: true,
-      printPreviousHistory: false
+      printPreviousHistory: false,
+      reuseReceptionPaper: true,
+      ...parsed,
+      ...(parsed.reuseReceptionPaper === undefined ? { reuseReceptionPaper: true } : {})
     };
   });
   const [pharmacyMedicines, setPharmacyMedicines] = useState([]);
@@ -2291,7 +2295,24 @@ const ConsultationPage = () => {
               <label className="text-xs font-black text-gray-900 uppercase tracking-wider block">Optional Sections to Include in Prescription:</label>
               
               <div className="space-y-2.5 bg-gray-50/80 p-3.5 border border-gray-200 rounded-xl text-sm font-extrabold text-gray-800">
-                <label className="flex items-center justify-between cursor-pointer select-none hover:text-orange-600">
+                <label className="flex items-center justify-between cursor-pointer select-none bg-orange-50 border border-orange-200 p-2.5 rounded-lg hover:bg-orange-100 transition-colors">
+                  <div>
+                    <span className="block font-black text-orange-950 flex items-center gap-1.5">
+                      <span>♻️</span> Reuse Reception Paper
+                    </span>
+                    <span className="text-[11px] font-semibold text-orange-800 block">
+                      Leaves Heading, Patient Info & Vitals blank to print cleanly onto paper from reception
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={printOptions.reuseReceptionPaper !== false}
+                    onChange={(e) => setPrintOptions({ ...printOptions, reuseReceptionPaper: e.target.checked })}
+                    className="rounded text-orange-600 focus:ring-orange-500 h-5 w-5 cursor-pointer ml-3 flex-shrink-0"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between cursor-pointer select-none hover:text-orange-600 border-t border-gray-200/60 pt-2">
                   <span>Include Vitals & Demographics</span>
                   <input
                     type="checkbox"
