@@ -1,4 +1,5 @@
 const axios = require("axios");
+const crypto = require("crypto");
 
 let accessToken = null;
 let tokenExpiry = 0;
@@ -36,7 +37,7 @@ const getAccessToken = async () => {
             throw new Error("ABDM_CLIENT_SECRET is missing in .env");
         }
 
-        const url = `${gatewayBaseUrl.replace(/\/$/, "")}/gateway/v0.5/sessions`;
+        const url = `${gatewayBaseUrl.replace(/\/$/, "")}/api/hiecm/gateway/v3/sessions`;
 
         console.log("🚀 Calling :", url);
 
@@ -45,11 +46,15 @@ const getAccessToken = async () => {
             {
                 clientId,
                 clientSecret,
+                grantType: "client_credentials",
             },
             {
                 headers: {
                     "Content-Type": "application/json",
                     Accept: "application/json",
+                    "REQUEST-ID": crypto.randomUUID(),
+                    TIMESTAMP: new Date().toISOString(),
+                    "X-CM-ID": process.env.ABDM_CM_ID || "sbx",
                 },
                 timeout: Number(process.env.ABDM_TIMEOUT || 30000),
             }

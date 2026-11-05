@@ -12,7 +12,7 @@ function getWhatsAppPopupFeatures() {
 
 export function openWhatsAppShareWindow() {
   // Resolve the named browsing context on every user click. A retained
-  // WindowProxy can become stale after WhatsApp's cross-origin navigation.
+  // WindowProxy can become stale after WhatsApp's cr1oss-origin navigation.
   whatsappShareWindow = window.open(
     '',
     'medora-whatsapp-share',
@@ -21,7 +21,7 @@ export function openWhatsAppShareWindow() {
   return whatsappShareWindow;
 }
 
-export function navigateWhatsAppShareWindow(url) {
+export function navigateWhatsAppShareWindow(url) { 
   if (whatsappShareWindow && !whatsappShareWindow.closed) {
     whatsappShareWindow.location.href = url;
     whatsappShareWindow.focus();

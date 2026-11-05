@@ -1,6 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const m2WebhookController = require('../controllers/m2WebhookController');
+const abdmRouteGuard = require('../../../middleware/abdmRouteGuardMiddleware');
+
+// Route guard: gateway callbacks -> verifyCallback, internal routes -> authMiddleware (hospital JWT)
+router.use(abdmRouteGuard);
 
 // ==========================================
 // M2 Webhook Health Check
@@ -15,23 +19,26 @@ router.get('/health', (req, res) => {
 
 // ==========================================
 // 1. Patient Discovery Callback
-// Gateway Endpoint: /v3/patient/care-context/discover
+// Gateway Endpoint: /api/v3/hip/patient/care-context/discover
 // ==========================================
 router.post('/v3/patient/care-context/discover', m2WebhookController.discoverCareContext);
+router.post('/api/v3/hip/patient/care-context/discover', m2WebhookController.discoverCareContext);
 
 // ==========================================
 // 2. User-Initiated Linking: OTP Init Callback
-// Gateway Endpoints: /v3/link/care-context/init & /v3/link/care-context/on-init
+// Gateway Endpoints: /api/v3/hip/link/care-context/init & /api/v3/hip/link/care-context/on-init
 // ==========================================
 router.post('/v3/link/care-context/init', m2WebhookController.initCareContextLink);
 router.post('/v3/link/care-context/on-init', m2WebhookController.initCareContextLink);
+router.post('/api/v3/hip/link/care-context/init', m2WebhookController.initCareContextLink);
 
 // ==========================================
 // 3. User-Initiated Linking: Confirm OTP Callback
-// Gateway Endpoints: /v3/link/care-context/confirm & /v3/link/care-context/on-confirm
+// Gateway Endpoints: /api/v3/hip/link/care-context/confirm & /api/v3/hip/link/care-context/on-confirm
 // ==========================================
 router.post('/v3/link/care-context/confirm', m2WebhookController.confirmCareContextLink);
 router.post('/v3/link/care-context/on-confirm', m2WebhookController.confirmCareContextLink);
+router.post('/api/v3/hip/link/care-context/confirm', m2WebhookController.confirmCareContextLink);
 
 // ==========================================
 // 4. HIP-Initiated Linking: Token On-Generate Callback
@@ -43,15 +50,17 @@ router.post('/v3/token/on-generate-token', m2WebhookController.handleOnGenerateT
 
 // ==========================================
 // 5. Consent Grant / Revoke Notification Callback
-// Gateway Endpoint: /v3/consent/request/hip/notify
+// Gateway Endpoint: /api/v3/consent/request/hip/notify
 // ==========================================
 router.post('/v3/consent/request/hip/notify', m2WebhookController.notifyConsent);
+router.post('/api/v3/consent/request/hip/notify', m2WebhookController.notifyConsent);
 
 // ==========================================
 // 6. Health Information Data Flow Request Callback
-// Gateway Endpoint: /v3/health-information/hip/request
+// Gateway Endpoint: /api/v3/hip/health-information/request
 // ==========================================
 router.post('/v3/health-information/hip/request', m2WebhookController.requestHealthInformation);
+router.post('/api/v3/hip/health-information/request', m2WebhookController.requestHealthInformation);
 
 // ==========================================
 // 7. Deep Linking SMS On-Notify Callback
