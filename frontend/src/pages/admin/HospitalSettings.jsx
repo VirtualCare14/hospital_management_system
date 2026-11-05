@@ -723,9 +723,6 @@ const HospitalSettings = () => {
                     disabled={uploading}
                   />
                 </label>
-                <p className="text-[10px] text-gray-500 mt-2">
-                  Logo will print on standard Tax Invoices and Bill Summaries (grayscaled automatically for thermal/B&W prints). JPG, PNG up to 2MB.
-                </p>
               </div>
             </div>
 
@@ -736,9 +733,6 @@ const HospitalSettings = () => {
                   <h4 className="text-sm font-extrabold text-gray-900 flex items-center gap-2">
                     <FileText className="h-4 w-4 text-orange-600" /> Letterhead & Print Settings
                   </h4>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    Select your preferred letterhead type: System Generated header, Photo banner, or Custom full-page pre-printed hospital letterhead.
-                  </p>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -983,24 +977,6 @@ const HospitalSettings = () => {
                           <span className="text-xs font-bold text-gray-600 bg-white px-3 py-2 rounded-lg border border-gray-200 shadow-2xs">
                             = {((Number(watch('customLetterheadHeaderHeight')) || 45) / 10).toFixed(1)} cm
                           </span>
-                        </div>
-                        <p className="text-[11px] text-gray-600 leading-relaxed">
-                          Enter the height of your physical pre-printed letterhead header in millimeters (mm). The software leaves this blank margin at the top so that the prescription title, patient information, and vitals will print cleanly onto your paper stationary without any digital letterhead.
-                        </p>
-                        <div className="text-[11px] text-gray-600 bg-white/80 p-2.5 rounded-lg border border-orange-100 flex items-center gap-2">
-                          <span className="text-sm">💡</span>
-                          <span><strong>Standard Recommendation:</strong> Most physical hospital pre-printed letterheads have a <strong>45 mm (4.5 cm)</strong> header area at the top.</span>
-                        </div>
-                      </div>
-
-                      {/* Live breakdown bar */}
-                      <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl text-emerald-900 text-xs">
-                        <div className="font-bold flex items-center gap-1.5 text-emerald-800">
-                          <span>📐</span> A4 Page Layout Breakdown (210 × 297 mm):
-                        </div>
-                        <div className="text-[11px] mt-1.5 text-emerald-700 space-y-1">
-                          <div>• Pre-printed Stationary Header: <strong>{Number(watch('customLetterheadHeaderHeight')) || 45} mm</strong> (Empty space on paper)</div>
-                          <div>• Printable Prescription & Vitals Area: <strong>{Math.max(0, 297 - (Number(watch('customLetterheadHeaderHeight')) || 45) - 15)} mm</strong> vertical space</div>
                         </div>
                       </div>
                     </div>
