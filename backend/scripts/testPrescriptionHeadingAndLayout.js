@@ -135,6 +135,14 @@ async function main() {
     assert(settingsCode.includes("setPreviewSlipMode('bill_receipt')"), 'Missing switch to bill_receipt');
   });
 
+  // Test 11: Invoice Footer Declaration/Message wired to prescription footer
+  runTest('Footer: Invoice Footer Declaration/Message sets footer text in system and photo prescriptions', () => {
+    assert(receiptCode.includes('customFooterDeclaration'), 'Missing customFooterDeclaration resolution');
+    assert(receiptCode.includes('hospital?.invoiceFooterMessage'), 'Missing hospital.invoiceFooterMessage check');
+    assert(receiptCode.includes('{footerDeclaration}'), 'Missing {footerDeclaration} in prescription footer');
+    assert(settingsCode.includes("invoiceFooterMessage: watch('invoiceFooterMessage')"), 'Missing live invoiceFooterMessage injection in settings preview');
+  });
+
   console.log('\n----------------------------------------------------------------------');
   console.log(`Results: ${passedTests} / ${totalTests} tests passed`);
   console.log('----------------------------------------------------------------------');

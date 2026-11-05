@@ -210,6 +210,15 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
     }
   }
 
+  // Footer text resolution: System Generated and Photo Generated prescriptions use invoiceFooterMessage declaration if configured
+  const customFooterDeclaration = (hospital?.invoiceFooterMessage && String(hospital.invoiceFooterMessage).trim().length > 0)
+    ? String(hospital.invoiceFooterMessage).trim()
+    : null;
+  const defaultPrescriptionFooter = 'This is a computer-generated document. No signature required.';
+  const footerDeclaration = (!isCustomLetterhead && customFooterDeclaration)
+    ? customFooterDeclaration
+    : (customFooterDeclaration || defaultPrescriptionFooter);
+
   const grossFee = patient.opdFee !== undefined ? patient.opdFee : (patient.doctorId?.opdFees || 0);
   const netFee = patient.netOpdFee !== undefined ? patient.netOpdFee : grossFee;
   const rawDoctorName = patient.doctorName || patient.visitingDoctorName || patient.doctorId?.doctorName || patient.doctorId?.username || (typeof patient.doctorId === 'string' ? patient.doctorId : '-');
@@ -465,7 +474,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
           paddingTop: '6px',
           pageBreakInside: 'avoid'
         }}>
-          <p style={{ margin: '0' }}>This is an official hospital refund slip. Please retain this receipt for records.</p>
+          <p style={{ margin: '0', whiteSpace: 'pre-line' }}>{customFooterDeclaration || 'This is an official hospital refund slip. Please retain this receipt for records.'}</p>
           <p style={{ margin: '2px 0 0 0' }}>Printed on: {documentDateTime}</p>
         </div>
       </div>
@@ -678,7 +687,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
           paddingTop: '8px',
           pageBreakInside: 'avoid'
         }}>
-          <p style={{ margin: '0' }}>This is a computer-generated receipt. Thank you.</p>
+          <p style={{ margin: '0', whiteSpace: 'pre-line' }}>{customFooterDeclaration || 'This is a computer-generated receipt. Thank you.'}</p>
           <p style={{ margin: '2px 0 0 0' }}>Printed on: {documentDateTime}</p>
         </div>
       </div>
@@ -1208,7 +1217,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
               width: '100%',
               boxSizing: 'border-box'
             }}>
-              <p style={{ margin: '0' }}>This is a computer-generated document. No signature required.</p>
+              <p style={{ margin: '0', whiteSpace: 'pre-line' }}>{footerDeclaration}</p>
               <p style={{ margin: '2px 0 0 0' }}>Generated on: {documentDateTime} &nbsp;|&nbsp; Page 2 of 2</p>
             </div>
           </div>
@@ -1749,7 +1758,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
           width: '100%',
           boxSizing: 'border-box'
         }}>
-          <p style={{ margin: '0' }}>This is a computer-generated document. No signature required.</p>
+          <p style={{ margin: '0', whiteSpace: 'pre-line' }}>{footerDeclaration}</p>
           <p style={{ margin: '2px 0 0 0' }}>Generated on: {documentDateTime}</p>
         </div>
       </div>

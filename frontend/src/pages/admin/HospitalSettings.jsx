@@ -538,6 +538,7 @@ const HospitalSettings = () => {
       alternateMobileNumber: watch('alternateMobileNumber') || settings?.alternateMobileNumber || '',
       emailAddress: watch('emailAddress') || settings?.emailAddress || '',
       website: watch('website') || settings?.website || '',
+      invoiceFooterMessage: watch('invoiceFooterMessage') !== undefined ? watch('invoiceFooterMessage') : (settings?.invoiceFooterMessage || ''),
       logoUrl: previewLogo || settings?.logoUrl || '',
       letterheadImageUrl: previewLetterhead || settings?.letterheadImageUrl || '',
       letterheadHeaderHeight: Number(watch('letterheadHeaderHeight') || settings?.letterheadHeaderHeight || 4.6),
