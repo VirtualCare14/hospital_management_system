@@ -284,8 +284,8 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
             justifyContent: 'space-between',
             alignItems: 'center',
             borderBottom: '2.5px solid #000',
-            paddingBottom: '14px',
-            marginBottom: '14px'
+            paddingBottom: '10px',
+            marginBottom: '10px'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, paddingRight: '20px' }}>
               {resolvedLogo && (
@@ -675,12 +675,12 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
 
         <div style={{ 
           position: 'relative',
-          marginTop: '20px',
+          marginTop: '12px',
           textAlign: 'center',
           fontSize: '9px',
           color: '#666',
           borderTop: '1px solid #ccc',
-          paddingTop: '8px',
+          paddingTop: '6px',
           pageBreakInside: 'avoid'
         }}>
           <p style={{ margin: '0', whiteSpace: 'pre-line' }}>{customFooterDeclaration || 'This is a computer-generated receipt. Thank you.'}</p>
