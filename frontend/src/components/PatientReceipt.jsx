@@ -244,9 +244,9 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
     return (
       <div ref={ref} className="a4-receipt" style={{
         width: '100%',
-        maxWidth: '210mm',
+        maxWidth: '148mm',
         minHeight: 'auto',
-        padding: showUploadedLetterhead ? '0 8mm 8mm 8mm' : '6mm 8mm 8mm 8mm',
+        padding: showUploadedLetterhead ? '0 6mm 6mm 6mm' : '5mm 6mm 6mm 6mm',
         margin: '0 auto',
         backgroundColor: '#ffffff',
         color: '#000000',
@@ -287,19 +287,19 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
             paddingBottom: '10px',
             marginBottom: '10px'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, paddingRight: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, paddingRight: '10px' }}>
               {resolvedLogo && (
                 <div style={{ flexShrink: 0 }}>
                   <img 
                     src={resolvedLogo} 
                     crossOrigin="anonymous" 
                     alt="Logo" 
-                    style={{ maxHeight: '75px', maxWidth: '75px', objectFit: 'contain', display: 'block' }} 
+                    style={{ maxHeight: '52px', maxWidth: '52px', objectFit: 'contain', display: 'block' }} 
                   />
                 </div>
               )}
               <div>
-                <h1 style={{ fontSize: '22px', fontWeight: '800', margin: '0', textTransform: 'uppercase', letterSpacing: '0.8px', color: '#111827' }}>
+                <h1 style={{ fontSize: '16px', fontWeight: '800', margin: '0', textTransform: 'uppercase', letterSpacing: '0.8px', color: '#111827' }}>
                   {hospital?.hospitalName || 'Hospital Name'}
                 </h1>
                 {hospital?.hospitalHeading && (
@@ -315,7 +315,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
               fontSize: '11px',
               color: '#111827',
               lineHeight: '1.4',
-              maxWidth: '400px',
+              maxWidth: '230px', flexShrink: 0,
               width: '100%',
               alignItems: 'flex-start'
             }}>
@@ -481,9 +481,9 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
     return (
       <div ref={ref} className="a4-receipt" style={{
         width: '100%',
-        maxWidth: '210mm',
+        maxWidth: '148mm',
         minHeight: 'auto',
-        padding: showUploadedLetterhead ? '0 8mm 8mm 8mm' : '6mm 8mm 8mm 8mm',
+        padding: showUploadedLetterhead ? '0 6mm 6mm 6mm' : '5mm 6mm 6mm 6mm',
         margin: '0 auto',
         backgroundColor: '#ffffff',
         color: '#000000',
@@ -524,19 +524,19 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
             paddingBottom: '14px',
             marginBottom: '14px'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, paddingRight: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, paddingRight: '10px' }}>
               {resolvedLogo && (
                 <div style={{ flexShrink: 0 }}>
                   <img 
                     src={resolvedLogo} 
                     crossOrigin="anonymous" 
                     alt="Logo" 
-                    style={{ maxHeight: '75px', maxWidth: '75px', objectFit: 'contain', display: 'block' }} 
+                    style={{ maxHeight: '52px', maxWidth: '52px', objectFit: 'contain', display: 'block' }} 
                   />
                 </div>
               )}
               <div>
-                <h1 style={{ fontSize: '22px', fontWeight: '800', margin: '0', textTransform: 'uppercase', letterSpacing: '0.8px', color: '#111827' }}>
+                <h1 style={{ fontSize: '16px', fontWeight: '800', margin: '0', textTransform: 'uppercase', letterSpacing: '0.8px', color: '#111827' }}>
                   {hospital?.hospitalName || 'Hospital Name'}
                 </h1>
                 {hospital?.hospitalHeading && (
@@ -552,7 +552,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
               fontSize: '11px',
               color: '#111827',
               lineHeight: '1.4',
-              maxWidth: '400px',
+              maxWidth: '230px', flexShrink: 0,
               width: '100%',
               alignItems: 'flex-start'
             }}>
