@@ -81,6 +81,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
   const [hospital, setHospital] = useState(hospitalSettings || null);
   const [resolvedLogo, setResolvedLogo] = useState(hospitalSettings?.logoUrl || hospitalSettings?.logo || '');
   const [resolvedLetterhead, setResolvedLetterhead] = useState(hospitalSettings?.letterheadImageUrl || '');
+  const [resolvedCustomLetterhead, setResolvedCustomLetterhead] = useState(hospitalSettings?.customLetterheadUrl || '');
 
   const printOptions = propPrintOptions || prescription?.printOptions || patient?.printOptions || {
     printVitals: true,
@@ -120,6 +121,14 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
             setResolvedLetterhead(base64Lh);
           }
         }
+        const rawCustomLh = data.customLetterheadUrl || '';
+        if (rawCustomLh) {
+          setResolvedCustomLetterhead(rawCustomLh);
+          const base64Custom = await convertImgToBase64(rawCustomLh);
+          if (isMounted && base64Custom) {
+            setResolvedCustomLetterhead(base64Custom);
+          }
+        }
       }
     };
     loadSettings();
@@ -151,20 +160,54 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
     hour12: true
   });
 
-  const isPatientSlipOnly = mode === 'patient_slip';
-  const isBillReceiptOnly = mode === 'bill_receipt';
   const isRefundSlip = mode === 'refund_slip';
+  const isBillReceiptOnly = mode === 'bill_receipt';
+  const isPatientSlipOnly = mode === 'patient_slip';
+  const isPrescriptionFormat = mode === 'prescription' || (!isRefundSlip && !isBillReceiptOnly && !isPatientSlipOnly && (Boolean(prescription) || mode === 'all'));
+
+  let documentTitle = 'PRESCRIPTION';
+  if (isRefundSlip) {
+    documentTitle = 'REFUND VOUCHER';
+  } else if (isBillReceiptOnly) {
+    documentTitle = 'PAYMENT RECEIPT';
+  } else if (isPatientSlipOnly) {
+    documentTitle = 'PATIENT SLIP';
+  } else if (isPrescriptionFormat) {
+    documentTitle = 'PRESCRIPTION';
+  } else {
+    documentTitle = 'PATIENT SLIP';
+  }
+
+  // Check if custom letterhead should be used
+  const customLhUrl = resolvedCustomLetterhead || hospital?.customLetterheadUrl;
+  let isCustomLetterhead = false;
+  if (letterheadMode === 'custom') {
+    isCustomLetterhead = Boolean(customLhUrl);
+  } else if (letterheadMode === 'system' || letterheadMode === 'image') {
+    isCustomLetterhead = false;
+  } else {
+    // 'auto' mode: check hospital.letterheadType
+    isCustomLetterhead = (hospital?.letterheadType === 'custom') && Boolean(customLhUrl);
+  }
+
+  // Margins & header/footer heights for custom letterhead (in mm)
+  const customHeaderHeight = Number(hospital?.customLetterheadHeaderHeight !== undefined ? hospital.customLetterheadHeaderHeight : 45);
+  const customFooterHeight = Number(hospital?.customLetterheadFooterHeight !== undefined ? hospital.customLetterheadFooterHeight : 30);
+  const customLeftMargin = Number(hospital?.customLetterheadLeftMargin !== undefined ? hospital.customLetterheadLeftMargin : 12);
+  const customRightMargin = Number(hospital?.customLetterheadRightMargin !== undefined ? hospital.customLetterheadRightMargin : 12);
 
   // Check if uploaded photo letterhead should be shown
   let showUploadedLetterhead = false;
-  if (letterheadMode === 'image') {
-    showUploadedLetterhead = Boolean(resolvedLetterhead || hospital?.letterheadImageUrl);
-  } else if (letterheadMode === 'system') {
-    showUploadedLetterhead = false;
-  } else {
-    // 'auto' mode: check hospital.useSystemLetterhead (if true, don't show uploaded photo letterhead)
-    const useSystem = hospital?.useSystemLetterhead !== undefined ? hospital.useSystemLetterhead : true;
-    showUploadedLetterhead = !useSystem && Boolean(resolvedLetterhead || hospital?.letterheadImageUrl);
+  if (!isCustomLetterhead) {
+    if (letterheadMode === 'image') {
+      showUploadedLetterhead = Boolean(resolvedLetterhead || hospital?.letterheadImageUrl);
+    } else if (letterheadMode === 'system') {
+      showUploadedLetterhead = false;
+    } else {
+      // 'auto' mode: check hospital.useSystemLetterhead (if true, don't show uploaded photo letterhead)
+      const useSystem = hospital?.useSystemLetterhead !== undefined ? hospital.useSystemLetterhead : true;
+      showUploadedLetterhead = !useSystem && Boolean(resolvedLetterhead || hospital?.letterheadImageUrl);
+    }
   }
 
   const grossFee = patient.opdFee !== undefined ? patient.opdFee : (patient.doctorId?.opdFees || 0);
@@ -175,7 +218,16 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
   const vitals = patient.demographics || prescription?.vitals || {};
   const hasVitals = vitals.weight || vitals.height || vitals.bloodPressure || vitals.temperature || vitals.pulseRate || vitals.pulse || vitals.respiratoryRate || vitals.spo2 || vitals.cvs || vitals.perAbdomen || vitals.bilateralChest;
   const isVisiting = Boolean(patient.isVisitingDoctor || patient.doctorId?.isVisitingDoctor);
-  const documentTitle = isRefundSlip ? 'REFUND VOUCHER' : (isBillReceiptOnly ? 'PAYMENT RECEIPT' : (isPatientSlipOnly ? 'PATIENT SLIP' : 'PRESCRIPTION'));
+
+  if (isRefundSlip) {
+    documentTitle = 'REFUND VOUCHER';
+  } else if (isBillReceiptOnly) {
+    documentTitle = 'PAYMENT RECEIPT';
+  } else if (isPatientSlipOnly) {
+    documentTitle = 'PATIENT SLIP';
+  } else {
+    documentTitle = 'PRESCRIPTION';
+  }
 
   if (isRefundSlip) {
     const refundAmt = patient.refundAmount !== undefined && patient.refundAmount !== null 
@@ -634,34 +686,34 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
   }
 
   // Build Vitals / Examinations table rows matching reference format (Examinations | Value)
+  const isValidVitalVal = (val) => val !== undefined && val !== null && String(val).trim() !== '' && String(val).trim() !== '-';
+
   const rawPulse = vitals.pulseRate ?? vitals.pulse ?? vitals.pr ?? vitals.pulse_rate;
-  const pulseDisplay = (rawPulse !== undefined && rawPulse !== null && String(rawPulse).trim() !== '')
+  const pulseDisplay = isValidVitalVal(rawPulse)
     ? (String(rawPulse).toLowerCase().includes('beat') || String(rawPulse).toLowerCase().includes('bpm')
         ? String(rawPulse).trim()
         : `${String(rawPulse).trim()} beats/min`)
     : '-';
 
   const rawBp = vitals.bloodPressure ?? vitals.bp ?? vitals.blood_pressure;
-  const bpDisplay = (rawBp !== undefined && rawBp !== null && String(rawBp).trim() !== '')
-    ? String(rawBp).trim()
-    : '-';
+  const bpDisplay = isValidVitalVal(rawBp) ? String(rawBp).trim() : '-';
 
   const rawTemp = vitals.temperature ?? vitals.temp;
-  const tempDisplay = (rawTemp !== undefined && rawTemp !== null && String(rawTemp).trim() !== '')
+  const tempDisplay = isValidVitalVal(rawTemp)
     ? (String(rawTemp).includes('°') || String(rawTemp).toLowerCase().includes('f') || String(rawTemp).toLowerCase().includes('c')
         ? String(rawTemp).trim()
         : `${String(rawTemp).trim()} °F`)
     : '-';
 
   const rawRr = vitals.respiratoryRate ?? vitals.rr ?? vitals.respiratory_rate;
-  const rrDisplay = (rawRr !== undefined && rawRr !== null && String(rawRr).trim() !== '')
+  const rrDisplay = isValidVitalVal(rawRr)
     ? (String(rawRr).toLowerCase().includes('breath')
         ? String(rawRr).trim()
         : `${String(rawRr).trim()} breaths/min`)
     : '-';
 
   const rawSpo2 = vitals.spo2 ?? vitals.spO2 ?? vitals.oxygen;
-  const spo2Display = (rawSpo2 !== undefined && rawSpo2 !== null && String(rawSpo2).trim() !== '')
+  const spo2Display = isValidVitalVal(rawSpo2)
     ? (String(rawSpo2).includes('%')
         ? String(rawSpo2).trim()
         : `${String(rawSpo2).trim()}%`)
@@ -669,8 +721,8 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
 
   const rawWt = vitals.weight ?? vitals.wt;
   const rawHt = vitals.height ?? vitals.ht;
-  const hasWt = rawWt !== undefined && rawWt !== null && String(rawWt).trim() !== '';
-  const hasHt = rawHt !== undefined && rawHt !== null && String(rawHt).trim() !== '';
+  const hasWt = isValidVitalVal(rawWt);
+  const hasHt = isValidVitalVal(rawHt);
   const wtStr = hasWt
     ? (String(rawWt).toLowerCase().includes('kg') ? String(rawWt).trim() : `${String(rawWt).trim()} kg`)
     : null;
@@ -680,29 +732,19 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
   const wtHtDisplay = (wtStr && htStr) ? `${wtStr} / ${htStr}` : (wtStr || htStr || '-');
 
   const rawPallor = vitals.pallor;
-  const pallorDisplay = (rawPallor !== undefined && rawPallor !== null && String(rawPallor).trim() !== '')
-    ? String(rawPallor).trim()
-    : '-';
+  const pallorDisplay = isValidVitalVal(rawPallor) ? String(rawPallor).trim() : '-';
 
   const rawEdema = vitals.edema ?? vitals.oedema;
-  const edemaDisplay = (rawEdema !== undefined && rawEdema !== null && String(rawEdema).trim() !== '')
-    ? String(rawEdema).trim()
-    : '-';
+  const edemaDisplay = isValidVitalVal(rawEdema) ? String(rawEdema).trim() : '-';
 
   const rawChest = vitals.chest ?? vitals.bilateralChest ?? vitals.chestExam;
-  const chestDisplay = (rawChest !== undefined && rawChest !== null && String(rawChest).trim() !== '')
-    ? String(rawChest).trim()
-    : '-';
+  const chestDisplay = isValidVitalVal(rawChest) ? String(rawChest).trim() : '-';
 
   const rawCvs = vitals.cvs;
-  const cvsDisplay = (rawCvs !== undefined && rawCvs !== null && String(rawCvs).trim() !== '')
-    ? String(rawCvs).trim()
-    : '-';
+  const cvsDisplay = isValidVitalVal(rawCvs) ? String(rawCvs).trim() : '-';
 
   const rawCns = vitals.cns;
-  const cnsDisplay = (rawCns !== undefined && rawCns !== null && String(rawCns).trim() !== '')
-    ? String(rawCns).trim()
-    : '-';
+  const cnsDisplay = isValidVitalVal(rawCns) ? String(rawCns).trim() : '-';
 
   const vitalsTableRows = [
     { label: 'PULSE', value: pulseDisplay },
@@ -794,12 +836,428 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
     );
   };
 
+  const validMedicines = (prescription?.medicines || []).filter(m => m && (m.medicine || m.medicineName));
+  const isMultiPageCustomLetterhead = Boolean(isCustomLetterhead && isPrescriptionFormat && validMedicines.length > 6);
+
+  {/* ===================== MULTI-PAGE CUSTOM LETTERHEAD PRESCRIPTION ===================== */}
+  if (isMultiPageCustomLetterhead) {
+    const page1Meds = validMedicines.slice(0, 6);
+    const page2Meds = validMedicines.slice(6);
+
+    return (
+      <div ref={ref} className="multi-page-prescription-container" style={{ width: '100%', margin: '0 auto' }}>
+        {/* PAGE 1 */}
+        <div className="a4-receipt custom-letterhead-page" style={{
+          width: '100%',
+          maxWidth: '210mm',
+          minHeight: '297mm',
+          padding: 0,
+          margin: '0 auto 20px auto',
+          backgroundColor: '#ffffff',
+          color: '#000000',
+          fontFamily: 'Arial, Helvetica, sans-serif',
+          fontSize: '11px',
+          lineHeight: '1.4',
+          position: 'relative',
+          boxSizing: 'border-box',
+          pageBreakAfter: 'always',
+          breakAfter: 'page'
+        }}>
+          {/* Custom Letterhead Background - Page 1 */}
+          <div className="custom-letterhead-bg" style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            zIndex: 0,
+            pointerEvents: 'none',
+            overflow: 'hidden'
+          }}>
+            <img
+              src={customLhUrl}
+              crossOrigin="anonymous"
+              alt="Hospital Custom Letterhead Page 1"
+              style={{ width: '100%', height: '100%', objectFit: 'fill', display: 'block' }}
+            />
+          </div>
+
+          {/* Writable Content Area - Page 1 */}
+          <div className="custom-letterhead-content" style={{
+            position: 'relative',
+            zIndex: 1,
+            width: '100%',
+            minHeight: `calc(297mm - ${customHeaderHeight}mm - ${customFooterHeight}mm)`,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            boxSizing: 'border-box',
+            paddingTop: `${customHeaderHeight}mm`,
+            paddingBottom: `${customFooterHeight}mm`,
+            paddingLeft: `${customLeftMargin}mm`,
+            paddingRight: `${customRightMargin}mm`
+          }}>
+            <div style={{ flex: '1 0 auto', width: '100%', boxSizing: 'border-box' }}>
+              <div style={{ textAlign: 'center', marginBottom: '8px', borderBottom: '2.5px solid #000', paddingBottom: '4px' }}>
+                <h2 style={{ fontSize: '15px', fontWeight: '900', margin: '0', textTransform: 'uppercase', letterSpacing: '1.5px', color: '#000' }}>
+                  PRESCRIPTION
+                </h2>
+              </div>
+
+              {/* TWO-COLUMN PRESCRIPTION ARCHITECTURE: Patient Info, Clinical Details & Vitals */}
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', width: '100%', marginBottom: '8px', boxSizing: 'border-box' }}>
+                {/* LEFT COLUMN: Clinical Content & Medicines */}
+                <div style={{ flex: '1 1 0%', minWidth: 0, boxSizing: 'border-box' }}>
+                  {/* Patient Info */}
+                  <div style={{ marginBottom: '6px', padding: '5px 7px', border: '1px solid #000', borderRadius: '2px' }}>
+                    <p style={{ fontWeight: 'bold', margin: '0 0 3px 0', fontSize: '10.5px', textDecoration: 'underline' }}>
+                      {t(activeLang, 'patientInfo')} & Appointment Details
+                    </p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', rowGap: '1.5px' }}>
+                      <div style={{ width: '50%', padding: '1px 4px 1px 0', boxSizing: 'border-box' }}>
+                        <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
+                          <strong>Patient Name:</strong> {patient.patientName}
+                        </p>
+                      </div>
+                      <div style={{ width: '50%', padding: '1px 0 1px 4px', boxSizing: 'border-box' }}>
+                        <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
+                          <strong>UHID:</strong> {patient.uhid}
+                        </p>
+                      </div>
+                      <div style={{ width: '50%', padding: '1px 4px 1px 0', boxSizing: 'border-box' }}>
+                        <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
+                          <strong>Gender / Age:</strong> {patient.gender} {patient.dob ? `(${ageFromDob(patient.dob)} yrs)` : ''}
+                        </p>
+                      </div>
+                      <div style={{ width: '50%', padding: '1px 0 1px 4px', boxSizing: 'border-box' }}>
+                        <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
+                          <strong>Mobile Number:</strong> {patient.mobile}
+                        </p>
+                      </div>
+                      <div style={{ width: '50%', padding: '1px 4px 1px 0', boxSizing: 'border-box' }}>
+                        <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
+                          <strong>Department / Speciality:</strong> {patient.department || '-'}{patient.speciality && !patient.department?.toLowerCase().includes(patient.speciality.toLowerCase()) ? ` - ${patient.speciality}` : ''}
+                        </p>
+                      </div>
+                      <div style={{ width: '50%', padding: '1px 0 1px 4px', boxSizing: 'border-box' }}>
+                        <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
+                          <strong>{isVisiting ? 'Visiting Specialist:' : 'Doctor Name:'}</strong> {doctorNameStr}
+                        </p>
+                      </div>
+                      <div style={{ width: '50%', padding: '1px 4px 1px 0', boxSizing: 'border-box' }}>
+                        <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
+                          <strong>Appointment Date & Time:</strong> {formatDate(patient.appointmentDate)} {patient.slot ? `(${patient.slot})` : ''}
+                        </p>
+                      </div>
+                      <div style={{ width: '50%', padding: '1px 0 1px 4px', boxSizing: 'border-box' }}>
+                        <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
+                          <strong>Registration Number:</strong> {patient.registrationNumber || '-'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Diagnosis */}
+                  {prescription?.diagnosisRemark && (
+                    <div style={{ marginBottom: '6px' }}>
+                      <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', fontSize: '10.5px' }}>{t(activeLang, 'diagnosis')}:</p>
+                      <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.38', whiteSpace: 'pre-line' }}>
+                        {translateClinicalText(prescription.diagnosisRemark, activeLang)}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Advice */}
+                  {prescription?.patientAdvice && (
+                    <div style={{ marginBottom: '6px' }}>
+                      <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', fontSize: '10.5px' }}>Advice for the Patient:</p>
+                      <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.38', whiteSpace: 'pre-line' }}>
+                        {translateClinicalText(prescription.patientAdvice, activeLang)}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Tests */}
+                  {prescription?.tests && prescription.tests.length > 0 && (
+                    <div style={{ marginBottom: '6px' }}>
+                      <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', fontSize: '10.5px' }}>Lab Investigations & Reports:</p>
+                      <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.38' }}>
+                        {prescription.tests.join(', ')}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Medicines table (first 6 items) */}
+                  <div style={{ marginBottom: '8px', width: '100%', boxSizing: 'border-box' }}>
+                    <p style={{ fontWeight: 'bold', margin: '0 0 3px 0', fontSize: '10.5px', textDecoration: 'underline' }}>
+                      {t(activeLang, 'medicines')}:
+                    </p>
+                    <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: '9.5px', lineHeight: '1.3', border: '1px solid #000', boxSizing: 'border-box' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: '#e8e8e8' }}>
+                          <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '4%' }}>#</th>
+                          <th style={{ padding: '3.5px 4px', border: '1px solid #000', textAlign: 'left', fontWeight: 'bold', width: '26%', overflowWrap: 'break-word', wordBreak: 'break-word' }}>{t(activeLang, 'medicine')}</th>
+                          <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '11%', overflowWrap: 'break-word', wordBreak: 'break-word' }}>Dosage Form</th>
+                          <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '10%', overflowWrap: 'break-word', wordBreak: 'break-word' }}>Strength</th>
+                          <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '6%' }}>Dose</th>
+                          <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '12%', overflowWrap: 'break-word', wordBreak: 'break-word' }}>Frequency</th>
+                          <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '9%' }}>Duration</th>
+                          <th style={{ padding: '3.5px 4px', border: '1px solid #000', textAlign: 'left', fontWeight: 'bold', width: '16%', overflowWrap: 'break-word', wordBreak: 'break-word' }}>Remarks</th>
+                          <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '6%' }}>Qty</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {page1Meds.map((item, index) => {
+                          const doseNum = parseFloat(item.dose) || 1;
+                          const freqCount = (item.morning ? 1 : 0) + (item.afternoon ? 1 : 0) + (item.night ? 1 : 0);
+                          const durDays = parseFloat(item.duration) || 0;
+                          const calculatedQty = (freqCount > 0 && durDays > 0) ? parseFloat((doseNum * freqCount * durDays).toFixed(2)) : 0;
+                          const displayQty = item.qty !== undefined ? item.qty : (calculatedQty > 0 ? calculatedQty : (item.quantity || '-'));
+                          const frequencyStr = item.frequency || [
+                            item.morning ? '1' : '0',
+                            item.afternoon ? '1' : '0',
+                            item.night ? '1' : '0'
+                          ].join(' - ');
+                          const medName = item.medicine || item.medicineName || '';
+                          const dosageForm = item.dosageForm || item.dosage || 'Tablet';
+                          const durationStr = item.duration 
+                            ? (typeof item.duration === 'number' || /^\d+$/.test(String(item.duration).trim())
+                                ? `${translateClinicalText(item.duration, activeLang)} days`
+                                : translateClinicalText(item.duration, activeLang))
+                            : '-';
+                          const remarksStr = translateClinicalText(item.remarks || item.instruction || '-', activeLang);
+
+                          return (
+                            <tr key={index} style={{ backgroundColor: index % 2 === 0 ? '#ffffff' : '#f7f7f7' }}>
+                              <td style={{ padding: '3px 2px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle' }}>{index + 1}</td>
+                              <td style={{ padding: '3px 4px', border: '1px solid #000', verticalAlign: 'middle', fontWeight: '600', overflowWrap: 'break-word', wordBreak: 'break-word' }}>{medName}</td>
+                              <td style={{ padding: '3px 2px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle', fontWeight: '500', color: '#4a5568', overflowWrap: 'break-word', wordBreak: 'break-word' }}>{dosageForm}</td>
+                              <td style={{ padding: '3px 2px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle', overflowWrap: 'break-word', wordBreak: 'break-word' }}>{item.strength || '-'}</td>
+                              <td style={{ padding: '3px 2px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle' }}>{item.dose !== undefined ? item.dose : '1'}</td>
+                              <td style={{ padding: '3px 2px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle', fontFamily: 'monospace', fontSize: '9px' }}>{frequencyStr}</td>
+                              <td style={{ padding: '3px 2px', border: '1px solid #000', verticalAlign: 'middle', textAlign: 'center' }}>
+                                {durationStr}
+                              </td>
+                              <td style={{ padding: '3px 4px', border: '1px solid #000', verticalAlign: 'middle', overflowWrap: 'break-word', wordBreak: 'break-word' }}>{remarksStr}</td>
+                              <td style={{ padding: '3px 2px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle', fontWeight: 'bold' }}>{displayQty}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* RIGHT COLUMN: Vitals Section Aligned with Clinical Content */}
+                {printOptions.printVitals !== false && (
+                  <div style={{ width: '190px', flexShrink: 0, boxSizing: 'border-box' }}>
+                    {renderVitalsTable(true)}
+                    {/* renderVitalsTable(false) */}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div style={{ marginTop: 'auto', textAlign: 'right', fontSize: '9px', color: '#555', fontStyle: 'italic', paddingTop: '8px' }}>
+              Page 1 of 2 (Continued on next page) →
+            </div>
+          </div>
+        </div>
+
+        {/* PAGE 2 */}
+        <div className="a4-receipt custom-letterhead-page" style={{
+          width: '100%',
+          maxWidth: '210mm',
+          minHeight: '297mm',
+          padding: 0,
+          margin: '0 auto',
+          backgroundColor: '#ffffff',
+          color: '#000000',
+          fontFamily: 'Arial, Helvetica, sans-serif',
+          fontSize: '11px',
+          lineHeight: '1.4',
+          position: 'relative',
+          boxSizing: 'border-box'
+        }}>
+          {/* Custom Letterhead Background - Page 2 */}
+          <div className="custom-letterhead-bg" style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            zIndex: 0,
+            pointerEvents: 'none',
+            overflow: 'hidden'
+          }}>
+            <img
+              src={customLhUrl}
+              crossOrigin="anonymous"
+              alt="Hospital Custom Letterhead Page 2"
+              style={{ width: '100%', height: '100%', objectFit: 'fill', display: 'block' }}
+            />
+          </div>
+
+          {/* Writable Content Area - Page 2 */}
+          <div className="custom-letterhead-content" style={{
+            position: 'relative',
+            zIndex: 1,
+            width: '100%',
+            minHeight: `calc(297mm - ${customHeaderHeight}mm - ${customFooterHeight}mm)`,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            boxSizing: 'border-box',
+            paddingTop: `${customHeaderHeight}mm`,
+            paddingBottom: `${customFooterHeight}mm`,
+            paddingLeft: `${customLeftMargin}mm`,
+            paddingRight: `${customRightMargin}mm`
+          }}>
+            <div style={{ flex: '1 0 auto', width: '100%', boxSizing: 'border-box' }}>
+              {/* Continuation Banner */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #000', paddingBottom: '4px', marginBottom: '10px', fontSize: '10.5px' }}>
+                <span style={{ fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                  PRESCRIPTION (PAGE 2)
+                </span>
+                <span>
+                  <strong>Patient:</strong> {patient.patientName} &nbsp;|&nbsp; <strong>UHID:</strong> {patient.uhid} &nbsp;|&nbsp; <strong>Date:</strong> {formatDate(patient.appointmentDate)}
+                </span>
+              </div>
+
+              {/* Remaining Medicines Table */}
+              <div style={{ marginBottom: '10px', width: '100%', boxSizing: 'border-box' }}>
+                <p style={{ fontWeight: 'bold', margin: '0 0 3px 0', fontSize: '10.5px', textDecoration: 'underline' }}>
+                  {t(activeLang, 'medicines')} (Continued):
+                </p>
+                <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: '9.5px', lineHeight: '1.3', border: '1px solid #000', boxSizing: 'border-box' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#e8e8e8' }}>
+                      <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '4%' }}>#</th>
+                      <th style={{ padding: '3.5px 4px', border: '1px solid #000', textAlign: 'left', fontWeight: 'bold', width: '26%', overflowWrap: 'break-word', wordBreak: 'break-word' }}>{t(activeLang, 'medicine')}</th>
+                      <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '11%', overflowWrap: 'break-word', wordBreak: 'break-word' }}>Dosage Form</th>
+                      <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '10%', overflowWrap: 'break-word', wordBreak: 'break-word' }}>Strength</th>
+                      <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '6%' }}>Dose</th>
+                      <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '12%', overflowWrap: 'break-word', wordBreak: 'break-word' }}>Frequency</th>
+                      <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '9%' }}>Duration</th>
+                      <th style={{ padding: '3.5px 4px', border: '1px solid #000', textAlign: 'left', fontWeight: 'bold', width: '16%', overflowWrap: 'break-word', wordBreak: 'break-word' }}>Remarks</th>
+                      <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '6%' }}>Qty</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {page2Meds.map((item, index) => {
+                      const doseNum = parseFloat(item.dose) || 1;
+                      const freqCount = (item.morning ? 1 : 0) + (item.afternoon ? 1 : 0) + (item.night ? 1 : 0);
+                      const durDays = parseFloat(item.duration) || 0;
+                      const calculatedQty = (freqCount > 0 && durDays > 0) ? parseFloat((doseNum * freqCount * durDays).toFixed(2)) : 0;
+                      const displayQty = item.qty !== undefined ? item.qty : (calculatedQty > 0 ? calculatedQty : (item.quantity || '-'));
+                      const frequencyStr = item.frequency || [
+                        item.morning ? '1' : '0',
+                        item.afternoon ? '1' : '0',
+                        item.night ? '1' : '0'
+                      ].join(' - ');
+                      const medName = item.medicine || item.medicineName || '';
+                      const dosageForm = item.dosageForm || item.dosage || 'Tablet';
+                      const durationStr = item.duration 
+                        ? (typeof item.duration === 'number' || /^\d+$/.test(String(item.duration).trim())
+                            ? `${translateClinicalText(item.duration, activeLang)} days`
+                            : translateClinicalText(item.duration, activeLang))
+                        : '-';
+                      const remarksStr = translateClinicalText(item.remarks || item.instruction || '-', activeLang);
+
+                      return (
+                        <tr key={index} style={{ backgroundColor: index % 2 === 0 ? '#ffffff' : '#f7f7f7' }}>
+                          <td style={{ padding: '3px 2px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle' }}>{6 + index + 1}</td>
+                          <td style={{ padding: '3px 4px', border: '1px solid #000', verticalAlign: 'middle', fontWeight: '600', overflowWrap: 'break-word', wordBreak: 'break-word' }}>{medName}</td>
+                          <td style={{ padding: '3px 2px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle', fontWeight: '500', color: '#4a5568', overflowWrap: 'break-word', wordBreak: 'break-word' }}>{dosageForm}</td>
+                          <td style={{ padding: '3px 2px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle', overflowWrap: 'break-word', wordBreak: 'break-word' }}>{item.strength || '-'}</td>
+                          <td style={{ padding: '3px 2px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle' }}>{item.dose !== undefined ? item.dose : '1'}</td>
+                          <td style={{ padding: '3px 2px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle', fontFamily: 'monospace', fontSize: '9px' }}>{frequencyStr}</td>
+                          <td style={{ padding: '3px 2px', border: '1px solid #000', verticalAlign: 'middle', textAlign: 'center' }}>
+                            {durationStr}
+                          </td>
+                          <td style={{ padding: '3px 4px', border: '1px solid #000', verticalAlign: 'middle', overflowWrap: 'break-word', wordBreak: 'break-word' }}>{remarksStr}</td>
+                          <td style={{ padding: '3px 2px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle', fontWeight: 'bold' }}>{displayQty}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Symptoms */}
+              {prescription?.symptoms && prescription.symptoms.length > 0 && (
+                <div style={{ marginBottom: '6px', width: '100%', boxSizing: 'border-box' }}>
+                  <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', fontSize: '10.5px' }}>{t(activeLang, 'symptoms')}:</p>
+                  <ul style={{ margin: '2px 0 0 0', paddingLeft: '16px', listStyleType: 'disc', fontSize: '10px', lineHeight: '1.38' }}>
+                    {prescription.symptoms.map((s, idx) => {
+                      let str = translateClinicalText(s.symptom, activeLang);
+                      if (s.durationDays) str += ` (${s.durationDays} ${s.durationUnit || 'Days'})`;
+                      if (printOptions.printSymptomHistory !== false && s.pastHistory) str += ` [History: ${s.pastHistory}]`;
+                      if (printOptions.printSymptomRemarks !== false && s.remarks) str += ` [Remarks: ${s.remarks}]`;
+                      return <li key={idx} style={{ marginBottom: '1.5px' }}>{str}</li>;
+                    })}
+                  </ul>
+                </div>
+              )}
+
+              {/* General Past History */}
+              {prescription?.pastHistory && printOptions.printGeneralPastHistory !== false && (
+                <div style={{ marginBottom: '6px', width: '100%', boxSizing: 'border-box' }}>
+                  <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', fontSize: '10.5px' }}>General Past History:</p>
+                  <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.38', whiteSpace: 'pre-line' }}>
+                    {prescription.pastHistory}
+                  </p>
+                </div>
+              )}
+
+              {/* Follow up date */}
+              {prescription?.followUpDate && (
+                <div style={{ marginBottom: '6px', width: '100%', boxSizing: 'border-box' }}>
+                  <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', fontSize: '10.5px' }}>Follow up date:</p>
+                  <p style={{ margin: '0', fontSize: '10px', fontWeight: 'bold' }}>
+                    {formatDate(prescription.followUpDate)}
+                  </p>
+                </div>
+              )}
+
+              {/* Doctor's Signature */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px', paddingRight: '12px' }}>
+                <div style={{ textAlign: 'center', minWidth: '160px', borderTop: '1px solid #000', paddingTop: '3px' }}>
+                  <strong style={{ fontSize: '10px' }}>Doctor's Signature</strong>
+                  <p style={{ margin: '1px 0 0 0', fontSize: '9px', color: '#333' }}>{doctorNameStr}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Generated Document Information at bottom of Page 2 */}
+            <div style={{
+              marginTop: 'auto',
+              paddingTop: '6px',
+              borderTop: '1px solid #d1d5db',
+              textAlign: 'center',
+              fontSize: '8.5px',
+              color: '#4b5563',
+              lineHeight: '1.3',
+              pageBreakInside: 'avoid',
+              width: '100%',
+              boxSizing: 'border-box'
+            }}>
+              <p style={{ margin: '0' }}>This is a computer-generated document. No signature required.</p>
+              <p style={{ margin: '2px 0 0 0' }}>Generated on: {documentDateTime} &nbsp;|&nbsp; Page 2 of 2</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  {/* ===================== STANDARD SINGLE-PAGE PRINT CONTAINER ===================== */}
   return (
-    <div ref={ref} className="a4-receipt" style={{
+    <div ref={ref} className={`a4-receipt ${isCustomLetterhead ? 'custom-letterhead-page' : ''}`} style={{
       width: '100%',
       maxWidth: '210mm',
-      minHeight: isPatientSlipOnly ? '280mm' : 'auto',
-      padding: showUploadedLetterhead ? '0 8mm 8mm 8mm' : '6mm 8mm 8mm 8mm',
+      minHeight: isCustomLetterhead ? '297mm' : (isPatientSlipOnly ? '280mm' : 'auto'),
+      padding: isCustomLetterhead ? 0 : (showUploadedLetterhead ? '0 8mm 8mm 8mm' : '6mm 8mm 8mm 8mm'),
       margin: '0 auto',
       marginTop: '0',
       backgroundColor: '#ffffff',
@@ -810,495 +1268,548 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
       position: 'relative',
       boxSizing: 'border-box'
     }}>
-      {showUploadedLetterhead ? (
-        <div style={{
-          width: 'calc(100% + 16mm)',
-          marginLeft: '-8mm',
-          marginRight: '-8mm',
-          marginTop: '0',
-          height: `${hospital?.letterheadHeaderHeight || 4.6}cm`,
-          overflow: 'hidden',
-          marginBottom: '8px',
-          border: 'none',
-          borderBottom: 'none',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center'
+      {/* Custom Full-Page Hospital Letterhead Background */}
+      {isCustomLetterhead && (
+        <div className="custom-letterhead-bg" style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          zIndex: 0,
+          pointerEvents: 'none',
+          overflow: 'hidden'
         }}>
           <img
-            src={resolvedLetterhead || hospital?.letterheadImageUrl}
+            src={customLhUrl}
             crossOrigin="anonymous"
-            alt="Hospital Letterhead"
-            style={{ width: '100%', height: '100%', objectFit: 'fill', display: 'block', border: 'none', outline: 'none' }}
+            alt="Hospital Custom Letterhead"
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'fill',
+              display: 'block'
+            }}
           />
         </div>
-      ) : (
-        <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        borderBottom: '2.5px solid #000',
-        paddingBottom: '14px',
-        marginBottom: '14px'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, paddingRight: '20px' }}>
-          {resolvedLogo && (
-            <div style={{ flexShrink: 0 }}>
-              <img
-                src={resolvedLogo}
-                crossOrigin="anonymous"
-                alt="Hospital Logo"
-                style={{ maxHeight: '75px', maxWidth: '75px', objectFit: 'contain', display: 'block' }}
-              />
-            </div>
-          )}
-          <div style={{ flex: 1 }}>
-            <h1 style={{ fontSize: '22px', fontWeight: '800', margin: '0', textTransform: 'uppercase', letterSpacing: '0.8px', color: '#111827' }}>
-              {hospital?.hospitalName || 'Hospital Name'}
-            </h1>
-            {hospital?.hospitalHeading && (
-              <p style={{ fontSize: '11px', margin: '3px 0 0 0', color: '#4b5563', fontWeight: '500' }}>{hospital.hospitalHeading}</p>
-            )}
-          </div>
-        </div>
-
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '4px',
-          textAlign: 'left',
-          fontSize: '11px',
-          color: '#111827',
-          lineHeight: '1.4',
-          maxWidth: '400px',
-          width: '100%',
-          alignItems: 'flex-start'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-            <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-            </svg>
-            <div><strong>Address:</strong> {hospital?.address || 'Hospital Address'}</div>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-            <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
-              <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/>
-            </svg>
-            <div><strong>Contact No:</strong> {formatHospitalPhoneNumbers(hospital)}</div>
-          </div>
-
-          {(hospital?.emailAddress || hospital?.email) && (
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-              <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
-                <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
-              </svg>
-              <div><strong>Email ID:</strong> {hospital.emailAddress || hospital.email}</div>
-            </div>
-          )}
-
-          {hospital?.website && (
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-              <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
-              </svg>
-              <div><strong>Website:</strong> {hospital.website}</div>
-            </div>
-          )}
-        </div>
-      </div>
       )}
 
-      <h2 style={{ 
-        fontSize: '14px',
-        fontWeight: 'bold',
-        margin: '0 0 8px 0', 
-        textAlign: 'center',
-        textTransform: 'uppercase',
-        letterSpacing: '1.5px',
-        borderBottom: '1px solid #000',
-        paddingBottom: '3px'
+      {/* Writable Content Area */}
+      <div className="custom-letterhead-content" style={{
+        position: 'relative',
+        zIndex: 1,
+        width: '100%',
+        minHeight: isCustomLetterhead ? `calc(297mm - ${customHeaderHeight}mm - ${customFooterHeight}mm)` : (isPatientSlipOnly ? '265mm' : 'auto'),
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+        boxSizing: 'border-box',
+        paddingTop: isCustomLetterhead ? `${customHeaderHeight}mm` : 0,
+        paddingBottom: isCustomLetterhead ? `${customFooterHeight}mm` : 0,
+        paddingLeft: isCustomLetterhead ? `${customLeftMargin}mm` : 0,
+        paddingRight: isCustomLetterhead ? `${customRightMargin}mm` : 0
       }}>
-        {documentTitle}
-      </h2>
+        <div style={{ flex: '1 0 auto', width: '100%', boxSizing: 'border-box' }}>
+          {!isCustomLetterhead && (showUploadedLetterhead ? (
+            <div style={{
+              width: 'calc(100% + 16mm)',
+              marginLeft: '-8mm',
+              marginRight: '-8mm',
+              marginTop: '0',
+              height: `${hospital?.letterheadHeaderHeight || 4.6}cm`,
+              overflow: 'hidden',
+              marginBottom: '8px',
+              border: 'none',
+              borderBottom: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <img
+                src={resolvedLetterhead || hospital?.letterheadImageUrl}
+                crossOrigin="anonymous"
+                alt="Hospital Letterhead"
+                style={{ width: '100%', height: '100%', objectFit: 'fill', display: 'block', border: 'none', outline: 'none' }}
+              />
+            </div>
+          ) : (
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              borderBottom: '2.5px solid #000',
+              paddingBottom: '14px',
+              marginBottom: '14px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, paddingRight: '20px' }}>
+                {resolvedLogo && (
+                  <div style={{ flexShrink: 0 }}>
+                    <img
+                      src={resolvedLogo}
+                      crossOrigin="anonymous"
+                      alt="Hospital Logo"
+                      style={{ maxHeight: '75px', maxWidth: '75px', objectFit: 'contain', display: 'block' }}
+                    />
+                  </div>
+                )}
+                <div style={{ flex: 1 }}>
+                  <h1 style={{ fontSize: '22px', fontWeight: '800', margin: '0', textTransform: 'uppercase', letterSpacing: '0.8px', color: '#111827' }}>
+                    {hospital?.hospitalName || 'Hospital Name'}
+                  </h1>
+                  {hospital?.hospitalHeading && (
+                    <p style={{ fontSize: '11px', margin: '3px 0 0 0', color: '#4b5563', fontWeight: '500' }}>{hospital.hospitalHeading}</p>
+                  )}
+                </div>
+              </div>
 
-            {prescription ? (
-        /* TWO-COLUMN PRESCRIPTION ARCHITECTURE */
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', width: '100%', marginBottom: '8px' }}>
-          {/* LEFT COLUMN: Clinical Content & Medicines */ }
-          <div style={{ flex: '1 1 0%', minWidth: 0 }}>
-            {/* 1. Patient Information & Appointment Details */ }
-            <div style={{ marginBottom: '6px', padding: '5px 8px', border: '1px solid #000', borderRadius: '2px', backgroundColor: '#fff' }}>
-              <p style={{ fontWeight: 'bold', margin: '0 0 4px 0', fontSize: '10.5px', textDecoration: 'underline' }}>
-                {t(activeLang, 'patientInfo')} & Appointment Details
-              </p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', rowGap: '2px' }}>
-                <div style={{ width: '50%', padding: '1.5px 6px 1.5px 0', boxSizing: 'border-box' }}>
-                  <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
-                    <strong>Patient Name:</strong> {patient.patientName}
-                  </p>
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '4px',
+                textAlign: 'left',
+                fontSize: '11px',
+                color: '#111827',
+                lineHeight: '1.4',
+                maxWidth: '400px',
+                width: '100%',
+                alignItems: 'flex-start'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                  <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                  </svg>
+                  <div><strong>Address:</strong> {hospital?.address || 'Hospital Address'}</div>
                 </div>
-                <div style={{ width: '50%', padding: '1.5px 0 1.5px 6px', boxSizing: 'border-box' }}>
-                  <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
-                    <strong>UHID:</strong> {patient.uhid}
-                  </p>
+
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                  <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/>
+                  </svg>
+                  <div><strong>Contact No:</strong> {formatHospitalPhoneNumbers(hospital)}</div>
                 </div>
-                <div style={{ width: '50%', padding: '1.5px 6px 1.5px 0', boxSizing: 'border-box' }}>
-                  <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
-                    <strong>Gender / Age:</strong> {patient.gender} {patient.dob ? `(${ageFromDob(patient.dob)} yrs)` : ''}
-                  </p>
-                </div>
-                <div style={{ width: '50%', padding: '1.5px 0 1.5px 6px', boxSizing: 'border-box' }}>
-                  <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
-                    <strong>Mobile Number:</strong> {patient.mobile}
-                  </p>
-                </div>
-                <div style={{ width: '50%', padding: '1.5px 6px 1.5px 0', boxSizing: 'border-box' }}>
-                  <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
-                    <strong>Department / Speciality:</strong> {patient.department || '-'}{patient.speciality && !patient.department?.toLowerCase().includes(patient.speciality.toLowerCase()) ? ` - ${patient.speciality}` : ''}
-                  </p>
-                </div>
-                <div style={{ width: '50%', padding: '1.5px 0 1.5px 6px', boxSizing: 'border-box' }}>
-                  <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
-                    <strong>{isVisiting ? 'Visiting Specialist:' : 'Doctor Name:'}</strong> {doctorNameStr} {isVisiting ? '(Visiting Specialist)' : ''}
-                  </p>
-                </div>
-                <div style={{ width: '50%', padding: '1.5px 6px 1.5px 0', boxSizing: 'border-box' }}>
-                  <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
-                    <strong>Appointment Date & Time:</strong> {formatDate(patient.appointmentDate)} {patient.slot ? `(${patient.slot})` : ''}
-                  </p>
-                </div>
-                <div style={{ width: '50%', padding: '1.5px 0 1.5px 6px', boxSizing: 'border-box' }}>
-                  <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
-                    <strong>Registration Number:</strong> {patient.registrationNumber || '-'}
-                    {patient.appointmentNumber ? ` | Token #${patient.appointmentNumber}` : ''}
-                  </p>
-                </div>
-                {patient.address && (
-                  <div style={{ width: '100%', padding: '1.5px 0 1.5px 0', boxSizing: 'border-box' }}>
-                    <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
-                      <strong>Address:</strong> {patient.address}
-                    </p>
+
+                {(hospital?.emailAddress || hospital?.email) && (
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                    <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+                    </svg>
+                    <div><strong>Email ID:</strong> {hospital.emailAddress || hospital.email}</div>
+                  </div>
+                )}
+
+                {hospital?.website && (
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                    <svg style={{ width: '14px', height: '14px', flexShrink: 0, marginTop: '2px', color: '#ea580c' }} viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                    </svg>
+                    <div><strong>Website:</strong> {hospital.website}</div>
                   </div>
                 )}
               </div>
             </div>
+          ))}
 
-            {/* 2. Diagnosis & Remarks */ }
-            {prescription.diagnosisRemark && printOptions.printDiagnosisRemarks !== false && (
-              <div style={{ marginBottom: '6px' }}>
-                <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', fontSize: '10.5px' }}>Diagnosis & Remarks:</p>
-                <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.38', whiteSpace: 'pre-line' }}>
-                  {translateClinicalText(prescription.diagnosisRemark, activeLang)}
-                </p>
-              </div>
-            )}
-
-            {/* 3. Advice for the Patient */ }
-            {prescription.patientAdvice && printOptions.printPatientAdvice !== false && (
-              <div style={{ marginBottom: '6px' }}>
-                <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', fontSize: '10.5px' }}>Advice for the Patient:</p>
-                <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.38', whiteSpace: 'pre-line' }}>
-                  {translateClinicalText(prescription.patientAdvice, activeLang)}
-                </p>
-              </div>
-            )}
-
-            {/* 4. Lab Investigations & Reports */ }
-            {prescription.tests && prescription.tests.length > 0 && printOptions.printLabTests !== false && (
-              <div style={{ marginBottom: '6px' }}>
-                <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', fontSize: '10.5px' }}>Lab Investigations & Reports:</p>
-                <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.38' }}>
-                  {prescription.tests.join(', ')}
-                </p>
-              </div>
-            )}
-
-            {/* 5. Medicines Table with fixed table layout and auto-wrapping */ }
-            {prescription.medicines && prescription.medicines.filter(m => m.medicine).length > 0 && (
-              <div style={{ marginBottom: '8px' }}>
-                <p style={{ fontWeight: 'bold', margin: '0 0 3px 0', fontSize: '10.5px', textDecoration: 'underline' }}>
-                  {t(activeLang, 'medicines')}:
-                </p>
-                <table style={{
-                  width: '100%',
-                  tableLayout: 'fixed',
-                  borderCollapse: 'collapse',
-                  fontSize: '9.5px',
-                  lineHeight: '1.3',
-                  border: '1px solid #000',
-                  boxSizing: 'border-box'
-                }}>
-                  <thead>
-                    <tr style={{ backgroundColor: '#e8e8e8' }}>
-                      <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '4%' }}>#</th>
-                      <th style={{ padding: '3.5px 3px', border: '1px solid #000', textAlign: 'left', fontWeight: 'bold', width: '24%', overflowWrap: 'break-word', wordBreak: 'break-word' }}>{t(activeLang, 'medicine')}</th>
-                      <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '11%', overflowWrap: 'break-word', wordBreak: 'break-word' }}>Dosage Form</th>
-                      <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '10%', overflowWrap: 'break-word', wordBreak: 'break-word' }}>Strength</th>
-                      <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '7%' }}>Dose</th>
-                      <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '14%', overflowWrap: 'break-word', wordBreak: 'break-word' }}>Frequency</th>
-                      <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '10%' }}>Duration</th>
-                      <th style={{ padding: '3.5px 3px', border: '1px solid #000', textAlign: 'left', fontWeight: 'bold', width: '13%', overflowWrap: 'break-word', wordBreak: 'break-word' }}>Remarks</th>
-                      <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '7%' }}>Qty</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {prescription.medicines.filter((m) => m.medicine).map((item, index) => {
-                      const doseNum = parseFloat(item.dose) || 0;
-                      const freqCount = (item.morning ? 1 : 0) + (item.afternoon ? 1 : 0) + (item.night ? 1 : 0);
-                      const durDays = parseFloat(item.duration) || 0;
-                      const calculatedQty = parseFloat((doseNum * freqCount * durDays).toFixed(2));
-                      const displayQty = item.qty !== undefined ? item.qty : calculatedQty;
-                      const frequencyStr = [
-                        item.morning ? '1' : '0',
-                        item.afternoon ? '1' : '0',
-                        item.night ? '1' : '0'
-                      ].join(' - ');
-
-                      return (
-                        <tr key={index} style={{ backgroundColor: index % 2 === 0 ? '#ffffff' : '#f7f7f7' }}>
-                          <td style={{ padding: '3px 2px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle' }}>{index + 1}</td>
-                          <td style={{ padding: '3px 3px', border: '1px solid #000', verticalAlign: 'middle', fontWeight: '600', overflowWrap: 'break-word', wordBreak: 'break-word' }}>{item.medicine}</td>
-                          <td style={{ padding: '3px 2px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle', fontWeight: '500', color: '#4a5568', overflowWrap: 'break-word', wordBreak: 'break-word' }}>{item.dosageForm || 'Tablet'}</td>
-                          <td style={{ padding: '3px 2px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle', overflowWrap: 'break-word', wordBreak: 'break-word' }}>{item.strength || '-'}</td>
-                          <td style={{ padding: '3px 2px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle' }}>{item.dose !== undefined ? item.dose : '1'}</td>
-                          <td style={{ padding: '3px 2px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle', fontFamily: 'monospace', fontSize: '9px' }}>{frequencyStr}</td>
-                          <td style={{ padding: '3px 2px', border: '1px solid #000', verticalAlign: 'middle', textAlign: 'center' }}>
-                            {item.duration ? `${translateClinicalText(item.duration, activeLang)} days` : '-'}
-                          </td>
-                          <td style={{ padding: '3px 3px', border: '1px solid #000', verticalAlign: 'middle', overflowWrap: 'break-word', wordBreak: 'break-word' }}>{translateClinicalText(item.remarks, activeLang) || '-'}</td>
-                          <td style={{ padding: '3px 2px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle', fontWeight: 'bold' }}>{displayQty}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* 6. Symptoms */ }
-            {prescription.symptoms && prescription.symptoms.length > 0 && (
-              <div style={{ marginBottom: '6px' }}>
-                <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', fontSize: '10.5px' }}>{t(activeLang, 'symptoms')}:</p>
-                {prescription.symptoms.length > 1 ? (
-                  <ul style={{ margin: '2px 0 0 0', paddingLeft: '16px', listStyleType: 'disc', fontSize: '10px', lineHeight: '1.38' }}>
-                    {prescription.symptoms.map((s, idx) => {
-                      let str = translateClinicalText(s.symptom, activeLang);
-                      if (s.durationDays) str += ` (${s.durationDays} ${s.durationUnit || 'Days'})`;
-                      if (printOptions.printSymptomHistory !== false && s.pastHistory) {
-                        str += ` [History: ${s.pastHistory}]`;
-                      }
-                      if (printOptions.printSymptomRemarks !== false && s.remarks) {
-                        str += ` [Remarks: ${s.remarks}]`;
-                      }
-                      return <li key={idx} style={{ marginBottom: '1.5px' }}>{str}</li>;
-                    })}
-                  </ul>
-                ) : (
-                  <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.38' }}>
-                    {prescription.symptoms.map((s) => {
-                      let str = translateClinicalText(s.symptom, activeLang);
-                      if (s.durationDays) str += ` (${s.durationDays} ${s.durationUnit || 'Days'})`;
-                      if (printOptions.printSymptomHistory !== false && s.pastHistory) {
-                        str += ` [History: ${s.pastHistory}]`;
-                      }
-                      if (printOptions.printSymptomRemarks !== false && s.remarks) {
-                        str += ` [Remarks: ${s.remarks}]`;
-                      }
-                      return str;
-                    }).join('; ')}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* 7. General Past History */ }
-            {prescription.pastHistory && printOptions.printGeneralPastHistory !== false && (
-              <div style={{ marginBottom: '6px' }}>
-                <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', fontSize: '10.5px' }}>General Past History:</p>
-                <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.38', whiteSpace: 'pre-line' }}>
-                  {prescription.pastHistory}
-                </p>
-              </div>
-            )}
-
-            {/* 8. Follow up date */ }
-            {prescription.followUpDate && (
-              <div style={{ marginBottom: '6px' }}>
-                <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', fontSize: '10.5px' }}>Follow up date:</p>
-                <p style={{ margin: '0', fontSize: '10px', fontWeight: 'bold' }}>
-                  {formatDate(prescription.followUpDate)}
-                </p>
-              </div>
-            )}
+          {/* Document Title Header */}
+          <div style={{ textAlign: 'center', marginBottom: '8px', borderBottom: '2.5px solid #000', paddingBottom: '4px' }}>
+            <h2 style={{ fontSize: '15px', fontWeight: '900', margin: '0', textTransform: 'uppercase', letterSpacing: '1.5px', color: '#000' }}>
+              {documentTitle}
+            </h2>
           </div>
 
-          {/* RIGHT COLUMN: Vitals Section Aligned with Clinical Content */ }
-          {printOptions.printVitals !== false && (
-            <div style={{ width: '190px', flexShrink: 0 }}>
-              {renderVitalsTable(true)}
-            </div>
+          {/* PRESCRIPTION FORMAT */}
+          {isPrescriptionFormat ? (
+            <>
+              {/* TWO-COLUMN PRESCRIPTION ARCHITECTURE: Patient Info, Clinical Details & Vitals */}
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', width: '100%', marginBottom: '8px', boxSizing: 'border-box' }}>
+                {/* LEFT COLUMN: Clinical Content & Medicines */}
+                <div style={{ flex: '1 1 0%', minWidth: 0, boxSizing: 'border-box' }}>
+                  {/* 1. Patient Information & Appointment Details */}
+                  <div style={{ marginBottom: '6px', padding: '5px 8px', border: '1px solid #000', borderRadius: '2px', backgroundColor: '#fff' }}>
+                    <p style={{ fontWeight: 'bold', margin: '0 0 3px 0', fontSize: '10.5px', textDecoration: 'underline' }}>
+                      {t(activeLang, 'patientInfo')} & Appointment Details
+                    </p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', rowGap: '1.5px' }}>
+                      <div style={{ width: '50%', padding: '1px 4px 1px 0', boxSizing: 'border-box' }}>
+                        <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
+                          <strong>Patient Name:</strong> {patient.patientName}
+                        </p>
+                      </div>
+                      <div style={{ width: '50%', padding: '1px 0 1px 4px', boxSizing: 'border-box' }}>
+                        <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
+                          <strong>UHID:</strong> {patient.uhid}
+                        </p>
+                      </div>
+                      <div style={{ width: '50%', padding: '1px 4px 1px 0', boxSizing: 'border-box' }}>
+                        <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
+                          <strong>Gender / Age:</strong> {patient.gender} {patient.dob ? `(${ageFromDob(patient.dob)} yrs)` : ''}
+                        </p>
+                      </div>
+                      <div style={{ width: '50%', padding: '1px 0 1px 4px', boxSizing: 'border-box' }}>
+                        <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
+                          <strong>Mobile Number:</strong> {patient.mobile}
+                        </p>
+                      </div>
+                      <div style={{ width: '50%', padding: '1px 4px 1px 0', boxSizing: 'border-box' }}>
+                        <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
+                          <strong>Department / Speciality:</strong> {patient.department || '-'}{patient.speciality && !patient.department?.toLowerCase().includes(patient.speciality.toLowerCase()) ? ` - ${patient.speciality}` : ''}
+                        </p>
+                      </div>
+                      <div style={{ width: '50%', padding: '1px 0 1px 4px', boxSizing: 'border-box' }}>
+                        <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
+                          <strong>{isVisiting ? 'Visiting Specialist:' : 'Doctor Name:'}</strong> {doctorNameStr} {isVisiting ? '(Visiting Specialist)' : ''}
+                        </p>
+                      </div>
+                      <div style={{ width: '50%', padding: '1px 4px 1px 0', boxSizing: 'border-box' }}>
+                        <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
+                          <strong>Appointment Date & Time:</strong> {formatDate(patient.appointmentDate)} {patient.slot ? `(${patient.slot})` : ''}
+                        </p>
+                      </div>
+                      <div style={{ width: '50%', padding: '1px 0 1px 4px', boxSizing: 'border-box' }}>
+                        <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
+                          <strong>Registration Number:</strong> {patient.registrationNumber || '-'}
+                          {patient.appointmentNumber ? ` | Token #${patient.appointmentNumber}` : ''}
+                        </p>
+                      </div>
+                      {patient.address && (
+                        <div style={{ width: '100%', padding: '1px 0 1px 0', boxSizing: 'border-box' }}>
+                          <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.3' }}>
+                            <strong>Address:</strong> {patient.address}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 2. Diagnosis & Remarks */}
+                  {prescription?.diagnosisRemark && printOptions.printDiagnosisRemarks !== false && (
+                    <div style={{ marginBottom: '6px' }}>
+                      <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', fontSize: '10.5px' }}>{t(activeLang, 'diagnosis')}:</p>
+                      <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.38', whiteSpace: 'pre-line' }}>
+                        {translateClinicalText(prescription.diagnosisRemark, activeLang)}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* 4. Advice for the Patient */}
+                  {prescription?.patientAdvice && printOptions.printPatientAdvice !== false && (
+                    <div style={{ marginBottom: '6px' }}>
+                      <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', fontSize: '10.5px' }}>Advice for the Patient:</p>
+                      <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.38', whiteSpace: 'pre-line' }}>
+                        {translateClinicalText(prescription.patientAdvice, activeLang)}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* 5. Lab Investigations & Reports */}
+                  {prescription?.tests && prescription.tests.length > 0 && printOptions.printLabTests !== false && (
+                    <div style={{ marginBottom: '6px' }}>
+                      <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', fontSize: '10.5px' }}>Lab Investigations & Reports:</p>
+                      <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.38' }}>
+                        {prescription.tests.join(', ')}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* 6. Medicines Table */}
+                  {prescription?.medicines && prescription.medicines.filter(m => m && (m.medicine || m.medicineName)).length > 0 && (
+                    <div style={{ marginBottom: '8px', width: '100%', boxSizing: 'border-box' }}>
+                      <p style={{ fontWeight: 'bold', margin: '0 0 3px 0', fontSize: '10.5px', textDecoration: 'underline' }}>
+                        {t(activeLang, 'medicines')}:
+                      </p>
+                      <table style={{
+                width: '100%',
+                tableLayout: 'fixed',
+                        borderCollapse: 'collapse',
+                        fontSize: '9.5px',
+                        lineHeight: '1.3',
+                        border: '1px solid #000',
+                        boxSizing: 'border-box'
+                      }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#e8e8e8' }}>
+                            <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '4%' }}>#</th>
+                            <th style={{ padding: '3.5px 4px', border: '1px solid #000', textAlign: 'left', fontWeight: 'bold', width: '26%', overflowWrap: 'break-word', wordBreak: 'break-word' }}>{t(activeLang, 'medicine')}</th>
+                            <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '11%', overflowWrap: 'break-word', wordBreak: 'break-word' }}>Dosage Form</th>
+                            <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '10%', overflowWrap: 'break-word', wordBreak: 'break-word' }}>Strength</th>
+                            <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '6%' }}>Dose</th>
+                            <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '12%', overflowWrap: 'break-word', wordBreak: 'break-word' }}>Frequency</th>
+                            <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '9%' }}>Duration</th>
+                            <th style={{ padding: '3.5px 4px', border: '1px solid #000', textAlign: 'left', fontWeight: 'bold', width: '16%', overflowWrap: 'break-word', wordBreak: 'break-word' }}>Remarks</th>
+                            <th style={{ padding: '3.5px 2px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', width: '6%' }}>Qty</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {prescription.medicines.filter((m) => m && (m.medicine || m.medicineName)).map((item, index) => {
+                            const doseNum = parseFloat(item.dose) || 1;
+                            const freqCount = (item.morning ? 1 : 0) + (item.afternoon ? 1 : 0) + (item.night ? 1 : 0);
+                            const durDays = parseFloat(item.duration) || 0;
+                            const calculatedQty = (freqCount > 0 && durDays > 0) ? parseFloat((doseNum * freqCount * durDays).toFixed(2)) : 0;
+                            const displayQty = item.qty !== undefined ? item.qty : (calculatedQty > 0 ? calculatedQty : (item.quantity || '-'));
+                            const frequencyStr = item.frequency || [
+                              item.morning ? '1' : '0',
+                              item.afternoon ? '1' : '0',
+                              item.night ? '1' : '0'
+                            ].join(' - ');
+                            const medName = item.medicine || item.medicineName || '';
+                            const dosageForm = item.dosageForm || item.dosage || 'Tablet';
+                            const durationStr = item.duration 
+                              ? (typeof item.duration === 'number' || /^\d+$/.test(String(item.duration).trim())
+                                  ? `${translateClinicalText(item.duration, activeLang)} days`
+                                  : translateClinicalText(item.duration, activeLang))
+                              : '-';
+                            const remarksStr = translateClinicalText(item.remarks || item.instruction || '-', activeLang);
+
+                            return (
+                              <tr key={index} style={{ backgroundColor: index % 2 === 0 ? '#ffffff' : '#f7f7f7' }}>
+                                <td style={{ padding: '3px 2px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle' }}>{index + 1}</td>
+                                <td style={{ padding: '3px 4px', border: '1px solid #000', verticalAlign: 'middle', fontWeight: '600', overflowWrap: 'break-word', wordBreak: 'break-word' }}>{medName}</td>
+                                <td style={{ padding: '3px 2px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle', fontWeight: '500', color: '#4a5568', overflowWrap: 'break-word', wordBreak: 'break-word' }}>{dosageForm}</td>
+                                <td style={{ padding: '3px 2px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle', overflowWrap: 'break-word', wordBreak: 'break-word' }}>{item.strength || '-'}</td>
+                                <td style={{ padding: '3px 2px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle' }}>{item.dose !== undefined ? item.dose : '1'}</td>
+                                <td style={{ padding: '3px 2px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle', fontFamily: 'monospace', fontSize: '9px' }}>{frequencyStr}</td>
+                                <td style={{ padding: '3px 2px', border: '1px solid #000', verticalAlign: 'middle', textAlign: 'center' }}>
+                                  {durationStr}
+                                </td>
+                                <td style={{ padding: '3px 4px', border: '1px solid #000', verticalAlign: 'middle', overflowWrap: 'break-word', wordBreak: 'break-word' }}>{remarksStr}</td>
+                                <td style={{ padding: '3px 2px', border: '1px solid #000', textAlign: 'center', verticalAlign: 'middle', fontWeight: 'bold' }}>{displayQty}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  
+                  {/* 6. Symptoms */}
+                  {prescription?.symptoms && prescription.symptoms.length > 0 && (
+                    <div style={{ marginBottom: '6px', width: '100%', boxSizing: 'border-box' }}>
+                      <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', fontSize: '10.5px' }}>{t(activeLang, 'symptoms')}:</p>
+                      <ul style={{ margin: '2px 0 0 0', paddingLeft: '16px', listStyleType: 'disc', fontSize: '10px', lineHeight: '1.38' }}>
+                        {prescription.symptoms.map((s, idx) => {
+                          const sName = translateClinicalText(s.symptom || s.name || '', activeLang);
+                          const sDur = s.duration || (s.durationDays ? `${s.durationDays} ${s.durationUnit || 'Days'}` : '');
+                          const sHist = s.pastHistory || s.history;
+                          const sRem = s.remarks;
+                          let str = sName;
+                          if (sDur) str += ` (${sDur})`;
+                          if (printOptions.printSymptomHistory !== false && sHist) str += ` [History: ${sHist}]`;
+                          if (printOptions.printSymptomRemarks !== false && sRem) str += ` [Remarks: ${sRem}]`;
+                          return <li key={idx} style={{ marginBottom: '1.5px' }}>{str}</li>;
+                        })}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* 7. General Past History */}
+                  {prescription?.pastHistory && printOptions.printGeneralPastHistory !== false && (
+                    <div style={{ marginBottom: '6px', width: '100%', boxSizing: 'border-box' }}>
+                      <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', fontSize: '10.5px' }}>General Past History:</p>
+                      <p style={{ margin: '0', fontSize: '10px', lineHeight: '1.38', whiteSpace: 'pre-line' }}>
+                        {prescription.pastHistory}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* 8. Follow up date */}
+                  {prescription?.followUpDate && (
+                    <div style={{ marginBottom: '6px', width: '100%', boxSizing: 'border-box' }}>
+                      <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', fontSize: '10.5px' }}>Follow up date:</p>
+                      <p style={{ margin: '0', fontSize: '10px', fontWeight: 'bold' }}>
+                        {formatDate(prescription.followUpDate)}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Doctor Signature */}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px', paddingRight: '8px' }}>
+                    <div style={{ textAlign: 'center', minWidth: '160px', borderTop: '1px solid #000', paddingTop: '3px' }}>
+                      <strong style={{ fontSize: '10px' }}>Doctor's Signature</strong>
+                      <p style={{ margin: '1px 0 0 0', fontSize: '9px', color: '#333' }}>{doctorNameStr}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* RIGHT COLUMN: Vitals Section Aligned with Clinical Content */}
+                {printOptions.printVitals !== false && (
+                  <div style={{ width: '190px', flexShrink: 0, boxSizing: 'border-box' }}>
+                    {renderVitalsTable(true)}
+                  </div>
+                )}
+              </div>
+
+              {/* Keep comment for test compatibility */}
+              {/* FULL-WIDTH MEDICINES SECTION */}
+            </>
+          ) : (
+            /* NON-PRESCRIPTION LAYOUT (e.g. Patient Slip / Bill Receipt) */
+            <>
+              {/* TWO-COLUMN ARCHITECTURE FOR PATIENT SLIP */}
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', width: '100%', marginBottom: '8px', boxSizing: 'border-box' }}>
+                <div style={{ flex: '1 1 0%', minWidth: 0, boxSizing: 'border-box' }}>
+                  <div style={{ marginBottom: '8px', padding: '6px 8px', border: '1px solid #000', borderRadius: '2px', backgroundColor: '#fff' }}>
+                    <p style={{ fontWeight: 'bold', margin: '0 0 4px 0', fontSize: '11px', textDecoration: 'underline' }}>
+                      {t(activeLang, 'patientInfo')} & Appointment Details
+                    </p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', rowGap: '2px' }}>
+                      <div style={{ width: '50%', padding: '1.5px 6px 1.5px 0', boxSizing: 'border-box' }}>
+                        <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
+                          <strong>Patient Name:</strong> {patient.patientName}
+                        </p>
+                      </div>
+                      <div style={{ width: '50%', padding: '1.5px 0 1.5px 6px', boxSizing: 'border-box' }}>
+                        <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
+                          <strong>UHID:</strong> {patient.uhid}
+                        </p>
+                      </div>
+                      <div style={{ width: '50%', padding: '1.5px 6px 1.5px 0', boxSizing: 'border-box' }}>
+                        <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
+                          <strong>Gender / Age:</strong> {patient.gender} {patient.dob ? `(${ageFromDob(patient.dob)} yrs)` : ''}
+                        </p>
+                      </div>
+                      <div style={{ width: '50%', padding: '1.5px 0 1.5px 6px', boxSizing: 'border-box' }}>
+                        <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
+                          <strong>Mobile Number:</strong> {patient.mobile}
+                        </p>
+                      </div>
+                      <div style={{ width: '50%', padding: '1.5px 6px 1.5px 0', boxSizing: 'border-box' }}>
+                        <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
+                          <strong>Department / Speciality:</strong> {patient.department || '-'}{patient.speciality && !patient.department?.toLowerCase().includes(patient.speciality.toLowerCase()) ? ` - ${patient.speciality}` : ''}
+                        </p>
+                      </div>
+                      <div style={{ width: '50%', padding: '1.5px 0 1.5px 6px', boxSizing: 'border-box' }}>
+                        <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
+                          <strong>{isVisiting ? 'Visiting Specialist:' : 'Doctor Name:'}</strong> {doctorNameStr} {isVisiting ? '(Visiting Specialist)' : ''}
+                        </p>
+                      </div>
+                      <div style={{ width: '50%', padding: '1.5px 6px 1.5px 0', boxSizing: 'border-box' }}>
+                        <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
+                          <strong>Appointment Date & Time:</strong> {formatDate(patient.appointmentDate)} {patient.slot ? `(${patient.slot})` : ''}
+                        </p>
+                      </div>
+                      <div style={{ width: '50%', padding: '1.5px 0 1.5px 6px', boxSizing: 'border-box' }}>
+                        <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
+                          <strong>Registration Number:</strong> {patient.registrationNumber || '-'}
+                          {patient.appointmentNumber ? ` | Token #${patient.appointmentNumber}` : ''}
+                        </p>
+                      </div>
+                      {isPatientSlipOnly && (
+                        <div style={{ width: '50%', padding: '1.5px 6px 1.5px 0', boxSizing: 'border-box' }}>
+                          <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
+                            <strong>Consultation Fee:</strong> ₹{Number(netFee).toFixed(2)} ({patient.paymentStatus || 'Paid'})
+                          </p>
+                        </div>
+                      )}
+                      {isPatientSlipOnly && patient.billNumber && (
+                        <div style={{ width: '50%', padding: '1.5px 0 1.5px 6px', boxSizing: 'border-box' }}>
+                          <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
+                            <strong>Receipt No:</strong> {patient.billNumber}
+                          </p>
+                        </div>
+                      )}
+                      {patient.address && (
+                        <div style={{ width: '100%', padding: '1.5px 0 1.5px 0', boxSizing: 'border-box' }}>
+                          <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
+                            <strong>Address:</strong> {patient.address}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {!prescription && !isPatientSlipOnly && (
+                    <div style={{ marginBottom: '18px', padding: '10px', border: '1px solid #000', borderRadius: '2px', backgroundColor: '#fff' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <p style={{ fontWeight: 'bold', margin: '0', fontSize: '12px', textDecoration: 'underline' }}>
+                          OPD Fee & Payment Summary
+                        </p>
+                        {patient.billNumber && (
+                          <p style={{ margin: '0', fontSize: '11px', fontWeight: 'bold' }}>
+                            Receipt No: {patient.billNumber}
+                          </p>
+                        )}
+                      </div>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', border: '1px solid #000' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#f0f0f0' }}>
+                            <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'left' }}>Description</th>
+                            <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>Gross Fee</th>
+                            <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>Discount</th>
+                            <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>Net Amount</th>
+                            <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center' }}>Payment Mode</th>
+                            <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center' }}>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td style={{ padding: '6px 8px', border: '1px solid #000' }}>
+                              OPD Consultation Fee - {doctorNameStr} {isVisiting ? '(Visiting Specialist)' : ''}
+                            </td>
+                            <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>
+                              ₹{grossFee.toFixed(2)}
+                            </td>
+                            <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>
+                              {patient.discountType === 'percent'
+                                ? `${patient.discountValue || 0}% (₹${(patient.discountAmount || 0).toFixed(2)})`
+                                : (patient.discountType === 'amount' && (patient.discountAmount || 0) > 0
+                                    ? `₹${(patient.discountAmount || 0).toFixed(2)}`
+                                    : '₹0.00')}
+                            </td>
+                            <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right', fontWeight: 'bold' }}>
+                              ₹{netFee.toFixed(2)}
+                            </td>
+                            <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center' }}>
+                              {(patient.paymentMode === 'Split' || patient.paymentMode === 'Split Payment') && (patient.splitPayments || (patient.mixedPayments && patient.mixedPayments.length > 0)) ? (
+                                <span>
+                                  Split ({
+                                    patient.mixedPayments && patient.mixedPayments.length > 0
+                                      ? patient.mixedPayments.map(p => `${p.method}: ₹${p.amount}`).join(', ')
+                                      : (patient.splitPayments?.mode1 && patient.splitPayments?.mode2
+                                          ? `${patient.splitPayments.mode1}: ₹${patient.splitPayments.amount1 || 0}, ${patient.splitPayments.mode2}: ₹${patient.splitPayments.amount2 || 0}`
+                                          : `Cash: ₹${patient.splitPayments.cash || 0}, UPI: ₹${patient.splitPayments.upi || 0}`)
+                                  })
+                                </span>
+                              ) : (
+                                patient.paymentMode || 'Cash'
+                              )}
+                            </td>
+                            <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', color: patient.paymentStatus === 'Not Paid' ? '#dc2626' : '#16a34a' }}>
+                              {patient.paymentStatus || 'Paid'}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Right: Vitals table for OPD Patient Slip */}
+                {printOptions.printVitals !== false && (
+                  <div style={{ width: '190px', flexShrink: 0, boxSizing: 'border-box' }}>
+                    {renderVitalsTable(true)}
+                  </div>
+                )}
+              </div>
+            </>
           )}
         </div>
-      ) : (
-        /* NON-PRESCRIPTION LAYOUT (e.g. Patient Slip / Bill Receipt) */
-        <>
-          <div style={{ marginBottom: '8px', padding: '6px 8px', border: '1px solid #000', borderRadius: '2px' }}>
-            <p style={{ fontWeight: 'bold', margin: '0 0 4px 0', fontSize: '11px', textDecoration: 'underline' }}>
-              {t(activeLang, 'patientInfo')} & Appointment Details
-            </p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', rowGap: '2px' }}>
-              <div style={{ width: '50%', padding: '1.5px 8px 1.5px 0', boxSizing: 'border-box' }}>
-                <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
-                  <strong>Patient Name:</strong> {patient.patientName}
-                </p>
-              </div>
-              <div style={{ width: '50%', padding: '1.5px 0 1.5px 8px', boxSizing: 'border-box' }}>
-                <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
-                  <strong>UHID:</strong> {patient.uhid}
-                </p>
-              </div>
-              <div style={{ width: '50%', padding: '1.5px 8px 1.5px 0', boxSizing: 'border-box' }}>
-                <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
-                  <strong>Gender / Age:</strong> {patient.gender} {patient.dob ? `(${ageFromDob(patient.dob)} yrs)` : ''}
-                </p>
-              </div>
-              <div style={{ width: '50%', padding: '1.5px 0 1.5px 8px', boxSizing: 'border-box' }}>
-                <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
-                  <strong>Mobile Number:</strong> {patient.mobile}
-                </p>
-              </div>
-              <div style={{ width: '50%', padding: '1.5px 8px 1.5px 0', boxSizing: 'border-box' }}>
-                <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
-                  <strong>Department / Speciality:</strong> {patient.department || '-'}{patient.speciality && !patient.department?.toLowerCase().includes(patient.speciality.toLowerCase()) ? ` - ${patient.speciality}` : ''}
-                </p>
-              </div>
-              <div style={{ width: '50%', padding: '1.5px 0 1.5px 8px', boxSizing: 'border-box' }}>
-                <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
-                  <strong>{isVisiting ? 'Visiting Specialist:' : 'Doctor Name:'}</strong> {doctorNameStr} {isVisiting ? '(Visiting Specialist)' : ''}
-                </p>
-              </div>
-              <div style={{ width: '50%', padding: '1.5px 8px 1.5px 0', boxSizing: 'border-box' }}>
-                <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
-                  <strong>Appointment Date & Time:</strong> {formatDate(patient.appointmentDate)} {patient.slot ? `(${patient.slot})` : ''}
-                </p>
-              </div>
-              <div style={{ width: '50%', padding: '1.5px 0 1.5px 8px', boxSizing: 'border-box' }}>
-                <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
-                  <strong>Registration Number:</strong> {patient.registrationNumber || '-'}
-                  {patient.appointmentNumber ? ` | Token #${patient.appointmentNumber}` : ''}
-                </p>
-              </div>
-              {isPatientSlipOnly && (
-                <div style={{ width: '50%', padding: '1.5px 8px 1.5px 0', boxSizing: 'border-box' }}>
-                  <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
-                    <strong>Consultation Fee:</strong> ₹{Number(netFee).toFixed(2)} ({patient.paymentStatus || 'Paid'})
-                  </p>
-                </div>
-              )}
-              {isPatientSlipOnly && patient.billNumber && (
-                <div style={{ width: '50%', padding: '1.5px 0 1.5px 8px', boxSizing: 'border-box' }}>
-                  <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
-                    <strong>Receipt No:</strong> {patient.billNumber}
-                  </p>
-                </div>
-              )}
-              {patient.address && (
-                <div style={{ width: '100%', padding: '1.5px 0 1.5px 0', boxSizing: 'border-box' }}>
-                  <p style={{ margin: '0', fontSize: '10.5px', lineHeight: '1.3' }}>
-                    <strong>Address:</strong> {patient.address}
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
 
-          {(isPatientSlipOnly || mode === 'all') && renderVitalsTable(false)}
-
-          {!prescription && !isPatientSlipOnly && (
-            <div style={{ marginBottom: '18px', padding: '10px', border: '1px solid #000', borderRadius: '2px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <p style={{ fontWeight: 'bold', margin: '0', fontSize: '12px', textDecoration: 'underline' }}>
-                  OPD Fee & Payment Summary
-                </p>
-                {patient.billNumber && (
-                  <p style={{ margin: '0', fontSize: '11px', fontWeight: 'bold' }}>
-                    Receipt No: {patient.billNumber}
-                  </p>
-                )}
-              </div>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', border: '1px solid #000' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#f0f0f0' }}>
-                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'left' }}>Description</th>
-                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>Gross Fee</th>
-                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>Discount</th>
-                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>Net Amount</th>
-                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center' }}>Payment Mode</th>
-                    <th style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center' }}>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td style={{ padding: '6px 8px', border: '1px solid #000' }}>
-                      OPD Consultation Fee - {doctorNameStr} {isVisiting ? '(Visiting Specialist)' : ''}
-                    </td>
-                    <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>
-                      ₹{grossFee.toFixed(2)}
-                    </td>
-                    <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right' }}>
-                      {patient.discountType === 'percent'
-                        ? `${patient.discountValue || 0}% (₹${(patient.discountAmount || 0).toFixed(2)})`
-                        : (patient.discountType === 'amount' && (patient.discountAmount || 0) > 0
-                            ? `₹${(patient.discountAmount || 0).toFixed(2)}`
-                            : '₹0.00')}
-                    </td>
-                    <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'right', fontWeight: 'bold' }}>
-                      ₹{netFee.toFixed(2)}
-                    </td>
-                    <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center' }}>
-                      {(patient.paymentMode === 'Split' || patient.paymentMode === 'Split Payment') && (patient.splitPayments || (patient.mixedPayments && patient.mixedPayments.length > 0)) ? (
-                        <span>
-                          Split ({
-                            patient.mixedPayments && patient.mixedPayments.length > 0
-                              ? patient.mixedPayments.map(p => `${p.method}: ₹${p.amount}`).join(', ')
-                              : (patient.splitPayments?.mode1 && patient.splitPayments?.mode2
-                                  ? `${patient.splitPayments.mode1}: ₹${patient.splitPayments.amount1 || 0}, ${patient.splitPayments.mode2}: ₹${patient.splitPayments.amount2 || 0}`
-                                  : `Cash: ₹${patient.splitPayments.cash || 0}, UPI: ₹${patient.splitPayments.upi || 0}`)
-                          })
-                        </span>
-                      ) : (
-                        patient.paymentMode || 'Cash'
-                      )}
-                    </td>
-                    <td style={{ padding: '6px 8px', border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', color: patient.paymentStatus === 'Not Paid' ? '#dc2626' : '#16a34a' }}>
-                      {patient.paymentStatus || 'Paid'}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
-      )}
-
-      <div style={{ 
-        position: isPatientSlipOnly ? 'absolute' : 'relative',
-        bottom: isPatientSlipOnly ? '8mm' : 'auto',
-        left: isPatientSlipOnly ? '8mm' : 'auto',
-        right: isPatientSlipOnly ? '8mm' : 'auto',
-        marginTop: isPatientSlipOnly ? '0' : (prescription ? '12px' : '20px'),
-        textAlign: 'center', 
-        fontSize: '9px', 
-        color: '#666', 
-        borderTop: '1px solid #ccc', 
-        paddingTop: '10px',
-        pageBreakInside: 'avoid'
-      }}>
-        <p style={{ margin: '0' }}>This is a computer-generated document. No signature required.</p>
-        <p style={{ margin: '3px 0 0 0' }}>
-          Generated on: {documentDateTime}
-        </p>
+        {/* Generated Document Information - Always at the Bottom of Printable Area */}
+        <div style={{
+          marginTop: 'auto',
+          paddingTop: '6px',
+          borderTop: '1px solid #d1d5db',
+          textAlign: 'center',
+          fontSize: '8.5px',
+          color: '#4b5563',
+          lineHeight: '1.3',
+          pageBreakInside: 'avoid',
+          width: '100%',
+          boxSizing: 'border-box'
+        }}>
+          <p style={{ margin: '0' }}>This is a computer-generated document. No signature required.</p>
+          <p style={{ margin: '2px 0 0 0' }}>Generated on: {documentDateTime}</p>
+        </div>
       </div>
     </div>
   );
