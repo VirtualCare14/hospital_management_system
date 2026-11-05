@@ -324,7 +324,9 @@ input.input[class*="pr-10"], .pr-10 {
   #ipd-discharge-print-container,
   #ipd-discharge-print-container *,
   .lab-receipt-print-area,
-  .lab-receipt-print-area * {
+  .lab-receipt-print-area *,
+  .print-area,
+  .print-area * {
     visibility: visible !important;
   }
 
@@ -334,7 +336,8 @@ input.input[class*="pr-10"], .pr-10 {
   .printable-area,
   #doctor-rx-print-container,
   #ipd-discharge-print-container,
-  .lab-receipt-print-area {
+  .lab-receipt-print-area,
+  .print-area {
     display: block !important;
     visibility: visible !important;
     position: relative !important;
