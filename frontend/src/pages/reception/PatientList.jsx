@@ -71,7 +71,9 @@ const PatientList = () => {
         if (data?.exists && data?.data) {
           setHospitalSettings(data.data);
           setReceptionSeePatientDue(Boolean(data.data.receptionSeePatientDue));
-          if (data.data.useSystemLetterhead === false && data.data.letterheadImageUrl) {
+          if (data.data.letterheadType === 'custom') {
+            setLetterheadOption('custom');
+          } else if (data.data.letterheadType === 'photo' || (data.data.useSystemLetterhead === false && data.data.letterheadImageUrl)) {
             setLetterheadOption('image');
           } else {
             setLetterheadOption('system');
@@ -1835,6 +1837,16 @@ const PatientList = () => {
                       title="Custom uploaded rectangular letterhead photo"
                     >
                       🖼️ Photo Letterhead
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLetterheadOption('custom')}
+                      className={`text-xs font-bold px-2.5 py-1 rounded transition-all cursor-pointer flex items-center gap-1.5 ${
+                        letterheadOption === 'custom' ? 'bg-white text-orange-600 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                      title="Leaves blank top margin for physical pre-printed letterhead paper"
+                    >
+                      📋 Pre-Printed Paper
                     </button>
                   </div>
                 </div>

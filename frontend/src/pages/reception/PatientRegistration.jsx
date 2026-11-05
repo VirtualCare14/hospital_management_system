@@ -978,7 +978,9 @@ const PatientRegistration = () => {
       .then(({ data }) => {
         if (data?.exists && data?.data) {
           setHospitalSettings(data.data);
-          if (data.data.useSystemLetterhead === false && data.data.letterheadImageUrl) {
+          if (data.data.letterheadType === 'custom') {
+            setLetterheadOption('custom');
+          } else if (data.data.letterheadType === 'photo' || (data.data.useSystemLetterhead === false && data.data.letterheadImageUrl)) {
             setLetterheadOption('image');
           } else {
             setLetterheadOption('system');
@@ -2071,29 +2073,7 @@ const PatientRegistration = () => {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  closeReceipt();
-                  const fName = registeredPatient.firstName || registeredPatient.patientName?.split(' ')[0] || '';
-                  const lName = registeredPatient.lastName || registeredPatient.patientName?.split(' ').slice(1).join(' ') || '';
-                  const params = new URLSearchParams({
-                    patientId: registeredPatient._id || registeredPatient.patientId || '',
-                    uhid: registeredPatient.uhid || '',
-                    firstName: fName,
-                    lastName: lName,
-                    mobile: registeredPatient.mobile || registeredPatient.phone || '',
-                    gender: registeredPatient.gender || '',
-                    age: registeredPatient.age ? String(registeredPatient.age) : '',
-                    ref: registeredPatient.doctorName ? `Dr. ${registeredPatient.doctorName}` : ''
-                  });
-                  navigate(`/reception/lab-billing?${params.toString()}`);
-                }}
-                className="btn cursor-pointer flex items-center gap-1.5 text-xs font-bold bg-orange-500 hover:bg-orange-600 text-white px-3.5 py-2 rounded-lg shadow-xs"
-              >
-                <FlaskConical className="h-4 w-4" /> Create Lab Bill
-              </button>
-              <button
-                type="button"
-                className="btn-secondary cursor-pointer text-xs px-3 py-2 text-gray-500 hover:text-gray-700 rounded-lg"
+                className="cursor-pointer text-xs font-bold px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-xs transition-colors"
                 onClick={closeReceipt}
               >
                 Done
@@ -2149,6 +2129,16 @@ const PatientRegistration = () => {
                     title="Custom uploaded rectangular letterhead photo"
                   >
                     🖼️ Photo Letterhead
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLetterheadOption('custom')}
+                    className={`text-xs font-bold px-2.5 py-1 rounded transition-all cursor-pointer flex items-center gap-1.5 ${
+                      letterheadOption === 'custom' ? 'bg-white text-orange-600 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                    title="Leaves blank top margin for physical pre-printed letterhead paper"
+                  >
+                    📋 Pre-Printed Paper
                   </button>
                 </div>
               </div>
