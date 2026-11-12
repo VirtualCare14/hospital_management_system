@@ -4,7 +4,60 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { useAuth } from '../context/AuthContext';
 import client from '../api/client';
-import { openPdfPrintWindow } from '../utils/pdfUtils';
+import { openPdfPrintWindow, sanitizeClonedDocumentForPdf } from '../utils/pdfUtils';
+
+// Trims empty top whitespace rows from html2canvas output before placing on PDF
+function trimCanvasTopWhitespace(canvas) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return canvas;
+  const width = canvas.width;
+  const height = canvas.height;
+  const maxScanHeight = Math.min(height, Math.round(height * 0.35));
+  const imgData = ctx.getImageData(0, 0, width, maxScanHeight);
+  const data = imgData.data;
+
+  let firstContentY = 0;
+  for (let y = 0; y < maxScanHeight; y++) {
+    let rowHasContent = false;
+    const rowOffset = y * width * 4;
+    for (let x = 0; x < width; x++) {
+      const idx = rowOffset + x * 4;
+      const r = data[idx];
+      const g = data[idx + 1];
+      const b = data[idx + 2];
+      const a = data[idx + 3];
+
+      // If pixel is not white and not transparent, it's content
+      if (a > 20 && (r < 240 || g < 240 || b < 240)) {
+        rowHasContent = true;
+        break;
+      }
+    }
+    if (rowHasContent) {
+      firstContentY = y;
+      break;
+    }
+  }
+
+  // If there's top whitespace (more than 2px), crop it out flush
+  if (firstContentY > 2) {
+    const trimmedCanvas = document.createElement('canvas');
+    trimmedCanvas.width = width;
+    trimmedCanvas.height = height - firstContentY;
+    const trimmedCtx = trimmedCanvas.getContext('2d');
+    if (trimmedCtx) {
+      trimmedCtx.fillStyle = '#ffffff';
+      trimmedCtx.fillRect(0, 0, trimmedCanvas.width, trimmedCanvas.height);
+      trimmedCtx.drawImage(
+        canvas,
+        0, firstContentY, width, height - firstContentY,
+        0, 0, width, height - firstContentY
+      );
+      return trimmedCanvas;
+    }
+  }
+  return canvas;
+}
 
 // Utility to convert number to words
 function amountInWords(num) {
@@ -103,13 +156,39 @@ export default function LabBillReceipt({ billData, hospitalSettings: initialHosp
     setIsPrintingPdf(true);
     try {
       if (printAreaRef.current) {
-        const canvas = await html2canvas(printAreaRef.current, {
+        const rawCanvas = await html2canvas(printAreaRef.current, {
           scale: 2.5,
           useCORS: true,
           logging: false,
           backgroundColor: '#ffffff',
-          imageTimeout: 15000
+          imageTimeout: 15000,
+          scrollX: 0,
+          scrollY: 0,
+          onclone: (clonedDoc) => {
+            if (typeof sanitizeClonedDocumentForPdf === 'function') {
+              sanitizeClonedDocumentForPdf(clonedDoc);
+            }
+            const clonedPrintArea = clonedDoc.querySelector('.lab-receipt-print-area');
+            if (clonedPrintArea) {
+              clonedPrintArea.style.border = 'none';
+              clonedPrintArea.style.borderTop = 'none';
+              clonedPrintArea.style.paddingTop = '0px';
+              clonedPrintArea.style.marginTop = '0px';
+              clonedPrintArea.style.boxShadow = 'none';
+            }
+            const wrappers = clonedDoc.querySelectorAll('.fixed, [class*="animate-in"]');
+            wrappers.forEach((el) => {
+              el.style.transform = 'none';
+              el.style.animation = 'none';
+              el.style.marginTop = '0px';
+              el.style.paddingTop = '0px';
+            });
+          }
         });
+
+        // Auto-trim any blank canvas rows above header to eliminate top gap
+        const canvas = trimCanvasTopWhitespace(rawCanvas);
+
         const imgData = canvas.toDataURL('image/png');
         const pdf = new jsPDF('p', 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();
@@ -134,7 +213,7 @@ export default function LabBillReceipt({ billData, hospitalSettings: initialHosp
       <style>{`
         @media print {
           @page {
-            margin: 6mm 8mm;
+            margin: 0;
             size: portrait;
           }
 
@@ -165,14 +244,18 @@ export default function LabBillReceipt({ billData, hospitalSettings: initialHosp
           .lab-receipt-print-area {
             display: block !important;
             visibility: visible !important;
-            position: relative !important;
-            left: auto !important;
-            top: auto !important;
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            right: 0 !important;
             width: 100% !important;
             max-width: 100% !important;
-            padding: 4mm 6mm !important;
-            margin: 0 auto !important;
-            border: 1px solid #cbd5e1 !important;
+            padding: 2mm 8mm 6mm 8mm !important;
+            padding-top: 0 !important;
+            margin: 0 !important;
+            margin-top: 0 !important;
+            border: none !important;
+            border-top: none !important;
             box-shadow: none !important;
             background: #ffffff !important;
             color: #000000 !important;
@@ -233,7 +316,7 @@ export default function LabBillReceipt({ billData, hospitalSettings: initialHosp
         {/* PRINTABLE RECEIPT CONTENT CONTAINER */}
         <div 
           ref={printAreaRef}
-          className="lab-receipt-print-area print-area bg-white text-slate-900 font-sans p-4 space-y-3 border border-slate-200 rounded-lg print:border-slate-300 print:p-4 print:m-0 print:w-full"
+          className="lab-receipt-print-area print-area bg-white text-slate-900 font-sans px-4 py-2 space-y-3 border-0 rounded-lg print:border-none print:p-0 print:m-0 print:w-full"
         >
           
           {/* HEADER: Hospital details with logo from Admin module */}
