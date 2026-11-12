@@ -95,7 +95,7 @@ export default function LabBillReceipt({ billData, onClose }) {
         </div>
 
         {/* PRINTABLE RECEIPT CONTENT CONTAINER */}
-        <div className="print-area bg-white text-slate-900 font-sans p-4 space-y-3 border border-slate-200 rounded-lg">
+        <div className="print-area bg-white text-slate-900 font-sans px-4 py-2 space-y-3 border-0 rounded-lg print:border-none print:p-0 print:m-0 print:w-full">
           
           {/* HEADER: Hospital details with logo from Admin module */}
           <div className="flex items-start justify-between border-b border-slate-300 pb-3">

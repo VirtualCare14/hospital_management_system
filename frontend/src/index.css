@@ -366,6 +366,23 @@ input.input[class*="pr-10"], .pr-10 {
     outline: none !important;
   }
 
+  /* Lab Receipt print positioning: flush at top 0 to eliminate any top gap from hidden page elements */
+  .lab-receipt-print-area {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    margin-top: 0 !important;
+    padding: 2mm 8mm 6mm 8mm !important;
+    padding-top: 0 !important;
+    border: none !important;
+    border-top: none !important;
+    box-shadow: none !important;
+  }
+
   /* Custom Hospital Letterhead Print Rules */
   .custom-letterhead-page {
     width: 210mm !important;
