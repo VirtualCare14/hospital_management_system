@@ -1,6 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const m3WebhookController = require('../controllers/m3WebhookController');
+const abdmRouteGuard = require('../../../middleware/abdmRouteGuardMiddleware');
+
+// Route guard: gateway callbacks -> verifyCallback, internal routes -> authMiddleware (hospital JWT)
+router.use(abdmRouteGuard);
 
 // ==========================================
 // M3 Webhook Health Check

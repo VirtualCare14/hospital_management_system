@@ -154,6 +154,20 @@ const initiateDataRequest = async ({
 
         // 2. Resolve Date Range and Data Push URL (fallback to stored consent artefact if available)
         const storedArtefact = await getConsentArtefact(consentId);
+
+        // ISS-07 / M3-R12: Consent validity gate — refuse data request for non-GRANTED or expired consent
+        if (!storedArtefact) {
+            throw new Error(`Consent artefact ${consentId} not found; refusing health data request`);
+        }
+        const now = new Date();
+        if (storedArtefact.status && storedArtefact.status !== 'GRANTED') {
+            throw new Error(`Consent ${consentId} is not GRANTED (status: ${storedArtefact.status}); refusing health data request`);
+        }
+        const consentExpiry = storedArtefact?.permission?.dateRange?.to;
+        if (consentExpiry && new Date(consentExpiry) <= now) {
+            throw new Error(`Consent ${consentId} has expired (expiresAt: ${consentExpiry}); refusing health data request`);
+        }
+
         const effectiveFrom = dateRangeFrom || storedArtefact?.permission?.dateRange?.from || new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
         const effectiveTo = dateRangeTo || storedArtefact?.permission?.dateRange?.to || new Date().toISOString();
         const effectivePushUrl = dataPushUrl || config.dataPushUrl;

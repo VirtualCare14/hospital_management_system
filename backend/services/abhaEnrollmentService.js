@@ -50,6 +50,9 @@ const verifyOtp = async ({ txnId, otp, mobile }) => {
     const encryptedOtp =
         await abdmCryptoService.encryptOtp(otp);
 
+    const encryptedMobile =
+        await abdmCryptoService.encryptMobile(mobile);
+
     const response = await axios.post(
 
         `${process.env.ABDM_ABHA_BASE_URL}/abha/api/v3/enrollment/enrol/byAadhaar`,
@@ -61,7 +64,7 @@ const verifyOtp = async ({ txnId, otp, mobile }) => {
                     timeStamp: Math.floor(Date.now() / 1000).toString(),
                     txnId,
                     otpValue: encryptedOtp,
-                    mobile
+                    mobile: encryptedMobile
                 }
             },
             consent: {

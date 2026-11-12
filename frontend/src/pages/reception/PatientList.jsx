@@ -58,7 +58,9 @@ const PatientList = () => {
 
   // Doctors list for filter
   const [doctorsList, setDoctorsList] = useState([]);
+  const PAYMENT_MODES = ['Cash', 'UPI', 'Card', 'Net Banking', 'Other', 'Pending', 'Split', 'Split Payment', 'Cash + UPI', 'Mixed Payment'];
   const [filterDoctorId, setFilterDoctorId] = useState('');
+  const [filterPaymentMode, setFilterPaymentMode] = useState('');
 
   // Hospital settings (for payment due display permission and letterhead configuration)
   const [hospitalSettings, setHospitalSettings] = useState(null);
@@ -142,10 +144,10 @@ const PatientList = () => {
   const [filterUhid, setFilterUhid] = useState('');
   const [filterRegNo, setFilterRegNo] = useState('');
   const [filterPatientName, setFilterPatientName] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
 
   const hasActiveFilters = Boolean(
-    fromDate || toDate || filterUhid || filterRegNo || filterPatientName || filterDoctorId
+    fromDate || toDate || filterUhid || filterRegNo || filterPatientName || filterDoctorId || filterPaymentMode
   );
 
   // Visit history modal
@@ -206,6 +208,7 @@ const PatientList = () => {
       if (filterRegNo) params.registrationNumber = filterRegNo;
       if (filterPatientName) params.patientName = filterPatientName;
       if (filterDoctorId) params.doctorId = filterDoctorId;
+      if (filterPaymentMode) params.paymentMode = filterPaymentMode;
 
       const { data } = await client.get('/patients/registrations/list', { params });
       setRegistrations(data.registrations || []);
@@ -223,7 +226,7 @@ const PatientList = () => {
   // Reset to page 1 whenever search filters or quickFilter change
   useEffect(() => {
     setCurrentPage(1);
-  }, [quickFilter, fromDate, toDate, filterUhid, filterRegNo, filterPatientName, filterDoctorId]);
+  }, [quickFilter, fromDate, toDate, filterUhid, filterRegNo, filterPatientName, filterDoctorId, filterPaymentMode]);
 
   // Fetch registrations on filter, page or page size change
   useEffect(() => {
@@ -231,7 +234,7 @@ const PatientList = () => {
       fetchRegistrations();
     }, 300);
     return () => clearTimeout(timeout);
-  }, [currentPage, pageSize, quickFilter, fromDate, toDate, filterUhid, filterRegNo, filterPatientName, filterDoctorId]);
+  }, [currentPage, pageSize, quickFilter, fromDate, toDate, filterUhid, filterRegNo, filterPatientName, filterDoctorId, filterPaymentMode]);
 
   const clearFilters = () => {
     setFromDate('');
@@ -240,6 +243,8 @@ const PatientList = () => {
     setFilterRegNo('');
     setFilterPatientName('');
     setFilterDoctorId('');
+    setFilterPaymentMode('');
+
   };
 
   const handleDeletePatient = async (patientId) => {
@@ -814,6 +819,15 @@ const PatientList = () => {
                 ))}
               </select>
             </div>
+            <div>
+              <label className="text-[10px] font-bold uppercase text-gray-500">Payment Mode</label>
+              <select className="input py-1.5 text-xs font-medium" value={filterPaymentMode} onChange={(e) => setFilterPaymentMode(e.target.value)}>
+                <option value="">All Payments</option>
+                {PAYMENT_MODES.map((mode) => (
+                  <option key={mode} value={mode}>{mode}</option>
+                ))}
+              </select>
+            </div>
           </div>
         )}
       </div>
@@ -832,6 +846,7 @@ const PatientList = () => {
                 <th className="p-3">Department</th>
                 <th className="p-3">Doctor</th>
                 {receptionSeePatientDue && <th className="p-3">Payment Due</th>}
+                <th className="p-3">Payment Mode</th>
                 <th className="p-3">Status</th>
                 <th className="p-3">Action</th>
               </tr>
@@ -839,13 +854,13 @@ const PatientList = () => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={receptionSeePatientDue ? 10 : 9} className="p-8">
-                    <SkeletonTable rows={pageSize > 10 ? 10 : pageSize} columns={receptionSeePatientDue ? 10 : 9} className="w-full" />
+                  <td colSpan={receptionSeePatientDue ? 11 : 10} className="p-8">
+                    <SkeletonTable rows={pageSize > 10 ? 10 : pageSize} columns={receptionSeePatientDue ? 11 : 10} className="w-full" />
                   </td>
                 </tr>
               ) : registrations.length === 0 ? (
                 <tr>
-                  <td colSpan={receptionSeePatientDue ? 10 : 9} className="p-12 text-center">
+                  <td colSpan={receptionSeePatientDue ? 11 : 10} className="p-12 text-center">
                     <div className="flex flex-col items-center justify-center gap-2 text-gray-400">
                       <Users className="h-10 w-10 text-gray-300" />
                       <p className="font-bold text-gray-600 text-sm">No patients found</p>
@@ -935,6 +950,12 @@ const PatientList = () => {
                         )}
                       </td>
                     )}
+                     <td className="p-3 text-xs">
+                       <div className="flex flex-col">
+                         <span className="font-bold text-gray-800">{reg.paymentMode || 'Cash'}</span>
+                         <span className="text-[10px] text-green-700 font-bold">₹{Number(reg.netOpdFee || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                       </div>
+                     </td>
                     <td className="p-3">
                       <div className="flex flex-col items-start gap-1">
                         <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${

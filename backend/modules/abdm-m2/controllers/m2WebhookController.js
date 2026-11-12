@@ -196,7 +196,7 @@ const notifyConsent = async (req, res) => {
  * ABDM Endpoint: POST /v3/health-information/hip/request
  */
 const requestHealthInformation = async (req, res) => {
-    res.status(202).json({ status: 'Accepted' });
+    res.status(200).json({ status: 'Accepted' });
     logIncomingWebhook('HEALTH INFORMATION HIP REQUEST', req);
 
     const hiRequest = req.body?.hiRequest;
