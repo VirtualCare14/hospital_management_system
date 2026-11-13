@@ -997,23 +997,32 @@ const getRegistrations = async (req, res) => {
       if (toDate) query.registrationDate.$lte = new Date(toDate + 'T23:59:59.999Z');
     }
 
-    if (uhid) query.uhid = { $regex: uhid, $options: 'i' };
-    if (registrationNumber) query.registrationNumber = { $regex: registrationNumber, $options: 'i' };
+    if (uhid) query.uhid = { $regex: uhid.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
+    if (registrationNumber) query.registrationNumber = { $regex: registrationNumber.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
     if (department) query.department = department;
-    if (paymentMode) query.paymentMode = paymentMode;
+    if (paymentMode) {
+      const mode = paymentMode.trim();
+      if (/^split/i.test(mode)) {
+        query.paymentMode = { $in: ['Split', 'Split Payment', 'Cash + UPI', 'Mixed Payment', /^split/i] };
+      } else {
+        query.paymentMode = { $regex: `^${mode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' };
+      }
+    }
     if (doctorId) query.doctorId = doctorId;
     if (req.user.role === 'clinic') {
       query.$or = [{ createdBy: req.user._id }, { doctorId: req.user._id }];
     }
 
-    // If patientName search, find matching patients first
-    if (patientName || search) {
-      const searchTerm = patientName || search;
+    // Unified search across Patient Name, UHID, and Registration Number (or legacy patientName)
+    if (search || patientName) {
+      const searchTerm = (search || patientName || '').trim();
+      const escapedTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
       let pQuery = tenantQuery(req, {
         $or: [
-          { patientName: { $regex: searchTerm, $options: 'i' } },
-          { uhid: { $regex: searchTerm, $options: 'i' } },
-          { mobile: { $regex: searchTerm, $options: 'i' } }
+          { patientName: { $regex: escapedTerm, $options: 'i' } },
+          { uhid: { $regex: escapedTerm, $options: 'i' } },
+          { mobile: { $regex: escapedTerm, $options: 'i' } }
         ]
       });
       if (req.user.role === 'clinic') {
@@ -1021,7 +1030,31 @@ const getRegistrations = async (req, res) => {
         pQuery._id = { $in: clinicPatientIds || [] };
       }
       const matchingPatients = await Patient.find(pQuery).select('_id');
-      query.patientId = { $in: matchingPatients.map(p => p._id) };
+      const matchedPatientIds = matchingPatients.map(p => p._id);
+
+      if (search) {
+        // Multi-field search for single search bar: matches Registration #, UHID, or Patient ID
+        const searchConditions = [
+          { registrationNumber: { $regex: escapedTerm, $options: 'i' } },
+          { uhid: { $regex: escapedTerm, $options: 'i' } }
+        ];
+        if (matchedPatientIds.length > 0) {
+          searchConditions.push({ patientId: { $in: matchedPatientIds } });
+        }
+
+        if (query.$or) {
+          const existingOr = query.$or;
+          delete query.$or;
+          query.$and = (query.$and || []).concat([
+            { $or: existingOr },
+            { $or: searchConditions }
+          ]);
+        } else {
+          query.$or = searchConditions;
+        }
+      } else {
+        query.patientId = { $in: matchedPatientIds };
+      }
     }
 
     // Statistics
@@ -1040,10 +1073,12 @@ const getRegistrations = async (req, res) => {
     const statsBaseQuery = { ...tenantQ };
     if (doctorId) statsBaseQuery.doctorId = doctorId;
     if (department) statsBaseQuery.department = department;
-    if (paymentMode) statsBaseQuery.paymentMode = paymentMode;
-    if (uhid) statsBaseQuery.uhid = { $regex: uhid, $options: 'i' };
-    if (registrationNumber) statsBaseQuery.registrationNumber = { $regex: registrationNumber, $options: 'i' };
+    if (paymentMode) statsBaseQuery.paymentMode = query.paymentMode;
+    if (uhid) statsBaseQuery.uhid = query.uhid;
+    if (registrationNumber) statsBaseQuery.registrationNumber = query.registrationNumber;
     if (query.patientId) statsBaseQuery.patientId = query.patientId;
+    if (query.$or) statsBaseQuery.$or = query.$or;
+    if (query.$and) statsBaseQuery.$and = query.$and;
 
     const [totalToday, totalMonth, totalCount] = await Promise.all([
       Visit.countDocuments({ ...statsBaseQuery, registrationDate: { $gte: today, $lt: tomorrow } }),
