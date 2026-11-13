@@ -43,6 +43,22 @@ const getPaginationRange = (currentPage, totalPages) => {
   return rangeWithDots;
 };
 
+// Helper to generate today's date string (YYYY-MM-DD)
+const getTodayStr = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getFirstDayOfMonthStr = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}-01`;
+};
+
 const PatientList = () => {
   const navigate = useNavigate();
   const [registrations, setRegistrations] = useState([]);
@@ -58,7 +74,7 @@ const PatientList = () => {
 
   // Doctors list for filter
   const [doctorsList, setDoctorsList] = useState([]);
-  const PAYMENT_MODES = ['Cash', 'UPI', 'Card', 'Net Banking', 'Other', 'Pending', 'Split', 'Split Payment', 'Cash + UPI', 'Mixed Payment'];
+  const PAYMENT_MODES = ['Cash', 'UPI', 'Card', 'Net Banking', 'Split'];
   const [filterDoctorId, setFilterDoctorId] = useState('');
   const [filterPaymentMode, setFilterPaymentMode] = useState('');
 
@@ -138,16 +154,16 @@ const PatientList = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Filters
-  const [fromDate, setFromDate] = useState('');
+  // Filters (fromDate defaults to today's date)
+  const todayStr = useMemo(() => getTodayStr(), []);
+  const firstDayStr = useMemo(() => getFirstDayOfMonthStr(), []);
+
+  const [fromDate, setFromDate] = useState(() => getTodayStr());
   const [toDate, setToDate] = useState('');
-  const [filterUhid, setFilterUhid] = useState('');
-  const [filterRegNo, setFilterRegNo] = useState('');
-  const [filterPatientName, setFilterPatientName] = useState('');
-  const [showFilters, setShowFilters] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const hasActiveFilters = Boolean(
-    fromDate || toDate || filterUhid || filterRegNo || filterPatientName || filterDoctorId || filterPaymentMode
+    (fromDate && fromDate !== todayStr) || toDate || searchTerm || filterDoctorId || filterPaymentMode
   );
 
   // Visit history modal
@@ -204,9 +220,7 @@ const PatientList = () => {
       }
       if (fromDate) params.fromDate = fromDate;
       if (toDate) params.toDate = toDate;
-      if (filterUhid) params.uhid = filterUhid;
-      if (filterRegNo) params.registrationNumber = filterRegNo;
-      if (filterPatientName) params.patientName = filterPatientName;
+      if (searchTerm) params.search = searchTerm.trim();
       if (filterDoctorId) params.doctorId = filterDoctorId;
       if (filterPaymentMode) params.paymentMode = filterPaymentMode;
 
@@ -226,7 +240,7 @@ const PatientList = () => {
   // Reset to page 1 whenever search filters or quickFilter change
   useEffect(() => {
     setCurrentPage(1);
-  }, [quickFilter, fromDate, toDate, filterUhid, filterRegNo, filterPatientName, filterDoctorId, filterPaymentMode]);
+  }, [quickFilter, fromDate, toDate, searchTerm, filterDoctorId, filterPaymentMode]);
 
   // Fetch registrations on filter, page or page size change
   useEffect(() => {
@@ -234,17 +248,14 @@ const PatientList = () => {
       fetchRegistrations();
     }, 300);
     return () => clearTimeout(timeout);
-  }, [currentPage, pageSize, quickFilter, fromDate, toDate, filterUhid, filterRegNo, filterPatientName, filterDoctorId, filterPaymentMode]);
+  }, [currentPage, pageSize, quickFilter, fromDate, toDate, searchTerm, filterDoctorId, filterPaymentMode]);
 
   const clearFilters = () => {
-    setFromDate('');
+    setFromDate(todayStr);
     setToDate('');
-    setFilterUhid('');
-    setFilterRegNo('');
-    setFilterPatientName('');
+    setSearchTerm('');
     setFilterDoctorId('');
     setFilterPaymentMode('');
-
   };
 
   const handleDeletePatient = async (patientId) => {
@@ -608,32 +619,14 @@ const PatientList = () => {
     }, 150);
   };
 
-  const getTodayStr = () => {
-    const d = new Date();
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-  const getFirstDayOfMonthStr = () => {
-    const d = new Date();
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    return `${year}-${month}-01`;
-  };
-
   const filterByToday = () => {
-    const today = getTodayStr();
-    setFromDate(today);
-    setToDate(today);
+    setFromDate(todayStr);
+    setToDate(todayStr);
   };
 
   const filterByMonth = () => {
-    const firstDay = getFirstDayOfMonthStr();
-    const today = getTodayStr();
-    setFromDate(firstDay);
-    setToDate(today);
+    setFromDate(firstDayStr);
+    setToDate(todayStr);
   };
 
   const filterByAll = () => {
@@ -643,10 +636,7 @@ const PatientList = () => {
 
   const [hoveredBox, setHoveredBox] = useState(null);
 
-  const todayStr = getTodayStr();
-  const firstDayStr = getFirstDayOfMonthStr();
-
-  const isTodayActive = fromDate === todayStr && toDate === todayStr;
+  const isTodayActive = fromDate === todayStr && (toDate === todayStr || !toDate);
   const isMonthActive = fromDate === firstDayStr && (toDate === todayStr || !toDate);
   const isAllActive = !fromDate && !toDate;
 
@@ -769,67 +759,101 @@ const PatientList = () => {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="card p-4">
-        <div className="flex items-center justify-between mb-3">
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className="flex items-center gap-2 text-sm font-bold text-gray-700 hover:text-orange-600"
-          >
-            <Filter className="h-4 w-4" /> Filters
-            <ChevronDown className={`h-4 w-4 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
-          </button>
-          {hasActiveFilters && (
-            <button onClick={clearFilters} className="text-xs font-bold text-red-500 hover:text-red-700">
-              Clear All Filters
-            </button>
-          )}
-        </div>
-
-        {showFilters && (
-          <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6 border-t border-orange-100 pt-3">
-            <div>
-              <label className="text-[10px] font-bold uppercase text-gray-500">From Date</label>
-              <input type="date" className="input py-1.5 text-xs" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold uppercase text-gray-500">To Date</label>
-              <input type="date" className="input py-1.5 text-xs" value={toDate} onChange={(e) => setToDate(e.target.value)} />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold uppercase text-gray-500">UHID</label>
-              <input className="input py-1.5 text-xs" placeholder="Search UHID" value={filterUhid} onChange={(e) => setFilterUhid(e.target.value)} />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold uppercase text-gray-500">Registration #</label>
-              <input className="input py-1.5 text-xs" placeholder="Search Reg#" value={filterRegNo} onChange={(e) => setFilterRegNo(e.target.value)} />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold uppercase text-gray-500">Patient Name</label>
-              <input className="input py-1.5 text-xs" placeholder="Search name" value={filterPatientName} onChange={(e) => setFilterPatientName(e.target.value)} />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold uppercase text-gray-500">Doctor</label>
-              <select className="input py-1.5 text-xs font-medium" value={filterDoctorId} onChange={(e) => setFilterDoctorId(e.target.value)}>
-                <option value="">All Doctors</option>
-                {allAvailableDoctors.map((doc) => (
-                  <option key={doc._id} value={doc._id}>
-                    {doc.role === 'nursing' ? '' : 'Dr. '}{doc.doctorName || doc.username}{doc.department ? ` (${doc.department})` : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-[10px] font-bold uppercase text-gray-500">Payment Mode</label>
-              <select className="input py-1.5 text-xs font-medium" value={filterPaymentMode} onChange={(e) => setFilterPaymentMode(e.target.value)}>
-                <option value="">All Payments</option>
-                {PAYMENT_MODES.map((mode) => (
-                  <option key={mode} value={mode}>{mode}</option>
-                ))}
-              </select>
+      {/* Filters Bar */}
+      <div className="card p-3 sm:p-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 items-end">
+          {/* Unified Search Bar */}
+          <div className="sm:col-span-2">
+            <label className="text-[10px] font-bold uppercase text-gray-500 mb-1 block">
+              Search Patient (UHID / Reg# / Name)
+            </label>
+            <div className="relative">
+              <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <input
+                type="text"
+                className="input py-1.5 pl-9 pr-8 text-xs font-medium w-full"
+                placeholder="Search UHID, Reg#, Patient Name..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer"
+                  title="Clear search"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
           </div>
-        )}
+
+          {/* From Date */}
+          <div>
+            <label className="text-[10px] font-bold uppercase text-gray-500 mb-1 block">From Date</label>
+            <input
+              type="date"
+              className="input py-1.5 text-xs font-medium w-full"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+            />
+          </div>
+
+          {/* To Date */}
+          <div>
+            <label className="text-[10px] font-bold uppercase text-gray-500 mb-1 block">To Date</label>
+            <input
+              type="date"
+              className="input py-1.5 text-xs font-medium w-full"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+            />
+          </div>
+
+          {/* Doctor */}
+          <div>
+            <label className="text-[10px] font-bold uppercase text-gray-500 mb-1 block">Doctor</label>
+            <select
+              className="input py-1.5 text-xs font-medium w-full"
+              value={filterDoctorId}
+              onChange={(e) => setFilterDoctorId(e.target.value)}
+            >
+              <option value="">All Doctors</option>
+              {allAvailableDoctors.map((doc) => (
+                <option key={doc._id} value={doc._id}>
+                  {doc.role === 'nursing' ? '' : 'Dr. '}{doc.doctorName || doc.username}{doc.department ? ` (${doc.department})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Payment Mode */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[10px] font-bold uppercase text-gray-500 block">Payment Mode</label>
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="text-[10px] font-bold text-red-500 hover:text-red-700 cursor-pointer ml-auto"
+                >
+                  Clear All
+                </button>
+              )}
+            </div>
+            <select
+              className="input py-1.5 text-xs font-medium w-full"
+              value={filterPaymentMode}
+              onChange={(e) => setFilterPaymentMode(e.target.value)}
+            >
+              <option value="">All Payments</option>
+              {PAYMENT_MODES.map((mode) => (
+                <option key={mode} value={mode}>{mode}</option>
+              ))}
+            </select>
+          </div>
+        </div>
       </div>
 
       {/* Registrations Table */}
@@ -845,7 +869,6 @@ const PatientList = () => {
                 <th className="p-3">Follow Up Date</th>
                 <th className="p-3">Department</th>
                 <th className="p-3">Doctor</th>
-                {receptionSeePatientDue && <th className="p-3">Payment Due</th>}
                 <th className="p-3">Payment Mode</th>
                 <th className="p-3">Status</th>
                 <th className="p-3">Action</th>
@@ -854,13 +877,13 @@ const PatientList = () => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={receptionSeePatientDue ? 11 : 10} className="p-8">
-                    <SkeletonTable rows={pageSize > 10 ? 10 : pageSize} columns={receptionSeePatientDue ? 11 : 10} className="w-full" />
+                  <td colSpan={10} className="p-8">
+                    <SkeletonTable rows={pageSize > 10 ? 10 : pageSize} columns={10} className="w-full" />
                   </td>
                 </tr>
               ) : registrations.length === 0 ? (
                 <tr>
-                  <td colSpan={receptionSeePatientDue ? 11 : 10} className="p-12 text-center">
+                  <td colSpan={10} className="p-12 text-center">
                     <div className="flex flex-col items-center justify-center gap-2 text-gray-400">
                       <Users className="h-10 w-10 text-gray-300" />
                       <p className="font-bold text-gray-600 text-sm">No patients found</p>
@@ -939,21 +962,10 @@ const PatientList = () => {
                         )
                         : (reg.visitType === 'Lab' || reg.department === 'Laboratory' || (reg.department && reg.department.toLowerCase().includes('lab')) ? 'Self / Lab' : 'Self')}
                     </td>
-                    {receptionSeePatientDue && (
-                      <td className="p-3 text-xs">
-                        {reg.dueAmount > 0 ? (
-                          <span className="inline-block px-2.5 py-1 rounded-lg text-xs font-black bg-red-100 text-red-700 border border-red-200 shadow-2xs">
-                            ₹{Number(reg.dueAmount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </span>
-                        ) : (
-                          <span className="text-gray-400 text-xs font-medium">₹0.00</span>
-                        )}
-                      </td>
-                    )}
                      <td className="p-3 text-xs">
                        <div className="flex flex-col">
                          <span className="font-bold text-gray-800">{reg.paymentMode || 'Cash'}</span>
-                         <span className="text-[10px] text-green-700 font-bold">₹{Number(reg.netOpdFee || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                         <span className="text-[10px] text-green-700 font-bold">₹{Number(reg.netOpdFee || reg.labFee || reg.billAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                        </div>
                      </td>
                     <td className="p-3">
