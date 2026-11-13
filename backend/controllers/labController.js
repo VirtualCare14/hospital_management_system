@@ -1867,6 +1867,15 @@ const createDirectLabRequest = async (req, res) => {
         ...(req.user?.hospitalId ? { hospitalId: req.user.hospitalId } : {})
       });
 
+      const visitPaymentMode = ['Credit Card', 'Debit Card'].includes(mappedPaymentMethod)
+        ? 'Card'
+        : (['Cash', 'UPI', 'Card', 'Net Banking', 'Split', 'Mixed Payment'].includes(mappedPaymentMethod) ? mappedPaymentMethod : 'Cash');
+
+      const labFee = typeof netTotal === 'number' && !isNaN(netTotal) ? netTotal : (baseTotal || 0);
+      const labGross = typeof baseTotal === 'number' && !isNaN(baseTotal) ? baseTotal : labFee;
+      const labDiscount = typeof discountAmount === 'number' && !isNaN(discountAmount) ? discountAmount : 0;
+      const labBillNumber = bill?.billNo || labReq?.labId || null;
+
       const labVisit = new Visit({
         hospitalId: req.user?.hospitalId || patient.hospitalId,
         patientId: patient._id,
@@ -1876,6 +1885,7 @@ const createDirectLabRequest = async (req, res) => {
         visitType: 'Lab',
         department: 'Laboratory',
         doctorId: resolvedDoctorId,
+        doctorName: req.user?.doctorName || req.user?.username || '',
         appointmentDate: todayStr,
         slot: 'Lab Walk-in',
         appointmentNumber: 1,
@@ -1885,14 +1895,15 @@ const createDirectLabRequest = async (req, res) => {
         consultationStatus: 'completed',
         visitNumber: visitCount + 1,
         createdBy: req.user?._id,
-        opdFee: 0,
-        grossOpdFee: 0,
-        discountAmount: 0,
-        discountType: 'none',
-        discountValue: 0,
-        netOpdFee: 0,
-        paymentStatus: 'Paid',
-        paymentMode: mappedPaymentMethod || 'Cash'
+        opdFee: labFee,
+        grossOpdFee: labGross,
+        discountAmount: labDiscount,
+        discountType: labDiscount > 0 ? (discPct > 0 ? 'percent' : 'amount') : 'none',
+        discountValue: labDiscount > 0 ? (discPct > 0 ? discPct : labDiscount) : 0,
+        netOpdFee: labFee,
+        paymentStatus: due <= 0 ? 'Paid' : 'Not Paid',
+        paymentMode: visitPaymentMode,
+        billNumber: labBillNumber
       });
 
       await labVisit.save();

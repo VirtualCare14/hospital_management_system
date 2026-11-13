@@ -1159,6 +1159,95 @@ const getRegistrations = async (req, res) => {
       });
     }
 
+    // Resolve lab bill amounts for Laboratory visits
+    const LabBill = require('../models/LabBill');
+    const labVisits = visits.filter(v =>
+      v.visitType === 'Lab' ||
+      v.slot === 'Lab Walk-in' ||
+      (v.department && v.department.toLowerCase().includes('lab'))
+    );
+
+    const labBillLookup = {};
+    if (labVisits.length > 0) {
+      try {
+        const labPatientIds = labVisits.map(v => v.patientId?._id || v.patientId).filter(Boolean);
+        const labBillNos = labVisits.map(v => v.billNumber).filter(Boolean);
+
+        const [matchedBilling, matchedLabBills] = await Promise.all([
+          Billing.find(tenantQuery(req, {
+            $or: [
+              ...(labBillNos.length > 0 ? [{ billNo: { $in: labBillNos } }, { invoiceNo: { $in: labBillNos } }] : []),
+              { patientId: { $in: labPatientIds }, billType: 'Lab' }
+            ]
+          })).sort({ createdAt: -1 }).lean(),
+          LabBill.find(tenantQuery(req, {
+            $or: [
+              ...(labBillNos.length > 0 ? [{ billNo: { $in: labBillNos } }, { labId: { $in: labBillNos } }] : []),
+              { patientId: { $in: labPatientIds } }
+            ]
+          })).sort({ createdAt: -1 }).lean()
+        ]);
+
+        labVisits.forEach(v => {
+          const vKey = v._id.toString();
+          const pIdStr = (v.patientId?._id || v.patientId)?.toString();
+          const vBillNo = v.billNumber;
+          const vDateStr = v.appointmentDate || (v.registrationDate ? new Date(v.registrationDate).toISOString().split('T')[0] : null);
+
+          let foundBill = null;
+          if (vBillNo) {
+            foundBill = matchedBilling.find(b => b.billNo === vBillNo || b.invoiceNo === vBillNo) ||
+                        matchedLabBills.find(b => b.billNo === vBillNo || b.labId === vBillNo);
+          }
+          if (!foundBill && pIdStr) {
+            foundBill = matchedBilling.find(b => {
+              if (b.patientId?.toString() !== pIdStr) return false;
+              const bDateStr = b.createdAt ? new Date(b.createdAt).toISOString().split('T')[0] : null;
+              return bDateStr === vDateStr;
+            }) || matchedLabBills.find(b => {
+              if (b.patientId?.toString() !== pIdStr) return false;
+              const bDateStr = b.createdAt ? new Date(b.createdAt).toISOString().split('T')[0] : null;
+              return bDateStr === vDateStr;
+            });
+
+            if (!foundBill) {
+              foundBill = matchedBilling.find(b => b.patientId?.toString() === pIdStr) ||
+                          matchedLabBills.find(b => b.patientId?.toString() === pIdStr);
+            }
+          }
+
+          if (foundBill) {
+            const amt = foundBill.grandTotal !== undefined ? foundBill.grandTotal : (foundBill.totalAmount !== undefined ? foundBill.totalAmount : (foundBill.amountPaid || 0));
+            const gross = foundBill.subtotal !== undefined ? foundBill.subtotal : (foundBill.baseAmount || amt);
+            const resolvedBillNo = foundBill.billNo || foundBill.invoiceNo || foundBill.labId || null;
+            labBillLookup[vKey] = {
+              netFee: amt,
+              grossFee: gross,
+              billNumber: resolvedBillNo,
+              paymentMode: foundBill.paymentMode || null
+            };
+
+            // Auto-heal legacy lab visits with 0 net fee in database
+            if ((!v.netOpdFee || v.netOpdFee === 0) && amt > 0) {
+              Visit.updateOne(
+                { _id: v._id, netOpdFee: 0 },
+                {
+                  $set: {
+                    netOpdFee: amt,
+                    opdFee: gross,
+                    grossOpdFee: gross,
+                    ...(resolvedBillNo ? { billNumber: resolvedBillNo } : {})
+                  }
+                }
+              ).exec().catch(() => {});
+            }
+          }
+        });
+      } catch (err) {
+        console.warn('Lab bills enrichment error:', err.message);
+      }
+    }
+
     // Enrich with patient data & follow-up information
     const enriched = visits.map(v => {
       let effectiveFollowUpDate = v.followUpDate || null;
@@ -1183,14 +1272,28 @@ const getRegistrations = async (req, res) => {
       const pIdStr = v.patientId?._id ? v.patientId._id.toString() : null;
       const dueAmt = (pIdStr && patientDueMap[pIdStr] !== undefined) ? patientDueMap[pIdStr] : (patientDueMap[v.uhid] || 0);
 
+      const isLab = (v.visitType === 'Lab' || v.slot === 'Lab Walk-in' || (v.department && v.department.toLowerCase().includes('lab')));
+      const labInfo = isLab ? labBillLookup[v._id.toString()] : null;
+
       const pDoc = v.doctorId;
-      const grossFee = v.opdFee !== undefined && v.opdFee !== null && v.opdFee > 0
+      let grossFee = v.opdFee !== undefined && v.opdFee !== null && v.opdFee > 0
         ? v.opdFee
         : (pDoc?.opdFees !== undefined && pDoc?.opdFees !== null ? pDoc.opdFees : 0);
       const discountAmount = v.discountAmount !== undefined && v.discountAmount !== null ? v.discountAmount : 0;
-      const netFee = v.netOpdFee !== undefined && v.netOpdFee !== null && v.netOpdFee > 0
+      let netFee = v.netOpdFee !== undefined && v.netOpdFee !== null && v.netOpdFee > 0
         ? v.netOpdFee
         : (grossFee > 0 ? Math.max(0, grossFee - discountAmount) : (v.netOpdFee || 0));
+
+      if (isLab && netFee <= 0 && labInfo && labInfo.netFee > 0) {
+        netFee = labInfo.netFee;
+        if (grossFee <= 0) grossFee = labInfo.grossFee;
+      }
+
+      const paymentModeVal = (isLab && labInfo?.paymentMode && (!v.paymentMode || v.paymentMode === 'Pending'))
+        ? labInfo.paymentMode
+        : (v.paymentMode || 'Cash');
+
+      const billNoVal = v.billNumber || (isLab && labInfo?.billNumber) || null;
 
       return {
         _id: v._id,
@@ -1204,7 +1307,7 @@ const getRegistrations = async (req, res) => {
         category: v.patientId?.category || 'General',
         address: v.patientId?.address || '',
         dob: v.patientId?.dob || null,
-        department: (v.visitType === 'Lab' || v.slot === 'Lab Walk-in' || (v.department && v.department.toLowerCase().includes('lab')))
+        department: isLab
           ? 'Laboratory'
           : (v.department || (v.visitType === 'Emergency' ? 'Emergency' : 'General')),
         appointmentDate: v.appointmentDate,
@@ -1229,11 +1332,12 @@ const getRegistrations = async (req, res) => {
         discountValue: v.discountValue || 0,
         discountAmount: discountAmount,
         netOpdFee: netFee,
+        labFee: netFee,
         paymentStatus: v.paymentStatus || 'Paid',
-        paymentMode: v.paymentMode || 'Cash',
+        paymentMode: paymentModeVal,
         splitPayments: v.splitPayments || null,
         mixedPayments: v.mixedPayments || [],
-        billNumber: v.billNumber || null,
+        billNumber: billNoVal,
         isRefunded: Boolean(v.isRefunded || v.paymentStatus === 'Refunded'),
         refundAmount: v.refundAmount || 0,
         refundRemarks: v.refundRemarks || '',

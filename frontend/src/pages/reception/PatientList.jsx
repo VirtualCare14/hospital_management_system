@@ -43,6 +43,22 @@ const getPaginationRange = (currentPage, totalPages) => {
   return rangeWithDots;
 };
 
+// Helper to generate today's date string (YYYY-MM-DD)
+const getTodayStr = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getFirstDayOfMonthStr = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}-01`;
+};
+
 const PatientList = () => {
   const navigate = useNavigate();
   const [registrations, setRegistrations] = useState([]);
@@ -138,13 +154,16 @@ const PatientList = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Filters
-  const [fromDate, setFromDate] = useState('');
+  // Filters (fromDate defaults to today's date)
+  const todayStr = useMemo(() => getTodayStr(), []);
+  const firstDayStr = useMemo(() => getFirstDayOfMonthStr(), []);
+
+  const [fromDate, setFromDate] = useState(() => getTodayStr());
   const [toDate, setToDate] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
 
   const hasActiveFilters = Boolean(
-    fromDate || toDate || searchTerm || filterDoctorId || filterPaymentMode
+    (fromDate && fromDate !== todayStr) || toDate || searchTerm || filterDoctorId || filterPaymentMode
   );
 
   // Visit history modal
@@ -232,7 +251,7 @@ const PatientList = () => {
   }, [currentPage, pageSize, quickFilter, fromDate, toDate, searchTerm, filterDoctorId, filterPaymentMode]);
 
   const clearFilters = () => {
-    setFromDate('');
+    setFromDate(todayStr);
     setToDate('');
     setSearchTerm('');
     setFilterDoctorId('');
@@ -600,32 +619,14 @@ const PatientList = () => {
     }, 150);
   };
 
-  const getTodayStr = () => {
-    const d = new Date();
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-  const getFirstDayOfMonthStr = () => {
-    const d = new Date();
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    return `${year}-${month}-01`;
-  };
-
   const filterByToday = () => {
-    const today = getTodayStr();
-    setFromDate(today);
-    setToDate(today);
+    setFromDate(todayStr);
+    setToDate(todayStr);
   };
 
   const filterByMonth = () => {
-    const firstDay = getFirstDayOfMonthStr();
-    const today = getTodayStr();
-    setFromDate(firstDay);
-    setToDate(today);
+    setFromDate(firstDayStr);
+    setToDate(todayStr);
   };
 
   const filterByAll = () => {
@@ -635,10 +636,7 @@ const PatientList = () => {
 
   const [hoveredBox, setHoveredBox] = useState(null);
 
-  const todayStr = getTodayStr();
-  const firstDayStr = getFirstDayOfMonthStr();
-
-  const isTodayActive = fromDate === todayStr && toDate === todayStr;
+  const isTodayActive = fromDate === todayStr && (toDate === todayStr || !toDate);
   const isMonthActive = fromDate === firstDayStr && (toDate === todayStr || !toDate);
   const isAllActive = !fromDate && !toDate;
 
@@ -871,7 +869,6 @@ const PatientList = () => {
                 <th className="p-3">Follow Up Date</th>
                 <th className="p-3">Department</th>
                 <th className="p-3">Doctor</th>
-                {receptionSeePatientDue && <th className="p-3">Payment Due</th>}
                 <th className="p-3">Payment Mode</th>
                 <th className="p-3">Status</th>
                 <th className="p-3">Action</th>
@@ -880,13 +877,13 @@ const PatientList = () => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={receptionSeePatientDue ? 11 : 10} className="p-8">
-                    <SkeletonTable rows={pageSize > 10 ? 10 : pageSize} columns={receptionSeePatientDue ? 11 : 10} className="w-full" />
+                  <td colSpan={10} className="p-8">
+                    <SkeletonTable rows={pageSize > 10 ? 10 : pageSize} columns={10} className="w-full" />
                   </td>
                 </tr>
               ) : registrations.length === 0 ? (
                 <tr>
-                  <td colSpan={receptionSeePatientDue ? 11 : 10} className="p-12 text-center">
+                  <td colSpan={10} className="p-12 text-center">
                     <div className="flex flex-col items-center justify-center gap-2 text-gray-400">
                       <Users className="h-10 w-10 text-gray-300" />
                       <p className="font-bold text-gray-600 text-sm">No patients found</p>
@@ -965,21 +962,10 @@ const PatientList = () => {
                         )
                         : (reg.visitType === 'Lab' || reg.department === 'Laboratory' || (reg.department && reg.department.toLowerCase().includes('lab')) ? 'Self / Lab' : 'Self')}
                     </td>
-                    {receptionSeePatientDue && (
-                      <td className="p-3 text-xs">
-                        {reg.dueAmount > 0 ? (
-                          <span className="inline-block px-2.5 py-1 rounded-lg text-xs font-black bg-red-100 text-red-700 border border-red-200 shadow-2xs">
-                            ₹{Number(reg.dueAmount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </span>
-                        ) : (
-                          <span className="text-gray-400 text-xs font-medium">₹0.00</span>
-                        )}
-                      </td>
-                    )}
                      <td className="p-3 text-xs">
                        <div className="flex flex-col">
                          <span className="font-bold text-gray-800">{reg.paymentMode || 'Cash'}</span>
-                         <span className="text-[10px] text-green-700 font-bold">₹{Number(reg.netOpdFee || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                         <span className="text-[10px] text-green-700 font-bold">₹{Number(reg.netOpdFee || reg.labFee || reg.billAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                        </div>
                      </td>
                     <td className="p-3">

@@ -57,6 +57,20 @@ function runTests() {
     'Frontend PatientList: Passes search param to /patients/registrations/list'
   );
 
+  // Check removal of Payment Due column
+  assert(
+    !patientListContent.includes('<th className="p-3">Payment Due</th>') &&
+    !patientListContent.includes('reg.dueAmount > 0 ? ('),
+    'Frontend PatientList: Completely removed Payment Due column from table headers and rows'
+  );
+
+  // Check fromDate defaults to today's date
+  assert(
+    patientListContent.includes("const [fromDate, setFromDate] = useState(() => getTodayStr());") &&
+    patientListContent.includes("getTodayStr = () =>"),
+    'Frontend PatientList: From Date defaults to today\'s date'
+  );
+
   // 2. Verify backend/controllers/patientController.js
   const controllerPath = path.join(__dirname, '../controllers/patientController.js');
   const controllerContent = fs.readFileSync(controllerPath, 'utf8');
@@ -91,3 +105,4 @@ function runTests() {
 }
 
 runTests();
+
