@@ -45,7 +45,7 @@ const sampleStatuses = ['Not Collected', 'Home Sample Assigned', 'On The Way To 
 const reportStatuses = ['Pending', 'In Progress', 'Ready', 'Completed', 'Delivered', 'Closed'];
 const cancellationReasons = ['Patient Not Interested', 'Patient Chose Another Lab', 'Duplicate Booking', 'Invalid Request', 'Other'];
 const units = ['g/dL', 'million/uL', 'cells/uL', 'lakh/uL', 'x10^3/uL', 'mg/dL', '%', 'mmol/L', 'U/L', 'uIU/mL', 'ng/mL', 'pg/mL'];
-const presetCategories = ['Blood Tests', 'Blood Sugar Tests', 'Lipid Profile', 'Liver Function Test', 'Kidney Function Test (KFT / RFT)', 'Infection Tests', 'Thyroid Test', 'Cardiac Markers (Heart tests)'];
+const presetCategories = ['Blood Tests', 'Blood Sugar Tests', 'Lipid Profile', 'Liver Function Test', 'Kidney Function Test (KFT / RFT)', 'Infection Tests', 'Thyroid Test', 'Cardiac Markers (Heart tests)', 'XRAY', 'DIGITAL XRAY', 'USG'];
 const DIAGNOSIS_CATEGORY_NAME = 'Diagnosis';
 
 const blankTest = { category: 'Blood Tests', test: '', title: '', description: '', notes: '', basePrice: 0, taxPercentage: 0, totalAmount: 0, isManualTotal: false, parameters: [], signatoryId: '' };

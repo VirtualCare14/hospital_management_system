@@ -158,23 +158,134 @@ const DEFAULT_CATALOG = {
     { id: 'thyroid', title: 'Thyroid Profile', price: 500 }
   ],
   'USG': [
-    { id: 'usg_echo', title: '2d Echo', price: 1800 },
-    { id: 'usg_breast', title: 'Breast', price: 600 },
-    { id: 'usg_doppler', title: 'Color Doppler (Fetus)', price: 1000 },
-    { id: 'usg_follicular', title: 'Follicular study', price: 1200 },
-    { id: 'usg_fwb', title: 'F.W.B.', price: 400 },
-    { id: 'usg_kub_f', title: 'K.U.B. FEMALE', price: 400 },
-    { id: 'usg_kub_m', title: 'K.U.B. MALE', price: 400 },
-    { id: 'usg_lower_abd', title: 'Lower Abdomen', price: 400 },
-    { id: 'usg_testis', title: 'Testis', price: 600 },
-    { id: 'usg_thyroid', title: 'Thyroid & Neck', price: 600 },
-    { id: 'usg_upper_abd', title: 'Upper Abdomen', price: 400 },
-    { id: 'usg_whole_abd', title: 'Whole Abdomen Female', price: 500 }
+    { id: 'usg_whole_abdomen', title: 'USG Whole Abdomen', price: 1000 },
+    { id: 'usg_upper_abdomen', title: 'USG Upper Abdomen', price: 800 },
+    { id: 'usg_lower_abdomen', title: 'USG Lower Abdomen', price: 800 },
+    { id: 'usg_kub', title: 'USG KUB', price: 900 },
+    { id: 'usg_pelvis', title: 'USG Pelvis', price: 850 },
+    { id: 'usg_abdomen_pelvis', title: 'USG Abdomen & Pelvis', price: 1200 },
+    { id: 'usg_pregnancy_obstetric', title: 'USG Pregnancy (Obstetric)', price: 1000 },
+    { id: 'usg_early_pregnancy', title: 'USG Early Pregnancy', price: 900 },
+    { id: 'usg_nt_scan', title: 'USG NT Scan', price: 1800 },
+    { id: 'usg_anomaly_scan', title: 'USG Anomaly Scan', price: 2200 },
+    { id: 'usg_growth_scan', title: 'USG Growth Scan', price: 1200 },
+    { id: 'usg_level_2_scan', title: 'USG Level 2 Scan', price: 2500 },
+    { id: 'usg_follicular_study', title: 'USG Follicular Study', price: 1200 },
+    { id: 'usg_tvs', title: 'USG TVS (Transvaginal Sonography)', price: 1100 },
+    { id: 'usg_tas', title: 'USG TAS (Transabdominal Sonography)', price: 900 },
+    { id: 'usg_breast', title: 'USG Breast', price: 1200 },
+    { id: 'usg_thyroid', title: 'USG Thyroid', price: 1000 },
+    { id: 'usg_neck', title: 'USG Neck', price: 1100 },
+    { id: 'usg_scrotum', title: 'USG Scrotum', price: 1000 },
+    { id: 'usg_testis', title: 'USG Testis', price: 1000 },
+    { id: 'usg_prostate', title: 'USG Prostate', price: 900 },
+    { id: 'usg_prostate_pvr', title: 'USG Prostate with PVR', price: 1000 },
+    { id: 'usg_renal', title: 'USG Renal', price: 900 },
+    { id: 'usg_liver', title: 'USG Liver', price: 800 },
+    { id: 'usg_gallbladder', title: 'USG Gallbladder', price: 800 },
+    { id: 'usg_pancreas', title: 'USG Pancreas', price: 800 },
+    { id: 'usg_spleen', title: 'USG Spleen', price: 800 },
+    { id: 'usg_appendix', title: 'USG Appendix', price: 850 },
+    { id: 'usg_soft_tissue', title: 'USG Soft Tissue', price: 900 },
+    { id: 'usg_inguinal_region', title: 'USG Inguinal Region', price: 950 },
+    { id: 'usg_hernia', title: 'USG Hernia', price: 950 },
+    { id: 'usg_shoulder', title: 'USG Shoulder', price: 1200 },
+    { id: 'usg_elbow', title: 'USG Elbow', price: 1100 },
+    { id: 'usg_wrist', title: 'USG Wrist', price: 1100 },
+    { id: 'usg_knee', title: 'USG Knee', price: 1200 },
+    { id: 'usg_ankle', title: 'USG Ankle', price: 1100 },
+    { id: 'usg_hip', title: 'USG Hip', price: 1200 },
+    { id: 'usg_doppler_lower_limb_arterial', title: 'USG Doppler Lower Limb Arterial', price: 2200 },
+    { id: 'usg_doppler_lower_limb_venous', title: 'USG Doppler Lower Limb Venous', price: 2200 },
+    { id: 'usg_doppler_upper_limb_arterial', title: 'USG Doppler Upper Limb Arterial', price: 2000 },
+    { id: 'usg_doppler_upper_limb_venous', title: 'USG Doppler Upper Limb Venous', price: 2000 },
+    { id: 'usg_carotid_doppler', title: 'USG Carotid Doppler', price: 2500 },
+    { id: 'usg_colour_doppler', title: 'USG Colour Doppler', price: 2000 },
+    { id: 'usg_fetal_doppler', title: 'USG Fetal Doppler', price: 1800 },
+    { id: 'usg_obstetric_doppler', title: 'USG Obstetric Doppler', price: 1800 },
+    { id: 'usg_portal_vein_doppler', title: 'USG Portal Vein Doppler', price: 2200 },
+    { id: 'usg_renal_doppler', title: 'USG Renal Doppler', price: 2200 },
+    { id: 'usg_scrotal_doppler', title: 'USG Scrotal Doppler', price: 1800 },
+    { id: 'usg_guided_fnac', title: 'USG Guided FNAC', price: 2500 },
+    { id: 'usg_guided_biopsy', title: 'USG Guided Biopsy', price: 3000 }
   ],
   'DIGITAL XRAY': [
-    { id: 'xr_chest', title: 'Chest PA View', price: 400 },
-    { id: 'xr_spine', title: 'Lumbar Spine AP/Lat', price: 650 },
-    { id: 'xr_knee', title: 'Both Knee Joint', price: 550 }
+    { id: 'dxr_chest_pa', title: 'Digital X-ray Chest PA', price: 500 },
+    { id: 'dxr_chest_ap', title: 'Digital X-ray Chest AP', price: 500 },
+    { id: 'dxr_chest_lat', title: 'Digital X-ray Chest Lateral', price: 550 },
+    { id: 'dxr_abdomen_ap', title: 'Digital X-ray Abdomen AP', price: 600 },
+    { id: 'dxr_kub', title: 'Digital X-ray KUB', price: 600 },
+    { id: 'dxr_skull_ap', title: 'Digital X-ray Skull AP', price: 550 },
+    { id: 'dxr_skull_lat', title: 'Digital X-ray Skull Lateral', price: 550 },
+    { id: 'dxr_pns', title: 'Digital X-ray PNS', price: 500 },
+    { id: 'dxr_cervical_spine', title: 'Digital X-ray Cervical Spine AP & Lateral', price: 700 },
+    { id: 'dxr_thoracic_spine', title: 'Digital X-ray Thoracic Spine AP & Lateral', price: 700 },
+    { id: 'dxr_lumbar_spine', title: 'Digital X-ray Lumbar Spine AP & Lateral', price: 750 },
+    { id: 'dxr_whole_spine', title: 'Digital X-ray Whole Spine', price: 1500 },
+    { id: 'dxr_pelvis_ap', title: 'Digital X-ray Pelvis AP', price: 600 },
+    { id: 'dxr_hip_joint', title: 'Digital X-ray Hip Joint', price: 600 },
+    { id: 'dxr_shoulder_joint', title: 'Digital X-ray Shoulder Joint', price: 550 },
+    { id: 'dxr_clavicle', title: 'Digital X-ray Clavicle', price: 500 },
+    { id: 'dxr_arm', title: 'Digital X-ray Arm', price: 500 },
+    { id: 'dxr_elbow_joint', title: 'Digital X-ray Elbow Joint', price: 500 },
+    { id: 'dxr_forearm', title: 'Digital X-ray Forearm', price: 500 },
+    { id: 'dxr_wrist_joint', title: 'Digital X-ray Wrist Joint', price: 500 },
+    { id: 'dxr_hand', title: 'Digital X-ray Hand', price: 500 },
+    { id: 'dxr_finger', title: 'Digital X-ray Finger', price: 450 },
+    { id: 'dxr_femur', title: 'Digital X-ray Femur', price: 550 },
+    { id: 'dxr_knee_joint', title: 'Digital X-ray Knee Joint', price: 550 },
+    { id: 'dxr_leg', title: 'Digital X-ray Leg', price: 550 },
+    { id: 'dxr_ankle_joint', title: 'Digital X-ray Ankle Joint', price: 500 },
+    { id: 'dxr_foot', title: 'Digital X-ray Foot', price: 500 },
+    { id: 'dxr_calcaneum', title: 'Digital X-ray Calcaneum', price: 500 },
+    { id: 'dxr_ribs', title: 'Digital X-ray Ribs', price: 600 },
+    { id: 'dxr_sternum', title: 'Digital X-ray Sternum', price: 550 },
+    { id: 'dxr_sacrum_coccyx', title: 'Digital X-ray Sacrum & Coccyx', price: 650 },
+    { id: 'dxr_si_joint', title: 'Digital X-ray SI Joint', price: 650 },
+    { id: 'dxr_mandible', title: 'Digital X-ray Mandible', price: 550 },
+    { id: 'dxr_nasal_bone', title: 'Digital X-ray Nasal Bone', price: 500 },
+    { id: 'dxr_neck_soft_tissue', title: 'Digital X-ray Neck Soft Tissue', price: 550 }
+  ],
+  'XRAY': [
+    { id: 'xr_chest_pa', title: 'Chest X-ray (PA)', price: 400 },
+    { id: 'xr_chest_ap', title: 'Chest X-ray (AP)', price: 400 },
+    { id: 'xr_chest_lat', title: 'Chest X-ray (Lateral)', price: 450 },
+    { id: 'xr_cervical_spine', title: 'Cervical Spine X-ray', price: 550 },
+    { id: 'xr_thoracic_spine', title: 'Thoracic Spine X-ray', price: 550 },
+    { id: 'xr_lumbar_spine', title: 'Lumbar Spine X-ray', price: 600 },
+    { id: 'xr_whole_spine', title: 'Whole Spine X-ray', price: 1200 },
+    { id: 'xr_skull', title: 'Skull X-ray', price: 500 },
+    { id: 'xr_pns', title: 'PNS X-ray', price: 450 },
+    { id: 'xr_nasal_bone', title: 'Nasal Bone X-ray', price: 400 },
+    { id: 'xr_shoulder', title: 'Shoulder X-ray', price: 450 },
+    { id: 'xr_clavicle', title: 'Clavicle X-ray', price: 400 },
+    { id: 'xr_arm', title: 'Arm X-ray', price: 400 },
+    { id: 'xr_elbow', title: 'Elbow X-ray', price: 400 },
+    { id: 'xr_forearm', title: 'Forearm X-ray', price: 400 },
+    { id: 'xr_wrist', title: 'Wrist X-ray', price: 400 },
+    { id: 'xr_hand', title: 'Hand X-ray', price: 400 },
+    { id: 'xr_finger', title: 'Finger X-ray', price: 350 },
+    { id: 'xr_pelvis', title: 'Pelvis X-ray', price: 500 },
+    { id: 'xr_hip', title: 'Hip X-ray', price: 500 },
+    { id: 'xr_femur', title: 'Femur X-ray', price: 450 },
+    { id: 'xr_knee', title: 'Knee X-ray', price: 450 },
+    { id: 'xr_leg', title: 'Leg X-ray', price: 450 },
+    { id: 'xr_ankle', title: 'Ankle X-ray', price: 400 },
+    { id: 'xr_foot', title: 'Foot X-ray', price: 400 },
+    { id: 'xr_heel', title: 'Heel X-ray (Calcaneum)', price: 400 },
+    { id: 'xr_abdomen_kub', title: 'Abdomen X-ray (KUB)', price: 500 },
+    { id: 'xr_dental', title: 'Dental X-ray', price: 250 },
+    { id: 'xr_opg', title: 'OPG (Orthopantomogram)', price: 600 },
+    { id: 'xr_ribs', title: 'Ribs X-ray', price: 500 },
+    { id: 'xr_sternum', title: 'Sternum X-ray', price: 450 },
+    { id: 'xr_sacrum', title: 'Sacrum X-ray', price: 500 },
+    { id: 'xr_coccyx', title: 'Coccyx X-ray', price: 500 },
+    { id: 'xr_si_joint', title: 'SI Joint X-ray', price: 550 },
+    { id: 'xr_mandible', title: 'Mandible X-ray', price: 450 },
+    { id: 'xr_neck_soft_tissue', title: 'Neck Soft Tissue X-ray', price: 450 },
+    { id: 'xr_barium_swallow', title: 'Barium Swallow', price: 1200 },
+    { id: 'xr_hsg', title: 'HSG (Hysterosalpingography)', price: 1800 },
+    { id: 'xr_ivu', title: 'IVU (Intravenous Urography)', price: 2000 }
   ]
 };
 
@@ -342,6 +453,7 @@ export default function ReceptionLabBilling() {
   const [customTestCategory, setCustomTestCategory] = useState('LAB');
   const [customTestName, setCustomTestName] = useState('');
   const [customTestPrice, setCustomTestPrice] = useState('');
+  const [addingCustomTest, setAddingCustomTest] = useState(false);
 
   // Edit Master Price Modal state
   const [editingTestPrice, setEditingTestPrice] = useState(null);
@@ -409,12 +521,18 @@ export default function ReceptionLabBilling() {
       const dbTests = Array.isArray(tRes.data) ? tRes.data : (tRes.data?.tests || []);
       const dbPkgs = Array.isArray(pRes.data) ? pRes.data : (pRes.data?.packages || []);
 
-      const formattedTests = dbTests.map(t => ({
-        id: t._id || t.testKey,
-        title: t.title || t.test,
-        category: (t.category || 'LAB').toUpperCase(),
-        price: Number(t.basePrice || t.totalAmount || 100)
-      }));
+      const formattedTests = dbTests.map(t => {
+        let cat = (t.category || 'LAB').toUpperCase();
+        if (cat === 'X-RAY' || cat === 'X RAY') cat = 'XRAY';
+        if (cat === 'DIGITAL X-RAY' || cat === 'DIGITAL X RAY') cat = 'DIGITAL XRAY';
+        if (cat === 'ULTRASOUND' || cat === 'ULTRASONOGRAPHY') cat = 'USG';
+        return {
+          id: t._id || t.testKey,
+          title: t.title || t.test,
+          category: cat,
+          price: Number(t.basePrice || t.totalAmount || 100)
+        };
+      });
 
       const formattedPkgs = dbPkgs.map(p => ({
         id: p._id,
@@ -881,39 +999,100 @@ export default function ReceptionLabBilling() {
     setShowReceiptModal(false);
   };
 
-  // Add custom test handler
-  const handleAddCustomTest = () => {
-    if (!customTestName.trim()) {
-      alert('Please enter test name');
+  // Add custom test handler - saves to hospital master database for future use
+  const handleAddCustomTest = async () => {
+    const trimmedTitle = customTestName.trim();
+    if (!trimmedTitle) {
+      toast.error('Please enter test name');
       return;
     }
-    const newTest = {
-      id: `custom_${Date.now()}`,
-      title: customTestName.trim(),
-      category: customTestCategory,
-      price: Number(customTestPrice) || 100
-    };
-    setSelectedServices(prev => [...prev, newTest]);
-    setCustomTestName('');
-    setCustomTestPrice('');
-    setShowAddCustomModal(false);
+    const priceNum = Number(customTestPrice);
+    if (isNaN(priceNum) || priceNum < 0) {
+      toast.error('Please enter a valid positive rate');
+      return;
+    }
+
+    setAddingCustomTest(true);
+    try {
+      // 1. Persist to database master catalog for this hospital
+      const res = await client.post('/lab/tests/update-price', {
+        title: trimmedTitle,
+        testName: trimmedTitle,
+        category: customTestCategory,
+        price: priceNum
+      });
+
+      const savedDoc = res.data?.test;
+      const testItem = {
+        id: savedDoc?._id || `custom_${Date.now()}`,
+        title: savedDoc?.title || trimmedTitle,
+        category: customTestCategory,
+        price: priceNum
+      };
+
+      // 2. Add or update in allTests master state
+      setAllTests(prev => {
+        const idx = prev.findIndex(
+          t => (t.id && t.id === testItem.id) || t.title.toLowerCase() === testItem.title.toLowerCase()
+        );
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = { ...copy[idx], ...testItem };
+          return copy;
+        }
+        return [...prev, testItem];
+      });
+
+      // 3. Automatically select the newly created test in the current bill
+      setSelectedServices(prev => {
+        const alreadySelected = prev.some(
+          s => (s.id && s.id === testItem.id) || s.title.toLowerCase() === testItem.title.toLowerCase()
+        );
+        if (alreadySelected) {
+          return prev.map(s =>
+            (s.id && s.id === testItem.id) || s.title.toLowerCase() === testItem.title.toLowerCase()
+              ? { ...s, price: priceNum }
+              : s
+          );
+        }
+        return [...prev, testItem];
+      });
+
+      toast.success(`"${trimmedTitle}" saved to ${customTestCategory} catalog and added to bill!`);
+      setCustomTestName('');
+      setCustomTestPrice('');
+      setShowAddCustomModal(false);
+    } catch (err) {
+      console.error('Failed to save custom test:', err);
+      toast.error(err.response?.data?.message || 'Failed to save custom test');
+    } finally {
+      setAddingCustomTest(false);
+    }
   };
 
   // Category tests helper - ensures updated master prices in allTests override defaults
   const getCategoryTests = (catId) => {
     const defaults = (DEFAULT_CATALOG[catId] || []).map(t => ({ ...t, category: catId }));
     
+    const isXrayCat = catId === 'XRAY';
+    const isDigitalXrayCat = catId === 'DIGITAL XRAY';
+    const isUsgCat = catId === 'USG';
+    const matchCat = (itemCat) => itemCat === catId ||
+      (isXrayCat && (itemCat === 'XRAY' || itemCat === 'X-RAY' || itemCat === 'X RAY')) ||
+      (isDigitalXrayCat && (itemCat === 'DIGITAL XRAY' || itemCat === 'DIGITAL X-RAY' || itemCat === 'DIGITAL X RAY')) ||
+      (isUsgCat && (itemCat === 'USG' || itemCat === 'ULTRASOUND' || itemCat === 'ULTRASONOGRAPHY'));
+
     // Merge defaults with dynamic allTests, prioritizing dynamic allTests price
     const merged = defaults.map(def => {
       const dynamicMatch = allTests.find(
-        dt => dt.category === catId && (dt.id === def.id || dt.title.toLowerCase() === def.title.toLowerCase())
+        dt => matchCat(dt.category) && (dt.id === def.id || dt.title.toLowerCase() === def.title.toLowerCase())
       );
       return dynamicMatch ? { ...def, ...dynamicMatch, price: Number(dynamicMatch.price) } : def;
     });
 
     // Include extra dynamic tests not present in defaults
     const extraTests = allTests.filter(
-      t => t.category === catId && !t.isPackage && !merged.some(m => m.title.toLowerCase() === t.title.toLowerCase())
+      t => matchCat(t.category) && !t.isPackage && !merged.some(m => m.title.toLowerCase() === t.title.toLowerCase())
     );
 
     const combined = [...merged, ...extraTests];
@@ -1449,13 +1628,17 @@ export default function ReceptionLabBilling() {
           </div>
         </div>
 
-        {/* Categories Pills Grid */}
+        {/* Categories Tabs */}
         <div className="pt-2 border-t border-slate-100">
-          <label className="lab-label mb-2">Service Category Tabs</label>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 lg:grid-cols-12 gap-2">
+          <div className="flex items-center justify-between mb-2">
+            <label className="lab-label !mb-0 font-bold text-slate-700">Service Category Tabs</label>
+            <span className="text-[11px] text-slate-400 font-medium">Click a tab to open its investigations (auto-closes previous)</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             {CATEGORIES.map((cat) => {
               const Icon = cat.icon;
               const isSelected = selectedCategory === cat.id;
+              const testCount = getCategoryTests(cat.id).length;
 
               return (
                 <button
@@ -1463,21 +1646,24 @@ export default function ReceptionLabBilling() {
                   type="button"
                   onClick={() => {
                     setSelectedCategory(cat.id);
-                    if (!openBoxes.includes(cat.id)) {
-                      setOpenBoxes(prev => [...prev, cat.id]);
-                    }
+                    setOpenBoxes([cat.id]);
                   }}
                   className={`
-                    flex flex-col items-center justify-center p-2 rounded-lg border text-center transition-all cursor-pointer
+                    flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-semibold transition-all cursor-pointer select-none
                     ${isSelected
                       ? 'border-orange-500 bg-orange-500 text-white shadow-xs font-bold'
                       : 'border-slate-200 bg-white text-slate-700 hover:bg-orange-50 hover:border-orange-200'
                     }
                   `}
                 >
-                  <Icon className={`w-4 h-4 mb-1 ${isSelected ? 'text-white' : 'text-slate-500'}`} />
-                  <span className="text-[10px] uppercase tracking-wider truncate w-full">
+                  <Icon className={`w-3.5 h-3.5 ${isSelected ? 'text-white' : 'text-orange-500'}`} />
+                  <span className="text-[11px] uppercase tracking-wider whitespace-nowrap">
                     {cat.label}
+                  </span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                    isSelected ? 'bg-white/25 text-white' : 'bg-slate-100 text-slate-500'
+                  }`}>
+                    {testCount}
                   </span>
                 </button>
               );
@@ -1509,6 +1695,8 @@ export default function ReceptionLabBilling() {
                     type="button"
                     onClick={() => {
                       setCustomTestCategory(cat.id);
+                      setCustomTestName('');
+                      setCustomTestPrice('');
                       setShowAddCustomModal(true);
                     }}
                     className="px-2.5 py-1 bg-white hover:bg-orange-50 text-orange-600 border border-orange-200 rounded-md text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
@@ -1827,8 +2015,15 @@ export default function ReceptionLabBilling() {
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-5 space-y-4 border border-slate-200 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-sm font-bold text-slate-800">Add Custom Test / Service</h3>
-              <button onClick={() => setShowAddCustomModal(false)} className="text-slate-400 hover:text-slate-600">
+              <div>
+                <h3 className="text-sm font-bold text-slate-800">Add Custom Test / Service</h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">Saves to hospital master catalog for future bills</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddCustomModal(false)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -1853,6 +2048,7 @@ export default function ReceptionLabBilling() {
                   onChange={(e) => setCustomTestName(e.target.value)}
                   placeholder="e.g. Special Serology Test"
                   className="lab-input"
+                  autoFocus
                 />
               </div>
 
@@ -1872,17 +2068,29 @@ export default function ReceptionLabBilling() {
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 type="button"
+                disabled={addingCustomTest}
                 onClick={() => setShowAddCustomModal(false)}
-                className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="button"
+                disabled={addingCustomTest}
                 onClick={handleAddCustomTest}
-                className="px-4 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer"
+                className="px-4 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
               >
-                Add Test
+                {addingCustomTest ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Test</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

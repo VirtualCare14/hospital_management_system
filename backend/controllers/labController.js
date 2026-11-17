@@ -21,6 +21,19 @@ const {
   ensureSystemCategoryForHospital,
   ensureDiagnosisTestForHospital
 } = require('../seeds/seedDiagnosisCategory');
+const {
+  ensureXrayCategoryForHospital,
+  seedXrayTests
+} = require('../seeds/seedXrayTests');
+const {
+  ensureDigitalXrayCategoryForHospital,
+  seedDigitalXrayTests
+} = require('../seeds/seedDigitalXrayTests');
+const {
+  ensureUsgCategoryForHospital,
+  seedUsgTests
+} = require('../seeds/seedUsgTests');
+const { standardTests } = require('../seeds/seedStandardLabTemplates');
 const generateUhid = require('../utils/generateUhid');
 const { isSamePatientName, normalizePatientName } = require('../utils/patientUtils');
 const { v2: cloudinary } = require('cloudinary');
@@ -158,6 +171,42 @@ const provisionStandardTemplatesForHospital = async (req) => {
     await ensureSystemCategoryForHospital(hospitalId);
     for (const testName of DIAGNOSIS_TESTS) {
       await ensureDiagnosisTestForHospital(hospitalId, testName);
+    }
+    await ensureXrayCategoryForHospital(hospitalId);
+    await ensureDigitalXrayCategoryForHospital(hospitalId);
+    await ensureUsgCategoryForHospital(hospitalId);
+
+    if (!provisionedHospitals.has('xray_seeded')) {
+      const xrayCount = await LabTest.countDocuments({
+        categoryKey: 'xray',
+        $or: [{ hospitalId: null }, { hospitalId: { $exists: false } }]
+      });
+      if (xrayCount < 39) {
+        await seedXrayTests().catch(err => console.warn('Auto-seed X-ray tests notice:', err.message));
+      }
+      provisionedHospitals.add('xray_seeded');
+    }
+
+    if (!provisionedHospitals.has('digital_xray_seeded')) {
+      const digitalXrayCount = await LabTest.countDocuments({
+        categoryKey: 'digital xray',
+        $or: [{ hospitalId: null }, { hospitalId: { $exists: false } }]
+      });
+      if (digitalXrayCount < 35) {
+        await seedDigitalXrayTests().catch(err => console.warn('Auto-seed Digital X-ray tests notice:', err.message));
+      }
+      provisionedHospitals.add('digital_xray_seeded');
+    }
+
+    if (!provisionedHospitals.has('usg_seeded')) {
+      const usgCount = await LabTest.countDocuments({
+        categoryKey: 'usg',
+        $or: [{ hospitalId: null }, { hospitalId: { $exists: false } }]
+      });
+      if (usgCount < 50) {
+        await seedUsgTests().catch(err => console.warn('Auto-seed USG tests notice:', err.message));
+      }
+      provisionedHospitals.add('usg_seeded');
     }
 
     // Only ensure global baseline standard tests once globally if DB has no global tests
@@ -721,15 +770,28 @@ const updateLabRequest = async (req, res) => {
 
 const listTests = async (req, res) => {
   await provisionStandardTemplatesForHospital(req);
-  const query = testMasterReadQuery(req);
-  if (req.query.category) query.category = req.query.category;
+  const extra = {};
+  if (req.query.category) {
+    const cat = req.query.category;
+    const catNorm = normalizeKey(cat);
+    if (catNorm === 'xray' || catNorm === 'x-ray') {
+      extra.categoryKey = 'xray';
+    } else if (catNorm === 'digital xray' || catNorm === 'digital x-ray' || catNorm === 'digital_xray') {
+      extra.categoryKey = 'digital xray';
+    } else if (catNorm === 'usg' || catNorm === 'ultrasound' || catNorm === 'ultrasonography') {
+      extra.categoryKey = 'usg';
+    } else {
+      extra.category = cat;
+    }
+  }
   if (req.query.q) {
-    query.$or = [
+    extra.$or = [
       { title: { $regex: req.query.q, $options: 'i' } },
       { test: { $regex: req.query.q, $options: 'i' } },
       { category: { $regex: req.query.q, $options: 'i' } }
     ];
   }
+  const query = testMasterReadQuery(req, extra);
   const tests = await LabTest.find(query).sort({ category: 1, test: 1, title: 1 });
 
   const tenantMap = new Map();
@@ -769,9 +831,21 @@ const listTestCategories = async (req, res) => {
 
   const categoryMap = new Map();
   savedCategories.forEach((category) => {
-    categoryMap.set(normalizeKey(category.name), {
+    let key = normalizeKey(category.name);
+    let catName = category.name;
+    if (key === 'x-ray' || key === 'xray') {
+      key = 'xray';
+      catName = 'XRAY';
+    } else if (key === 'digital x-ray' || key === 'digital_xray' || key === 'digital xray') {
+      key = 'digital xray';
+      catName = 'DIGITAL XRAY';
+    } else if (key === 'usg' || key === 'ultrasound' || key === 'ultrasonography') {
+      key = 'usg';
+      catName = 'USG';
+    }
+    categoryMap.set(key, {
       _id: category._id,
-      name: category.name,
+      name: catName,
       status: category.status,
       isSystem: Boolean(category.isSystem),
       systemKey: category.systemKey || '',
@@ -779,11 +853,22 @@ const listTestCategories = async (req, res) => {
     });
   });
   testCategories.filter(Boolean).forEach((name) => {
-    const key = normalizeKey(name);
+    let key = normalizeKey(name);
+    let catName = name;
+    if (key === 'x-ray' || key === 'xray') {
+      key = 'xray';
+      catName = 'XRAY';
+    } else if (key === 'digital x-ray' || key === 'digital_xray' || key === 'digital xray') {
+      key = 'digital xray';
+      catName = 'DIGITAL XRAY';
+    } else if (key === 'usg' || key === 'ultrasound' || key === 'ultrasonography') {
+      key = 'usg';
+      catName = 'USG';
+    }
     if (!categoryMap.has(key)) {
       const isSystem = key === normalizeKey(DIAGNOSIS_CATEGORY_NAME);
       categoryMap.set(key, {
-        name,
+        name: catName,
         isSystem,
         systemKey: isSystem ? DIAGNOSIS_SYSTEM_KEY : '',
         source: 'test'
@@ -950,16 +1035,33 @@ const updateTestPrice = async (req, res) => {
     if (isNaN(newPrice) || newPrice < 0) {
       return res.status(400).json({ message: 'Valid positive price is required' });
     }
-    const normalizedCategory = String(category || 'LAB').trim().toUpperCase();
+    let normalizedCategory = String(category || 'LAB').trim().toUpperCase();
+    if (normalizedCategory === 'X-RAY' || normalizedCategory === 'X RAY') normalizedCategory = 'XRAY';
+    if (normalizedCategory === 'DIGITAL X-RAY' || normalizedCategory === 'DIGITAL X RAY') normalizedCategory = 'DIGITAL XRAY';
+    if (normalizedCategory === 'ULTRASOUND' || normalizedCategory === 'ULTRASONOGRAPHY') normalizedCategory = 'USG';
     const normalizedTitle = String(title || testName || '').trim();
 
     if (!normalizedTitle) {
       return res.status(400).json({ message: 'Test title or name is required' });
     }
 
+    await ensureCategory(req, normalizedCategory);
+
     let testDoc = null;
     if (testId && mongoose.Types.ObjectId.isValid(testId)) {
       testDoc = await LabTest.findOne(testMasterReadQuery(req, { _id: testId }));
+    }
+
+    if (!testDoc && normalizedCategory) {
+      const catKey = normalizeKey(normalizedCategory);
+      testDoc = await LabTest.findOne(testMasterReadQuery(req, {
+        categoryKey: catKey,
+        $or: [
+          { testKey: normalizeKey(normalizedTitle) },
+          { title: { $regex: `^${escapeRegex(normalizedTitle)}$`, $options: 'i' } },
+          { test: { $regex: `^${escapeRegex(normalizedTitle)}$`, $options: 'i' } }
+        ]
+      }));
     }
 
     if (!testDoc) {
@@ -973,7 +1075,7 @@ const updateTestPrice = async (req, res) => {
     }
 
     if (testDoc) {
-      if (req.user.hospitalId && (!testDoc.hospitalId || String(testDoc.hospitalId) !== String(req.user.hospitalId))) {
+      if (req.user?.hospitalId && (!testDoc.hospitalId || String(testDoc.hospitalId) !== String(req.user.hospitalId))) {
         // Copy-on-write for hospital
         let tenantCopy = await LabTest.findOne({
           hospitalId: req.user.hospitalId,
@@ -986,6 +1088,8 @@ const updateTestPrice = async (req, res) => {
         if (tenantCopy) {
           tenantCopy.basePrice = newPrice;
           tenantCopy.totalAmount = newPrice;
+          tenantCopy.category = normalizedCategory;
+          tenantCopy.categoryKey = normalizeKey(normalizedCategory);
           await tenantCopy.save();
           return res.json({ message: 'Price updated successfully in master', test: tenantCopy });
         } else {
@@ -1011,8 +1115,16 @@ const updateTestPrice = async (req, res) => {
       }
     } else {
       // Create new test entry in test master
+      const isRadio = ['XRAY', 'DIGITAL XRAY', 'USG', 'CT SCAN', 'MRI', 'EPS', 'OPG', 'MAMMOGRAPHY'].includes(normalizedCategory);
+      const defaultParams = isRadio ? [
+        { name: 'Findings', fieldType: 'Text', referenceRange: 'Normal radiological/sonographic appearance.', unit: '', status: 'Active' },
+        { name: 'Impression', fieldType: 'Text', referenceRange: 'No significant abnormality detected.', unit: '', status: 'Active' }
+      ] : [
+        { name: 'Result', fieldType: 'Text', referenceRange: 'Normal', unit: '', status: 'Active' }
+      ];
+
       const newTest = await LabTest.create({
-        hospitalId: req.user.hospitalId,
+        hospitalId: req.user?.hospitalId || null,
         category: normalizedCategory,
         categoryKey: normalizeKey(normalizedCategory),
         test: normalizedTitle,
@@ -1020,6 +1132,7 @@ const updateTestPrice = async (req, res) => {
         title: normalizedTitle,
         basePrice: newPrice,
         totalAmount: newPrice,
+        parameters: defaultParams,
         status: 'Active'
       });
       return res.json({ message: 'Price updated successfully in master', test: newTest });
@@ -1611,12 +1724,13 @@ const createDirectLabRequest = async (req, res) => {
         });
       } else {
         expandedTestList.push(testName);
-        const testDoc = await LabTest.findOne({
+        const testDocs = await LabTest.find(testMasterReadQuery(req, {
           $or: [
             { title: { $regex: `^${escapeRegex(testName)}$`, $options: 'i' } },
             { test: { $regex: `^${escapeRegex(testName)}$`, $options: 'i' } }
           ]
-        });
+        }));
+        const testDoc = testDocs.find(t => t.hospitalId && String(t.hospitalId) === String(req.user?.hospitalId)) || testDocs[0];
         if (testDoc) {
           baseTotal += (testDoc.basePrice || testDoc.totalAmount || 0);
         }

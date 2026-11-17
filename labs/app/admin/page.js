@@ -285,7 +285,16 @@ function LabAdminDashboard() {
 
       const mergedMap = new Map();
       fetchedCats.forEach(cat => {
-        const catName = (cat.name || cat.category || '').toUpperCase();
+        let catName = (cat.name || cat.category || '').toUpperCase();
+        if (catName === 'X-RAY' || catName === 'X RAY') {
+          catName = 'XRAY';
+        }
+        if (catName === 'DIGITAL X-RAY' || catName === 'DIGITAL X RAY') {
+          catName = 'DIGITAL XRAY';
+        }
+        if (catName === 'ULTRASOUND' || catName === 'ULTRASONOGRAPHY') {
+          catName = 'USG';
+        }
         if (catName) {
           const presetMatch = DEFAULT_CATEGORIES.find(c => c.name === catName);
           mergedMap.set(catName, {
@@ -7463,7 +7472,11 @@ Polycystic Ovarian Disease (PCOD / PCOS) is a complex endocrine disorder charact
 
   // Filtered Tests for View Reports Section
   const filteredTests = labTests.filter(test => {
-    const matchesCat = selectedCategoryFilter === 'ALL' || test.category?.toUpperCase() === selectedCategoryFilter;
+    let testCat = (test.category || '').toUpperCase();
+    if (testCat === 'X-RAY' || testCat === 'X RAY') testCat = 'XRAY';
+    if (testCat === 'DIGITAL X-RAY' || testCat === 'DIGITAL X RAY') testCat = 'DIGITAL XRAY';
+    if (testCat === 'ULTRASOUND' || testCat === 'ULTRASONOGRAPHY') testCat = 'USG';
+    const matchesCat = selectedCategoryFilter === 'ALL' || testCat === selectedCategoryFilter;
     const q = searchQuery.toLowerCase();
     const matchesSearch = !q || (
       (test.title || test.test || '').toLowerCase().includes(q) ||
@@ -7648,7 +7661,13 @@ Polycystic Ovarian Disease (PCOD / PCOS) is a complex endocrine disorder charact
               <div className="overflow-x-auto pb-2">
                 <div className="flex items-stretch gap-2.5 min-w-max">
                   {categoriesList.map((cat) => {
-                    const testCount = labTests.filter(t => t.category?.toUpperCase() === cat.name).length;
+                    const testCount = labTests.filter(t => {
+                      let tc = (t.category || '').toUpperCase();
+                      if (tc === 'X-RAY' || tc === 'X RAY') tc = 'XRAY';
+                      if (tc === 'DIGITAL X-RAY' || tc === 'DIGITAL X RAY') tc = 'DIGITAL XRAY';
+                      if (tc === 'ULTRASOUND' || tc === 'ULTRASONOGRAPHY') tc = 'USG';
+                      return tc === cat.name;
+                    }).length;
                     const isSelected = selectedCategoryFilter === cat.name;
 
                     return (
@@ -9167,7 +9186,13 @@ Polycystic Ovarian Disease (PCOD / PCOS) is a complex endocrine disorder charact
                   All ({labTests.length})
                 </button>
                 {categoriesList.map(cat => {
-                  const count = labTests.filter(t => t.category?.toUpperCase() === cat.name).length;
+                  const count = labTests.filter(t => {
+                    let tc = (t.category || '').toUpperCase();
+                    if (tc === 'X-RAY' || tc === 'X RAY') tc = 'XRAY';
+                    if (tc === 'DIGITAL X-RAY' || tc === 'DIGITAL X RAY') tc = 'DIGITAL XRAY';
+                    if (tc === 'ULTRASOUND' || tc === 'ULTRASONOGRAPHY') tc = 'USG';
+                    return tc === cat.name;
+                  }).length;
                   return (
                     <button
                       key={cat.id}
