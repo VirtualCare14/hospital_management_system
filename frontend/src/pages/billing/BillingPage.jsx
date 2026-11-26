@@ -17,6 +17,9 @@ import client from '../../api/client';
 import { useHeader } from '../../context/HeaderContext';
 import { formatUhid } from '../../utils/uhid';
 import PaginationFooter from '../../components/PaginationFooter';
+import AdvanceReceiptModal from '../../components/AdvanceReceiptModal';
+import { sanitizeClonedDocumentForPdf } from '../../utils/pdfUtils';
+import ConsumableServiceSettings from '../admin/ConsumableServiceSettings';
 
 const BILL_TYPES = [
   { id: 'All', label: 'All Connected Modules', icon: FileText },
@@ -363,6 +366,8 @@ const BillingPage = () => {
   const [advanceRemarksInput, setAdvanceRemarksInput] = useState('');
   const [savingAdvance, setSavingAdvance] = useState(false);
   const [selectedAdvancePatient, setSelectedAdvancePatient] = useState(null);
+  const [showAdvanceReceiptModal, setShowAdvanceReceiptModal] = useState(false);
+  const [advanceReceiptData, setAdvanceReceiptData] = useState(null);
 
   // Insurance & Cashless Modal Panel
   const [showInsuranceModal, setShowInsuranceModal] = useState(false);
@@ -1357,7 +1362,7 @@ const BillingPage = () => {
         status: finalize ? 'Final' : 'Draft',
         
         // Financial Ledger fields
-        paymentMode: paymentMode,
+        paymentMode: paymentMode || 'Cash',
         transactionRef: transactionRef,
         mixedPayments: paymentMode === 'Mixed Payment' ? [
           { method: 'Cash', amount: parseFloat(cashSplit || 0) },
@@ -1379,7 +1384,7 @@ const BillingPage = () => {
       };
 
       const { data } = await client.post('/billing', payload);
-      toast.success(finalize ? `Tax Invoice generated (${effectivePaymentStatus})` : 'Draft invoice saved');
+      toast.success(finalize ? `Tax Invoice generated (${effectivePaymentStatus})` : 'Charges saved successfully as draft');
       
       if (finalize) {
         // Automatically trigger Print Dialog with layout
@@ -1457,7 +1462,8 @@ const BillingPage = () => {
         scale: 2.5,
         useCORS: true,
         logging: false,
-        backgroundColor: '#ffffff'
+        backgroundColor: '#ffffff',
+        onclone: (clonedDoc) => sanitizeClonedDocumentForPdf(clonedDoc)
       });
 
       const imgData = canvas.toDataURL('image/png');
@@ -1547,7 +1553,7 @@ const BillingPage = () => {
       const localDate = now.toLocaleDateString('sv-SE'); // returns 'YYYY-MM-DD'
       const localTime = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
 
-      await client.post('/billing/advance', {
+      const { data } = await client.post('/billing/advance', {
         patientId: selectedAdvancePatient._id,
         uhid: selectedAdvancePatient.uhid,
         amount: parseFloat(advanceAmountInput),
@@ -1562,10 +1568,37 @@ const BillingPage = () => {
       if (selectedPatient && (selectedPatient._id === selectedAdvancePatient._id || selectedPatient.uhid === selectedAdvancePatient.uhid)) {
         loadPatientUnbilledItems(selectedPatient);
       }
+
+      // Automatically display Advance Receipt with letterhead
+      if (data?.advance) {
+        setAdvanceReceiptData({
+          advance: data.advance,
+          patient: selectedAdvancePatient
+        });
+        setShowAdvanceReceiptModal(true);
+      }
     } catch (err) {
       toast.error('Failed to record advance');
     } finally {
       setSavingAdvance(false);
+    }
+  };
+
+  const handleOpenLatestAdvanceReceipt = async (patient) => {
+    if (!patient?.uhid) return;
+    try {
+      const { data } = await client.get(`/billing/advance/${patient.uhid}`);
+      if (Array.isArray(data) && data.length > 0) {
+        setAdvanceReceiptData({
+          advance: data[0],
+          patient: patient
+        });
+        setShowAdvanceReceiptModal(true);
+      } else {
+        toast.error('No advance payment record found for this patient');
+      }
+    } catch (err) {
+      toast.error('Failed to load advance receipts');
     }
   };
 
@@ -1767,7 +1800,14 @@ const BillingPage = () => {
                           <tr key={p._id} className="hover:bg-orange-50/10 transition-colors">
                             <td className="p-4 pl-6">
                               <div>
-                                <span className="font-extrabold text-gray-900">{p.patientName}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCreateBill(p)}
+                                  className="font-extrabold text-gray-900 hover:text-orange-600 hover:underline text-left cursor-pointer transition-colors"
+                                  title="Open Invoice Builder for this patient"
+                                >
+                                  {p.patientName}
+                                </button>
                                 <div className="text-[10px] text-gray-400 mt-0.5">{p.gender} • {p.patientAge ? `${p.patientAge} years` : 'Age N/A'}</div>
                               </div>
                             </td>
@@ -1842,6 +1882,18 @@ const BillingPage = () => {
                                       className="w-full px-3 py-2 text-xs font-bold text-gray-800 hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-2 text-left transition-colors cursor-pointer"
                                     >
                                       <Coins className="h-4 w-4 text-emerald-600" /> Record Advance
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setActivePatientMenuId(null);
+                                        handleOpenLatestAdvanceReceipt(p);
+                                      }}
+                                      className="w-full px-3 py-2 text-xs font-bold text-gray-800 hover:bg-amber-50 hover:text-amber-700 flex items-center gap-2 text-left transition-colors cursor-pointer"
+                                    >
+                                      <Receipt className="h-4 w-4 text-amber-600" /> Advance Receipt
                                     </button>
 
                                     <button
@@ -1966,30 +2018,12 @@ const BillingPage = () => {
                     </div>
                   </div>
 
-                  {/* 3 Action Buttons */}
+                  {/* Top Action Buttons */}
                   <div className="shrink-0 xl:pl-6 xl:border-l xl:border-orange-100 flex flex-col gap-2.5 w-full xl:w-56">
                     <button
                       type="button"
-                      onClick={() => setShowCustomChargeModal(true)}
-                      className="w-full bg-orange-50/80 hover:bg-orange-500 text-orange-600 hover:text-white border border-orange-200/80 hover:border-orange-500 font-extrabold text-xs py-2.5 px-4 rounded-xl shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap"
-                      title="Add extra item or category to invoice"
-                    >
-                      <Plus className="h-4 w-4" /> Add Extra Category Item
-                    </button>
-                    
-                    <button
-                      type="button"
-                      onClick={handleOpenConsumableModal}
-                      className="w-full bg-amber-50/90 hover:bg-amber-600 text-amber-800 hover:text-white border border-amber-300 hover:border-amber-600 font-extrabold text-xs py-2.5 px-4 rounded-xl shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap group"
-                      title="Add consumable services (syringes, gloves, kits, post-TPA non-payables)"
-                    >
-                      <Package className="h-4 w-4 text-amber-600 group-hover:text-white transition-colors" /> + Add Consumable Services
-                    </button>
-                    
-                    <button
-                      type="button"
                       onClick={() => setShowPaymentModal(true)}
-                      className="w-full bg-orange-50/80 hover:bg-orange-500 text-orange-600 hover:text-white border border-orange-200/80 hover:border-orange-500 font-extrabold text-xs py-2.5 px-4 rounded-xl shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap"
+                      className="w-full bg-orange-600 hover:bg-orange-700 text-white font-extrabold text-xs py-2.5 px-4 rounded-xl shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap"
                       title="Open Final Payment Collection & Ledger popup"
                     >
                       <FileText className="h-4 w-4" /> Generate Invoice
@@ -2011,6 +2045,15 @@ const BillingPage = () => {
                       title="Add insurance or cashless pre-auth split for this admission"
                     >
                       <ShieldCheck className="h-4 w-4" /> Add Insurance / Cashless
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => (selectedItems.length > 0 ? handlePrintOverviewDraft() : handlePrintLedgerDirectly(selectedPatient))}
+                      className="w-full bg-slate-50/90 hover:bg-slate-700 text-slate-700 hover:text-white border border-slate-200 hover:border-slate-700 font-extrabold text-xs py-2.5 px-4 rounded-xl shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap"
+                      title="Print complete billing & advance ledger for this patient"
+                    >
+                      <Printer className="h-4 w-4" /> Print Ledger
                     </button>
                   </div>
                 </div>
@@ -2066,22 +2109,40 @@ const BillingPage = () => {
                     </div>
 
                     <div className="card overflow-hidden">
-                      <div className="p-4 border-b border-orange-100 bg-orange-50/20 flex items-center justify-between">
+                      <div className="p-3 sm:p-4 border-b border-orange-100 bg-orange-50/20 flex flex-wrap items-center justify-between gap-2.5">
                         <h4 className="font-extrabold text-gray-900 text-sm flex items-center gap-2">
                           <Receipt className="h-4.5 w-4.5 text-orange-500" /> Select Charges to Invoice ({selectedItemIndexes.length} selected)
                         </h4>
-                        {billType === 'Pharmacy' && items.length > 0 && (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {billType === 'Pharmacy' && items.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const anyUnchecked = items.some(i => i.addGst === false);
+                                items.forEach((_, idx) => handleToggleItemGst(idx, anyUnchecked));
+                              }}
+                              className="text-[11px] font-bold text-orange-700 bg-white hover:bg-orange-50 border border-orange-200 px-2.5 py-1.5 rounded-lg shadow-xs transition-colors flex items-center gap-1 cursor-pointer"
+                            >
+                              {items.some(i => i.addGst === false) ? 'Set All to Inc GST' : 'Set All to Ex GST'}
+                            </button>
+                          )}
                           <button
                             type="button"
-                            onClick={() => {
-                              const anyUnchecked = items.some(i => i.addGst === false);
-                              items.forEach((_, idx) => handleToggleItemGst(idx, anyUnchecked));
-                            }}
-                            className="text-[11px] font-bold text-orange-700 bg-white hover:bg-orange-50 border border-orange-200 px-2.5 py-1 rounded-lg shadow-sm transition-colors flex items-center gap-1 cursor-pointer"
+                            onClick={() => setShowCustomChargeModal(true)}
+                            className="bg-orange-50 hover:bg-orange-500 text-orange-700 hover:text-white border border-orange-200 hover:border-orange-500 font-extrabold text-xs py-1.5 px-3 rounded-lg shadow-xs hover:shadow-sm transition-all duration-150 cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
+                            title="Add extra item or category to invoice"
                           >
-                            {items.some(i => i.addGst === false) ? 'Set All to Inc GST' : 'Set All to Ex GST'}
+                            <Plus className="h-3.5 w-3.5" /> + Add Extra Item
                           </button>
-                        )}
+                          <button
+                            type="button"
+                            onClick={handleOpenConsumableModal}
+                            className="bg-amber-50 hover:bg-amber-600 text-amber-800 hover:text-white border border-amber-300 hover:border-amber-600 font-extrabold text-xs py-1.5 px-3 rounded-lg shadow-xs hover:shadow-sm transition-all duration-150 cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
+                            title="Add consumable services (syringes, gloves, kits, post-TPA non-payables)"
+                          >
+                            <Package className="h-3.5 w-3.5 text-amber-600 hover:text-white transition-colors" /> + Add Consumable Services
+                          </button>
+                        </div>
                       </div>
                       <div className="overflow-x-auto">
                         <table className="w-full text-left text-xs">
@@ -2323,6 +2384,31 @@ const BillingPage = () => {
                           </tbody>
                         </table>
                       </div>
+
+                      {/* Bottom Footer Action Bar */}
+                      <div className="p-3 sm:p-4 bg-orange-50/20 border-t border-orange-100 flex flex-col sm:flex-row items-center justify-between gap-3">
+                        <div className="text-xs text-gray-600 flex items-center gap-2">
+                          <span className="font-extrabold text-gray-900">{selectedItemIndexes.length}</span> item(s) selected
+                          <span className="text-gray-300">|</span>
+                          <span>Subtotal: <strong className="text-gray-900">₹{subtotal.toFixed(2)}</strong></span>
+                          {items.some(i => i.isCustom || i.isConsumable) && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                              New charges added
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                          <button
+                            type="button"
+                            onClick={() => handleSaveBill(false)}
+                            disabled={saving || selectedItems.length === 0}
+                            className="w-full sm:w-auto bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white font-extrabold text-xs py-2 px-5 rounded-xl shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer flex items-center justify-center gap-2"
+                            title="Save charges to patient's bill draft"
+                          >
+                            <Save className="h-4 w-4" /> {saving ? 'Saving...' : 'Save Charges'}
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
@@ -2450,7 +2536,17 @@ const BillingPage = () => {
                             </div>
                             {advanceReceived > 0 && (
                               <div className="flex items-center justify-between gap-2 text-[11px] pt-1 border-t border-emerald-200/60">
-                                <span className="text-[10px] text-emerald-700">Available: ₹{advanceReceived.toFixed(2)}</span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[10px] text-emerald-700">Available: ₹{advanceReceived.toFixed(2)}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenLatestAdvanceReceipt(selectedPatient)}
+                                    className="text-[10px] font-bold text-emerald-800 hover:text-emerald-950 underline cursor-pointer"
+                                    title="View & Print Advance Receipt with Letterhead"
+                                  >
+                                    (View Receipt)
+                                  </button>
+                                </div>
                                 <div className="relative w-28">
                                   <span className="absolute left-2 top-1 text-gray-400 text-[10px] font-bold">₹</span>
                                   <input
@@ -2543,6 +2639,19 @@ const BillingPage = () => {
                               }`}
                             >
                               <Shield className="h-3.5 w-3.5 text-blue-600" /> {tpaAllocation > 0 ? 'Edit Insurance' : 'Add Insurance'}
+                            </button>
+                          </div>
+
+                          {/* Save Charges action at bottom of breakdown */}
+                          <div className="pt-2 border-t border-orange-100 flex flex-col gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleSaveBill(false)}
+                              disabled={saving || selectedItems.length === 0}
+                              className="w-full bg-white hover:bg-orange-50 text-orange-700 border border-orange-300 font-extrabold text-xs py-2.5 px-4 rounded-xl shadow-xs hover:shadow-sm transition-all duration-200 cursor-pointer flex items-center justify-center gap-2"
+                              title="Save charges to patient's bill draft"
+                            >
+                              <Save className="h-4 w-4 text-orange-600" /> {saving ? 'Saving...' : 'Save Charges'}
                             </button>
                           </div>
                         </div>
@@ -3055,7 +3164,14 @@ const BillingPage = () => {
         </div>
       )}
 
-      {/* ===================== VIEW 4: DUE AMOUNT RECOVERY WORKSPACE ===================== */}
+      {/* ===================== VIEW 4: CONSUMABLES MANAGEMENT ===================== */}
+      {activeTab === 'consumables' && (
+        <div className="animate-fadeIn">
+          <ConsumableServiceSettings />
+        </div>
+      )}
+
+      {/* ===================== VIEW 5: DUE AMOUNT RECOVERY WORKSPACE ===================== */}
       {activeTab === 'due-recovery' && (
         <div className="space-y-6 animate-fadeIn">
           {/* Header Banner */}
@@ -5067,8 +5183,8 @@ const BillingPage = () => {
         const generalDiscountAmount = Math.max(0, (printBillObj.discountAmount || 0) - totalItemDiscounts);
         const footerColSpan = hasItemDiscounts ? 7 : 6;
         return (
-          <div className="fixed inset-0 bg-black/75 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto animate-fadeIn print:static print:p-0 print:bg-transparent print:backdrop-blur-none print:overflow-visible print:z-auto">
-            <div className="bg-gray-100 rounded-2xl shadow-2xl max-w-4xl w-full flex flex-col h-[90vh] print:bg-transparent print:shadow-none print:max-w-none print:w-full print:h-auto print:border-none print:rounded-none print:overflow-visible">
+          <div className="fixed inset-0 bg-black/75 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto animate-fadeIn print:fixed print:inset-0 print:p-0 print:m-0 print:bg-white print:backdrop-blur-none print:overflow-visible print:block">
+            <div className="bg-gray-100 rounded-2xl shadow-2xl max-w-4xl w-full flex flex-col h-[90vh] print:bg-white print:shadow-none print:max-w-none print:w-full print:h-auto print:border-none print:rounded-none print:overflow-visible print:block">
               
               {/* Modal Header */}
               <div className="bg-white border-b border-gray-200 px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0 rounded-t-2xl print:hidden">
@@ -5114,14 +5230,46 @@ const BillingPage = () => {
               </div>
 
               {/* Print Area Preview Container */}
-              <div className="flex-1 overflow-y-auto p-8 flex justify-center bg-gray-200/50 print:bg-transparent print:p-0 print:overflow-visible">
+              <div className="flex-1 overflow-y-auto p-8 flex justify-center bg-gray-200/50 print:bg-white print:p-0 print:m-0 print:overflow-visible print:block">
                 <div
                   ref={printAreaRef}
-                  className="a4-receipt bg-white shadow-lg w-[210mm] min-h-[297mm] p-10 border border-gray-300 relative text-gray-900 overflow-hidden text-left leading-normal print:w-full print:max-w-none print:shadow-none print:border-none print:p-4 print:m-0"
+                  className="a4-receipt bg-white shadow-lg w-[210mm] min-h-[297mm] p-10 border border-gray-300 relative text-gray-900 overflow-hidden text-left leading-normal print:w-full print:max-w-none print:min-h-0 print:shadow-none print:border-none print:p-0 print:m-0 print:overflow-visible"
                   id="invoice-print-area"
                 >
                   {/* Printout stylesheet rules */}
                   <style>{`
+                    @media print {
+                      @page {
+                        size: A4 portrait;
+                        margin: 8mm;
+                      }
+                      body * {
+                        visibility: hidden !important;
+                      }
+                      #invoice-print-area,
+                      #invoice-print-area * {
+                        visibility: visible !important;
+                      }
+                      #invoice-print-area {
+                        display: block !important;
+                        position: absolute !important;
+                        left: 0 !important;
+                        top: 0 !important;
+                        width: 100% !important;
+                        max-width: 100% !important;
+                        min-height: auto !important;
+                        margin: 0 !important;
+                        padding: 2mm 4mm !important;
+                        border: none !important;
+                        box-shadow: none !important;
+                        overflow: visible !important;
+                        box-sizing: border-box !important;
+                      }
+                      .print\\:hidden,
+                      .print\\:hidden * {
+                        display: none !important;
+                      }
+                    }
                     #invoice-print-area {
                       font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
                       color: #000000 !important;
@@ -5484,6 +5632,17 @@ const BillingPage = () => {
           </div>
         );
       })()}
+
+      {/* Advance Payment Receipt Modal with Letterhead */}
+      <AdvanceReceiptModal
+        isOpen={showAdvanceReceiptModal}
+        onClose={() => {
+          setShowAdvanceReceiptModal(false);
+          setAdvanceReceiptData(null);
+        }}
+        advanceData={advanceReceiptData}
+        hospitalInfo={hospitalInfo}
+      />
 
     </div>
   );

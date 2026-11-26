@@ -15,6 +15,10 @@ const advancePaymentSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  receiptNo: {
+    type: String,
+    default: ''
+  },
   amount: {
     type: Number,
     required: true,

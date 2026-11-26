@@ -379,19 +379,10 @@ const Sidebar = () => {
             {renderSectionHeader('Day Care')}
             <div className="space-y-1">
               <NavLink
-                to="/same-day-care?tab=all"
-                onClick={handleOptionClick}
-                title="All Patients (Lookup)"
-                className={() => getLinkClass(window.location.search.includes('tab=all') || (location.pathname === '/same-day-care' && !window.location.search.includes('tab=')))}
-              >
-                <Users className="h-5 w-5 shrink-0" />
-                {isExpanded && <span className="truncate">All Patients (Lookup)</span>}
-              </NavLink>
-              <NavLink
                 to="/same-day-care?tab=pending"
                 onClick={handleOptionClick}
                 title="Treatment Pending"
-                className={() => getLinkClass(window.location.search.includes('tab=pending'))}
+                className={() => getLinkClass(window.location.search.includes('tab=pending') || (location.pathname === '/same-day-care' && !window.location.search.includes('tab=')))}
               >
                 <Clock className="h-5 w-5 shrink-0" />
                 {isExpanded && <span className="truncate">Treatment Pending</span>}
@@ -404,6 +395,33 @@ const Sidebar = () => {
               >
                 <CheckCircle className="h-5 w-5 shrink-0" />
                 {isExpanded && <span className="truncate">Treatment Completed</span>}
+              </NavLink>
+              <NavLink
+                to="/same-day-care?tab=followup"
+                onClick={handleOptionClick}
+                title="Scheduled Follow-ups"
+                className={() => getLinkClass(window.location.search.includes('tab=followup'))}
+              >
+                <CalendarDays className="h-5 w-5 shrink-0" />
+                {isExpanded && <span className="truncate">Scheduled Follow-ups</span>}
+              </NavLink>
+              <NavLink
+                to="/same-day-care?tab=all"
+                onClick={handleOptionClick}
+                title="All Patients"
+                className={() => getLinkClass(window.location.search.includes('tab=all'))}
+              >
+                <Users className="h-5 w-5 shrink-0" />
+                {isExpanded && <span className="truncate">All Patients</span>}
+              </NavLink>
+              <NavLink
+                to="/same-day-care?tab=datewise"
+                onClick={handleOptionClick}
+                title="Date-wise Tracking"
+                className={() => getLinkClass(window.location.search.includes('tab=datewise'))}
+              >
+                <Activity className="h-5 w-5 shrink-0" />
+                {isExpanded && <span className="truncate">Date-wise Tracking</span>}
               </NavLink>
               <NavLink
                 to="/same-day-care/dialysis"
@@ -426,11 +444,11 @@ const Sidebar = () => {
               <NavLink
                 to="/same-day-care/billing"
                 onClick={handleOptionClick}
-                title="Same day billing"
+                title="Same Day Billing"
                 className={({ isActive }) => getLinkClass(isActive)}
               >
                 <BadgeIndianRupee className="h-5 w-5 shrink-0" />
-                {isExpanded && <span className="truncate">Same day billing</span>}
+                {isExpanded && <span className="truncate">Same Day Billing</span>}
               </NavLink>
             </div>
           </div>
@@ -572,6 +590,15 @@ const Sidebar = () => {
               >
                 <FileText className="h-5 w-5 shrink-0" />
                 {isExpanded && <span className="truncate">Invoice Registry</span>}
+              </NavLink>
+              <NavLink
+                to="/module/8?tab=consumables"
+                onClick={handleOptionClick}
+                title="Consumables"
+                className={() => getLinkClass(window.location.search.includes('tab=consumables'))}
+              >
+                <Package className="h-5 w-5 shrink-0" />
+                {isExpanded && <span className="truncate">Consumables</span>}
               </NavLink>
               <NavLink
                 to="/module/8?tab=due-recovery"

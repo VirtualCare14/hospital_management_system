@@ -136,7 +136,7 @@ const SameDayCareWorkspace = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState('all');
+  const [activeTab, setActiveTab] = useState(tabParam || 'pending');
   const [patients, setPatients] = useState([]);
   const [queue, setQueue] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -313,6 +313,7 @@ const SameDayCareWorkspace = () => {
   }, []);
 
   useEffect(() => {
+    setQueueSearch('');
     if (tabParam === 'completed') {
       setActiveTab('completed');
     } else if (tabParam === 'pending' || tabParam === 'queue') {
@@ -324,7 +325,7 @@ const SameDayCareWorkspace = () => {
     } else if (tabParam === 'datewise') {
       setActiveTab('datewise');
     } else {
-      setActiveTab('all');
+      setActiveTab('pending');
     }
   }, [tabParam]);
 
@@ -530,48 +531,49 @@ const SameDayCareWorkspace = () => {
       <div className="no-print space-y-6">
         {!showTreatmentList ? (
         <>
-          {/* Tabs Menu */}
-          <div className="flex bg-orange-50/50 p-1 rounded-xl border border-orange-100 w-fit mb-4 mb-4 select-none">
-            <button
-              onClick={() => { setActiveTab('pending'); setSearchParams({ tab: 'pending' }); }}
-              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-all ${
-                activeTab === 'pending' || activeTab === 'queue' ? 'bg-orange-500 text-white shadow-sm' : 'text-orange-950 hover:bg-orange-100/50'
-              }`}
-            >
-              <Clock className="h-4 w-4" /> Treatment Pending ({filteredQueue.length})
-            </button>
-            <button
-              onClick={() => { setActiveTab('completed'); setSearchParams({ tab: 'completed' }); }}
-              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-all ${
-                activeTab === 'completed' ? 'bg-orange-500 text-white shadow-sm' : 'text-orange-950 hover:bg-orange-100/50'
-              }`}
-            >
-              <CheckCircle className="h-4 w-4" /> Treatment Completed ({completedList.length})
-            </button>
-            <button
-              onClick={() => { setActiveTab('followup'); setSearchParams({ tab: 'followup' }); }}
-              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-all ${
-                activeTab === 'followup' ? 'bg-orange-500 text-white shadow-sm' : 'text-orange-950 hover:bg-orange-100/50'
-              }`}
-            >
-              <CalendarDays className="h-4 w-4" /> Scheduled Follow-ups ({followups.length})
-            </button>
-             <button
-              onClick={() => { setActiveTab('all'); setSearchParams({ tab: 'all' }); }}
-              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-all ${
-                activeTab === 'all' ? 'bg-orange-500 text-white shadow-sm' : 'text-orange-950 hover:bg-orange-100/50'
-              }`}
-            >
-              <User className="h-4 w-4" /> All Patients (Lookup)
-            </button>
-            <button
-              onClick={() => { setActiveTab('datewise'); setSearchParams({ tab: 'datewise' }); }}
-              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-all ${
-                activeTab === 'datewise' ? 'bg-orange-500 text-white shadow-sm' : 'text-orange-950 hover:bg-orange-100/50'
-              }`}
-            >
-              <Activity className="h-4 w-4" /> Date-wise Tracking
-            </button>
+          {/* Contextual Day Care Header (No duplicate tab bar) */}
+          <div className="card p-4 sm:p-5 bg-gradient-to-r from-orange-50/70 via-amber-50/30 to-white border border-orange-100 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-orange-100 text-orange-600 rounded-xl shrink-0">
+                <Activity className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-base sm:text-lg font-extrabold text-gray-900">
+                  {activeTab === 'pending' || activeTab === 'queue'
+                    ? 'Treatment Pending Queue'
+                    : activeTab === 'completed'
+                      ? 'Treatment Completed'
+                      : activeTab === 'followup'
+                        ? 'Scheduled Follow-ups'
+                        : activeTab === 'datewise'
+                          ? 'Date-wise Treatment Tracking'
+                          : 'All Day Care Patients'}
+                </h2>
+                <p className="text-xs text-gray-500">
+                  {activeTab === 'pending' || activeTab === 'queue'
+                    ? 'Active same-day procedures awaiting treatment completion'
+                    : activeTab === 'completed'
+                      ? 'Completed day care procedures, reports, and billing access'
+                      : activeTab === 'followup'
+                        ? 'Patients scheduled for follow-up procedures or check-ups'
+                        : activeTab === 'datewise'
+                          ? 'Review daily day-care volume, completed treatments, and pending drafts'
+                          : 'Search registered day-care patients and start a new care session'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
+              <span className="px-3 py-1.5 rounded-xl bg-amber-50 text-amber-800 border border-amber-200">
+                Pending: {queue.filter(i => i.treatmentType && i.treatmentType.trim() !== '').length}
+              </span>
+              <span className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200">
+                Completed: {completedList.length}
+              </span>
+              <span className="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-800 border border-blue-200">
+                Follow-ups: {followups.length}
+              </span>
+            </div>
           </div>
 
           {activeTab === 'pending' || activeTab === 'queue' ? (
@@ -647,19 +649,10 @@ const SameDayCareWorkspace = () => {
                           <SkeletonTable rows={5} columns={9} className="w-full" />
                         </td>
                       </tr>
-                    ) : queue.filter(item => {
-                      if (pendingSourceFilter === 'Doctor') return item.source === 'Doctor Referral';
-                      if (pendingSourceFilter === 'Reception') return item.source === 'Registration';
-                      return true;
-                    }).length === 0 ? (
+                    ) : filteredQueue.length === 0 ? (
                       <tr><td colSpan="9" className="p-8 text-center text-gray-400"><Clock className="h-8 w-8 mx-auto mb-2 opacity-50 text-orange-400" /><p className="font-bold">No pending treatments match the filter</p></td></tr>
                     ) : (
-                      queue.filter(item => {
-                        if (pendingSourceFilter === 'All') return true;
-                        if (pendingSourceFilter === 'Doctor') return item.source === 'Doctor Referral';
-                        if (pendingSourceFilter === 'Reception') return item.source === 'Registration';
-                        return true;
-                      }).map(item => (
+                      filteredQueue.map(item => (
                         <tr key={item._id} className="hover:bg-orange-50/20">
                           <td className="p-3 pl-4">
                             <span className="font-bold text-gray-950 block">{item.patientName}</span>
@@ -1256,21 +1249,6 @@ const SameDayCareWorkspace = () => {
                   </div>
                   <button type="submit" className="btn py-2.5 px-6"><Search className="h-4 w-4" /> Search</button>
                 </form>
-              </div>
-
-              {/* Recent Patients Quick Access - Treatment Icons */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
-                {categories.map(cat => {
-                  const Icon = TREATMENT_ICONS[cat.name] || FolderHeart;
-                  return (
-                    <div key={cat.name} className="card p-4 text-center hover:shadow-md transition-all cursor-pointer border-2 border-transparent hover:border-orange-200" onClick={() => {
-                      toast(`Search and select a patient first, then click "Start Care".`, { icon: 'ℹ️' });
-                    }}>
-                      <Icon className="h-8 w-8 mx-auto mb-1 text-orange-500" />
-                      <span className="block text-[10px] font-bold uppercase text-gray-600 leading-tight">{cat.name}</span>
-                    </div>
-                  );
-                })}
               </div>
 
               {/* Patient List */}

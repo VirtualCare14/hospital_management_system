@@ -2,9 +2,43 @@
 // These helpers sanitize the cloned DOM before html2canvas renders it so unsupported
 // CSS color functions like oklch() / oklab() do not break the PDF generation flow.
 
-const unsupportedColorPattern = /\b(?:oklch|oklab)\([^)]*\)/gi;
+const hasUnsupportedColorRegex = /\b(?:oklch|oklab|color-mix)\(/i;
 
-export const hasUnsupportedCssColor = (value) => typeof value === 'string' && unsupportedColorPattern.test(value);
+export const hasUnsupportedCssColor = (value) => typeof value === 'string' && hasUnsupportedColorRegex.test(value);
+
+const replaceUnsupportedColorFunctions = (value, replacer) => {
+  if (!value || typeof value !== 'string' || !hasUnsupportedCssColor(value)) return value;
+
+  let result = '';
+  let i = 0;
+  while (i < value.length) {
+    const slice = value.slice(i);
+    const match = slice.match(/\b(?:oklch|oklab|color-mix)\(/i);
+    if (!match) {
+      result += slice;
+      break;
+    }
+    const start = i + match.index;
+    result += value.slice(i, start);
+
+    let depth = 0;
+    let j = start + match[0].length - 1;
+    for (; j < value.length; j += 1) {
+      if (value[j] === '(') depth += 1;
+      else if (value[j] === ')') {
+        depth -= 1;
+        if (depth === 0) {
+          j += 1;
+          break;
+        }
+      }
+    }
+    const fnCall = value.slice(start, j);
+    result += replacer(fnCall);
+    i = j;
+  }
+  return result;
+};
 
 export const normalizeCssColor = (value) => {
   if (!value) return value;
@@ -17,8 +51,13 @@ export const normalizeCssColor = (value) => {
   }
 
   try {
+    ctx.fillStyle = '#010203';
     ctx.fillStyle = value;
-    return ctx.fillStyle || '#888888';
+    const resolved = ctx.fillStyle;
+    if (resolved && !hasUnsupportedCssColor(resolved)) {
+      return resolved;
+    }
+    return '#888888';
   } catch (error) {
     console.warn('PDF color normalization failed for', value, error);
     return '#888888';
@@ -27,7 +66,7 @@ export const normalizeCssColor = (value) => {
 
 export const normalizeCssValue = (value) => {
   if (!value || !hasUnsupportedCssColor(value)) return value;
-  return value.replace(unsupportedColorPattern, (match) => normalizeCssColor(match));
+  return replaceUnsupportedColorFunctions(value, (match) => normalizeCssColor(match));
 };
 
 const styleOverrideText = `
@@ -78,11 +117,37 @@ const sanitizeNodeStyles = (node) => {
   });
 
   const inlineStyle = node.getAttribute('style');
-  if (inlineStyle && unsupportedColorPattern.test(inlineStyle)) {
+  if (inlineStyle && hasUnsupportedCssColor(inlineStyle)) {
     node.setAttribute('style', normalizeCssValue(inlineStyle));
   }
 
-  const computedStyle = window.getComputedStyle(node);
+  const view = node.ownerDocument?.defaultView || window;
+  const computedStyle = view.getComputedStyle(node);
+  const explicitColorProps = [
+    'color',
+    'background-color',
+    'background-image',
+    'border-top-color',
+    'border-right-color',
+    'border-bottom-color',
+    'border-left-color',
+    'outline-color',
+    'text-decoration-color',
+    'fill',
+    'stroke'
+  ];
+
+  explicitColorProps.forEach((prop) => {
+    const value = computedStyle.getPropertyValue(prop);
+    if (value && hasUnsupportedCssColor(value)) {
+      try {
+        node.style.setProperty(prop, normalizeCssValue(value));
+      } catch (error) {
+        // Ignore invalid writable properties.
+      }
+    }
+  });
+
   for (let i = 0; i < computedStyle.length; i += 1) {
     const prop = computedStyle[i];
     const value = computedStyle.getPropertyValue(prop);
@@ -108,6 +173,12 @@ const sanitizeNodeStyles = (node) => {
 
 export const sanitizeClonedDocumentForPdf = (clonedDoc) => {
   if (!clonedDoc || !clonedDoc.body || !clonedDoc.head) return;
+
+  clonedDoc.querySelectorAll('style').forEach((styleEl) => {
+    if (styleEl.textContent && hasUnsupportedCssColor(styleEl.textContent)) {
+      styleEl.textContent = normalizeCssValue(styleEl.textContent);
+    }
+  });
 
   const styleOverride = clonedDoc.createElement('style');
   styleOverride.textContent = styleOverrideText;

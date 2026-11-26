@@ -432,13 +432,48 @@ const IpdOtForm = () => {
   };
 
   const handlePrintConsultation = (customRecord = null) => {
-    const activeForm = customRecord ? customRecord : form;
+    const validCustomRecord = customRecord && !customRecord.nativeEvent && customRecord._id ? customRecord : null;
+    const activeForm = validCustomRecord || form;
     const patientObj = admission?.patientId || {};
     const consentNotes = activeForm.consultation?.consultationNotes || '';
     const heading = activeForm.consultation?.templateHeading || 'OT Consultation / Consent Form';
     const dateStr = activeForm.consultation?.signatureSignedAt 
       ? new Date(activeForm.consultation.signatureSignedAt).toLocaleDateString('en-IN') 
       : new Date().toLocaleDateString('en-IN');
+
+    const phoneList = Array.isArray(hospitalInfo?.contactNumbers) && hospitalInfo.contactNumbers.length > 0
+      ? hospitalInfo.contactNumbers.map((p) => (p.name ? `${p.name}: ${p.number}` : p.number)).filter(Boolean).join(', ')
+      : (Array.isArray(hospitalInfo?.phoneNumbers) ? hospitalInfo.phoneNumbers.filter(Boolean).join(', ') : '');
+
+    const useImageLetterhead = Boolean(
+      hospitalInfo?.letterheadImageUrl &&
+      (hospitalInfo?.letterheadType === 'image' || hospitalInfo?.useSystemLetterhead === false)
+    );
+
+    const letterheadHtml = useImageLetterhead
+      ? `<div class="letterhead-img-wrap">
+           <img src="${hospitalInfo.letterheadImageUrl}" alt="Hospital Letterhead" style="width:100%;max-height:${(hospitalInfo.letterheadHeaderHeight || 4.6) * 32}px;object-fit:fill;display:block;" />
+         </div>`
+      : `<div class="header-container">
+           <div class="header-left">
+             ${hospitalInfo?.logoUrl ? `<img src="${hospitalInfo.logoUrl}" class="hospital-logo" alt="Logo" />` : ''}
+             <div class="hospital-details">
+               <h1>${hospitalInfo?.hospitalName || 'Hospital Name'}</h1>
+               ${hospitalInfo?.hospitalHeading ? `<p class="hospital-heading">${hospitalInfo.hospitalHeading}</p>` : ''}
+               <p class="hospital-address">${hospitalInfo?.address || ''}</p>
+             </div>
+           </div>
+           <div class="header-right">
+             ${phoneList ? `<p><strong>Phone:</strong> ${phoneList}</p>` : ''}
+             ${hospitalInfo?.emailAddress ? `<p><strong>Email:</strong> ${hospitalInfo.emailAddress}</p>` : ''}
+             ${hospitalInfo?.dlNumber ? `<p><strong>DL No:</strong> ${hospitalInfo.dlNumber}</p>` : ''}
+             ${hospitalInfo?.website ? `<p><strong>Website:</strong> ${hospitalInfo.website}</p>` : ''}
+             ${hospitalInfo?.gstNumber ? `<p><strong>GSTIN:</strong> ${hospitalInfo.gstNumber}</p>` : ''}
+           </div>
+         </div>`;
+
+    const hasHtmlTags = /<[a-z][\s\S]*>/i.test(consentNotes);
+    const consultantName = admission?.doctorInCharge?.doctorName || admission?.doctorInCharge?.username || activeForm?.surgeonName || '';
 
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
@@ -453,40 +488,42 @@ const IpdOtForm = () => {
           <title>${heading}</title>
           <style>
             @media print {
-              @page { size: A4; margin: 15mm; }
-              body { font-size: 11pt; }
+              @page { size: A4 portrait; margin: 0 !important; }
+              body { font-size: 11pt; padding: 12mm !important; margin: 0 !important; }
             }
-            body { font-family: 'Helvetica Neue', Arial, sans-serif; padding: 20px; color: #333; line-height: 1.6; }
-            .header-container { border-bottom: 2px solid #ea580c; padding-bottom: 12px; margin-bottom: 20px; display: flex; align-items: center; gap: 15px; }
-            .hospital-logo { max-height: 60px; max-width: 150px; object-fit: contain; }
-            .hospital-details h1 { font-size: 20px; font-weight: 800; margin: 0; color: #1e293b; }
-            .hospital-details p { font-size: 12px; margin: 2px 0 0 0; color: #64748b; }
-            
-            .doc-title { text-align: center; font-size: 16px; font-weight: 800; margin: 20px 0; text-transform: uppercase; letter-spacing: 0.5px; color: #0f172a; border-bottom: 1px dashed #cbd5e1; padding-bottom: 8px; }
-            
-            .patient-box { border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 20px; padding: 12px 16px; background-color: #f8fafc; font-size: 13px; }
-            .patient-box h4 { font-weight: 800; margin: 0 0 8px 0; color: #475569; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; }
-            .patient-grid { display: grid; grid-template-cols: 1fr 1fr; gap: 6px 20px; }
-            .patient-grid div { display: flex; }
-            .patient-grid span.label { font-weight: bold; color: #64748b; width: 140px; flex-shrink: 0; }
-            .patient-grid span.val { color: #1e293b; }
+            * { box-sizing: border-box; }
+            body { font-family: 'Helvetica Neue', Arial, sans-serif; padding: 16px; color: #111827; line-height: 1.55; margin: 0; background: #fff; }
+            .letterhead-img-wrap { border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 14px; }
+            .header-container { border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+            .header-left { display: flex; align-items: center; gap: 14px; flex: 1; }
+            .hospital-logo { max-height: 64px; max-width: 80px; object-fit: contain; flex-shrink: 0; }
+            .hospital-details h1 { font-size: 20px; font-weight: 800; margin: 0; text-transform: uppercase; color: #111827; letter-spacing: 0.5px; }
+            .hospital-details .hospital-heading { font-size: 11px; font-weight: 700; margin: 2px 0 0 0; color: #374151; }
+            .hospital-details .hospital-address { font-size: 11px; margin: 3px 0 0 0; color: #4b5563; }
+            .header-right { text-align: right; font-size: 10.5px; color: #1f2937; line-height: 1.45; flex-shrink: 0; }
+            .header-right p { margin: 1px 0; }
 
-            .consent-content { font-size: 14px; color: #0f172a; margin-bottom: 50px; text-align: justify; white-space: pre-wrap; }
-            
-            .footer-section { margin-top: 60px; border-top: 1px solid #e2e8f0; padding-top: 20px; font-size: 13px; }
-            .signature-grid { display: grid; grid-template-cols: 1fr 1fr; gap: 40px; margin-bottom: 20px; }
-            .sig-col { border-top: 1px dashed #94a3b8; padding-top: 6px; text-align: center; color: #475569; font-weight: bold; margin-top: 50px; }
-            .date-row { text-align: right; font-size: 12px; color: #64748b; font-weight: bold; margin-top: 10px; }
+            .doc-title { text-align: center; font-size: 15px; font-weight: 800; margin: 12px 0 14px 0; text-transform: uppercase; letter-spacing: 0.8px; color: #0f172a; border-bottom: 1.5px solid #000; padding-bottom: 5px; }
+
+            .patient-box { border: 1px solid #000; border-radius: 4px; margin-bottom: 16px; padding: 10px 14px; background-color: #f8fafc; font-size: 12px; }
+            .patient-box h4 { font-weight: 800; margin: 0 0 6px 0; color: #111827; text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.5px; border-bottom: 1px solid #cbd5e1; padding-bottom: 3px; }
+            .patient-grid { display: grid; grid-template-cols: 1fr 1fr; gap: 4px 18px; }
+            .patient-grid div { display: flex; }
+            .patient-grid span.label { font-weight: 700; color: #374151; width: 130px; flex-shrink: 0; }
+            .patient-grid span.val { color: #111827; font-weight: 500; }
+
+            .consent-content { font-size: 13px; color: #0f172a; margin-bottom: 36px; text-align: justify; line-height: 1.65; ${hasHtmlTags ? '' : 'white-space: pre-wrap;'} }
+            .consent-content p { margin: 0 0 8px 0; }
+
+            .footer-section { margin-top: 40px; border-top: 1px solid #cbd5e1; padding-top: 16px; font-size: 12px; page-break-inside: avoid; }
+            .signature-grid { display: grid; grid-template-cols: 1fr 1fr; gap: 40px; margin-bottom: 14px; }
+            .sig-col { border-top: 1px dashed #64748b; padding-top: 6px; text-align: center; color: #334155; font-weight: 700; margin-top: 42px; }
+            .date-row { text-align: right; font-size: 11px; color: #475569; font-weight: 700; margin-top: 8px; }
+            .footer-note { text-align: center; font-size: 10px; color: #64748b; margin-top: 10px; font-style: italic; }
           </style>
         </head>
         <body>
-          <div class="header-container">
-            ${hospitalInfo?.logoUrl ? '<img src="' + hospitalInfo.logoUrl + '" class="hospital-logo" alt="Logo" />' : ''}
-            <div class="hospital-details">
-              <h1>${hospitalInfo?.hospitalName || 'Hospital Name'}</h1>
-              <p>${hospitalInfo?.address || ''}</p>
-            </div>
-          </div>
+          ${letterheadHtml}
 
           <div class="doc-title">${heading}</div>
 
@@ -494,11 +531,13 @@ const IpdOtForm = () => {
             <h4>Patient Demographics</h4>
             <div class="patient-grid">
               <div><span class="label">Patient Name:</span><span class="val">${activeForm.patientName || patientObj.patientName || 'N/A'}</span></div>
-              <div><span class="label">Age / Sex:</span><span class="val">${activeForm.age || 'N/A'} Yrs / ${activeForm.gender || patientObj.gender || 'N/A'}</span></div>
-              <div><span class="label">Address:</span><span class="val">${patientObj.address || 'N/A'}</span></div>
-              <div><span class="label">Mobile Number:</span><span class="val">${patientObj.mobile || 'N/A'}</span></div>
-              <div><span class="label">Aadhaar Number:</span><span class="val">${patientObj.aadhaar || 'N/A'}</span></div>
               <div><span class="label">UHID / MRN:</span><span class="val">${formatUhid(activeForm.uhid || patientObj.uhid)}</span></div>
+              <div><span class="label">Age / Sex:</span><span class="val">${activeForm.age || patientObj.age || 'N/A'} Yrs / ${activeForm.gender || patientObj.gender || 'N/A'}</span></div>
+              <div><span class="label">Mobile Number:</span><span class="val">${patientObj.mobile || 'N/A'}</span></div>
+              <div><span class="label">IPD No / PID:</span><span class="val">${admission?.ipdNumber || 'N/A'}${admission?.pidNumber ? ` / ${admission.pidNumber}` : ''}</span></div>
+              <div><span class="label">Consultant:</span><span class="val">${consultantName ? `Dr. ${consultantName}` : 'N/A'}</span></div>
+              <div><span class="label">Address:</span><span class="val">${patientObj.address || 'N/A'}</span></div>
+              <div><span class="label">Aadhaar Number:</span><span class="val">${patientObj.aadhaar || 'N/A'}</span></div>
             </div>
           </div>
 
@@ -512,23 +551,21 @@ const IpdOtForm = () => {
               <div class="sig-col">Witness Signature / Thumb Impression</div>
             </div>
             <div class="date-row">Date: ${dateStr}</div>
+            ${hospitalInfo?.invoiceFooterMessage ? `<div class="footer-note">${hospitalInfo.invoiceFooterMessage}</div>` : ''}
           </div>
 
           <script>
-            setTimeout(function() {
-              window.print();
-            }, 300);
+            window.onload = function() {
+              setTimeout(function() {
+                window.focus();
+                window.print();
+              }, 250);
+            };
           </script>
         </body>
       </html>
     `);
     printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-      try {
-        printWindow.print();
-      } catch (e) {}
-    }, 400);
   };
 
   useEffect(() => {
@@ -954,7 +991,7 @@ const IpdOtForm = () => {
                 <Edit3 className="h-4 w-4" /> Edit Content
               </button>
               <button
-                onClick={handlePrintConsultation}
+                onClick={() => handlePrintConsultation()}
                 className="btn-secondary text-sm py-2 px-4 flex items-center gap-2 cursor-pointer"
               >
                 <Printer className="h-4 w-4" /> Print Consultation

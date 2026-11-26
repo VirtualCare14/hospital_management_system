@@ -572,20 +572,10 @@ const HospitalSettings = () => {
         onclone: (clonedDoc) => sanitizeClonedDocumentForPdf ? sanitizeClonedDocumentForPdf(clonedDoc) : undefined
       });
       const imgData = canvas.toDataURL('image/png');
-      const isHalfPage = previewSlipMode === 'bill_receipt';
-      const pdf = isHalfPage
-        ? new jsPDF({ orientation: 'landscape', unit: 'mm', format: [148.5, 210] })
-        : new jsPDF('p', 'mm', 'a4');
-
+      const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfPageHeight = pdf.internal.pageSize.getHeight();
-
-      if (isHalfPage) {
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfPageHeight);
-      } else {
-        const drawHeight = (canvas.height * pdfWidth) / canvas.width;
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, drawHeight);
-      }
+      const drawHeight = (canvas.height * pdfWidth) / canvas.width;
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, drawHeight);
       pdf.autoPrint();
       const docTitle = previewSlipMode === 'prescription' 
         ? 'Rx Prescription' 

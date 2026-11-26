@@ -595,20 +595,10 @@ const PatientList = () => {
             scale: 2, useCORS: true, backgroundColor: '#ffffff', imageTimeout: 20000
           });
           const imgData = canvas.toDataURL('image/png');
-          const isHalfPage = modeToPrint === 'bill_receipt' || modeToPrint === 'refund_slip';
-          const pdf = isHalfPage
-            ? new jsPDF({ orientation: 'landscape', unit: 'mm', format: [148.5, 210] })
-            : new jsPDF('p', 'mm', 'a4');
-
+          const pdf = new jsPDF('p', 'mm', 'a4');
           const pdfWidth = pdf.internal.pageSize.getWidth();
-          const pdfPageHeight = pdf.internal.pageSize.getHeight();
-
-          if (isHalfPage) {
-            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfPageHeight);
-          } else {
-            const drawHeight = (canvas.height * pdfWidth) / canvas.width;
-            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, drawHeight);
-          }
+          const drawHeight = (canvas.height * pdfWidth) / canvas.width;
+          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, drawHeight);
           pdf.autoPrint();
           const docTitle = modeToPrint === 'bill_receipt' ? 'Payment Receipt' : (modeToPrint === 'refund_slip' ? 'Refund Voucher' : 'Prescription Slip');
           openPdfPrintWindow(pdf, docTitle);
@@ -1879,7 +1869,7 @@ const PatientList = () => {
 
             {/* Scrollable Document Container */}
             <div className="flex-1 overflow-auto p-4 bg-gray-100 flex justify-center print:p-0 print:m-0 print:bg-transparent print:overflow-visible">
-              <div className="bg-white shadow-xl rounded-none border-none overflow-hidden w-full max-w-[210mm] print:shadow-none print:border-none print:rounded-none print:w-full print:max-w-[210mm]">
+              <div className="bg-white shadow-xl rounded-none border-none overflow-hidden w-[210mm] min-w-[210mm] shrink-0 print:shadow-none print:border-none print:rounded-none print:w-full print:max-w-[210mm]">
                 <PatientReceipt 
                   ref={receiptRef} 
                   patient={patientDetails} 

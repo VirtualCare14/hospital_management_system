@@ -2158,21 +2158,45 @@ const createAdvance = async (req, res) => {
     const localDate = date || now.toLocaleDateString('sv-SE');
     const localTime = time || now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
 
+    // Generate unique sequential Advance Receipt Number
+    const todayDigits = localDate.replace(/-/g, '');
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const countToday = await AdvancePayment.countDocuments({
+      hospitalId: req.user.hospitalId,
+      createdAt: { $gte: startOfToday }
+    });
+    const receiptNo = `ADV-${todayDigits}-${String(countToday + 1).padStart(4, '0')}`;
+
     const advance = new AdvancePayment({
       hospitalId: req.user.hospitalId,
       patientId,
       uhid,
+      receiptNo,
       amount: Number(amount),
       date: localDate,
       time: localTime,
       paymentMode,
       remarks: remarks || '',
       collectedBy: req.user._id,
-      collectedByName: req.user.username || 'Staff'
+      collectedByName: req.user.doctorName || req.user.username || 'Staff'
     });
 
     await advance.save();
-    res.status(201).json({ message: 'Advance payment recorded successfully', advance });
+
+    // Attach patient summary to returned advance object for receipt rendering
+    const advanceObj = advance.toObject();
+    advanceObj.patient = {
+      _id: patient._id,
+      patientName: patient.patientName,
+      uhid: patient.uhid,
+      mobile: patient.mobile,
+      gender: patient.gender,
+      patientAge: patient.patientAge || (patient.dob ? Math.floor((new Date() - new Date(patient.dob)) / (365.25 * 24 * 60 * 60 * 1000)) : ''),
+      doctorName: patient.doctorName || ''
+    };
+
+    res.status(201).json({ message: 'Advance payment recorded successfully', advance: advanceObj });
   } catch (error) {
     console.error('Create Advance Error:', error);
     res.status(500).json({ message: 'Server error' });
