@@ -869,6 +869,7 @@ const CompletedConsultationDetails = () => {
           ref={receiptRef} 
           patient={receiptPatient} 
           prescription={receiptPrescription}
+          printOptions={{ ...(receiptPrescription?.printOptions || {}), reuseReceptionPaper: false }}
           language={activePrintLang || receiptPrescription?.language || 'English'}
         />
       </div>

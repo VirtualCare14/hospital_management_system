@@ -62,9 +62,9 @@ const PrescriptionPage = () => {
       printDiagnosisRemarks: true,
       printPatientAdvice: true,
       printPreviousHistory: false,
-      reuseReceptionPaper: true,
+      reuseReceptionPaper: false,
       ...parsed,
-      ...(parsed.reuseReceptionPaper === undefined ? { reuseReceptionPaper: true } : {})
+      ...(parsed.reuseReceptionPaper === undefined ? { reuseReceptionPaper: false } : {})
     };
   });
 

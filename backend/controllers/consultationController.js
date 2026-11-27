@@ -221,7 +221,7 @@ const createConsultation = async (req, res) => {
         return {
           patientId,
           hospitalId: req.user.hospitalId,
-          doctorId,
+          doctorId: finalDoctorId || req.user._id,
           tests: [testName],
           status: isHomeCollection ? 'assigned' : 'pending',
           sampleStatus: isHomeCollection ? 'Home Sample Assigned' : 'Not Collected',

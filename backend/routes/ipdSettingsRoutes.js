@@ -6,16 +6,17 @@ const {
 } = require('../controllers/ipdSettingsController');
 const authMiddleware = require('../middleware/authMiddleware');
 
-// Middleware to restrict route to administrators and IPD admins
-const adminOrIpdOnly = (req, res, next) => {
-  if (req.user && (req.user.role === 'admin' || req.user.role === 'ipd')) {
+// Middleware to restrict route to administrators, IPD admins, and Billing users
+const adminIpdOrBillingOnly = (req, res, next) => {
+  const hasBillingAccess = req.user?.role === 'billing' || (Array.isArray(req.user?.moduleAccess) && req.user.moduleAccess.includes(8));
+  if (req.user && (req.user.role === 'admin' || req.user.role === 'ipd' || hasBillingAccess)) {
     next();
   } else {
-    res.status(403).json({ message: 'Access denied: admin or IPD permission required' });
+    res.status(403).json({ message: 'Access denied: admin, IPD, or billing permission required' });
   }
 };
 
 router.get('/', authMiddleware, getSettings);
-router.put('/', authMiddleware, adminOrIpdOnly, updateSettings);
+router.put('/', authMiddleware, adminIpdOrBillingOnly, updateSettings);
 
 module.exports = router;

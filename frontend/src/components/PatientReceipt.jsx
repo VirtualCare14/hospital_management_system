@@ -89,7 +89,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
     printSymptomHistory: true,
     printSymptomRemarks: true,
     printGeneralPastHistory: true,
-    reuseReceptionPaper: true
+    reuseReceptionPaper: false
   };
 
   useEffect(() => {
@@ -177,15 +177,12 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
   }
 
   // Paper reuse architecture:
-  // When printing a doctor prescription, reuseReceptionPaper defaults to true.
-  // When reuseReceptionPaper is true, the digital header, PRESCRIPTION heading,
-  // patient details box, and vitals table are hidden (preserving exact vertical layout height)
-  // so the physical paper taken from reception can be fed into the printer without duplicate printing.
+  // Only hide the digital header, PRESCRIPTION heading, patient details box, and vitals table
+  // when reuseReceptionPaper is explicitly enabled (true).
   const isReusingPaper = Boolean(
     isPrescriptionFormat && 
     !isPatientSlipOnly && 
-    (printOptions?.reuseReceptionPaper === true || 
-     (printOptions?.reuseReceptionPaper !== false && (propPrintOptions ? propPrintOptions.reuseReceptionPaper !== false : true)))
+    printOptions?.reuseReceptionPaper === true
   );
 
   // Check if pre-printed / custom letterhead mode should be used
@@ -256,7 +253,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
 
     return (
       <div ref={ref} className="a4-receipt" style={{
-        width: '100%',
+        width: '210mm',
         maxWidth: '210mm',
         minHeight: '148.5mm',
         height: '148.5mm',
@@ -497,7 +494,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
   if (isBillReceiptOnly) {
     return (
       <div ref={ref} className="a4-receipt" style={{
-        width: '100%',
+        width: '210mm',
         maxWidth: '210mm',
         minHeight: '148.5mm',
         height: '148.5mm',
@@ -1392,11 +1389,11 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
           {isPrescriptionFormat ? (
             <>
               {/* TWO-COLUMN PRESCRIPTION ARCHITECTURE: Patient Info, Clinical Details & Vitals */}
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', width: '100%', marginBottom: '8px', boxSizing: 'border-box', visibility: isReusingPaper ? 'hidden' : 'visible' }}>
-                {/* LEFT COLUMN: Clinical Content & Medicines */}
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', width: '100%', marginBottom: '8px', boxSizing: 'border-box' }}>
+                {/* LEFT COLUMN: Patient Info & Clinical Details */}
                 <div style={{ flex: '1 1 0%', minWidth: 0, boxSizing: 'border-box' }}>
                   {/* 1. Patient Information & Appointment Details */}
-                  <div style={{ marginBottom: '6px', padding: '5px 8px', border: '1px solid #000', borderRadius: '2px', backgroundColor: '#fff' }}>
+                  <div style={{ marginBottom: '6px', padding: '5px 8px', border: '1px solid #000', borderRadius: '2px', backgroundColor: '#fff', visibility: isReusingPaper ? 'hidden' : 'visible' }}>
                     <p style={{ fontWeight: 'bold', margin: '0 0 3px 0', fontSize: '10.5px', textDecoration: 'underline' }}>
                       {t(activeLang, 'patientInfo')} & Appointment Details
                     </p>
@@ -1451,18 +1448,8 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
                       )}
                     </div>
                   </div>
-                </div>
 
-                {/* RIGHT COLUMN: Vitals Section Aligned with Clinical Content */}
-                {printOptions.printVitals !== false && (
-                  <div style={{ width: '190px', flexShrink: 0, boxSizing: 'border-box' }}>
-                    {renderVitalsTable(true)}
-                  </div>
-                )}
-              </div>
-
-              {/* FULL-WIDTH CLINICAL CONTENT & MEDICINES SECTION */}
-              {/* 2. Diagnosis & Remarks */}
+                  {/* 2. Diagnosis & Remarks */}
                   {prescription?.diagnosisRemark && printOptions.printDiagnosisRemarks !== false && (
                     <div style={{ marginBottom: '6px' }}>
                       <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', fontSize: '10.5px' }}>{t(activeLang, 'diagnosis')}:</p>
@@ -1472,7 +1459,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
                     </div>
                   )}
 
-                  {/* 4. Advice for the Patient */}
+                  {/* 3. Advice for the Patient */}
                   {prescription?.patientAdvice && printOptions.printPatientAdvice !== false && (
                     <div style={{ marginBottom: '6px' }}>
                       <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', fontSize: '10.5px' }}>Advice for the Patient:</p>
@@ -1482,7 +1469,7 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
                     </div>
                   )}
 
-                  {/* 5. Lab Investigations & Reports */}
+                  {/* 4. Lab Investigations & Reports */}
                   {prescription?.tests && prescription.tests.length > 0 && printOptions.printLabTests !== false && (
                     <div style={{ marginBottom: '6px' }}>
                       <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', fontSize: '10.5px' }}>Lab Investigations & Reports:</p>
@@ -1491,8 +1478,18 @@ const PatientReceipt = forwardRef(({ patient, prescription, hospitalSettings, la
                       </p>
                     </div>
                   )}
+                </div>
 
-                  {/* 6. Medicines Table */}
+                {/* RIGHT COLUMN: Vitals Section Aligned with Clinical Content */}
+                {printOptions.printVitals !== false && (
+                  <div style={{ width: '190px', flexShrink: 0, boxSizing: 'border-box', visibility: isReusingPaper ? 'hidden' : 'visible' }}>
+                    {renderVitalsTable(true)}
+                  </div>
+                )}
+              </div>
+
+              {/* FULL-WIDTH MEDICINES & ADDITIONAL CLINICAL SECTIONS */}
+                  {/* 5. Medicines Table */}
                   {prescription?.medicines && prescription.medicines.filter(m => m && (m.medicine || m.medicineName)).length > 0 && (
                     <div style={{ marginBottom: '8px', width: '100%', boxSizing: 'border-box' }}>
                       <p style={{ fontWeight: 'bold', margin: '0 0 3px 0', fontSize: '10.5px', textDecoration: 'underline' }}>

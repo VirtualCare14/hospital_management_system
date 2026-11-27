@@ -104,9 +104,9 @@ const ConsultationPage = () => {
       printDiagnosisRemarks: true,
       printPatientAdvice: true,
       printPreviousHistory: false,
-      reuseReceptionPaper: true,
+      reuseReceptionPaper: false,
       ...parsed,
-      ...(parsed.reuseReceptionPaper === undefined ? { reuseReceptionPaper: true } : {})
+      ...(parsed.reuseReceptionPaper === undefined ? { reuseReceptionPaper: false } : {})
     };
   });
   const [pharmacyMedicines, setPharmacyMedicines] = useState([]);
@@ -2306,7 +2306,7 @@ const ConsultationPage = () => {
                   </div>
                   <input
                     type="checkbox"
-                    checked={printOptions.reuseReceptionPaper !== false}
+                    checked={Boolean(printOptions.reuseReceptionPaper)}
                     onChange={(e) => setPrintOptions({ ...printOptions, reuseReceptionPaper: e.target.checked })}
                     className="rounded text-orange-600 focus:ring-orange-500 h-5 w-5 cursor-pointer ml-3 flex-shrink-0"
                   />

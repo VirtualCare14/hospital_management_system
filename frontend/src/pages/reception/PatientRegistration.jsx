@@ -1004,20 +1004,10 @@ const PatientRegistration = () => {
           imageTimeout: 20000
         });
         const imgData = canvas.toDataURL('image/png');
-        const isHalfPage = targetMode === 'bill_receipt' || targetMode === 'refund_slip';
-        const pdf = isHalfPage
-          ? new jsPDF({ orientation: 'landscape', unit: 'mm', format: [148.5, 210] })
-          : new jsPDF('p', 'mm', 'a4');
-
+        const pdf = new jsPDF('p', 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfPageHeight = pdf.internal.pageSize.getHeight();
-
-        if (isHalfPage) {
-          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfPageHeight);
-        } else {
-          const drawHeight = (canvas.height * pdfWidth) / canvas.width;
-          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, drawHeight);
-        }
+        const drawHeight = (canvas.height * pdfWidth) / canvas.width;
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, drawHeight);
         pdf.autoPrint();
         const docTitle = targetMode === 'bill_receipt' ? 'Payment Receipt' : 'Prescription Slip';
         openPdfPrintWindow(pdf, docTitle);
@@ -2139,7 +2129,7 @@ const PatientRegistration = () => {
           )}
 
           <div className="overflow-auto border border-gray-200 rounded-xl bg-gray-100 p-3 flex justify-center print:p-0 print:m-0 print:border-none print:bg-transparent" style={{ maxHeight: '650px' }}>
-            <div className="bg-white shadow-xl rounded-none border-none overflow-hidden w-full max-w-[210mm] print:shadow-none print:border-none print:rounded-none print:w-full print:max-w-[210mm]">
+            <div className="bg-white shadow-xl rounded-none border-none overflow-hidden w-[210mm] min-w-[210mm] shrink-0 print:shadow-none print:border-none print:rounded-none print:w-full print:max-w-[210mm]">
               <PatientReceipt 
                 ref={receiptRef} 
                 patient={registeredPatient} 
